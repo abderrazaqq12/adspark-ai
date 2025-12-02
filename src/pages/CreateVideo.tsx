@@ -3,12 +3,43 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Upload, Sparkles, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { 
+  Upload, 
+  Sparkles, 
+  Loader2, 
+  FileText, 
+  Mic, 
+  Video, 
+  Wand2,
+  CheckCircle2,
+  Circle,
+  ChevronRight,
+  Palette,
+  Globe
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { sceneRouting, videoTypes, exportFormats } from "@/data/aiModels";
+
+// Production pipeline stages based on roadmap
+const pipelineStages = [
+  { id: 1, name: "Script & Hooks", icon: FileText, description: "Input script, hooks, and marketing angles" },
+  { id: 2, name: "Scene Builder", icon: Wand2, description: "AI breaks down script into visual scenes" },
+  { id: 3, name: "Voice Generation", icon: Mic, description: "Generate or upload voice-over" },
+  { id: 4, name: "Video Generation", icon: Video, description: "AI creates video for each scene" },
+  { id: 5, name: "Assembly & Edit", icon: Palette, description: "Combine, sync, add branding" },
+  { id: 6, name: "Export", icon: Globe, description: "Multi-format export" },
+];
 
 export default function CreateVideo() {
   const [script, setScript] = useState("");
+  const [hooks, setHooks] = useState("");
+  const [videoType, setVideoType] = useState("ugc");
+  const [targetLanguage, setTargetLanguage] = useState("ar");
+  const [currentStage, setCurrentStage] = useState(1);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [scenes, setScenes] = useState<any[]>([]);
 
@@ -41,32 +72,119 @@ export default function CreateVideo() {
       <div>
         <h1 className="text-4xl font-bold text-foreground mb-2">Create AI Video Ad</h1>
         <p className="text-muted-foreground">
-          Transform your script into a stunning video advertisement
+          Multi-layer production pipeline for professional video ads
         </p>
       </div>
+
+      {/* Pipeline Progress */}
+      <Card className="bg-gradient-card border-border shadow-card">
+        <CardContent className="py-4">
+          <div className="flex items-center justify-between overflow-x-auto gap-2">
+            {pipelineStages.map((stage, index) => (
+              <div key={stage.id} className="flex items-center">
+                <div 
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                    currentStage === stage.id 
+                      ? 'bg-primary/20 text-primary' 
+                      : currentStage > stage.id 
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-muted-foreground'
+                  }`}
+                >
+                  {currentStage > stage.id ? (
+                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                  ) : currentStage === stage.id ? (
+                    <stage.icon className="w-4 h-4" />
+                  ) : (
+                    <Circle className="w-4 h-4 opacity-50" />
+                  )}
+                  <span className="text-sm font-medium whitespace-nowrap hidden md:inline">{stage.name}</span>
+                </div>
+                {index < pipelineStages.length - 1 && (
+                  <ChevronRight className="w-4 h-4 text-muted-foreground mx-1" />
+                )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Input Section */}
         <Card className="bg-gradient-card border-border shadow-card">
           <CardHeader>
-            <CardTitle className="text-foreground">Script Input</CardTitle>
+            <CardTitle className="text-foreground flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary" />
+              Layer 1: Script & Hooks
+            </CardTitle>
             <CardDescription className="text-muted-foreground">
-              Paste your voice-over script or upload an audio file
+              Enter your voice-over script, hooks, and marketing angles
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Video Type & Language */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-foreground">Video Type</Label>
+                <Select value={videoType} onValueChange={setVideoType}>
+                  <SelectTrigger className="bg-muted/50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {videoTypes.map((type) => (
+                      <SelectItem key={type.id} value={type.id}>
+                        {type.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-foreground">Language</Label>
+                <Select value={targetLanguage} onValueChange={setTargetLanguage}>
+                  <SelectTrigger className="bg-muted/50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ar">Arabic (العربية)</SelectItem>
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="ar-gulf">Arabic (Gulf)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Hooks */}
+            <div className="space-y-2">
+              <Label htmlFor="hooks" className="text-foreground">Marketing Hooks (Optional)</Label>
+              <Input
+                id="hooks"
+                placeholder="Enter attention-grabbing hooks..."
+                className="bg-muted/50 border-input"
+                value={hooks}
+                onChange={(e) => setHooks(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                AI will generate variations based on your hooks
+              </p>
+            </div>
+
+            {/* Script */}
             <div className="space-y-2">
               <Label htmlFor="script" className="text-foreground">Voice-Over Script</Label>
               <Textarea
                 id="script"
-                placeholder="Enter your video script here... 
+                placeholder="Enter your video script here...
 
-Example:
-'Tired of complicated video editing? Meet VideoAI - the platform that turns your ideas into stunning video ads in minutes. Just paste your script, and watch as our AI creates professional scenes, adds visuals, and syncs everything perfectly. No experience needed.'"
-                className="min-h-[300px] bg-muted/50 border-input resize-none"
+Tip: Keep sentences short (under 15 words) for better voice-over. ~60 words = 30 seconds."
+                className="min-h-[200px] bg-muted/50 border-input resize-none"
                 value={script}
                 onChange={(e) => setScript(e.target.value)}
               />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>{script.split(/\s+/).filter(Boolean).length} words</span>
+                <span>~{Math.round(script.split(/\s+/).filter(Boolean).length / 2)}s duration</span>
+              </div>
             </div>
 
             <div className="flex gap-2">
@@ -83,13 +201,13 @@ Example:
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4 mr-2" />
-                    Analyze Script
+                    Analyze & Build Scenes
                   </>
                 )}
               </Button>
               <Button variant="outline" disabled className="border-border">
                 <Upload className="w-4 h-4 mr-2" />
-                Upload Audio
+                Audio
               </Button>
             </div>
           </CardContent>
@@ -98,10 +216,13 @@ Example:
         {/* Scene Preview */}
         <Card className="bg-gradient-card border-border shadow-card">
           <CardHeader>
-            <CardTitle className="text-foreground">AI Scene Breakdown</CardTitle>
+            <CardTitle className="text-foreground flex items-center gap-2">
+              <Wand2 className="w-5 h-5 text-primary" />
+              Layer 2: AI Scene Breakdown
+            </CardTitle>
             <CardDescription className="text-muted-foreground">
               {scenes.length > 0
-                ? `${scenes.length} scenes identified`
+                ? `${scenes.length} scenes with auto-routed AI models`
                 : "Scenes will appear here after analysis"}
             </CardDescription>
           </CardHeader>
@@ -109,39 +230,53 @@ Example:
             {scenes.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Sparkles className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Enter a script and click "Analyze Script" to see AI-generated scenes</p>
+                <p>Enter a script and click "Analyze & Build Scenes"</p>
+                <p className="text-xs mt-2">AI will auto-route each scene to the best model</p>
               </div>
             ) : (
               <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
-                {scenes.map((scene, index) => (
-                  <div
-                    key={index}
-                    className="p-4 rounded-lg bg-muted/30 border border-border hover:border-primary/50 transition-colors"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold flex-shrink-0">
-                        {index + 1}
-                      </div>
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-semibold text-foreground">{scene.title}</h4>
-                          <span className="text-xs text-muted-foreground">
-                            {scene.duration}s
-                          </span>
+                {scenes.map((scene, index) => {
+                  // Auto-route based on scene content
+                  const routing = sceneRouting.find(r => 
+                    scene.title?.toLowerCase().includes(r.sceneType.replace('_', ' ')) ||
+                    scene.description?.toLowerCase().includes(r.sceneType.replace('_', ' '))
+                  ) || sceneRouting[5]; // Default to B-roll
+                  
+                  return (
+                    <div
+                      key={index}
+                      className="p-4 rounded-lg bg-muted/30 border border-border hover:border-primary/50 transition-colors"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold flex-shrink-0">
+                          {index + 1}
                         </div>
-                        <p className="text-sm text-muted-foreground">{scene.description}</p>
-                        {scene.visualPrompt && (
-                          <div className="mt-2 p-2 rounded bg-muted/50 border border-border">
-                            <p className="text-xs text-muted-foreground">
-                              <span className="text-primary font-medium">Visual: </span>
-                              {scene.visualPrompt}
-                            </p>
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-semibold text-foreground">{scene.title}</h4>
+                            <div className="flex items-center gap-2">
+                              <Badge className="bg-primary/20 text-primary border-0 text-xs">
+                                {routing.recommendedModel}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {scene.duration}s
+                              </span>
+                            </div>
                           </div>
-                        )}
+                          <p className="text-sm text-muted-foreground">{scene.description}</p>
+                          {scene.visualPrompt && (
+                            <div className="mt-2 p-2 rounded bg-muted/50 border border-border">
+                              <p className="text-xs text-muted-foreground">
+                                <span className="text-primary font-medium">Visual: </span>
+                                {scene.visualPrompt}
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
@@ -149,28 +284,54 @@ Example:
       </div>
 
       {scenes.length > 0 && (
-        <Card className="bg-gradient-card border-border shadow-card">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold text-foreground mb-1">Ready to generate video?</h3>
-                <p className="text-sm text-muted-foreground">
-                  Review your scenes and proceed to video generation
-                </p>
+        <>
+          {/* Export Formats */}
+          <Card className="bg-gradient-card border-border shadow-card">
+            <CardHeader>
+              <CardTitle className="text-foreground flex items-center gap-2">
+                <Globe className="w-5 h-5 text-primary" />
+                Export Formats
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-3">
+                {exportFormats.map((format) => (
+                  <Badge 
+                    key={format.id} 
+                    variant="outline" 
+                    className="px-4 py-2 text-sm cursor-pointer hover:bg-primary/10"
+                  >
+                    {format.name}
+                  </Badge>
+                ))}
               </div>
-              <Button size="lg" disabled className="bg-gradient-primary text-primary-foreground shadow-glow">
-                <Video className="w-5 h-5 mr-2" />
-                Generate Video
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          {/* Generate Button */}
+          <Card className="bg-gradient-card border-border shadow-card">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-foreground mb-1">Ready to generate video?</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {scenes.length} scenes • ~{scenes.reduce((acc, s) => acc + (s.duration || 3), 0)}s total duration
+                  </p>
+                </div>
+                <Button size="lg" disabled className="bg-gradient-primary text-primary-foreground shadow-glow">
+                  <Video className="w-5 h-5 mr-2" />
+                  Generate Video (Coming Soon)
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </>
       )}
     </div>
   );
 }
 
-const Video = ({ className }: { className?: string }) => (
+const VideoIcon = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <polygon points="5 3 19 12 5 21 5 3" />
   </svg>
