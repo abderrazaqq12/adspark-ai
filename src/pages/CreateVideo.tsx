@@ -23,6 +23,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { sceneRouting, videoTypes, exportFormats } from "@/data/aiModels";
+import BatchGeneration from "@/components/BatchGeneration";
 
 // Production pipeline stages based on roadmap
 const pipelineStages = [
@@ -284,7 +285,14 @@ Tip: Keep sentences short (under 15 words) for better voice-over. ~60 words = 30
       </div>
 
       {scenes.length > 0 && (
-        <>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Batch Generation */}
+          <BatchGeneration 
+            scriptId="temp-script-id" 
+            scenesCount={scenes.length}
+            onComplete={() => toast.success("All videos generated!")}
+          />
+
           {/* Export Formats */}
           <Card className="bg-gradient-card border-border shadow-card">
             <CardHeader>
@@ -292,8 +300,11 @@ Tip: Keep sentences short (under 15 words) for better voice-over. ~60 words = 30
                 <Globe className="w-5 h-5 text-primary" />
                 Export Formats
               </CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Select output formats for your videos
+              </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-3">
                 {exportFormats.map((format) => (
                   <Badge 
@@ -305,27 +316,14 @@ Tip: Keep sentences short (under 15 words) for better voice-over. ~60 words = 30
                   </Badge>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Generate Button */}
-          <Card className="bg-gradient-card border-border shadow-card">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-foreground mb-1">Ready to generate video?</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {scenes.length} scenes • ~{scenes.reduce((acc, s) => acc + (s.duration || 3), 0)}s total duration
-                  </p>
-                </div>
-                <Button size="lg" disabled className="bg-gradient-primary text-primary-foreground shadow-glow">
-                  <Video className="w-5 h-5 mr-2" />
-                  Generate Video (Coming Soon)
-                </Button>
+              <div className="p-4 rounded-lg bg-muted/30 border border-border">
+                <p className="text-sm text-muted-foreground">
+                  {scenes.length} scenes • ~{scenes.reduce((acc, s) => acc + (s.duration || 3), 0)}s total duration
+                </p>
               </div>
             </CardContent>
           </Card>
-        </>
+        </div>
       )}
     </div>
   );
