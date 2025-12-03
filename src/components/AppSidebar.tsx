@@ -1,5 +1,8 @@
-import { Home, Video, FileText, Settings, Sparkles, FolderOpen, Wrench } from "lucide-react";
+import { Home, Video, FileText, Settings, Sparkles, FolderOpen, LogOut, Cpu } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import {
   Sidebar,
   SidebarContent,
@@ -9,6 +12,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
 
@@ -20,12 +24,22 @@ const navigationItems = [
 
 const toolsItems = [
   { title: "Scene Builder", url: "/scene-builder", icon: FileText },
-  { title: "AI Engines", url: "/engines", icon: Sparkles },
+  { title: "AI Engines", url: "/engines", icon: Cpu },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
   const { open } = useSidebar();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error("Failed to logout");
+    } else {
+      navigate("/auth");
+    }
+  };
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
@@ -33,7 +47,7 @@ export function AppSidebar() {
         {/* Logo/Brand */}
         <div className="px-4 py-6 border-b border-sidebar-border">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center shadow-glow">
               <Sparkles className="w-5 h-5 text-primary-foreground" />
             </div>
             {open && (
@@ -92,6 +106,16 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      
+      <SidebarFooter className="border-t border-sidebar-border p-4">
+        <SidebarMenuButton 
+          onClick={handleLogout}
+          className="w-full justify-start text-destructive hover:bg-destructive/10"
+        >
+          <LogOut className="w-4 h-4" />
+          {open && <span>Logout</span>}
+        </SidebarMenuButton>
+      </SidebarFooter>
     </Sidebar>
   );
 }
