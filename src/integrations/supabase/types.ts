@@ -14,7 +14,475 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      ai_engines: {
+        Row: {
+          api_base_url: string | null
+          api_key_env: string | null
+          config: Json | null
+          created_at: string | null
+          description: string | null
+          id: string
+          max_duration_sec: number | null
+          name: string
+          pricing_model: string | null
+          priority_score: number | null
+          status: string | null
+          supported_ratios: string[] | null
+          supports_free_tier: boolean | null
+          type: string
+        }
+        Insert: {
+          api_base_url?: string | null
+          api_key_env?: string | null
+          config?: Json | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          max_duration_sec?: number | null
+          name: string
+          pricing_model?: string | null
+          priority_score?: number | null
+          status?: string | null
+          supported_ratios?: string[] | null
+          supports_free_tier?: boolean | null
+          type: string
+        }
+        Update: {
+          api_base_url?: string | null
+          api_key_env?: string | null
+          config?: Json | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          max_duration_sec?: number | null
+          name?: string
+          pricing_model?: string | null
+          priority_score?: number | null
+          status?: string | null
+          supported_ratios?: string[] | null
+          supports_free_tier?: boolean | null
+          type?: string
+        }
+        Relationships: []
+      }
+      generation_queue: {
+        Row: {
+          attempts: number | null
+          completed_at: string | null
+          created_at: string | null
+          engine_id: string | null
+          error_message: string | null
+          id: string
+          max_attempts: number | null
+          priority: number | null
+          scene_id: string | null
+          started_at: string | null
+          status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          attempts?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          engine_id?: string | null
+          error_message?: string | null
+          id?: string
+          max_attempts?: number | null
+          priority?: number | null
+          scene_id?: string | null
+          started_at?: string | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          attempts?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          engine_id?: string | null
+          error_message?: string | null
+          id?: string
+          max_attempts?: number | null
+          priority?: number | null
+          scene_id?: string | null
+          started_at?: string | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generation_queue_engine_id_fkey"
+            columns: ["engine_id"]
+            isOneToOne: false
+            referencedRelation: "ai_engines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "generation_queue_scene_id_fkey"
+            columns: ["scene_id"]
+            isOneToOne: false
+            referencedRelation: "scenes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          credits: number | null
+          email: string | null
+          id: string
+          plan: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          credits?: number | null
+          email?: string | null
+          id: string
+          plan?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          credits?: number | null
+          email?: string | null
+          id?: string
+          plan?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          created_at: string | null
+          id: string
+          language: string | null
+          name: string
+          output_count: number | null
+          product_name: string | null
+          settings: Json | null
+          status: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          language?: string | null
+          name: string
+          output_count?: number | null
+          product_name?: string | null
+          settings?: Json | null
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          language?: string | null
+          name?: string
+          output_count?: number | null
+          product_name?: string | null
+          settings?: Json | null
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      prompt_templates: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          id: string
+          is_default: boolean | null
+          language: string | null
+          name: string
+          template_text: string
+          updated_at: string | null
+          user_id: string | null
+          variables: Json | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          language?: string | null
+          name: string
+          template_text: string
+          updated_at?: string | null
+          user_id?: string | null
+          variables?: Json | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          language?: string | null
+          name?: string
+          template_text?: string
+          updated_at?: string | null
+          user_id?: string | null
+          variables?: Json | null
+        }
+        Relationships: []
+      }
+      scenes: {
+        Row: {
+          created_at: string | null
+          duration_sec: number | null
+          engine_id: string | null
+          engine_name: string | null
+          id: string
+          index: number
+          metadata: Json | null
+          scene_type: string | null
+          script_id: string | null
+          status: string | null
+          text: string
+          thumbnail_url: string | null
+          updated_at: string | null
+          video_url: string | null
+          visual_prompt: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          duration_sec?: number | null
+          engine_id?: string | null
+          engine_name?: string | null
+          id?: string
+          index: number
+          metadata?: Json | null
+          scene_type?: string | null
+          script_id?: string | null
+          status?: string | null
+          text: string
+          thumbnail_url?: string | null
+          updated_at?: string | null
+          video_url?: string | null
+          visual_prompt?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          duration_sec?: number | null
+          engine_id?: string | null
+          engine_name?: string | null
+          id?: string
+          index?: number
+          metadata?: Json | null
+          scene_type?: string | null
+          script_id?: string | null
+          status?: string | null
+          text?: string
+          thumbnail_url?: string | null
+          updated_at?: string | null
+          video_url?: string | null
+          visual_prompt?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scenes_engine_id_fkey"
+            columns: ["engine_id"]
+            isOneToOne: false
+            referencedRelation: "ai_engines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scenes_script_id_fkey"
+            columns: ["script_id"]
+            isOneToOne: false
+            referencedRelation: "scripts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scripts: {
+        Row: {
+          created_at: string | null
+          hooks: string[] | null
+          id: string
+          language: string | null
+          metadata: Json | null
+          project_id: string | null
+          raw_text: string
+          status: string | null
+          style: string | null
+          tone: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          hooks?: string[] | null
+          id?: string
+          language?: string | null
+          metadata?: Json | null
+          project_id?: string | null
+          raw_text: string
+          status?: string | null
+          style?: string | null
+          tone?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          hooks?: string[] | null
+          id?: string
+          language?: string | null
+          metadata?: Json | null
+          project_id?: string | null
+          raw_text?: string
+          status?: string | null
+          style?: string | null
+          tone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scripts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      uploads: {
+        Row: {
+          created_at: string | null
+          file_name: string | null
+          file_size: number | null
+          file_type: string | null
+          file_url: string
+          id: string
+          metadata: Json | null
+          project_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          file_url: string
+          id?: string
+          metadata?: Json | null
+          project_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          metadata?: Json | null
+          project_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uploads_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_settings: {
+        Row: {
+          api_keys: Json | null
+          created_at: string | null
+          default_language: string | null
+          default_voice: string | null
+          id: string
+          preferences: Json | null
+          updated_at: string | null
+          use_free_tier_only: boolean | null
+          user_id: string | null
+        }
+        Insert: {
+          api_keys?: Json | null
+          created_at?: string | null
+          default_language?: string | null
+          default_voice?: string | null
+          id?: string
+          preferences?: Json | null
+          updated_at?: string | null
+          use_free_tier_only?: boolean | null
+          user_id?: string | null
+        }
+        Update: {
+          api_keys?: Json | null
+          created_at?: string | null
+          default_language?: string | null
+          default_voice?: string | null
+          id?: string
+          preferences?: Json | null
+          updated_at?: string | null
+          use_free_tier_only?: boolean | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      video_outputs: {
+        Row: {
+          created_at: string | null
+          duration_sec: number | null
+          final_video_url: string | null
+          format: string | null
+          has_subtitles: boolean | null
+          has_watermark: boolean | null
+          id: string
+          metadata: Json | null
+          project_id: string | null
+          script_id: string | null
+          status: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          duration_sec?: number | null
+          final_video_url?: string | null
+          format?: string | null
+          has_subtitles?: boolean | null
+          has_watermark?: boolean | null
+          id?: string
+          metadata?: Json | null
+          project_id?: string | null
+          script_id?: string | null
+          status?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          duration_sec?: number | null
+          final_video_url?: string | null
+          format?: string | null
+          has_subtitles?: boolean | null
+          has_watermark?: boolean | null
+          id?: string
+          metadata?: Json | null
+          project_id?: string | null
+          script_id?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_outputs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "video_outputs_script_id_fkey"
+            columns: ["script_id"]
+            isOneToOne: false
+            referencedRelation: "scripts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
