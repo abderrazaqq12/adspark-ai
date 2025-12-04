@@ -11,7 +11,24 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, action } = await req.json();
+    const { prompt, action, n8nBaseUrl, n8nApiKey, workflow } = await req.json();
+    
+    // Handle workflow deployment to n8n
+    if (action === "deploy_workflow" && n8nBaseUrl && n8nApiKey && workflow) {
+      return await deployWorkflow(n8nBaseUrl, n8nApiKey, workflow);
+    }
+
+    // Handle listing workflows from n8n
+    if (action === "list_workflows" && n8nBaseUrl && n8nApiKey) {
+      return await listWorkflows(n8nBaseUrl, n8nApiKey);
+    }
+
+    // Handle activating a workflow
+    if (action === "activate_workflow" && n8nBaseUrl && n8nApiKey && workflow?.id) {
+      return await activateWorkflow(n8nBaseUrl, n8nApiKey, workflow.id, workflow.active);
+    }
+
+    // AI-powered workflow generation
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (!LOVABLE_API_KEY) {
@@ -21,33 +38,46 @@ serve(async (req) => {
     let systemPrompt = "";
     
     if (action === "generate_workflow") {
-      systemPrompt = `You are an expert n8n workflow automation assistant. You help users create n8n workflows by generating JSON node configurations.
+      systemPrompt = `You are an expert n8n workflow automation assistant. Generate complete, deployable n8n workflow JSON configurations.
 
-When the user describes what they want to automate, you should:
-1. Identify the nodes needed
-2. Suggest the workflow structure
-3. Provide the JSON configuration for each node
+When the user describes what they want to automate, you should generate a valid n8n workflow JSON that can be directly imported.
 
-Format your response as a JSON object with:
+IMPORTANT: Return ONLY valid JSON in this exact format (no markdown, no explanation outside JSON):
 {
-  "workflow_name": "string",
-  "description": "string",
+  "name": "Workflow Name",
   "nodes": [
     {
-      "type": "n8n node type (e.g., n8n-nodes-base.webhook, n8n-nodes-base.httpRequest)",
-      "name": "descriptive name",
-      "parameters": { node-specific parameters },
-      "position": [x, y]
+      "parameters": {},
+      "id": "unique-uuid",
+      "name": "Node Name",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
     }
   ],
-  "connections": { connection mapping }
+  "connections": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
 }
 
-Always include proper error handling nodes and suggest best practices.`;
+Common node types:
+- n8n-nodes-base.webhook (trigger)
+- n8n-nodes-base.httpRequest (API calls)
+- n8n-nodes-base.set (set values)
+- n8n-nodes-base.if (conditions)
+- n8n-nodes-base.code (JavaScript)
+- n8n-nodes-base.slack (Slack messages)
+- n8n-nodes-base.googleSheets (Google Sheets)
+- n8n-nodes-base.telegram (Telegram)
+
+Always include proper node positioning (increment x by 200 for each node in sequence).
+Always generate unique UUIDs for node IDs.`;
     } else if (action === "suggest_nodes") {
       systemPrompt = `You are an n8n expert. Based on the user's description, suggest the most appropriate n8n nodes to use.
 
-Respond with a JSON object:
+Respond with ONLY valid JSON:
 {
   "suggestions": [
     {
@@ -132,3 +162,155 @@ Respond with a JSON object:
     });
   }
 });
+
+async function deployWorkflow(baseUrl: string, apiKey: string, workflow: any) {
+  try {
+    // Clean the base URL
+    const cleanUrl = baseUrl.replace(/\/mcp-server\/http\/?$/, "").replace(/\/$/, "");
+    const apiUrl = `${cleanUrl}/api/v1/workflows`;
+    
+    console.log("Deploying workflow to:", apiUrl);
+    
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "X-N8N-API-KEY": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(workflow),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("n8n API error:", response.status, errorText);
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: `n8n API error: ${response.status} - ${errorText}` 
+      }), {
+        status: response.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const result = await response.json();
+    console.log("Workflow deployed successfully:", result.id);
+
+    return new Response(JSON.stringify({ 
+      success: true, 
+      workflow: result,
+      message: `Workflow "${result.name}" deployed successfully!`
+    }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
+  } catch (error) {
+    console.error("Deploy workflow error:", error);
+    return new Response(JSON.stringify({ 
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to deploy workflow" 
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+}
+
+async function listWorkflows(baseUrl: string, apiKey: string) {
+  try {
+    const cleanUrl = baseUrl.replace(/\/mcp-server\/http\/?$/, "").replace(/\/$/, "");
+    const apiUrl = `${cleanUrl}/api/v1/workflows`;
+    
+    console.log("Listing workflows from:", apiUrl);
+    
+    const response = await fetch(apiUrl, {
+      method: "GET",
+      headers: {
+        "X-N8N-API-KEY": apiKey,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("n8n API error:", response.status, errorText);
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: `n8n API error: ${response.status}` 
+      }), {
+        status: response.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const result = await response.json();
+    console.log("Listed workflows:", result.data?.length || 0);
+
+    return new Response(JSON.stringify({ 
+      success: true, 
+      workflows: result.data || result
+    }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
+  } catch (error) {
+    console.error("List workflows error:", error);
+    return new Response(JSON.stringify({ 
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to list workflows" 
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+}
+
+async function activateWorkflow(baseUrl: string, apiKey: string, workflowId: string, active: boolean) {
+  try {
+    const cleanUrl = baseUrl.replace(/\/mcp-server\/http\/?$/, "").replace(/\/$/, "");
+    const apiUrl = `${cleanUrl}/api/v1/workflows/${workflowId}`;
+    
+    console.log("Activating workflow:", workflowId, "active:", active);
+    
+    const response = await fetch(apiUrl, {
+      method: "PATCH",
+      headers: {
+        "X-N8N-API-KEY": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ active }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("n8n API error:", response.status, errorText);
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: `n8n API error: ${response.status}` 
+      }), {
+        status: response.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const result = await response.json();
+    console.log("Workflow activation updated:", result.id, "active:", result.active);
+
+    return new Response(JSON.stringify({ 
+      success: true, 
+      workflow: result,
+      message: `Workflow ${active ? 'activated' : 'deactivated'} successfully!`
+    }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
+  } catch (error) {
+    console.error("Activate workflow error:", error);
+    return new Response(JSON.stringify({ 
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to update workflow" 
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+}
