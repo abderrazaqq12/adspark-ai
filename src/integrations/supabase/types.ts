@@ -65,6 +65,56 @@ export type Database = {
         }
         Relationships: []
       }
+      audio_tracks: {
+        Row: {
+          created_at: string | null
+          duration_sec: number | null
+          fade_in_ms: number | null
+          fade_out_ms: number | null
+          file_url: string
+          id: string
+          name: string
+          script_id: string | null
+          start_time_sec: number | null
+          track_type: string | null
+          volume: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          duration_sec?: number | null
+          fade_in_ms?: number | null
+          fade_out_ms?: number | null
+          file_url: string
+          id?: string
+          name: string
+          script_id?: string | null
+          start_time_sec?: number | null
+          track_type?: string | null
+          volume?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          duration_sec?: number | null
+          fade_in_ms?: number | null
+          fade_out_ms?: number | null
+          file_url?: string
+          id?: string
+          name?: string
+          script_id?: string | null
+          start_time_sec?: number | null
+          track_type?: string | null
+          volume?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audio_tracks_script_id_fkey"
+            columns: ["script_id"]
+            isOneToOne: false
+            referencedRelation: "scripts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       generation_queue: {
         Row: {
           attempts: number | null
@@ -354,6 +404,44 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subtitles: {
+        Row: {
+          created_at: string | null
+          end_time_ms: number
+          id: string
+          scene_id: string | null
+          start_time_ms: number
+          style: Json | null
+          text: string
+        }
+        Insert: {
+          created_at?: string | null
+          end_time_ms: number
+          id?: string
+          scene_id?: string | null
+          start_time_ms: number
+          style?: Json | null
+          text: string
+        }
+        Update: {
+          created_at?: string | null
+          end_time_ms?: number
+          id?: string
+          scene_id?: string | null
+          start_time_ms?: number
+          style?: Json | null
+          text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subtitles_scene_id_fkey"
+            columns: ["scene_id"]
+            isOneToOne: false
+            referencedRelation: "scenes"
             referencedColumns: ["id"]
           },
         ]
