@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.test-api-connection]
 verify_jwt = true
+
+[functions.n8n-ai-helper]
+verify_jwt = true

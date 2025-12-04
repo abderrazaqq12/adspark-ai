@@ -323,6 +323,16 @@ export default function Settings() {
   const [userId, setUserId] = useState<string | null>(null);
   const [userN8nWebhook, setUserN8nWebhook] = useState("");
   const [n8nApiKey, setN8nApiKey] = useState("");
+  const [savingN8nSettings, setSavingN8nSettings] = useState(false);
+  const [testingUserWebhook, setTestingUserWebhook] = useState(false);
+  const [userWebhookStatus, setUserWebhookStatus] = useState<"idle" | "success" | "error">("idle");
+  
+  // AI n8n helper state
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiAction, setAiAction] = useState<"generate_workflow" | "suggest_nodes" | "help">("suggest_nodes");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState<any>(null);
 
   useEffect(() => {
     fetchData();
@@ -374,6 +384,12 @@ export default function Settings() {
           
           setApiKeys(apiKeysOnly);
           setActivatedModels(modelsOnly);
+        }
+        // Load n8n settings from preferences
+        const prefs = settingsRes.data.preferences as Record<string, any> | null;
+        if (prefs) {
+          setUserN8nWebhook(prefs.n8n_webhook_url || "");
+          setN8nApiKey(prefs.n8n_api_key || "");
         }
       }
     } catch (error) {
@@ -612,6 +628,107 @@ export default function Settings() {
       });
     } finally {
       setTestingConnection(false);
+    }
+  };
+
+  const testUserN8nWebhook = async () => {
+    if (!userN8nWebhook) {
+      toast.error("Please enter your n8n webhook URL first");
+      return;
+    }
+
+    setTestingUserWebhook(true);
+    setUserWebhookStatus("idle");
+    
+    try {
+      const response = await fetch(userN8nWebhook, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        mode: "no-cors", // n8n webhooks may not have CORS headers
+        body: JSON.stringify({
+          test: true,
+          timestamp: new Date().toISOString(),
+          source: "VideoAI Platform",
+        }),
+      });
+      
+      // Since no-cors doesn't return response data, we assume success if no error
+      setUserWebhookStatus("success");
+      toast.success("Request sent to your n8n webhook", {
+        description: "Check your n8n execution history to confirm receipt",
+      });
+    } catch (error) {
+      setUserWebhookStatus("error");
+      toast.error("Failed to connect to webhook", {
+        description: error instanceof Error ? error.message : "Network error",
+      });
+    } finally {
+      setTestingUserWebhook(false);
+    }
+  };
+
+  const saveN8nSettings = async () => {
+    setSavingN8nSettings(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // Get current preferences and merge
+      const { data: currentSettings } = await supabase
+        .from("user_settings")
+        .select("preferences")
+        .eq("user_id", user.id)
+        .single();
+
+      const currentPrefs = (currentSettings?.preferences as Record<string, any>) || {};
+      const updatedPrefs = {
+        ...currentPrefs,
+        n8n_webhook_url: userN8nWebhook,
+        n8n_api_key: n8nApiKey,
+      };
+
+      const { error } = await supabase
+        .from("user_settings")
+        .update({ preferences: updatedPrefs })
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+      toast.success("n8n settings saved successfully");
+    } catch (error) {
+      console.error("Error saving n8n settings:", error);
+      toast.error("Failed to save n8n settings");
+    } finally {
+      setSavingN8nSettings(false);
+    }
+  };
+
+  const generateAiN8nHelp = async () => {
+    if (!aiPrompt.trim()) {
+      toast.error("Please enter a description of what you want to automate");
+      return;
+    }
+
+    setAiLoading(true);
+    setAiResult(null);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke("n8n-ai-helper", {
+        body: { prompt: aiPrompt, action: aiAction },
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        setAiResult(data.content);
+        toast.success("AI generated suggestions!");
+      } else {
+        throw new Error(data.error || "Failed to generate response");
+      }
+    } catch (error) {
+      console.error("AI error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to get AI help");
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -1109,14 +1226,30 @@ export default function Settings() {
                     className="font-mono text-sm"
                   />
                   <Button 
-                    variant="outline" 
-                    size="icon" 
-                    onClick={() => copyToClipboard(userN8nWebhook)}
-                    disabled={!userN8nWebhook}
+                    variant="outline"
+                    onClick={testUserN8nWebhook}
+                    disabled={!userN8nWebhook || testingUserWebhook}
                   >
-                    <Copy className="w-4 h-4" />
+                    {testingUserWebhook ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                    <span className="ml-2">Test</span>
                   </Button>
                 </div>
+                {userWebhookStatus === "success" && (
+                  <div className="flex items-center gap-2 text-green-500 text-sm">
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Request sent - check your n8n execution history</span>
+                  </div>
+                )}
+                {userWebhookStatus === "error" && (
+                  <div className="flex items-center gap-2 text-red-500 text-sm">
+                    <XCircle className="w-4 h-4" />
+                    <span>Failed to send request</span>
+                  </div>
+                )}
               </div>
 
               {/* n8n API Key */}
@@ -1143,6 +1276,151 @@ export default function Settings() {
                   </div>
                 </div>
               </div>
+
+              {/* Save n8n Settings Button */}
+              <Button
+                onClick={saveN8nSettings}
+                disabled={savingN8nSettings}
+                className="bg-gradient-primary text-primary-foreground"
+              >
+                {savingN8nSettings ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4 mr-2" />
+                )}
+                Save n8n Settings
+              </Button>
+
+              <Separator className="bg-border" />
+
+              {/* AI n8n Workflow Helper */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-foreground">AI Workflow Helper</Label>
+                    <p className="text-xs text-muted-foreground">Use AI to generate n8n workflow configurations</p>
+                  </div>
+                  <Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="bg-gradient-primary text-primary-foreground">
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Create with AI
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                          <Sparkles className="w-5 h-5 text-primary" />
+                          AI n8n Workflow Generator
+                        </DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>What do you want to help with?</Label>
+                          <div className="flex gap-2">
+                            <Button
+                              variant={aiAction === "suggest_nodes" ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setAiAction("suggest_nodes")}
+                            >
+                              Suggest Nodes
+                            </Button>
+                            <Button
+                              variant={aiAction === "generate_workflow" ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setAiAction("generate_workflow")}
+                            >
+                              Generate Workflow
+                            </Button>
+                            <Button
+                              variant={aiAction === "help" ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setAiAction("help")}
+                            >
+                              Get Help
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Describe what you want to automate</Label>
+                          <Textarea
+                            placeholder={
+                              aiAction === "suggest_nodes"
+                                ? "e.g., I want to automatically post new video outputs to social media..."
+                                : aiAction === "generate_workflow"
+                                ? "e.g., Create a workflow that triggers when a video is generated, uploads it to S3, and sends a Slack notification..."
+                                : "e.g., How do I connect a webhook to a Google Sheets node?"
+                            }
+                            value={aiPrompt}
+                            onChange={(e) => setAiPrompt(e.target.value)}
+                            rows={4}
+                          />
+                        </div>
+
+                        <Button
+                          onClick={generateAiN8nHelp}
+                          disabled={aiLoading || !aiPrompt.trim()}
+                          className="w-full bg-gradient-primary text-primary-foreground"
+                        >
+                          {aiLoading ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Generating...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-4 h-4 mr-2" />
+                              Generate with AI
+                            </>
+                          )}
+                        </Button>
+
+                        {aiResult && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <Label>AI Response</Label>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => copyToClipboard(typeof aiResult === "string" ? aiResult : JSON.stringify(aiResult, null, 2))}
+                              >
+                                <Copy className="w-3 h-3 mr-1" />
+                                Copy
+                              </Button>
+                            </div>
+                            <div className="p-4 rounded-lg bg-muted/50 border border-border max-h-[300px] overflow-y-auto">
+                              {typeof aiResult === "string" ? (
+                                <p className="text-sm whitespace-pre-wrap">{aiResult}</p>
+                              ) : (
+                                <pre className="text-xs font-mono overflow-x-auto">
+                                  {JSON.stringify(aiResult, null, 2)}
+                                </pre>
+                              )}
+                            </div>
+                            {typeof aiResult === "object" && aiResult.suggestions && (
+                              <div className="space-y-2">
+                                <Label className="text-sm">Suggested Nodes:</Label>
+                                <div className="grid gap-2">
+                                  {aiResult.suggestions.map((s: any, i: number) => (
+                                    <div key={i} className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+                                      <div className="font-medium text-sm">{s.name}</div>
+                                      <div className="text-xs text-muted-foreground">{s.node_type}</div>
+                                      <div className="text-xs mt-1">{s.description}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </div>
+
+              <Separator className="bg-border" />
 
               {/* MCP Integration Info */}
               <div className="p-4 rounded-lg bg-primary/10 border border-primary/20 space-y-2">
