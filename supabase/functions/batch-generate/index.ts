@@ -19,7 +19,26 @@ interface QueueItem {
   engineName: string;
   variationIndex: number;
   prompt: string;
+  costTier: string;
 }
+
+interface Engine {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  cost_tier: string;
+  supports_free_tier: boolean;
+  priority_score: number;
+}
+
+// Define which cost tiers are allowed for each pricing tier
+const TIER_MAPPINGS: Record<string, string[]> = {
+  free: ['free'],
+  cheap: ['free', 'cheap'],
+  normal: ['free', 'cheap', 'normal'],
+  expensive: ['free', 'cheap', 'normal', 'expensive'],
+};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -58,7 +77,19 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Starting batch generation for script: ${scriptId}, variations: ${variationsPerScene}`);
+    console.log(`[batch-generate] Starting batch generation for script: ${scriptId}, variations: ${variationsPerScene}`);
+
+    // Fetch user settings to get pricing tier
+    const { data: userSettings } = await supabase
+      .from("user_settings")
+      .select("pricing_tier")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const pricingTier = userSettings?.pricing_tier || 'normal';
+    const allowedTiers = TIER_MAPPINGS[pricingTier] || TIER_MAPPINGS.normal;
+
+    console.log(`[batch-generate] User pricing tier: ${pricingTier}, allowed tiers: ${allowedTiers.join(', ')}`);
 
     // Fetch scenes for the script
     const { data: scenes, error: scenesError } = await supabase
@@ -79,19 +110,33 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch active engines
-    const { data: engines, error: enginesError } = await supabase
+    // Fetch active engines and filter by pricing tier
+    const { data: allEngines, error: enginesError } = await supabase
       .from("ai_engines")
       .select("*")
       .eq("status", "active");
 
-    if (enginesError || !engines || engines.length === 0) {
+    if (enginesError || !allEngines || allEngines.length === 0) {
       console.error("Error fetching engines:", enginesError);
       throw new Error("No active engines available");
     }
 
+    // Filter engines by user's pricing tier
+    const engines = (allEngines as Engine[]).filter(e => 
+      allowedTiers.includes(e.cost_tier || 'normal')
+    );
+
+    if (engines.length === 0) {
+      return new Response(
+        JSON.stringify({ error: `No engines available for ${pricingTier} tier` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[batch-generate] ${engines.length} engines available after tier filter: ${engines.map(e => e.name).join(', ')}`);
+
     // Group engines by type for smart selection
-    const enginesByType: Record<string, typeof engines> = {
+    const enginesByType: Record<string, Engine[]> = {
       avatar: engines.filter(e => e.type === "avatar"),
       text_to_video: engines.filter(e => e.type === "text_to_video"),
       image_to_video: engines.filter(e => e.type === "image_to_video"),
@@ -105,7 +150,7 @@ Deno.serve(async (req) => {
     for (const scene of scenes) {
       for (let v = 0; v < variationsPerScene; v++) {
         // Select engine based on scene type or random if enabled
-        let selectedEngine;
+        let selectedEngine: Engine;
         
         if (randomEngines) {
           // Smart random: pick from appropriate type based on scene
@@ -145,11 +190,12 @@ Deno.serve(async (req) => {
           engineName: selectedEngine.name,
           variationIndex: v + 1,
           prompt: variationPrompt,
+          costTier: selectedEngine.cost_tier || 'normal',
         });
       }
     }
 
-    console.log(`Generated ${queueItems.length} queue items for ${scenes.length} scenes`);
+    console.log(`[batch-generate] Generated ${queueItems.length} queue items for ${scenes.length} scenes`);
 
     // Insert into generation_queue
     const queueInserts = queueItems.map((item, index) => ({
@@ -181,15 +227,17 @@ Deno.serve(async (req) => {
     // Return batch info
     const batchSummary = {
       scriptId,
+      pricingTier,
       totalScenes: scenes.length,
       variationsPerScene,
       totalVariations: queueItems.length,
       queuedItems: queueData?.length || 0,
       engines: [...new Set(queueItems.map(q => q.engineName))],
+      costTiers: [...new Set(queueItems.map(q => q.costTier))],
       estimatedTime: `${Math.ceil(queueItems.length * 30 / 60)} minutes`,
     };
 
-    console.log("Batch generation queued successfully:", batchSummary);
+    console.log("[batch-generate] Batch generation queued successfully:", batchSummary);
 
     return new Response(
       JSON.stringify({ 
