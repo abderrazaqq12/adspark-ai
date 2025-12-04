@@ -333,6 +333,12 @@ export default function Settings() {
   const [aiAction, setAiAction] = useState<"generate_workflow" | "suggest_nodes" | "help">("suggest_nodes");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState<any>(null);
+  
+  // n8n workflow management state
+  const [deployingWorkflow, setDeployingWorkflow] = useState(false);
+  const [loadingWorkflows, setLoadingWorkflows] = useState(false);
+  const [n8nWorkflows, setN8nWorkflows] = useState<any[]>([]);
+  const [showWorkflowManager, setShowWorkflowManager] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -729,6 +735,99 @@ export default function Settings() {
       toast.error(error instanceof Error ? error.message : "Failed to get AI help");
     } finally {
       setAiLoading(false);
+    }
+  };
+
+  const deployWorkflowToN8n = async (workflow: any) => {
+    if (!userN8nWebhook || !n8nApiKey) {
+      toast.error("Please configure your n8n webhook URL and API key first");
+      return;
+    }
+
+    setDeployingWorkflow(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("n8n-ai-helper", {
+        body: {
+          action: "deploy_workflow",
+          n8nBaseUrl: userN8nWebhook,
+          n8nApiKey: n8nApiKey,
+          workflow: workflow,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success(data.message || "Workflow deployed successfully!");
+        await listN8nWorkflows(); // Refresh the list
+      } else {
+        throw new Error(data.error || "Failed to deploy workflow");
+      }
+    } catch (error) {
+      console.error("Deploy error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to deploy workflow");
+    } finally {
+      setDeployingWorkflow(false);
+    }
+  };
+
+  const listN8nWorkflows = async () => {
+    if (!userN8nWebhook || !n8nApiKey) {
+      toast.error("Please configure your n8n webhook URL and API key first");
+      return;
+    }
+
+    setLoadingWorkflows(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("n8n-ai-helper", {
+        body: {
+          action: "list_workflows",
+          n8nBaseUrl: userN8nWebhook,
+          n8nApiKey: n8nApiKey,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        setN8nWorkflows(data.workflows || []);
+        setShowWorkflowManager(true);
+        toast.success(`Found ${data.workflows?.length || 0} workflows`);
+      } else {
+        throw new Error(data.error || "Failed to list workflows");
+      }
+    } catch (error) {
+      console.error("List workflows error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to list workflows");
+    } finally {
+      setLoadingWorkflows(false);
+    }
+  };
+
+  const toggleWorkflowActive = async (workflowId: string, active: boolean) => {
+    if (!userN8nWebhook || !n8nApiKey) return;
+
+    try {
+      const { data, error } = await supabase.functions.invoke("n8n-ai-helper", {
+        body: {
+          action: "activate_workflow",
+          n8nBaseUrl: userN8nWebhook,
+          n8nApiKey: n8nApiKey,
+          workflow: { id: workflowId, active },
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success(data.message);
+        await listN8nWorkflows(); // Refresh
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (error) {
+      console.error("Toggle workflow error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to update workflow");
     }
   };
 
@@ -1380,14 +1479,32 @@ export default function Settings() {
                           <div className="space-y-2">
                             <div className="flex items-center justify-between">
                               <Label>AI Response</Label>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => copyToClipboard(typeof aiResult === "string" ? aiResult : JSON.stringify(aiResult, null, 2))}
-                              >
-                                <Copy className="w-3 h-3 mr-1" />
-                                Copy
-                              </Button>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => copyToClipboard(typeof aiResult === "string" ? aiResult : JSON.stringify(aiResult, null, 2))}
+                                >
+                                  <Copy className="w-3 h-3 mr-1" />
+                                  Copy
+                                </Button>
+                                {/* Deploy button for generated workflows */}
+                                {aiAction === "generate_workflow" && typeof aiResult === "object" && aiResult.nodes && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => deployWorkflowToN8n(aiResult)}
+                                    disabled={deployingWorkflow || !userN8nWebhook || !n8nApiKey}
+                                    className="bg-gradient-primary text-primary-foreground"
+                                  >
+                                    {deployingWorkflow ? (
+                                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                    ) : (
+                                      <Zap className="w-3 h-3 mr-1" />
+                                    )}
+                                    Deploy to n8n
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                             <div className="p-4 rounded-lg bg-muted/50 border border-border max-h-[300px] overflow-y-auto">
                               {typeof aiResult === "string" ? (
@@ -1412,6 +1529,9 @@ export default function Settings() {
                                 </div>
                               </div>
                             )}
+                            {!userN8nWebhook || !n8nApiKey ? (
+                              <p className="text-xs text-amber-500">Configure n8n URL and API key above to deploy workflows</p>
+                            ) : null}
                           </div>
                         )}
                       </div>
@@ -1422,8 +1542,70 @@ export default function Settings() {
 
               <Separator className="bg-border" />
 
+              {/* Workflow Manager */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-foreground">Workflow Manager</Label>
+                    <p className="text-xs text-muted-foreground">View and manage your n8n workflows</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={listN8nWorkflows}
+                    disabled={loadingWorkflows || !userN8nWebhook || !n8nApiKey}
+                  >
+                    {loadingWorkflows ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                    )}
+                    Load Workflows
+                  </Button>
+                </div>
+
+                {showWorkflowManager && n8nWorkflows.length > 0 && (
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    {n8nWorkflows.map((wf: any) => (
+                      <div
+                        key={wf.id}
+                        className="p-3 rounded-lg bg-muted/30 border border-border flex items-center justify-between"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm truncate">{wf.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            ID: {wf.id} • {wf.nodes?.length || 0} nodes
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-2">
+                          <Badge
+                            variant={wf.active ? "default" : "secondary"}
+                            className={wf.active ? "bg-green-500/20 text-green-500" : ""}
+                          >
+                            {wf.active ? "Active" : "Inactive"}
+                          </Badge>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => toggleWorkflowActive(wf.id, !wf.active)}
+                          >
+                            {wf.active ? "Deactivate" : "Activate"}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {showWorkflowManager && n8nWorkflows.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No workflows found in your n8n instance
+                  </p>
+                )}
+              </div>
+
+              <Separator className="bg-border" />
               {/* MCP Integration Info */}
-              <div className="p-4 rounded-lg bg-primary/10 border border-primary/20 space-y-2">
+              <div className="p-4 rounded-lg bg-primary/10 border border-primary/20 space-y-3">
                 <div className="flex items-center gap-2">
                   <Bot className="w-4 h-4 text-primary" />
                   <span className="font-medium text-primary">n8n MCP Integration</span>
@@ -1432,6 +1614,17 @@ export default function Settings() {
                   This platform supports n8n MCP (Model Context Protocol) integration. You can connect n8n as an MCP server 
                   to expose your workflows as tools for AI assistants.
                 </p>
+                <div className="space-y-2">
+                  <Label className="text-xs">Your n8n MCP Server URL</Label>
+                  <Input
+                    readOnly
+                    value={userN8nWebhook ? userN8nWebhook.replace(/\/?$/, "/mcp-server/http") : "Configure webhook URL above"}
+                    className="font-mono text-xs bg-muted/30"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Use this URL to connect n8n as an MCP server in your AI tools
+                  </p>
+                </div>
                 <a 
                   href="https://docs.n8n.io/advanced-ai/accessing-n8n-mcp-server/" 
                   target="_blank" 
