@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { DollarSign, Sparkles, TrendingUp, Crown, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface BatchCostPreviewProps {
   scenesCount: number;
@@ -28,6 +29,7 @@ export default function BatchCostPreview({ scenesCount, variationsPerScene }: Ba
   const [userTier, setUserTier] = useState<string>("normal");
   const [availableEngines, setAvailableEngines] = useState<Engine[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     fetchUserSettings();
@@ -55,6 +57,32 @@ export default function BatchCostPreview({ scenesCount, variationsPerScene }: Ba
     }
   };
 
+  const handleTierChange = async (newTier: string) => {
+    setUpdating(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Please sign in to change tier");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("user_settings")
+        .update({ pricing_tier: newTier })
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+
+      setUserTier(newTier);
+      toast.success(`Switched to ${TIER_COSTS[newTier].label} tier`);
+    } catch (error: any) {
+      console.error("Error updating tier:", error);
+      toast.error("Failed to update tier");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const totalVideos = scenesCount * variationsPerScene;
   const tierConfig = TIER_COSTS[userTier] || TIER_COSTS.normal;
   const TierIcon = tierConfig.icon;
@@ -65,20 +93,6 @@ export default function BatchCostPreview({ scenesCount, variationsPerScene }: Ba
   const enginesInTier = availableEngines.filter(e => {
     const engineTierIndex = tiers.indexOf(e.cost_tier || 'normal');
     return engineTierIndex <= userTierIndex;
-  });
-
-  // Calculate cost estimates per tier
-  const costBreakdown = tiers.slice(0, userTierIndex + 1).map(tier => {
-    const tierEngines = availableEngines.filter(e => e.cost_tier === tier);
-    const tierCost = TIER_COSTS[tier];
-    const estimatedUsage = Math.ceil(totalVideos / (userTierIndex + 1)); // Distribute across tiers
-    return {
-      tier,
-      ...tierCost,
-      engineCount: tierEngines.length,
-      estimatedVideos: tier === userTier ? totalVideos : estimatedUsage,
-      estimatedCost: tier === 'free' ? 0 : estimatedUsage * tierCost.perVideo,
-    };
   });
 
   const totalEstimatedCost = userTier === 'free' ? 0 : totalVideos * tierConfig.perVideo;
@@ -144,26 +158,35 @@ export default function BatchCostPreview({ scenesCount, variationsPerScene }: Ba
           )}
         </div>
 
-        {/* Tier Comparison */}
-        <div className="grid grid-cols-4 gap-1 pt-2">
-          {Object.entries(TIER_COSTS).map(([tier, config]) => {
-            const Icon = config.icon;
-            const isSelected = tier === userTier;
-            const tierCost = tier === 'free' ? 0 : totalVideos * config.perVideo;
-            
-            return (
-              <div 
-                key={tier} 
-                className={`p-2 rounded text-center ${isSelected ? 'bg-primary/20 ring-1 ring-primary' : 'bg-muted/20'}`}
-              >
-                <Icon className={`w-3 h-3 mx-auto mb-1 ${config.color}`} />
-                <p className="text-[10px] text-muted-foreground">{config.label}</p>
-                <p className={`text-xs font-semibold ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
-                  {tier === 'free' ? "Free" : `$${tierCost.toFixed(0)}`}
-                </p>
-              </div>
-            );
-          })}
+        {/* Clickable Tier Selector */}
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground font-medium">Change Tier</p>
+          <div className="grid grid-cols-4 gap-1">
+            {Object.entries(TIER_COSTS).map(([tier, config]) => {
+              const Icon = config.icon;
+              const isSelected = tier === userTier;
+              const tierCost = tier === 'free' ? 0 : totalVideos * config.perVideo;
+              
+              return (
+                <button 
+                  key={tier} 
+                  onClick={() => handleTierChange(tier)}
+                  disabled={updating}
+                  className={`p-2 rounded text-center transition-all cursor-pointer hover:scale-105 disabled:opacity-50 ${
+                    isSelected 
+                      ? 'bg-primary/20 ring-2 ring-primary shadow-glow' 
+                      : 'bg-muted/20 hover:bg-muted/40'
+                  }`}
+                >
+                  <Icon className={`w-3 h-3 mx-auto mb-1 ${config.color}`} />
+                  <p className="text-[10px] text-muted-foreground">{config.label}</p>
+                  <p className={`text-xs font-semibold ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
+                    {tier === 'free' ? "Free" : `$${tierCost.toFixed(0)}`}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {userTier === 'free' && enginesInTier.length < 5 && (
