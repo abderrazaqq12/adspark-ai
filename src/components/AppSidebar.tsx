@@ -1,8 +1,9 @@
-import { Home, Video, FileText, Settings, Sparkles, FolderOpen, LogOut, Cpu } from "lucide-react";
+import { Home, Video, FileText, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { CreditsDisplay } from "@/components/CreditsDisplay";
 import {
   Sidebar,
   SidebarContent,
@@ -20,6 +21,7 @@ const navigationItems = [
   { title: "Dashboard", url: "/", icon: Home },
   { title: "Create Video", url: "/create", icon: Video },
   { title: "My Projects", url: "/projects", icon: FolderOpen },
+  { title: "Video Library", url: "/videos", icon: PlaySquare },
 ];
 
 const toolsItems = [
@@ -107,7 +109,8 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       
-      <SidebarFooter className="border-t border-sidebar-border p-4">
+      <SidebarFooter className="border-t border-sidebar-border p-4 space-y-3">
+        {open && <CreditsDisplay />}
         <SidebarMenuButton 
           onClick={handleLogout}
           className="w-full justify-start text-destructive hover:bg-destructive/10"

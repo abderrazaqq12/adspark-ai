@@ -1,9 +1,27 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Check, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { 
+  Sparkles, 
+  Check, 
+  Loader2, 
+  Video, 
+  UserCircle, 
+  Image, 
+  Mic, 
+  Search,
+  Zap,
+  Clock,
+  DollarSign,
+  Wand2,
+  ArrowRight
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { sceneRouting, videoModels, avatarModels, voiceModels } from "@/data/aiModels";
 
 interface AIEngine {
   id: string;
@@ -15,11 +33,14 @@ interface AIEngine {
   pricing_model: string | null;
   max_duration_sec: number | null;
   supported_ratios: string[] | null;
+  priority_score: number | null;
 }
 
 export default function Engines() {
   const [engines, setEngines] = useState<AIEngine[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState("all");
 
   useEffect(() => {
     fetchEngines();
@@ -47,9 +68,24 @@ export default function Engines() {
       case "active":
         return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Active</Badge>;
       case "coming_soon":
-        return <Badge variant="secondary" className="bg-secondary/20 text-secondary-foreground border-secondary/30">Coming Soon</Badge>;
+        return <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">Coming Soon</Badge>;
       default:
-        return <Badge variant="outline">Disabled</Badge>;
+        return <Badge variant="outline" className="border-muted-foreground/30">Disabled</Badge>;
+    }
+  };
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case "avatar":
+        return <UserCircle className="w-5 h-5" />;
+      case "text_to_video":
+        return <Video className="w-5 h-5" />;
+      case "image_to_video":
+        return <Image className="w-5 h-5" />;
+      case "voice":
+        return <Mic className="w-5 h-5" />;
+      default:
+        return <Sparkles className="w-5 h-5" />;
     }
   };
 
@@ -64,6 +100,36 @@ export default function Engines() {
     return labels[type] || type;
   };
 
+  const getPricingBadge = (model: string | null) => {
+    switch (model) {
+      case "free":
+        return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Free</Badge>;
+      case "free_tier":
+        return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">Free Tier</Badge>;
+      case "pay_per_use":
+        return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">Pay Per Use</Badge>;
+      case "subscription":
+        return <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">Subscription</Badge>;
+      default:
+        return null;
+    }
+  };
+
+  const filteredEngines = engines.filter(engine => {
+    const matchesSearch = engine.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      engine.description?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesType = activeTab === "all" || engine.type === activeTab;
+    return matchesSearch && matchesType;
+  });
+
+  const engineCounts = {
+    all: engines.length,
+    text_to_video: engines.filter(e => e.type === "text_to_video").length,
+    avatar: engines.filter(e => e.type === "avatar").length,
+    image_to_video: engines.filter(e => e.type === "image_to_video").length,
+    voice: engines.filter(e => e.type === "voice").length,
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto p-8 flex items-center justify-center min-h-[50vh]">
@@ -74,61 +140,261 @@ export default function Engines() {
 
   return (
     <div className="container mx-auto p-8 space-y-8 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-4xl font-bold text-foreground mb-2">AI Video Engines</h1>
-        <p className="text-muted-foreground">
-          {engines.length} engines available for video generation
-        </p>
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-bold text-foreground mb-2">AI Video Engines</h1>
+          <p className="text-muted-foreground">
+            {engines.filter(e => e.status === "active").length} active engines • {engines.length} total available
+          </p>
+        </div>
+        <div className="relative w-full md:w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search engines..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+          />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {engines.map((engine) => (
-          <Card key={engine.id} className="bg-gradient-card border-border shadow-card hover:border-primary/50 transition-colors">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
-                    <Sparkles className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-foreground">{engine.name}</CardTitle>
-                    {getStatusBadge(engine.status)}
-                  </div>
+      {/* Engine Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        {[
+          { label: "All Engines", count: engineCounts.all, icon: Sparkles, color: "text-primary" },
+          { label: "Video Gen", count: engineCounts.text_to_video, icon: Video, color: "text-blue-400" },
+          { label: "Avatar/UGC", count: engineCounts.avatar, icon: UserCircle, color: "text-purple-400" },
+          { label: "Image to Video", count: engineCounts.image_to_video, icon: Image, color: "text-green-400" },
+          { label: "Voice", count: engineCounts.voice, icon: Mic, color: "text-orange-400" },
+        ].map((stat) => (
+          <Card key={stat.label} className="bg-gradient-card border-border">
+            <CardContent className="pt-4 pb-3">
+              <div className="flex items-center gap-3">
+                <stat.icon className={`w-5 h-5 ${stat.color}`} />
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{stat.count}</p>
+                  <p className="text-xs text-muted-foreground">{stat.label}</p>
                 </div>
-              </div>
-              <CardDescription className="text-muted-foreground mt-2">
-                {engine.description || "AI-powered video generation engine"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Check className="w-4 h-4 text-primary" />
-                  <span>{getTypeLabel(engine.type)}</span>
-                </div>
-                {engine.max_duration_sec && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Check className="w-4 h-4 text-primary" />
-                    <span>Up to {engine.max_duration_sec}s duration</span>
-                  </div>
-                )}
-                {engine.supports_free_tier && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Check className="w-4 h-4 text-primary" />
-                    <span>Free tier available</span>
-                  </div>
-                )}
-                {engine.supported_ratios && engine.supported_ratios.length > 0 && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Check className="w-4 h-4 text-primary" />
-                    <span>Ratios: {engine.supported_ratios.join(", ")}</span>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {/* Tabs & Engine Grid */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="mb-6">
+          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="text_to_video">Video Gen</TabsTrigger>
+          <TabsTrigger value="avatar">Avatar/UGC</TabsTrigger>
+          <TabsTrigger value="image_to_video">Image → Video</TabsTrigger>
+          <TabsTrigger value="voice">Voice</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value={activeTab}>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredEngines.map((engine) => (
+              <Card 
+                key={engine.id} 
+                className={`bg-gradient-card border-border shadow-card transition-all hover:shadow-lg ${
+                  engine.status === "active" ? "hover:border-primary/50" : "opacity-75"
+                }`}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                        engine.status === "active" ? "bg-primary/20" : "bg-muted"
+                      }`}>
+                        {getTypeIcon(engine.type)}
+                      </div>
+                      <div>
+                        <CardTitle className="text-foreground text-lg">{engine.name}</CardTitle>
+                        <div className="flex items-center gap-2 mt-1">
+                          {getStatusBadge(engine.status)}
+                          {getPricingBadge(engine.pricing_model)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <CardDescription className="text-muted-foreground mt-3">
+                    {engine.description || "AI-powered video generation engine"}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Wand2 className="w-4 h-4 text-primary" />
+                      <span>{getTypeLabel(engine.type)}</span>
+                    </div>
+                    {engine.max_duration_sec && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Clock className="w-4 h-4 text-primary" />
+                        <span>Up to {engine.max_duration_sec}s per clip</span>
+                      </div>
+                    )}
+                    {engine.supports_free_tier && (
+                      <div className="flex items-center gap-2 text-sm text-green-400">
+                        <DollarSign className="w-4 h-4" />
+                        <span>Free tier available</span>
+                      </div>
+                    )}
+                    {engine.supported_ratios && engine.supported_ratios.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {engine.supported_ratios.map((ratio) => (
+                          <Badge key={ratio} variant="outline" className="text-xs">
+                            {ratio}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {engine.priority_score && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2 pt-2 border-t border-border">
+                        <Zap className="w-3 h-3" />
+                        <span>Priority Score: {engine.priority_score}</span>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      {/* Scene Routing Guide */}
+      <Card className="bg-gradient-card border-border shadow-card">
+        <CardHeader>
+          <CardTitle className="text-foreground flex items-center gap-2">
+            <ArrowRight className="w-5 h-5 text-primary" />
+            Smart Scene Routing
+          </CardTitle>
+          <CardDescription className="text-muted-foreground">
+            Automatic engine selection based on scene type for optimal results
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {sceneRouting.slice(0, 9).map((route) => (
+              <div 
+                key={route.sceneType}
+                className="p-4 rounded-lg bg-muted/30 border border-border hover:border-primary/30 transition-colors"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <Badge variant="outline" className="text-xs">{route.sceneType}</Badge>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <p className="font-medium text-foreground">{route.recommendedModel}</p>
+                <p className="text-xs text-muted-foreground mt-1">{route.reason}</p>
+                {route.alternativeModel && (
+                  <p className="text-xs text-primary mt-1">Alt: {route.alternativeModel}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Model Comparison from aiModels data */}
+      <Card className="bg-gradient-card border-border shadow-card">
+        <CardHeader>
+          <CardTitle className="text-foreground">Model Capabilities Reference</CardTitle>
+          <CardDescription className="text-muted-foreground">
+            Detailed comparison of AI video models and their best use cases
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="video">
+            <TabsList className="mb-4">
+              <TabsTrigger value="video">Video Models</TabsTrigger>
+              <TabsTrigger value="avatar">Avatar Models</TabsTrigger>
+              <TabsTrigger value="voice">Voice Models</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="video">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-3 px-4 text-muted-foreground">Model</th>
+                      <th className="text-left py-3 px-4 text-muted-foreground">Best For</th>
+                      <th className="text-left py-3 px-4 text-muted-foreground">Output</th>
+                      <th className="text-left py-3 px-4 text-muted-foreground">Speed</th>
+                      <th className="text-left py-3 px-4 text-muted-foreground">Pricing</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {videoModels.slice(0, 6).map((model) => (
+                      <tr key={model.id} className="border-b border-border/50 hover:bg-muted/30">
+                        <td className="py-3 px-4 font-medium text-foreground">{model.name}</td>
+                        <td className="py-3 px-4 text-muted-foreground">{model.bestFor[0]}</td>
+                        <td className="py-3 px-4 text-muted-foreground">{model.outputQuality}</td>
+                        <td className="py-3 px-4 text-muted-foreground">{model.speed}</td>
+                        <td className="py-3 px-4 text-muted-foreground">{model.pricing}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="avatar">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-3 px-4 text-muted-foreground">Model</th>
+                      <th className="text-left py-3 px-4 text-muted-foreground">Best For</th>
+                      <th className="text-left py-3 px-4 text-muted-foreground">Lip Sync</th>
+                      <th className="text-left py-3 px-4 text-muted-foreground">Realism</th>
+                      <th className="text-left py-3 px-4 text-muted-foreground">Pricing</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {avatarModels.map((model) => (
+                      <tr key={model.id} className="border-b border-border/50 hover:bg-muted/30">
+                        <td className="py-3 px-4 font-medium text-foreground">{model.name}</td>
+                        <td className="py-3 px-4 text-muted-foreground">{model.bestFor[0]}</td>
+                        <td className="py-3 px-4 text-muted-foreground">{model.lipSyncQuality}</td>
+                        <td className="py-3 px-4 text-muted-foreground">{model.avatarRealism}</td>
+                        <td className="py-3 px-4 text-muted-foreground">{model.pricing}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="voice">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-3 px-4 text-muted-foreground">Model</th>
+                      <th className="text-left py-3 px-4 text-muted-foreground">Best For</th>
+                      <th className="text-left py-3 px-4 text-muted-foreground">Quality</th>
+                      <th className="text-left py-3 px-4 text-muted-foreground">Speed</th>
+                      <th className="text-left py-3 px-4 text-muted-foreground">Pricing</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {voiceModels.map((model) => (
+                      <tr key={model.id} className="border-b border-border/50 hover:bg-muted/30">
+                        <td className="py-3 px-4 font-medium text-foreground">{model.name}</td>
+                        <td className="py-3 px-4 text-muted-foreground">{model.bestFor[0]}</td>
+                        <td className="py-3 px-4 text-muted-foreground">{model.outputQuality}</td>
+                        <td className="py-3 px-4 text-muted-foreground">{model.speed}</td>
+                        <td className="py-3 px-4 text-muted-foreground">{model.pricing}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
     </div>
   );
 }
