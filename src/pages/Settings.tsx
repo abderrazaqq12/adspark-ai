@@ -75,12 +75,77 @@ interface APIKeyConfig {
   label: string;
   description: string;
   placeholder: string;
+  websiteUrl?: string;
 }
 
 interface APIKeyCategory {
   name: string;
   keys: APIKeyConfig[];
 }
+
+// Direct API settings page URLs (not homepages)
+const API_WEBSITE_URLS: Record<string, string> = {
+  // AI Assistants
+  OPENAI_API_KEY: "https://platform.openai.com/api-keys",
+  GEMINI_API_KEY: "https://aistudio.google.com/apikey",
+  // Text-to-Video
+  RUNWAY_API_KEY: "https://app.runwayml.com/settings/api-keys",
+  PIKA_API_KEY: "https://pika.art/settings/api",
+  HAILUO_API_KEY: "https://hailuoai.com/settings/api",
+  KLING_API_KEY: "https://klingai.com/developer/api-keys",
+  VIDU_API_KEY: "https://www.vidu.studio/settings/api",
+  LTX_API_KEY: "https://ltx.studio/settings/api",
+  WAN_API_KEY: "https://www.wan.video/api",
+  SKYREELS_API_KEY: "https://skyreels.ai/settings",
+  SEEDANCE_API_KEY: "https://seedance.ai/api",
+  HIGGSFIELD_API_KEY: "https://higgsfield.ai/settings/api",
+  // Avatar & UGC
+  HEYGEN_API_KEY: "https://app.heygen.com/settings/api",
+  ELAI_API_KEY: "https://app.elai.io/settings/api-keys",
+  ARCADS_API_KEY: "https://arcads.ai/settings/api",
+  CREATIFY_API_KEY: "https://creatify.ai/settings/api",
+  JOGG_API_KEY: "https://jogg.ai/settings/api",
+  TWINADS_API_KEY: "https://twinads.ai/settings",
+  VIDNOZ_API_KEY: "https://www.vidnoz.com/api",
+  CELEBIFY_API_KEY: "https://celebify.ai/api",
+  OMNIHUMAN_API_KEY: "https://omnihuman.ai/settings",
+  HEDRA_API_KEY: "https://www.hedra.com/settings/api",
+  // Image-to-Video
+  LEONARDO_API_KEY: "https://app.leonardo.ai/settings/api",
+  FLORAFAUNA_API_KEY: "https://florafauna.ai/settings/api",
+  // Template & Editing
+  PICTORY_API_KEY: "https://pictory.ai/settings/api",
+  QUSO_API_KEY: "https://quso.ai/settings/api",
+  TOPVIEW_API_KEY: "https://topview.ai/settings/api",
+  FLEXCLIP_API_KEY: "https://flexclip.com/settings/api",
+  FLIKI_API_KEY: "https://fliki.ai/settings/api",
+  INVIDEO_API_KEY: "https://ai.invideo.io/settings/api",
+  CREATOMATE_API_KEY: "https://creatomate.com/settings/api-keys",
+  JSON2VIDEO_API_KEY: "https://json2video.com/dashboard/api-keys",
+  SHOTSTACK_API_KEY: "https://dashboard.shotstack.io/api-keys",
+  WISECUT_API_KEY: "https://wisecut.video/settings/api",
+  ZEBRACAT_API_KEY: "https://zebracat.ai/settings/api",
+  OPUS_API_KEY: "https://opus.pro/settings/api",
+  CAPTIONS_API_KEY: "https://captions.ai/settings/api",
+  NIM_API_KEY: "https://nim.video/settings/api",
+  SCADE_API_KEY: "https://scade.pro/settings/api",
+  CRAYO_API_KEY: "https://crayo.ai/settings/api",
+  // Voice & Audio
+  ELEVENLABS_API_KEY: "https://elevenlabs.io/settings/api-keys",
+  FLAIR_API_KEY: "https://flair.ai/settings/api",
+  // AI Platforms
+  HUGGINGFACE_API_KEY: "https://huggingface.co/settings/tokens",
+  LIVGEN_API_KEY: "https://livgen.ai/settings/api",
+  AIVIDEO_API_KEY: "https://aivideo.com/settings/api",
+  // Global Providers
+  AIMLAPI_API_KEY: "https://aimlapi.com/settings/api-keys",
+  OPENROUTER_API_KEY: "https://openrouter.ai/settings/keys",
+  EDENAI_API_KEY: "https://app.edenai.run/admin/account/settings",
+  FAL_API_KEY: "https://fal.ai/dashboard/keys",
+  APIFRAME_API_KEY: "https://apiframe.pro/settings/api",
+  GOOGLE_AI_STUDIO_KEY: "https://aistudio.google.com/apikey",
+  VERTEX_AI_KEY: "https://console.cloud.google.com/apis/credentials",
+};
 
 // Global API providers with multiple models
 interface GlobalAPIProvider {
@@ -1022,6 +1087,20 @@ export default function Settings() {
                                   )}
                                   <span className="ml-1 text-xs">Test</span>
                                 </Button>
+                                {API_WEBSITE_URLS[provider.key] && (
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-9 w-9"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(API_WEBSITE_URLS[provider.key], '_blank');
+                                    }}
+                                    title={`Open ${provider.label} settings page`}
+                                  >
+                                    <ExternalLink className="w-3 h-3 text-primary" />
+                                  </Button>
+                                )}
                               </div>
                             </div>
                             
@@ -1148,6 +1227,17 @@ export default function Settings() {
                             )}
                             <span className="ml-1 text-xs">Test</span>
                           </Button>
+                          {API_WEBSITE_URLS[config.key] && (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-9 w-9"
+                              onClick={() => window.open(API_WEBSITE_URLS[config.key], '_blank')}
+                              title={`Open ${config.label} settings page`}
+                            >
+                              <ExternalLink className="w-3 h-3 text-primary" />
+                            </Button>
+                          )}
                           {apiKeys[config.key] && (
                             <Button
                               variant="outline"
