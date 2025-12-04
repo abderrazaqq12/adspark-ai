@@ -3,9 +3,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { Loader2, Play, Pause, RefreshCw, CheckCircle, XCircle, Clock, Zap, Video, AlertTriangle } from "lucide-react";
+import { Loader2, Play, Pause, RefreshCw, CheckCircle, XCircle, Clock, Zap, Video, AlertTriangle, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import VideoPreviewPlayer from "./VideoPreviewPlayer";
 
 interface QueueItem {
   id: string;
@@ -55,6 +56,7 @@ export default function GenerationDashboard() {
   const [loading, setLoading] = useState(true);
   const [processingQueue, setProcessingQueue] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [previewItem, setPreviewItem] = useState<QueueItem | null>(null);
 
   useEffect(() => {
     fetchQueueItems();
@@ -362,14 +364,15 @@ export default function GenerationDashboard() {
                         </span>
                       )}
                       {item.scenes?.video_url && (
-                        <a
-                          href={item.scenes.video_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline text-sm"
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setPreviewItem(item)}
+                          className="text-primary"
                         >
-                          View
-                        </a>
+                          <Eye className="w-3 h-3 mr-1" />
+                          Preview
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -379,6 +382,23 @@ export default function GenerationDashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* Video Preview Modal */}
+      {previewItem && previewItem.scenes?.video_url && (
+        <VideoPreviewPlayer
+          open={!!previewItem}
+          onOpenChange={(open) => !open && setPreviewItem(null)}
+          videoUrl={previewItem.scenes.video_url}
+          title={previewItem.scenes.text}
+          sceneIndex={previewItem.scenes.index}
+          engineName={previewItem.ai_engines?.name}
+          onDownload={() => {
+            if (previewItem.scenes?.video_url) {
+              window.open(previewItem.scenes.video_url, '_blank');
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
