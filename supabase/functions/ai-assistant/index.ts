@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { message, provider, context, history } = await req.json();
+    const { message, provider, context, history, saasState } = await req.json();
 
     console.log(`[ai-assistant] User: ${user.id}, Provider: ${provider}`);
 
@@ -95,30 +95,71 @@ Deno.serve(async (req) => {
       });
     }
 
-    const systemPrompt = `You are an expert AI assistant specialized in creating high-converting video advertisements. Your expertise includes:
+    // Build enhanced context from SaaS state
+    let stateContext = "";
+    if (saasState) {
+      stateContext = `\n\n--- CURRENT APP STATE ---`;
+      if (saasState.productName) {
+        stateContext += `\nProduct Name: ${saasState.productName}`;
+      }
+      if (saasState.stage !== undefined) {
+        const stages = ["Product Info", "Video Script & Audio", "Scene Builder", "Video Generation", "Assembly & Edit", "Export"];
+        stateContext += `\nCurrent Stage: ${stages[saasState.stage] || `Stage ${saasState.stage}`}`;
+      }
+      if (saasState.scripts && saasState.scripts.length > 0) {
+        stateContext += `\n\nUser's Scripts (${saasState.scripts.length} total):`;
+        saasState.scripts.slice(0, 3).forEach((script: string, i: number) => {
+          stateContext += `\n\nScript ${i + 1}:\n"${script.slice(0, 500)}${script.length > 500 ? '...' : ''}"`;
+        });
+        if (saasState.scripts.length > 3) {
+          stateContext += `\n\n...and ${saasState.scripts.length - 3} more scripts`;
+        }
+      }
+      if (saasState.scenes && saasState.scenes.length > 0) {
+        stateContext += `\n\nGenerated Scenes (${saasState.scenes.length} total):`;
+        saasState.scenes.slice(0, 5).forEach((scene: any, i: number) => {
+          stateContext += `\n- Scene ${i + 1}: ${scene.description || scene.title || scene.text || 'No description'}`;
+        });
+      }
+      stateContext += `\n--- END APP STATE ---\n`;
+    }
 
-- Writing compelling ad scripts (UGC, testimonials, product showcases)
-- Creating attention-grabbing hooks that stop scrollers
-- Understanding e-commerce marketing psychology
-- Optimizing for different platforms (TikTok, Instagram, YouTube, Facebook)
-- Multi-language marketing (English, Arabic, Spanish, French)
+    const systemPrompt = `You are an expert AI assistant for a video ad creation SaaS platform. You have FULL ACCESS to the user's current project state and can provide specific, actionable advice.
 
-Context: The user is working on ${context || "video ad creation"}.
+## YOUR CAPABILITIES:
+1. **Script Writing & Improvement**: Write, rewrite, and optimize video ad scripts for conversions
+2. **Marketing Hooks**: Generate attention-grabbing hooks for TikTok, Instagram, YouTube
+3. **Scene Analysis**: Review scene breakdowns and suggest improvements
+4. **Engine Recommendations**: Advise on which AI video engines to use based on content type and budget
+5. **Platform Optimization**: Tailor content for specific platforms and audiences
+6. **Enhancement Suggestions**: Proactively suggest improvements to the user's current work
 
-Guidelines:
-1. Be concise and actionable
-2. Focus on conversion-driving copy
-3. Suggest specific hooks, CTAs, and emotional triggers
-4. When asked for scripts, format them with clear scene breakdowns
-5. Consider the target audience and platform
+## CONTEXT:
+${context || "video ad creation"}${stateContext}
 
-If the user asks for a script or hook suggestion that can be directly used, include it in your response with clear markers.`;
+## GUIDELINES:
+1. Be SPECIFIC and ACTIONABLE - reference the user's actual content
+2. When improving scripts, provide the COMPLETE improved version
+3. For hooks, give 5+ options with platform recommendations
+4. Format scripts/hooks in markdown code blocks for easy copying
+5. Consider the target platform, audience, and emotional triggers
+6. If you suggest script changes, wrap them in \`\`\`script\`\`\` blocks
+7. Be direct and concise - users want quick, valuable advice
+8. If the user asks to improve/edit something, do it immediately without asking for clarification
+
+## RESPONSE FORMAT:
+- Use markdown formatting for clarity
+- Put any suggested scripts/hooks in code blocks
+- Be conversational but efficient
+- Provide reasoning briefly, then the solution`;
 
     const messages = [
       { role: "system", content: systemPrompt },
       ...(history || []).map((m: any) => ({ role: m.role, content: m.content })),
       { role: "user", content: message },
     ];
+
+    console.log(`[ai-assistant] Sending request to ${apiUrl} with model ${model}`);
 
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -129,7 +170,7 @@ If the user asks for a script or hook suggestion that can be directly used, incl
       body: JSON.stringify({
         model,
         messages,
-        max_tokens: 1000,
+        max_tokens: 2000,
         temperature: 0.7,
       }),
     });
@@ -139,13 +180,13 @@ If the user asks for a script or hook suggestion that can be directly used, incl
       console.error(`AI API error: ${response.status}`, errorText);
       
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       
-      throw new Error(`AI API error: ${response.status}`);
+      throw new Error(`AI API error: ${response.status} - ${errorText.slice(0, 100)}`);
     }
 
     const data = await response.json();
@@ -157,6 +198,8 @@ If the user asks for a script or hook suggestion that can be directly used, incl
     if (scriptMatch) {
       suggestion = scriptMatch[1].trim();
     }
+
+    console.log(`[ai-assistant] Response generated successfully, suggestion extracted: ${!!suggestion}`);
 
     return new Response(JSON.stringify({ 
       response: assistantResponse,

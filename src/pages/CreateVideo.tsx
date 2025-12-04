@@ -1102,6 +1102,28 @@ export default function CreateVideo() {
                             )}
                           </Button>
 
+                          {/* Play Generated Voice Button - shown after generation */}
+                          {slot.generatedAudioUrl && !slot.audioUrl && (
+                            <Button
+                              variant={playingAudio === slot.id ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => playAudio(slot.id, slot.generatedAudioUrl!)}
+                              className={`text-xs ${playingAudio === slot.id ? 'bg-primary text-primary-foreground' : ''}`}
+                            >
+                              {playingAudio === slot.id ? (
+                                <>
+                                  <Pause className="w-3 h-3 mr-1" />
+                                  Playing
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="w-3 h-3 mr-1" />
+                                  Play Voice
+                                </>
+                              )}
+                            </Button>
+                          )}
+
                           {/* Upload Audio */}
                           {!slot.audioUrl && (
                             <label className="cursor-pointer">
@@ -1733,6 +1755,12 @@ export default function CreateVideo() {
       {/* AI Assistant */}
       <AIAssistant 
         context="video ad creation with scripts, hooks, and marketing copy"
+        currentState={{
+          productName: productInfo.name,
+          scripts: scriptSlots.map(s => s.text).filter(t => t.trim()),
+          scenes: scenes,
+          stage: currentStage,
+        }}
         onSuggestion={(suggestion) => {
           // Auto-fill script with AI suggestion
           if (suggestion && scriptSlots.length > 0) {
