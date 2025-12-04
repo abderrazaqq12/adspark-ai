@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Save, Plus, Trash2, FileText, Loader2, Pencil } from "lucide-react";
+import { Save, Plus, Trash2, FileText, Loader2, Pencil, Webhook, Copy, CheckCircle, XCircle, ExternalLink, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -30,6 +30,23 @@ interface UserSettings {
   use_free_tier_only: boolean | null;
 }
 
+const N8N_WEBHOOK_URL = "https://bedeukijnixeihjepbjg.supabase.co/functions/v1/n8n-webhook";
+
+const AVAILABLE_ACTIONS = [
+  { action: "create_project", description: "Create a new project", example: { name: "My Campaign", product_name: "Premium Watch", language: "en" } },
+  { action: "get_projects", description: "List all projects", example: { limit: 10 } },
+  { action: "create_script", description: "Create a new script", example: { projectId: "uuid", raw_text: "Your script text..." } },
+  { action: "generate_scripts", description: "AI generate scripts", example: { projectId: "uuid", templateId: "uuid" } },
+  { action: "breakdown_scenes", description: "Break script into scenes", example: { scriptId: "uuid" } },
+  { action: "batch_generate", description: "Start batch video generation", example: { scriptId: "uuid", variationsPerScene: 5, randomEngines: true } },
+  { action: "process_queue", description: "Process generation queue", example: { limit: 10 } },
+  { action: "generate_voiceover", description: "Generate voiceover audio", example: { scriptId: "uuid", voice: "en-US-Neural2-D" } },
+  { action: "assemble_video", description: "Assemble final video", example: { scriptId: "uuid", format: "mp4", addSubtitles: true } },
+  { action: "get_engines", description: "List AI engines", example: { type: "video", status: "active" } },
+  { action: "route_engine", description: "Auto-route to best engine", example: { sceneType: "product_showcase", complexity: "high" } },
+  { action: "full_pipeline", description: "Run entire workflow", example: { projectName: "Summer Sale", product_name: "Sunglasses", scriptText: "Your script...", variationsPerScene: 3 } },
+];
+
 export default function Settings() {
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
@@ -43,15 +60,32 @@ export default function Settings() {
     language: "en",
     category: "script",
   });
+  
+  // n8n integration state
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<"idle" | "success" | "error">("idle");
+  const [selectedAction, setSelectedAction] = useState(AVAILABLE_ACTIONS[0]);
+  const [testPayload, setTestPayload] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    setTestPayload(JSON.stringify({
+      action: selectedAction.action,
+      userId: userId || "your-user-id",
+      data: selectedAction.example
+    }, null, 2));
+  }, [selectedAction, userId]);
+
   const fetchData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      
+      setUserId(user.id);
 
       const [templatesRes, settingsRes] = await Promise.all([
         supabase.from("prompt_templates").select("*").order("created_at", { ascending: false }),
@@ -183,6 +217,45 @@ export default function Settings() {
     }
   };
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard");
+  };
+
+  const testN8NConnection = async () => {
+    setTestingConnection(true);
+    setConnectionStatus("idle");
+    
+    try {
+      const payload = JSON.parse(testPayload);
+      const response = await fetch(N8N_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setConnectionStatus("success");
+        toast.success("Connection successful!", {
+          description: `Action "${payload.action}" executed successfully`,
+        });
+        console.log("n8n webhook result:", result);
+      } else {
+        setConnectionStatus("error");
+        toast.error("Connection failed", { description: result.error });
+      }
+    } catch (error) {
+      setConnectionStatus("error");
+      toast.error("Connection failed", { 
+        description: error instanceof Error ? error.message : "Invalid JSON or network error" 
+      });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto p-8 flex items-center justify-center min-h-[50vh]">
@@ -196,9 +269,149 @@ export default function Settings() {
       <div>
         <h1 className="text-4xl font-bold text-foreground mb-2">Settings</h1>
         <p className="text-muted-foreground">
-          Manage prompt templates and generation preferences
+          Manage prompt templates, generation preferences, and integrations
         </p>
       </div>
+
+      {/* n8n Integration */}
+      <Card className="bg-gradient-card border-border shadow-card">
+        <CardHeader>
+          <CardTitle className="text-foreground flex items-center gap-2">
+            <Zap className="w-5 h-5 text-orange-500" />
+            n8n Integration
+          </CardTitle>
+          <CardDescription className="text-muted-foreground">
+            Connect your VideoAI SaaS with n8n for powerful automation workflows
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Webhook URL */}
+          <div className="space-y-2">
+            <Label className="text-foreground">Webhook URL</Label>
+            <div className="flex gap-2">
+              <Input
+                readOnly
+                value={N8N_WEBHOOK_URL}
+                className="font-mono text-sm bg-muted/50"
+              />
+              <Button variant="outline" size="icon" onClick={() => copyToClipboard(N8N_WEBHOOK_URL)}>
+                <Copy className="w-4 h-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Use this URL in your n8n HTTP Request node to trigger actions
+            </p>
+          </div>
+
+          {/* User ID */}
+          <div className="space-y-2">
+            <Label className="text-foreground">Your User ID</Label>
+            <div className="flex gap-2">
+              <Input
+                readOnly
+                value={userId || "Loading..."}
+                className="font-mono text-sm bg-muted/50"
+              />
+              <Button variant="outline" size="icon" onClick={() => copyToClipboard(userId || "")}>
+                <Copy className="w-4 h-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Include this in your n8n payload as "userId" to authenticate requests
+            </p>
+          </div>
+
+          <Separator className="bg-border" />
+
+          {/* Available Actions */}
+          <div className="space-y-3">
+            <Label className="text-foreground">Available Actions</Label>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+              {AVAILABLE_ACTIONS.map((item) => (
+                <Button
+                  key={item.action}
+                  variant={selectedAction.action === item.action ? "default" : "outline"}
+                  size="sm"
+                  className="justify-start text-xs"
+                  onClick={() => setSelectedAction(item)}
+                >
+                  {item.action}
+                </Button>
+              ))}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              <strong>{selectedAction.action}:</strong> {selectedAction.description}
+            </p>
+          </div>
+
+          {/* Test Payload */}
+          <div className="space-y-2">
+            <Label className="text-foreground">Test Payload</Label>
+            <Textarea
+              value={testPayload}
+              onChange={(e) => setTestPayload(e.target.value)}
+              rows={8}
+              className="font-mono text-sm"
+            />
+          </div>
+
+          {/* Test Connection */}
+          <div className="flex items-center gap-4">
+            <Button 
+              onClick={testN8NConnection} 
+              disabled={testingConnection}
+              className="bg-gradient-primary text-primary-foreground"
+            >
+              {testingConnection ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Webhook className="w-4 h-4 mr-2" />
+              )}
+              Test Connection
+            </Button>
+            {connectionStatus === "success" && (
+              <div className="flex items-center gap-2 text-green-500">
+                <CheckCircle className="w-5 h-5" />
+                <span className="text-sm">Connected</span>
+              </div>
+            )}
+            {connectionStatus === "error" && (
+              <div className="flex items-center gap-2 text-destructive">
+                <XCircle className="w-5 h-5" />
+                <span className="text-sm">Failed</span>
+              </div>
+            )}
+          </div>
+
+          <Separator className="bg-border" />
+
+          {/* n8n Setup Instructions */}
+          <div className="p-4 bg-muted/30 rounded-lg space-y-3">
+            <h4 className="font-medium text-foreground flex items-center gap-2">
+              <ExternalLink className="w-4 h-4" />
+              Setup Instructions for n8n
+            </h4>
+            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+              <li>Open your n8n workflow editor</li>
+              <li>Add an <strong>HTTP Request</strong> node</li>
+              <li>Set Method to <strong>POST</strong></li>
+              <li>Paste the Webhook URL above</li>
+              <li>Set Body Content Type to <strong>JSON</strong></li>
+              <li>Use the payload format shown above</li>
+              <li>Connect additional nodes to process the response</li>
+            </ol>
+            <a 
+              href="https://n8n.srv854030.hstgr.cloud" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-primary hover:underline text-sm"
+            >
+              Open n8n Dashboard
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Prompt Templates */}
       <Card className="bg-gradient-card border-border shadow-card">
