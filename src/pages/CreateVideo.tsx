@@ -58,6 +58,7 @@ const ELEVENLABS_VOICES = [
 
 const ELEVENLABS_MODELS = [
   { id: "eleven_multilingual_v2", name: "Multilingual v2", description: "29 languages, most natural" },
+  { id: "eleven_flash_v2_5", name: "Flash v2.5 (v3)", description: "Ultra-fast, high quality" },
   { id: "eleven_turbo_v2_5", name: "Turbo v2.5", description: "32 languages, low latency" },
   { id: "eleven_turbo_v2", name: "Turbo v2", description: "English only, fastest" },
   { id: "eleven_monolingual_v1", name: "English v1", description: "Legacy English model" },
@@ -77,6 +78,14 @@ const VOICE_LANGUAGES = [
   { id: "ko", name: "Korean (한국어)" },
   { id: "zh", name: "Chinese (中文)" },
 ];
+
+interface ElevenLabsVoice {
+  id: string;
+  name: string;
+  category?: string;
+  labels?: Record<string, string>;
+  preview_url?: string;
+}
 
 // Production pipeline stages based on roadmap
 const pipelineStages = [
@@ -132,10 +141,15 @@ export default function CreateVideo() {
   const [selectedFormats, setSelectedFormats] = useState<string[]>(["9:16", "16:9", "1:1"]);
   const [playingAudio, setPlayingAudio] = useState<number | null>(null);
   const [audioElements, setAudioElements] = useState<Record<number, HTMLAudioElement>>({});
+  const [myVoices, setMyVoices] = useState<ElevenLabsVoice[]>([]);
+  const [isLoadingVoices, setIsLoadingVoices] = useState(false);
+  const [isGeneratingScript, setIsGeneratingScript] = useState(false);
+  const [voiceSource, setVoiceSource] = useState<'library' | 'my'>('library');
 
-  // Load existing project if user has one
+  // Load existing project and voices
   useEffect(() => {
     loadLatestProject();
+    loadMyVoices();
   }, []);
 
   const loadLatestProject = async () => {
@@ -185,6 +199,59 @@ export default function CreateVideo() {
           setCurrentStage(2);
         }
       }
+    }
+  };
+
+  const loadMyVoices = async () => {
+    setIsLoadingVoices(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-voiceover", {
+        body: { action: 'get_voices' },
+      });
+
+      if (error) throw error;
+
+      if (data.my_voices && data.my_voices.length > 0) {
+        setMyVoices(data.my_voices);
+      }
+    } catch (error: any) {
+      console.error("Error loading voices:", error);
+      // Don't show error toast - it's optional
+    } finally {
+      setIsLoadingVoices(false);
+    }
+  };
+
+  const generateScriptFromProduct = async (slotId: number) => {
+    if (!productInfo.name.trim()) {
+      toast.error("Please enter product name first");
+      setExpandedStage(0);
+      return;
+    }
+
+    setIsGeneratingScript(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-script-from-product", {
+        body: {
+          productName: productInfo.name,
+          productDescription: productInfo.description,
+          productImageUrl: productInfo.imageUrl,
+          productLink: productInfo.link,
+          language: voiceLanguage,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.script) {
+        updateScriptSlot(slotId, "text", data.script);
+        toast.success(`Script generated! (~${data.estimated_duration_seconds}s)`);
+      }
+    } catch (error: any) {
+      console.error("Error generating script:", error);
+      toast.error(error.message || "Failed to generate script");
+    } finally {
+      setIsGeneratingScript(false);
     }
   };
 
@@ -593,6 +660,27 @@ export default function CreateVideo() {
                     <Volume2 className="w-4 h-4 text-primary" />
                     ElevenLabs Voice Settings
                   </h4>
+                  
+                  {/* Voice Source Toggle */}
+                  <div className="flex gap-2">
+                    <Button 
+                      variant={voiceSource === 'library' ? 'default' : 'outline'} 
+                      size="sm"
+                      onClick={() => setVoiceSource('library')}
+                    >
+                      Library Voices
+                    </Button>
+                    <Button 
+                      variant={voiceSource === 'my' ? 'default' : 'outline'} 
+                      size="sm"
+                      onClick={() => setVoiceSource('my')}
+                      disabled={myVoices.length === 0}
+                    >
+                      My Voices {myVoices.length > 0 && `(${myVoices.length})`}
+                    </Button>
+                    {isLoadingVoices && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+                  </div>
+
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label className="text-foreground text-xs">Voice</Label>
@@ -601,11 +689,19 @@ export default function CreateVideo() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="max-h-[300px]">
-                          {ELEVENLABS_VOICES.map((voice) => (
-                            <SelectItem key={voice.id} value={voice.id}>
-                              {voice.name}
-                            </SelectItem>
-                          ))}
+                          {voiceSource === 'library' ? (
+                            ELEVENLABS_VOICES.map((voice) => (
+                              <SelectItem key={voice.id} value={voice.id}>
+                                {voice.name}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            myVoices.map((voice) => (
+                              <SelectItem key={voice.id} value={voice.id}>
+                                {voice.name}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -689,6 +785,27 @@ export default function CreateVideo() {
                         </div>
                         
                         <div className="flex items-center gap-2">
+                          {/* Generate Script Button */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => generateScriptFromProduct(slot.id)}
+                            disabled={isGeneratingScript || !productInfo.name.trim()}
+                            className="text-xs"
+                          >
+                            {isGeneratingScript ? (
+                              <>
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                Writing...
+                              </>
+                            ) : (
+                              <>
+                                <FileText className="w-3 h-3 mr-1" />
+                                Generate Script
+                              </>
+                            )}
+                          </Button>
+
                           {/* Generate Voice Button */}
                           <Button
                             variant="outline"

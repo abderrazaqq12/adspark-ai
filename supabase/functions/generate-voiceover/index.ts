@@ -49,17 +49,75 @@ serve(async (req) => {
       });
     }
 
-    const { text, language = 'en', voiceId, scriptId } = await req.json();
+    const { action, text, language = 'en', voiceId, model = 'eleven_multilingual_v2', scriptId } = await req.json();
 
-    // Map language to voice
-    const voiceMap: Record<string, string> = {
-      'en': voiceId || 'EXAVITQu4vr4xnSDxMaL', // Sarah
-      'ar': voiceId || 'pFZP5JQG7iQjIQuC4Bku', // Lily (works for Arabic)
-      'es': voiceId || 'FGY2WhTYpPnrIDTdsKH5', // Laura
-      'fr': voiceId || 'XB0fDUnXU5powFXDhCwa', // Charlotte
+    // Handle fetching user's voices
+    if (action === 'get_voices') {
+      console.log('[generate-voiceover] Fetching user voices from ElevenLabs');
+      
+      const voicesResponse = await fetch('https://api.elevenlabs.io/v1/voices', {
+        headers: {
+          'xi-api-key': elevenLabsKey,
+        },
+      });
+
+      if (!voicesResponse.ok) {
+        const errorText = await voicesResponse.text();
+        console.error('ElevenLabs voices API error:', errorText);
+        throw new Error('Failed to fetch voices');
+      }
+
+      const voicesData = await voicesResponse.json();
+      
+      // Separate library voices from user's cloned voices
+      const libraryVoices = voicesData.voices?.filter((v: any) => v.category === 'premade') || [];
+      const myVoices = voicesData.voices?.filter((v: any) => v.category !== 'premade') || [];
+
+      return new Response(JSON.stringify({ 
+        success: true, 
+        library_voices: libraryVoices.map((v: any) => ({
+          id: v.voice_id,
+          name: v.name,
+          category: v.category,
+          labels: v.labels,
+          preview_url: v.preview_url,
+        })),
+        my_voices: myVoices.map((v: any) => ({
+          id: v.voice_id,
+          name: v.name,
+          category: v.category,
+          labels: v.labels,
+          preview_url: v.preview_url,
+        })),
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Default voice map based on language
+    const defaultVoiceMap: Record<string, string> = {
+      'en': 'EXAVITQu4vr4xnSDxMaL', // Sarah
+      'ar': 'pFZP5JQG7iQjIQuC4Bku', // Lily
+      'es': 'FGY2WhTYpPnrIDTdsKH5', // Laura
+      'fr': 'XB0fDUnXU5powFXDhCwa', // Charlotte
     };
 
-    const selectedVoice = voiceMap[language] || voiceMap['en'];
+    const selectedVoice = voiceId || defaultVoiceMap[language] || defaultVoiceMap['en'];
+
+    // Supported models
+    const supportedModels = [
+      'eleven_multilingual_v2',
+      'eleven_turbo_v2_5',
+      'eleven_turbo_v2',
+      'eleven_monolingual_v1',
+      'eleven_multilingual_v1',
+      'eleven_flash_v2_5', // v3 Flash
+      'eleven_flash_v2', // v3 Flash legacy
+    ];
+
+    const modelToUse = supportedModels.includes(model) ? model : 'eleven_multilingual_v2';
+
+    console.log(`[generate-voiceover] Generating with voice: ${selectedVoice}, model: ${modelToUse}, language: ${language}`);
 
     // Generate voice using ElevenLabs
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${selectedVoice}`, {
@@ -71,7 +129,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         text,
-        model_id: 'eleven_multilingual_v2',
+        model_id: modelToUse,
         voice_settings: {
           stability: 0.5,
           similarity_boost: 0.75,

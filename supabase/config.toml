@@ -44,3 +44,9 @@ verify_jwt = true
 
 [functions.n8n-ai-helper]
 verify_jwt = true
+
+[functions.generate-script-from-product]
+verify_jwt = false
+
+[functions.create-google-drive-folder]
+verify_jwt = false

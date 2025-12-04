@@ -39,7 +39,15 @@ serve(async (req) => {
 
     console.log(`[breakdown-scenes] Authenticated user: ${user.id}`);
 
-    const { scriptId, scriptText } = await req.json();
+    const { scriptId, scripts } = await req.json();
+
+    // scripts is an array of { id, text, audioUrl } - one per voice-over script
+    if (!scripts || !Array.isArray(scripts) || scripts.length === 0) {
+      return new Response(JSON.stringify({ error: 'Scripts array is required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Get engines for routing recommendations
     const { data: engines } = await supabase
@@ -49,9 +57,25 @@ serve(async (req) => {
 
     const engineList = engines?.map(e => `${e.name} (${e.type}): ${e.description}`).join('\n') || '';
 
-    const systemPrompt = `You are a professional video ad producer. Break down scripts into scenes for AI video generation. Each scene should be 3-8 seconds.
+    // Process each script and generate scenes that match the voice-over
+    const allScenesByScript: any[] = [];
+    let globalSceneIndex = 0;
 
-Available AI engines:
+    for (let scriptIndex = 0; scriptIndex < scripts.length; scriptIndex++) {
+      const script = scripts[scriptIndex];
+      const scriptText = script.text;
+
+      if (!scriptText || !scriptText.trim()) {
+        continue;
+      }
+
+      console.log(`[breakdown-scenes] Processing script ${scriptIndex + 1}/${scripts.length}`);
+
+      const systemPrompt = `You are a professional video ad producer. Break down voice-over scripts into scenes that will sync with the audio.
+
+IMPORTANT: Each scene must match a segment of the voice-over. Do NOT generate visual content or AI-generated imagery descriptions - those will be added in the video generation step.
+
+Available AI engines for later video generation:
 ${engineList}
 
 Output JSON array with this structure:
@@ -59,107 +83,118 @@ Output JSON array with this structure:
   "scenes": [
     {
       "index": 1,
-      "text": "Scene dialogue/narration text",
+      "text": "The exact voice-over text for this scene segment",
       "scene_type": "hook|problem|solution|social_proof|cta|broll|avatar|product|testimonial|transition",
-      "visual_prompt": "Detailed visual description for AI video generation",
       "duration_sec": 5,
-      "recommended_engine": "Engine name from list",
-      "engine_reason": "Why this engine is best"
+      "notes": "Brief production notes about this scene"
     }
   ]
-}`;
+}
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${lovableApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Break down this script into 4-8 video scenes:\n\n"${scriptText}"\n\nFor each scene:\n1. Extract the relevant text/narration\n2. Determine scene type\n3. Write a detailed visual prompt\n4. Estimate duration\n5. Recommend the best AI engine` }
-        ],
-      }),
-    });
+Rules:
+- Break the script into 3-6 logical segments
+- Each scene's text must be the EXACT voice-over text for that segment
+- Duration should match typical speaking pace (~2.5 words per second)
+- Do NOT include visual prompts - those come later
+- Focus on scene type and pacing only`;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI API error:', errorText);
-      throw new Error('Failed to break down scenes');
-    }
+      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${lovableApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Break down this voice-over script into scenes:\n\n"${scriptText}"\n\nCreate scenes that match the natural flow of the narration.` }
+          ],
+        }),
+      });
 
-    const aiData = await response.json();
-    const content = aiData.choices?.[0]?.message?.content || '{}';
-    
-    // Parse scenes from AI response
-    let parsedScenes: any[] = [];
-    try {
-      const jsonMatch = content.match(/\{[\s\S]*"scenes"[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        parsedScenes = parsed.scenes || [];
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('AI API error:', errorText);
+        throw new Error('Failed to break down scenes');
       }
-    } catch (e) {
-      console.error('Error parsing scenes:', e);
-      // Create basic scene breakdown as fallback
-      const sentences = scriptText.split(/[.!?]+/).filter((s: string) => s.trim());
-      parsedScenes = sentences.slice(0, 6).map((text: string, i: number) => ({
-        index: i + 1,
-        text: text.trim(),
-        scene_type: i === 0 ? 'hook' : i === sentences.length - 1 ? 'cta' : 'solution',
-        visual_prompt: `Scene ${i + 1}: ${text.trim().substring(0, 100)}`,
-        duration_sec: 5,
-        recommended_engine: 'Pika Labs'
-      }));
+
+      const aiData = await response.json();
+      const content = aiData.choices?.[0]?.message?.content || '{}';
+      
+      // Parse scenes from AI response
+      let parsedScenes: any[] = [];
+      try {
+        const jsonMatch = content.match(/\{[\s\S]*"scenes"[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          parsedScenes = parsed.scenes || [];
+        }
+      } catch (e) {
+        console.error('Error parsing scenes:', e);
+        // Create basic scene breakdown as fallback
+        const sentences = scriptText.split(/[.!?]+/).filter((s: string) => s.trim());
+        parsedScenes = sentences.slice(0, 6).map((text: string, i: number) => ({
+          index: i + 1,
+          text: text.trim(),
+          scene_type: i === 0 ? 'hook' : i === sentences.length - 1 ? 'cta' : 'solution',
+          duration_sec: Math.max(3, Math.round(text.split(/\s+/).length / 2.5)),
+          notes: ''
+        }));
+      }
+
+      // Add script index and global scene index
+      parsedScenes.forEach((scene, idx) => {
+        allScenesByScript.push({
+          ...scene,
+          script_index: scriptIndex,
+          script_id: script.id || scriptIndex,
+          global_index: globalSceneIndex + idx,
+        });
+      });
+
+      globalSceneIndex += parsedScenes.length;
     }
 
-    // Map engine names to IDs
-    const engineMap = new Map(engines?.map(e => [e.name.toLowerCase(), e]) || []);
+    // Save scenes to database if scriptId provided
+    if (scriptId && allScenesByScript.length > 0) {
+      // Delete existing scenes
+      await supabase.from('scenes').delete().eq('script_id', scriptId);
 
-    // Save scenes to database
-    const scenesToInsert = parsedScenes.map((scene: any, idx: number) => {
-      const engineName = scene.recommended_engine || 'Pika Labs';
-      const engine = Array.from(engineMap.values()).find(e => 
-        e.name.toLowerCase().includes(engineName.toLowerCase()) ||
-        engineName.toLowerCase().includes(e.name.toLowerCase())
-      );
-      
-      return {
+      const scenesToInsert = allScenesByScript.map((scene, idx) => ({
         script_id: scriptId,
-        index: scene.index || idx + 1,
+        index: idx,
         text: scene.text,
         scene_type: scene.scene_type || 'broll',
-        visual_prompt: scene.visual_prompt,
         duration_sec: scene.duration_sec || 5,
-        engine_id: engine?.id || null,
-        engine_name: engine?.name || engineName,
         status: 'pending',
-        metadata: { engine_reason: scene.engine_reason }
-      };
-    });
+        metadata: { 
+          notes: scene.notes,
+          script_index: scene.script_index,
+        }
+      }));
 
-    const { data: insertedScenes, error: insertError } = await supabase
-      .from('scenes')
-      .insert(scenesToInsert)
-      .select();
+      const { error: insertError } = await supabase
+        .from('scenes')
+        .insert(scenesToInsert);
 
-    if (insertError) {
-      console.error('Insert error:', insertError);
-      throw insertError;
+      if (insertError) {
+        console.error('Insert error:', insertError);
+        throw insertError;
+      }
+
+      // Update script status
+      await supabase
+        .from('scripts')
+        .update({ status: 'scenes_ready' })
+        .eq('id', scriptId);
     }
-
-    // Update script status
-    await supabase
-      .from('scripts')
-      .update({ status: 'scenes_ready' })
-      .eq('id', scriptId);
 
     return new Response(JSON.stringify({ 
       success: true, 
-      scenes: insertedScenes,
-      count: insertedScenes?.length || 0
+      scenes: allScenesByScript,
+      count: allScenesByScript.length,
+      scripts_processed: scripts.length,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
