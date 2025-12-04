@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Upload, 
   Sparkles, 
@@ -24,7 +25,9 @@ import {
   Play,
   Pause,
   Volume2,
-  X
+  X,
+  LayoutTemplate,
+  RefreshCw
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -113,6 +116,13 @@ interface ProductInfo {
   link: string;
 }
 
+interface PromptTemplate {
+  id: string;
+  name: string;
+  category: string | null;
+  template_text: string;
+}
+
 export default function CreateVideo() {
   // Product Info state
   const [productInfo, setProductInfo] = useState<ProductInfo>({
@@ -145,11 +155,18 @@ export default function CreateVideo() {
   const [isLoadingVoices, setIsLoadingVoices] = useState(false);
   const [isGeneratingScript, setIsGeneratingScript] = useState(false);
   const [voiceSource, setVoiceSource] = useState<'library' | 'my'>('library');
+  
+  // Template state
+  const [templates, setTemplates] = useState<PromptTemplate[]>([]);
+  const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+  const [isGeneratingFromTemplates, setIsGeneratingFromTemplates] = useState(false);
 
-  // Load existing project and voices
+  // Load existing project, voices, and templates
   useEffect(() => {
     loadLatestProject();
     loadMyVoices();
+    loadTemplates();
   }, []);
 
   const loadLatestProject = async () => {
@@ -222,6 +239,105 @@ export default function CreateVideo() {
     }
   };
 
+  const loadTemplates = async () => {
+    setIsLoadingTemplates(true);
+    try {
+      const { data, error } = await supabase
+        .from("prompt_templates")
+        .select("id, name, category, template_text")
+        .order("name");
+
+      if (error) throw error;
+      setTemplates(data || []);
+    } catch (error: any) {
+      console.error("Error loading templates:", error);
+    } finally {
+      setIsLoadingTemplates(false);
+    }
+  };
+
+  const toggleTemplateSelection = (templateId: string) => {
+    setSelectedTemplates(prev => 
+      prev.includes(templateId) 
+        ? prev.filter(id => id !== templateId)
+        : prev.length < 20 ? [...prev, templateId] : prev
+    );
+  };
+
+  const generateScriptsFromTemplates = async () => {
+    if (!productInfo.name.trim()) {
+      toast.error("Please enter product name first");
+      setExpandedStage(0);
+      return;
+    }
+
+    if (selectedTemplates.length === 0) {
+      toast.error("Please select at least one template");
+      return;
+    }
+
+    setIsGeneratingFromTemplates(true);
+    const newSlots: ScriptSlot[] = [];
+    let successCount = 0;
+
+    try {
+      for (let i = 0; i < selectedTemplates.length; i++) {
+        const templateId = selectedTemplates[i];
+        const template = templates.find(t => t.id === templateId);
+        if (!template) continue;
+
+        // Fill template variables with product info
+        let filledPrompt = template.template_text
+          .replace(/\{\{product_name\}\}/g, productInfo.name)
+          .replace(/\{\{audience\}\}/g, "general consumers")
+          .replace(/\{\{benefits\}\}/g, productInfo.description || "quality and value")
+          .replace(/\{\{problem\}\}/g, "common pain points")
+          .replace(/\{\{cta\}\}/g, "Shop now!")
+          .replace(/\{\{brand_tone\}\}/g, "engaging and professional")
+          .replace(/\{\{offer\}\}/g, "limited time offer")
+          .replace(/\{\{language\}\}/g, voiceLanguage === 'ar' ? 'Arabic' : voiceLanguage === 'es' ? 'Spanish' : 'English');
+
+        const { data, error } = await supabase.functions.invoke("generate-script-from-product", {
+          body: {
+            productName: productInfo.name,
+            productDescription: filledPrompt,
+            productImageUrl: productInfo.imageUrl,
+            productLink: productInfo.link,
+            language: voiceLanguage,
+            tone: template.name,
+          },
+        });
+
+        if (!error && data.script) {
+          newSlots.push({
+            id: scriptSlots.length + i + 1,
+            text: data.script,
+            audioFile: null,
+            audioUrl: null,
+            generatedAudioUrl: null,
+            isGenerating: false,
+          });
+          successCount++;
+        }
+      }
+
+      if (newSlots.length > 0) {
+        // Replace existing empty slots or add new ones
+        const existingNonEmpty = scriptSlots.filter(s => s.text.trim());
+        const combined = [...existingNonEmpty, ...newSlots].slice(0, 20);
+        
+        // Renumber IDs
+        setScriptSlots(combined.map((slot, idx) => ({ ...slot, id: idx + 1 })));
+        toast.success(`Generated ${successCount} scripts from templates!`);
+        setSelectedTemplates([]);
+      }
+    } catch (error: any) {
+      console.error("Error generating from templates:", error);
+      toast.error(error.message || "Failed to generate scripts");
+    } finally {
+      setIsGeneratingFromTemplates(false);
+    }
+  };
   const generateScriptFromProduct = async (slotId: number) => {
     if (!productInfo.name.trim()) {
       toast.error("Please enter product name first");
@@ -739,6 +855,80 @@ export default function CreateVideo() {
                       </Select>
                     </div>
                   </div>
+                </div>
+
+                {/* Script Template Selection */}
+                <div className="p-4 rounded-lg bg-muted/30 border border-border space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
+                      <LayoutTemplate className="w-4 h-4 text-primary" />
+                      Script Templates
+                    </h4>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        {selectedTemplates.length} selected
+                      </Badge>
+                      {isLoadingTemplates && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+                    </div>
+                  </div>
+                  
+                  <p className="text-xs text-muted-foreground">
+                    Select templates to batch generate multiple script variations. Choose up to 20 templates.
+                  </p>
+
+                  {templates.length > 0 ? (
+                    <div className="grid grid-cols-1 gap-2 max-h-[200px] overflow-y-auto pr-2">
+                      {templates.map((template) => (
+                        <div
+                          key={template.id}
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                            selectedTemplates.includes(template.id)
+                              ? 'bg-primary/10 border-primary/50'
+                              : 'bg-muted/20 border-border hover:bg-muted/40'
+                          }`}
+                          onClick={() => toggleTemplateSelection(template.id)}
+                        >
+                          <Checkbox
+                            checked={selectedTemplates.includes(template.id)}
+                            onCheckedChange={() => toggleTemplateSelection(template.id)}
+                            className="shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">
+                              {template.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {template.category || 'General'} • {template.template_text.slice(0, 50)}...
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground text-sm">
+                      No templates found. Create templates in Prompt Templates page.
+                    </div>
+                  )}
+
+                  {selectedTemplates.length > 0 && (
+                    <Button
+                      onClick={generateScriptsFromTemplates}
+                      disabled={isGeneratingFromTemplates || !productInfo.name.trim()}
+                      className="w-full bg-gradient-primary hover:opacity-90"
+                    >
+                      {isGeneratingFromTemplates ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Generating {selectedTemplates.length} Scripts...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          Generate {selectedTemplates.length} Scripts from Templates
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
 
                 {/* Scripts */}
