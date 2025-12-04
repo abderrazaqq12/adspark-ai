@@ -19,6 +19,7 @@ export type Database = {
           api_base_url: string | null
           api_key_env: string | null
           config: Json | null
+          cost_tier: string | null
           created_at: string | null
           description: string | null
           id: string
@@ -35,6 +36,7 @@ export type Database = {
           api_base_url?: string | null
           api_key_env?: string | null
           config?: Json | null
+          cost_tier?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
@@ -51,6 +53,7 @@ export type Database = {
           api_base_url?: string | null
           api_key_env?: string | null
           config?: Json | null
+          cost_tier?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
@@ -111,6 +114,50 @@ export type Database = {
             columns: ["script_id"]
             isOneToOne: false
             referencedRelation: "scripts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      engine_usage_analytics: {
+        Row: {
+          cost_estimate: number | null
+          created_at: string | null
+          duration_ms: number | null
+          engine_id: string | null
+          engine_name: string
+          error_message: string | null
+          id: string
+          success: boolean | null
+          user_id: string | null
+        }
+        Insert: {
+          cost_estimate?: number | null
+          created_at?: string | null
+          duration_ms?: number | null
+          engine_id?: string | null
+          engine_name: string
+          error_message?: string | null
+          id?: string
+          success?: boolean | null
+          user_id?: string | null
+        }
+        Update: {
+          cost_estimate?: number | null
+          created_at?: string | null
+          duration_ms?: number | null
+          engine_id?: string | null
+          engine_name?: string
+          error_message?: string | null
+          id?: string
+          success?: boolean | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "engine_usage_analytics_engine_id_fkey"
+            columns: ["engine_id"]
+            isOneToOne: false
+            referencedRelation: "ai_engines"
             referencedColumns: ["id"]
           },
         ]
@@ -498,6 +545,7 @@ export type Database = {
           default_voice: string | null
           id: string
           preferences: Json | null
+          pricing_tier: string | null
           updated_at: string | null
           use_free_tier_only: boolean | null
           user_id: string | null
@@ -509,6 +557,7 @@ export type Database = {
           default_voice?: string | null
           id?: string
           preferences?: Json | null
+          pricing_tier?: string | null
           updated_at?: string | null
           use_free_tier_only?: boolean | null
           user_id?: string | null
@@ -520,6 +569,7 @@ export type Database = {
           default_voice?: string | null
           id?: string
           preferences?: Json | null
+          pricing_tier?: string | null
           updated_at?: string | null
           use_free_tier_only?: boolean | null
           user_id?: string | null

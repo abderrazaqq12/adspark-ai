@@ -5,14 +5,16 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Save, Plus, Trash2, FileText, Loader2, Pencil, Webhook, Copy, CheckCircle, XCircle, ExternalLink, Zap, Key, Eye, EyeOff, Bot, RefreshCw } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Save, Plus, Trash2, FileText, Loader2, Pencil, Webhook, Copy, CheckCircle, XCircle, ExternalLink, Zap, Key, Eye, EyeOff, Bot, RefreshCw, DollarSign, Sparkles, TrendingUp, Crown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import BatchApiKeyTester from "@/components/BatchApiKeyTester";
+import EngineUsageAnalytics from "@/components/EngineUsageAnalytics";
 
 interface PromptTemplate {
   id: string;
@@ -29,8 +31,44 @@ interface UserSettings {
   default_language: string | null;
   default_voice: string | null;
   use_free_tier_only: boolean | null;
+  pricing_tier: string | null;
   api_keys: Record<string, string> | null;
 }
+
+const PRICING_TIERS = [
+  { 
+    value: "free", 
+    label: "Free Tier", 
+    description: "Only use free AI engines",
+    icon: Sparkles,
+    color: "text-green-500",
+    bgColor: "bg-green-500/10 border-green-500/30"
+  },
+  { 
+    value: "cheap", 
+    label: "Budget", 
+    description: "Low-cost engines like Hailuo, Wan Video",
+    icon: DollarSign,
+    color: "text-blue-500",
+    bgColor: "bg-blue-500/10 border-blue-500/30"
+  },
+  { 
+    value: "normal", 
+    label: "Standard", 
+    description: "Balanced cost & quality engines",
+    icon: TrendingUp,
+    color: "text-primary",
+    bgColor: "bg-primary/10 border-primary/30"
+  },
+  { 
+    value: "expensive", 
+    label: "Premium", 
+    description: "Best quality: Runway, Sora, HeyGen",
+    icon: Crown,
+    color: "text-amber-500",
+    bgColor: "bg-amber-500/10 border-amber-500/30"
+  },
+];
 
 interface APIKeyConfig {
   key: string;
@@ -370,7 +408,7 @@ export default function Settings() {
         .from("user_settings")
         .update({
           default_language: settings.default_language,
-          use_free_tier_only: settings.use_free_tier_only,
+          pricing_tier: settings.pricing_tier,
         })
         .eq("id", settings.id);
 
@@ -445,8 +483,9 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="api-keys" className="space-y-6">
-        <TabsList className="bg-muted/50">
+          <TabsList className="bg-muted/50">
           <TabsTrigger value="api-keys">API Keys</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
           <TabsTrigger value="n8n">n8n Integration</TabsTrigger>
           <TabsTrigger value="preferences">Preferences</TabsTrigger>
@@ -571,6 +610,9 @@ export default function Settings() {
                 </div>
               ))}
 
+              {/* Batch API Key Tester */}
+              <BatchApiKeyTester apiKeys={apiKeys} />
+
               <Button 
                 onClick={handleSaveApiKeys} 
                 disabled={savingKeys}
@@ -581,6 +623,11 @@ export default function Settings() {
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Analytics Tab */}
+        <TabsContent value="analytics" className="space-y-6">
+          <EngineUsageAnalytics />
         </TabsContent>
 
         {/* Templates Tab */}
@@ -875,15 +922,43 @@ export default function Settings() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-foreground">Use Free Tier Only</Label>
-                  <p className="text-sm text-muted-foreground">Only use AI engines with free tier support</p>
-                </div>
-                <Switch
-                  checked={settings?.use_free_tier_only || false}
-                  onCheckedChange={(checked) => setSettings(s => s ? { ...s, use_free_tier_only: checked } : null)}
-                />
+              {/* Pricing Tier Selector */}
+              <div className="space-y-3">
+                <Label className="text-foreground text-lg font-semibold">Engine Cost Tier</Label>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Select which tier of AI engines to use for video generation
+                </p>
+                <RadioGroup
+                  value={settings?.pricing_tier || "normal"}
+                  onValueChange={(v) => setSettings(s => s ? { ...s, pricing_tier: v } : null)}
+                  className="grid grid-cols-2 gap-4"
+                >
+                  {PRICING_TIERS.map((tier) => {
+                    const IconComponent = tier.icon;
+                    return (
+                      <div
+                        key={tier.value}
+                        className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                          settings?.pricing_tier === tier.value
+                            ? tier.bgColor
+                            : "bg-muted/20 border-border hover:border-primary/50"
+                        }`}
+                      >
+                        <RadioGroupItem value={tier.value} id={tier.value} className="sr-only" />
+                        <Label htmlFor={tier.value} className="cursor-pointer">
+                          <div className="flex items-center gap-3 mb-2">
+                            <IconComponent className={`w-5 h-5 ${tier.color}`} />
+                            <span className="font-semibold text-foreground">{tier.label}</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground">{tier.description}</p>
+                        </Label>
+                        {settings?.pricing_tier === tier.value && (
+                          <CheckCircle className={`absolute top-3 right-3 w-5 h-5 ${tier.color}`} />
+                        )}
+                      </div>
+                    );
+                  })}
+                </RadioGroup>
               </div>
 
               <Separator className="bg-border" />
