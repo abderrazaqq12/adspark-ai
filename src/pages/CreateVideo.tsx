@@ -48,9 +48,11 @@ export default function CreateVideo() {
     { id: 1, text: "", audioFile: null, audioUrl: null }
   ]);
   const [hooks, setHooks] = useState("");
+  const [hooksMode, setHooksMode] = useState<"automatic" | "manual">("automatic");
   const [videoType, setVideoType] = useState("ugc_review");
   const [targetLanguage, setTargetLanguage] = useState("ar");
   const [currentStage, setCurrentStage] = useState(1);
+  const [expandedStage, setExpandedStage] = useState(1);
   const [voiceGenerationDone, setVoiceGenerationDone] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -262,25 +264,25 @@ export default function CreateVideo() {
         <div className="flex flex-col gap-1">
           {pipelineStages.map((stage, index) => (
             <div key={stage.id} className="flex flex-col">
-              <button
-                onClick={() => setCurrentStage(stage.id)}
-                className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left w-full ${
-                  currentStage === stage.id 
-                    ? 'bg-primary/20 text-primary' 
-                    : currentStage > stage.id || (stage.id === 3 && voiceGenerationDone)
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:bg-muted/50'
-                }`}
-              >
-                {currentStage > stage.id || (stage.id === 3 && voiceGenerationDone) ? (
-                  <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
-                ) : currentStage === stage.id ? (
-                  <stage.icon className="w-5 h-5 shrink-0" />
-                ) : (
-                  <Circle className="w-5 h-5 opacity-50 shrink-0" />
-                )}
-                <span className="text-sm font-medium">{stage.name}</span>
-              </button>
+                <button
+                  onClick={() => setExpandedStage(expandedStage === stage.id ? 0 : stage.id)}
+                  className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left w-full ${
+                    expandedStage === stage.id 
+                      ? 'bg-primary/20 text-primary' 
+                      : currentStage > stage.id || (stage.id === 3 && voiceGenerationDone)
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-muted-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  {currentStage > stage.id || (stage.id === 3 && voiceGenerationDone) ? (
+                    <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
+                  ) : expandedStage === stage.id ? (
+                    <stage.icon className="w-5 h-5 shrink-0" />
+                  ) : (
+                    <Circle className="w-5 h-5 opacity-50 shrink-0" />
+                  )}
+                  <span className="text-sm font-medium">{stage.name}</span>
+                </button>
               {index < pipelineStages.length - 1 && (
                 <div className="ml-6 h-4 border-l-2 border-muted-foreground/20" />
               )}
@@ -349,20 +351,52 @@ export default function CreateVideo() {
               </div>
             </div>
 
-            {/* Hooks */}
+            {/* Hooks Mode Selection */}
             <div className="space-y-2">
-              <Label htmlFor="hooks" className="text-foreground">Marketing Hooks (Optional)</Label>
-              <Input
-                id="hooks"
-                placeholder="Enter attention-grabbing hooks..."
-                className="bg-muted/50 border-input"
-                value={hooks}
-                onChange={(e) => setHooks(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                AI will generate variations based on your hooks
-              </p>
+              <Label className="text-foreground">Marketing Hooks Mode</Label>
+              <div className="flex gap-2">
+                <Button
+                  variant={hooksMode === "automatic" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setHooksMode("automatic")}
+                  className={hooksMode === "automatic" ? "bg-gradient-primary" : ""}
+                >
+                  Automatic (AI Generated)
+                </Button>
+                <Button
+                  variant={hooksMode === "manual" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setHooksMode("manual")}
+                  className={hooksMode === "manual" ? "bg-gradient-primary" : ""}
+                >
+                  Manual
+                </Button>
+              </div>
             </div>
+
+            {/* Hooks Input */}
+            {hooksMode === "manual" && (
+              <div className="space-y-2">
+                <Label htmlFor="hooks" className="text-foreground">Marketing Hooks</Label>
+                <Input
+                  id="hooks"
+                  placeholder="Enter your attention-grabbing hooks..."
+                  className="bg-muted/50 border-input"
+                  value={hooks}
+                  onChange={(e) => setHooks(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Enter multiple hooks separated by commas
+                </p>
+              </div>
+            )}
+            {hooksMode === "automatic" && (
+              <div className="p-3 bg-primary/10 rounded-lg border border-primary/20">
+                <p className="text-sm text-primary">
+                  AI will automatically generate attention-grabbing hooks based on your script and product
+                </p>
+              </div>
+            )}
 
             {/* Scripts */}
             <div className="space-y-4">
