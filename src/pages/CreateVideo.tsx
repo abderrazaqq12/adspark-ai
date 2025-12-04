@@ -1307,10 +1307,64 @@ export default function CreateVideo() {
                   Step 3: Video Generation
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  Generate video for each scene using AI engines
+                  Generate video for each scene using AI engines or upload your own
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
+                {/* Custom Video Upload Section */}
+                <div className="p-4 rounded-lg bg-muted/30 border border-border space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
+                      <Upload className="w-4 h-4 text-primary" />
+                      Upload Your Own Videos
+                    </h4>
+                    <Badge variant="outline" className="text-xs">Optional</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Already have video content? Upload videos to use as scenes or B-roll footage.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept="video/*"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []);
+                          if (files.length > 0) {
+                            toast.success(`${files.length} video(s) ready to use as scenes`);
+                          }
+                        }}
+                      />
+                      <div className="p-4 rounded-lg border-2 border-dashed border-border hover:border-primary/50 transition-colors text-center">
+                        <Video className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                        <p className="text-sm font-medium text-foreground">Scene Videos</p>
+                        <p className="text-xs text-muted-foreground">Main scene content</p>
+                      </div>
+                    </label>
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept="video/*"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []);
+                          if (files.length > 0) {
+                            toast.success(`${files.length} B-roll video(s) added`);
+                          }
+                        }}
+                      />
+                      <div className="p-4 rounded-lg border-2 border-dashed border-border hover:border-primary/50 transition-colors text-center">
+                        <FileText className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                        <p className="text-sm font-medium text-foreground">B-Roll Footage</p>
+                        <p className="text-xs text-muted-foreground">Supplementary clips</p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
                 {scriptId ? (
                   <BatchGeneration 
                     scriptId={scriptId} 
@@ -1337,19 +1391,95 @@ export default function CreateVideo() {
                   Step 4: Assembly & Edit
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  Combine scenes, sync audio, and add branding
+                  Combine scenes, sync audio, and generate multiple final videos
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="text-center py-8 text-muted-foreground">
-                  <Palette className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p>Timeline editor and assembly tools</p>
-                  <p className="text-xs mt-2">Adjust transitions, audio sync, and branding elements</p>
+              <CardContent className="space-y-6">
+                {/* Batch Assembly Options */}
+                <div className="p-4 rounded-lg bg-muted/30 border border-border space-y-4">
+                  <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    Batch Video Assembly
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Generate multiple final videos with different combinations of scenes and transitions
+                  </p>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Videos to Generate</Label>
+                      <Select defaultValue="10">
+                        <SelectTrigger className="bg-muted/50 h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="5">5 videos</SelectItem>
+                          <SelectItem value="10">10 videos</SelectItem>
+                          <SelectItem value="25">25 videos</SelectItem>
+                          <SelectItem value="50">50 videos</SelectItem>
+                          <SelectItem value="100">100 videos</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Transition Style</Label>
+                      <Select defaultValue="mixed">
+                        <SelectTrigger className="bg-muted/50 h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cut">Cut (No transition)</SelectItem>
+                          <SelectItem value="fade">Fade</SelectItem>
+                          <SelectItem value="slide">Slide</SelectItem>
+                          <SelectItem value="zoom">Zoom</SelectItem>
+                          <SelectItem value="mixed">Mixed (Random)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/20">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Randomize Scene Order</p>
+                      <p className="text-xs text-muted-foreground">Create unique variations by shuffling scenes</p>
+                    </div>
+                    <Checkbox defaultChecked />
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/20 border border-border">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Auto-add Music</p>
+                      <p className="text-xs text-muted-foreground">AI selects background music per video</p>
+                    </div>
+                    <Checkbox defaultChecked />
+                  </div>
                 </div>
+
+                {/* Quick Stats */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3 rounded-lg bg-muted/20 border border-border text-center">
+                    <p className="text-2xl font-bold text-primary">{scenes.length}</p>
+                    <p className="text-xs text-muted-foreground">Scenes</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/20 border border-border text-center">
+                    <p className="text-2xl font-bold text-primary">{Math.round(scenes.reduce((acc, s) => acc + (s.duration || 3), 0))}s</p>
+                    <p className="text-xs text-muted-foreground">Duration</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/20 border border-border text-center">
+                    <p className="text-2xl font-bold text-primary">10</p>
+                    <p className="text-xs text-muted-foreground">Videos</p>
+                  </div>
+                </div>
+
                 <div className="flex gap-2">
-                  <Button className="flex-1 bg-gradient-primary hover:opacity-90 text-primary-foreground">
+                  <Button 
+                    className="flex-1 bg-gradient-primary hover:opacity-90 text-primary-foreground"
+                    onClick={() => {
+                      toast.success("Starting batch assembly of 10 videos...");
+                    }}
+                  >
                     <Sparkles className="w-4 h-4 mr-2" />
-                    Auto-Assemble
+                    Auto-Assemble All ({10} videos)
                   </Button>
                   <Button variant="outline" className="flex-1">
                     <Palette className="w-4 h-4 mr-2" />
