@@ -1,4 +1,4 @@
-import { Home, Video, FileText, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, FlaskConical, LayoutTemplate } from "lucide-react";
+import { Home, Video, FileText, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, FlaskConical, LayoutTemplate, PanelLeftClose, PanelLeft } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +14,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarFooter,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 
@@ -49,18 +50,23 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarContent>
-        {/* Logo/Brand */}
-        <div className="px-4 py-6 border-b border-sidebar-border">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center shadow-glow">
-              <Sparkles className="w-5 h-5 text-primary-foreground" />
-            </div>
-            {open && (
-              <div className="flex flex-col">
-                <span className="font-bold text-lg text-sidebar-foreground">VideoAI</span>
-                <span className="text-xs text-muted-foreground">Ad Generator</span>
+        {/* Logo/Brand with Collapse Button */}
+        <div className="px-4 py-4 border-b border-sidebar-border">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center shadow-glow">
+                <Sparkles className="w-5 h-5 text-primary-foreground" />
               </div>
-            )}
+              {open && (
+                <div className="flex flex-col">
+                  <span className="font-bold text-lg text-sidebar-foreground">VideoAI</span>
+                  <span className="text-xs text-muted-foreground">Ad Generator</span>
+                </div>
+              )}
+            </div>
+            <SidebarTrigger className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent rounded-md transition-colors">
+              {open ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
+            </SidebarTrigger>
           </div>
         </div>
 
