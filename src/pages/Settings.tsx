@@ -275,7 +275,7 @@ const API_KEY_CATEGORIES: APIKeyCategory[] = [
   },
 ];
 
-const N8N_WEBHOOK_URL = "https://bedeukijnixeihjepbjg.supabase.co/functions/v1/n8n-webhook";
+const DEFAULT_N8N_WEBHOOK_URL = "https://bedeukijnixeihjepbjg.supabase.co/functions/v1/n8n-webhook";
 
 const AVAILABLE_ACTIONS = [
   { action: "create_project", description: "Create a new project", example: { name: "My Campaign", product_name: "Premium Watch", language: "en" } },
@@ -321,6 +321,8 @@ export default function Settings() {
   const [selectedAction, setSelectedAction] = useState(AVAILABLE_ACTIONS[0]);
   const [testPayload, setTestPayload] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
+  const [userN8nWebhook, setUserN8nWebhook] = useState("");
+  const [n8nApiKey, setN8nApiKey] = useState("");
 
   useEffect(() => {
     fetchData();
@@ -585,7 +587,7 @@ export default function Settings() {
     
     try {
       const payload = JSON.parse(testPayload);
-      const response = await fetch(N8N_WEBHOOK_URL, {
+      const response = await fetch(DEFAULT_N8N_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -1095,16 +1097,87 @@ export default function Settings() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Webhook URL */}
+              {/* User's n8n Webhook URL */}
               <div className="space-y-2">
-                <Label className="text-foreground">Webhook URL</Label>
+                <Label className="text-foreground">Your n8n Webhook URL</Label>
+                <p className="text-xs text-muted-foreground">Enter your n8n webhook URL to receive automation triggers</p>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="https://n8n.yourdomain.com/webhook/VideoAI"
+                    value={userN8nWebhook}
+                    onChange={(e) => setUserN8nWebhook(e.target.value)}
+                    className="font-mono text-sm"
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={() => copyToClipboard(userN8nWebhook)}
+                    disabled={!userN8nWebhook}
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* n8n API Key */}
+              <div className="space-y-2">
+                <Label className="text-foreground">n8n API Key</Label>
+                <p className="text-xs text-muted-foreground">Your n8n instance API key for authentication</p>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type={showKeys["N8N_API_KEY"] ? "text" : "password"}
+                      placeholder="n8n_api_xxxxxxxxxxxxxxxx"
+                      value={n8nApiKey}
+                      onChange={(e) => setN8nApiKey(e.target.value)}
+                      className="font-mono text-sm pr-10"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full w-9"
+                      onClick={() => toggleKeyVisibility("N8N_API_KEY")}
+                    >
+                      {showKeys["N8N_API_KEY"] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* MCP Integration Info */}
+              <div className="p-4 rounded-lg bg-primary/10 border border-primary/20 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Bot className="w-4 h-4 text-primary" />
+                  <span className="font-medium text-primary">n8n MCP Integration</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  This platform supports n8n MCP (Model Context Protocol) integration. You can connect n8n as an MCP server 
+                  to expose your workflows as tools for AI assistants.
+                </p>
+                <a 
+                  href="https://docs.n8n.io/advanced-ai/accessing-n8n-mcp-server/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:underline flex items-center gap-1"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Learn more about n8n MCP setup
+                </a>
+              </div>
+
+              <Separator className="bg-border" />
+
+              {/* VideoAI Webhook (for n8n to call) */}
+              <div className="space-y-2">
+                <Label className="text-foreground">VideoAI Webhook URL (for n8n)</Label>
+                <p className="text-xs text-muted-foreground">Use this URL in your n8n workflows to trigger VideoAI actions</p>
                 <div className="flex gap-2">
                   <Input
                     readOnly
-                    value={N8N_WEBHOOK_URL}
+                    value={DEFAULT_N8N_WEBHOOK_URL}
                     className="font-mono text-sm bg-muted/50"
                   />
-                  <Button variant="outline" size="icon" onClick={() => copyToClipboard(N8N_WEBHOOK_URL)}>
+                  <Button variant="outline" size="icon" onClick={() => copyToClipboard(DEFAULT_N8N_WEBHOOK_URL)}>
                     <Copy className="w-4 h-4" />
                   </Button>
                 </div>
