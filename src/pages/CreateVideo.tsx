@@ -37,6 +37,7 @@ import AIAssistant from "@/components/AIAssistant";
 import VoicePreview from "@/components/VoicePreview";
 import { VideoUploadPreview, generateVideoId } from "@/components/VideoUploadPreview";
 import BatchAssembly from "@/components/BatchAssembly";
+import CostCalculatorPreview from "@/components/CostCalculatorPreview";
 
 // ElevenLabs voices - expanded list with categories
 const ELEVENLABS_VOICES = [
@@ -227,6 +228,9 @@ export default function CreateVideo() {
   const [transitionStyle, setTransitionStyle] = useState('mixed');
   const [randomizeOrder, setRandomizeOrder] = useState(true);
   const [autoAddMusic, setAutoAddMusic] = useState(true);
+  
+  // Cost & engine preferences
+  const [freeEnginesOnly, setFreeEnginesOnly] = useState(true);
 
   // Load existing project, voices, and templates
   useEffect(() => {
@@ -1273,60 +1277,109 @@ export default function CreateVideo() {
                   </div>
                 </div>
 
-                {/* Scenes */}
+                {/* Cost Calculator */}
+                <CostCalculatorPreview
+                  scenesCount={scenes.length || 5}
+                  avgDuration={5}
+                  videoCount={videosToGenerate}
+                  onFreeOnlyChange={setFreeEnginesOnly}
+                />
+
+                {/* Scenes organized by script */}
                 {scenes.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
                     <Sparkles className="w-12 h-12 mx-auto mb-4 opacity-50" />
                     <p>Enter a script and click "Analyze & Build Scenes" in Step 1</p>
-                    <p className="text-xs mt-2">AI will auto-route each scene to the best model</p>
+                    <p className="text-xs mt-2">AI will auto-route each scene to the best {freeEnginesOnly ? 'free ' : ''}model</p>
                   </div>
                 ) : (
-                  <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
-                    <h4 className="text-sm font-medium text-foreground">
-                      Generated Scenes ({scenes.length})
-                    </h4>
-                    {scenes.map((scene, index) => {
-                      const routing = sceneRouting.find(r => 
-                        scene.title?.toLowerCase().includes(r.sceneType.replace('_', ' ')) ||
-                        scene.description?.toLowerCase().includes(r.sceneType.replace('_', ' '))
-                      ) || sceneRouting[5];
-                      
+                  <div className="space-y-6">
+                    {/* Scenes grouped by script */}
+                    {scriptSlots.filter(s => s.text.trim()).map((script, scriptIndex) => {
+                      // Calculate which scenes belong to this script
+                      const scenesPerScript = Math.ceil(scenes.length / scriptSlots.filter(s => s.text.trim()).length);
+                      const startIdx = scriptIndex * scenesPerScript;
+                      const endIdx = Math.min(startIdx + scenesPerScript, scenes.length);
+                      const scriptScenes = scenes.slice(startIdx, endIdx);
+
+                      if (scriptScenes.length === 0) return null;
+
                       return (
-                        <div
-                          key={index}
-                          className="p-4 rounded-lg bg-muted/30 border border-border hover:border-primary/50 transition-colors"
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold flex-shrink-0">
-                              {index + 1}
-                            </div>
-                            <div className="flex-1 space-y-2">
-                              <div className="flex items-center justify-between">
-                                <h4 className="font-semibold text-foreground">{scene.title}</h4>
-                                <div className="flex items-center gap-2">
-                                  <Badge className="bg-primary/20 text-primary border-0 text-xs">
-                                    {routing.recommendedModel}
-                                  </Badge>
-                                  <span className="text-xs text-muted-foreground">
-                                    {scene.duration}s
-                                  </span>
+                        <div key={script.id} className="space-y-3">
+                          <div className="flex items-center gap-2 pb-2 border-b border-border">
+                            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">
+                              Script {scriptIndex + 1}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {scriptScenes.length} scenes • ~{scriptScenes.reduce((acc, s) => acc + (s.duration || 5), 0)}s
+                            </span>
+                          </div>
+                          
+                          <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
+                            {scriptScenes.map((scene, idx) => {
+                              const globalIndex = startIdx + idx;
+                              const routing = sceneRouting.find(r => 
+                                scene.title?.toLowerCase().includes(r.sceneType.replace('_', ' ')) ||
+                                scene.description?.toLowerCase().includes(r.sceneType.replace('_', ' '))
+                              ) || sceneRouting[5];
+                              
+                              // Select free model if freeEnginesOnly
+                              const selectedModel = freeEnginesOnly ? 'NanoBanana' : routing.recommendedModel;
+                              
+                              return (
+                                <div
+                                  key={globalIndex}
+                                  className="p-4 rounded-lg bg-muted/30 border border-border hover:border-primary/50 transition-colors"
+                                >
+                                  <div className="flex items-start gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold flex-shrink-0">
+                                      {globalIndex + 1}
+                                    </div>
+                                    <div className="flex-1 space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <h4 className="font-semibold text-foreground">{scene.title}</h4>
+                                        <div className="flex items-center gap-2">
+                                          <Badge className={`border-0 text-xs ${freeEnginesOnly ? 'bg-green-500/20 text-green-400' : 'bg-primary/20 text-primary'}`}>
+                                            {selectedModel}
+                                          </Badge>
+                                          <span className="text-xs text-muted-foreground">
+                                            {scene.duration}s
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <p className="text-sm text-muted-foreground">{scene.description}</p>
+                                      {scene.visualPrompt && (
+                                        <div className="mt-2 p-2 rounded bg-muted/50 border border-border">
+                                          <p className="text-xs text-muted-foreground">
+                                            <span className="text-primary font-medium">Visual: </span>
+                                            {scene.visualPrompt}
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
-                              <p className="text-sm text-muted-foreground">{scene.description}</p>
-                              {scene.visualPrompt && (
-                                <div className="mt-2 p-2 rounded bg-muted/50 border border-border">
-                                  <p className="text-xs text-muted-foreground">
-                                    <span className="text-primary font-medium">Visual: </span>
-                                    {scene.visualPrompt}
-                                  </p>
-                                </div>
-                              )}
-                            </div>
+                              );
+                            })}
                           </div>
                         </div>
                       );
                     })}
                   </div>
+                )}
+
+                {/* Next Step Button */}
+                {scenes.length > 0 && (
+                  <Button
+                    onClick={() => {
+                      setExpandedStage(3);
+                      setCurrentStage(3);
+                    }}
+                    className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow"
+                  >
+                    <ChevronRight className="w-4 h-4 mr-2" />
+                    Next: Generate Videos
+                  </Button>
                 )}
               </CardContent>
             </Card>
