@@ -430,7 +430,7 @@ Tip: Keep sentences short (under 15 words) for better voice-over. ~60 words = 30
       </div>
 
       {scenes.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="flex flex-col gap-6">
           {/* Save & Batch Generation */}
           <div className="space-y-4">
             {!scriptId && (
