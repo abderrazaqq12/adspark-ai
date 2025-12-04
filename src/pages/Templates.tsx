@@ -114,6 +114,139 @@ Scene 5 - Recommendation:
     rating: 4.9,
   },
   {
+    id: "carousel-ad",
+    name: "Carousel Ad Script",
+    description: "Multi-slide carousel format for Instagram/Facebook",
+    category: "Carousel",
+    template_text: `Slide 1 (Hook):
+"{{number}} ways {{product_name}} will change your {{life_aspect}}"
+Visual: Eye-catching product shot
+
+Slide 2 (Benefit 1):
+"{{benefit_1}}"
+"{{explanation_1}}"
+Visual: Demonstration or before/after
+
+Slide 3 (Benefit 2):
+"{{benefit_2}}"
+"{{explanation_2}}"
+Visual: User testimonial or social proof
+
+Slide 4 (Benefit 3):
+"{{benefit_3}}"
+"{{explanation_3}}"
+Visual: Results or statistics
+
+Slide 5 (Social Proof):
+"{{testimonial_count}}+ happy customers"
+"⭐⭐⭐⭐⭐ {{rating}} average rating"
+Visual: Reviews collage
+
+Slide 6 (CTA):
+"{{offer}}"
+"{{cta}}"
+Visual: Product + discount badge`,
+    variables: ["number", "product_name", "life_aspect", "benefit_1", "explanation_1", "benefit_2", "explanation_2", "benefit_3", "explanation_3", "testimonial_count", "rating", "offer", "cta"],
+    uses: 2100,
+    rating: 4.6,
+  },
+  {
+    id: "story-ad-15sec",
+    name: "15-Second Story Ad",
+    description: "Quick-hitting vertical video for Stories/Reels/TikTok",
+    category: "Story",
+    template_text: `[0-3 sec] HOOK:
+"POV: You just discovered {{product_name}}"
+Action: Quick product reveal
+
+[3-7 sec] PROBLEM + SOLUTION:
+"No more {{problem}}..."
+Action: Show the problem, then solution
+
+[7-11 sec] TRANSFORMATION:
+"Now you can {{benefit}}"
+Action: Show results/transformation
+
+[11-15 sec] CTA:
+"{{offer}} - Link in bio 👆"
+Action: Product shot with text overlay`,
+    variables: ["product_name", "problem", "benefit", "offer"],
+    uses: 3200,
+    rating: 4.9,
+  },
+  {
+    id: "story-ad-30sec",
+    name: "30-Second Story Ad",
+    description: "Extended vertical video format with more detail",
+    category: "Story",
+    template_text: `[0-5 sec] HOOK:
+"Wait... you've never tried {{product_name}}?!"
+Visual: Surprised reaction, product teaser
+
+[5-12 sec] PROBLEM:
+"Let me guess... you're struggling with {{problem}}"
+"And you've tried {{failed_solution}} but nothing works"
+Visual: Relatable frustration moment
+
+[12-20 sec] SOLUTION:
+"{{product_name}} is different because {{unique_value}}"
+"It {{key_benefit}} in just {{timeframe}}"
+Visual: Product demonstration
+
+[20-27 sec] PROOF:
+"{{social_proof_number}}+ people already made the switch"
+"Here's what they're saying..."
+Visual: Quick testimonial clips or reviews
+
+[27-30 sec] CTA:
+"{{discount}}% OFF today only"
+"Link in bio - don't miss out!"
+Visual: Product + offer overlay`,
+    variables: ["product_name", "problem", "failed_solution", "unique_value", "key_benefit", "timeframe", "social_proof_number", "discount"],
+    uses: 1800,
+    rating: 4.7,
+  },
+  {
+    id: "explainer-video",
+    name: "Product Explainer Video",
+    description: "Educational format explaining how your product works",
+    category: "Explainer",
+    template_text: `Hook (0-5 sec):
+"Here's how {{product_name}} works in 60 seconds"
+
+Introduction (5-15 sec):
+"{{product_name}} is a {{product_category}} designed for {{target_audience}}"
+"It helps you {{main_benefit}} without {{common_pain}}"
+
+How It Works - Step 1 (15-25 sec):
+"First, {{step_1}}"
+"This {{step_1_benefit}}"
+Visual: Screen recording or animation
+
+How It Works - Step 2 (25-35 sec):
+"Next, {{step_2}}"
+"You'll see {{step_2_result}}"
+Visual: Demonstration
+
+How It Works - Step 3 (35-45 sec):
+"Finally, {{step_3}}"
+"And that's it - {{final_result}}"
+Visual: Results showcase
+
+Why Choose Us (45-55 sec):
+"Unlike {{competitor_type}}, {{product_name}} offers:"
+"✓ {{differentiator_1}}"
+"✓ {{differentiator_2}}"
+"✓ {{differentiator_3}}"
+
+CTA (55-60 sec):
+"Start your {{trial_type}} today"
+"{{cta}} - {{url}}"`,
+    variables: ["product_name", "product_category", "target_audience", "main_benefit", "common_pain", "step_1", "step_1_benefit", "step_2", "step_2_result", "step_3", "final_result", "competitor_type", "differentiator_1", "differentiator_2", "differentiator_3", "trial_type", "cta", "url"],
+    uses: 1234,
+    rating: 4.8,
+  },
+  {
     id: "feature-showcase",
     name: "Feature Showcase",
     description: "Highlight key product features with demonstrations",
@@ -237,6 +370,73 @@ Scene 5 - Verdict:
     variables: ["product_name", "competitor", "test_duration", "comparison_1", "score_1_product", "score_1_competitor", "comparison_2", "advantage_explanation", "comparison_3", "difference_description", "cta"],
     uses: 654,
     rating: 4.4,
+  },
+  {
+    id: "unboxing-reveal",
+    name: "Unboxing & Reveal",
+    description: "Exciting product unboxing experience video",
+    category: "UGC",
+    template_text: `Hook: "My {{product_name}} finally arrived! Let's unbox it together 📦"
+
+Scene 1 - Package Arrival:
+"Look at this packaging - {{packaging_comment}}"
+Action: Show sealed package
+
+Scene 2 - Unboxing:
+"Opening it up... and wow, {{first_impression}}"
+Action: Slow reveal of product
+
+Scene 3 - What's Inside:
+"You get {{included_item_1}}, {{included_item_2}}, and {{included_item_3}}"
+Action: Show all items
+
+Scene 4 - First Impressions:
+"The quality is {{quality_comment}}. I love how {{standout_feature}}"
+Action: Close-up details
+
+Scene 5 - Initial Test:
+"Let me try it out... {{first_use_reaction}}"
+Action: Using the product
+
+Scene 6 - CTA:
+"Get yours at {{cta}} - use code {{promo_code}} for {{discount}}% off!"`,
+    variables: ["product_name", "packaging_comment", "first_impression", "included_item_1", "included_item_2", "included_item_3", "quality_comment", "standout_feature", "first_use_reaction", "cta", "promo_code", "discount"],
+    uses: 1456,
+    rating: 4.7,
+  },
+  {
+    id: "before-after",
+    name: "Before & After Transformation",
+    description: "Dramatic transformation showcase",
+    category: "Testimonial",
+    template_text: `Hook: "My {{timeframe}} transformation with {{product_name}} (you won't believe the results)"
+
+Scene 1 - Before State:
+"This was me {{timeframe}} ago... {{before_description}}"
+"I was dealing with {{problem}} every single day"
+Visual: Before footage/photos
+
+Scene 2 - The Turning Point:
+"Then I discovered {{product_name}}. I was skeptical because {{initial_doubt}}"
+"But I decided to give it {{trial_period}}"
+
+Scene 3 - The Journey:
+"Week 1: {{week_1_progress}}"
+"Week 2: {{week_2_progress}}"
+"Week 4: {{week_4_progress}}"
+Visual: Progress montage
+
+Scene 4 - After State:
+"And here I am now... {{after_description}}"
+"{{emotional_impact}}"
+Visual: After footage/photos
+
+Scene 5 - CTA:
+"Your transformation starts today. {{cta}}"
+"{{offer}}"`,
+    variables: ["timeframe", "product_name", "before_description", "problem", "initial_doubt", "trial_period", "week_1_progress", "week_2_progress", "week_4_progress", "after_description", "emotional_impact", "cta", "offer"],
+    uses: 1678,
+    rating: 4.9,
   },
 ];
 
