@@ -209,48 +209,53 @@ export default function CreateVideo() {
   };
 
   return (
-    <div className="container mx-auto p-8 space-y-8 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-4xl font-bold text-foreground mb-2">Create AI Video Ad</h1>
-        <p className="text-muted-foreground">
-          Multi-layer production pipeline for professional video ads
-        </p>
+    <div className="flex min-h-screen animate-in fade-in duration-500">
+      {/* Vertical Pipeline Sidebar */}
+      <div className="w-64 shrink-0 border-r border-border bg-gradient-card p-4">
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold text-foreground">Pipeline</h2>
+          <p className="text-xs text-muted-foreground">Production stages</p>
+        </div>
+        <div className="flex flex-col gap-1">
+          {pipelineStages.map((stage, index) => (
+            <div key={stage.id} className="flex flex-col">
+              <button
+                onClick={() => setCurrentStage(stage.id)}
+                className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left w-full ${
+                  currentStage === stage.id 
+                    ? 'bg-primary/20 text-primary' 
+                    : currentStage > stage.id 
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-muted/50'
+                }`}
+              >
+                {currentStage > stage.id ? (
+                  <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
+                ) : currentStage === stage.id ? (
+                  <stage.icon className="w-5 h-5 shrink-0" />
+                ) : (
+                  <Circle className="w-5 h-5 opacity-50 shrink-0" />
+                )}
+                <span className="text-sm font-medium">{stage.name}</span>
+              </button>
+              {index < pipelineStages.length - 1 && (
+                <div className="ml-6 h-4 border-l-2 border-muted-foreground/20" />
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Pipeline Progress */}
-      <Card className="bg-gradient-card border-border shadow-card">
-        <CardContent className="py-4">
-          <div className="flex items-center justify-between overflow-x-auto gap-2">
-            {pipelineStages.map((stage, index) => (
-              <div key={stage.id} className="flex items-center">
-                <div 
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                    currentStage === stage.id 
-                      ? 'bg-primary/20 text-primary' 
-                      : currentStage > stage.id 
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground'
-                  }`}
-                >
-                  {currentStage > stage.id ? (
-                    <CheckCircle2 className="w-4 h-4 text-primary" />
-                  ) : currentStage === stage.id ? (
-                    <stage.icon className="w-4 h-4" />
-                  ) : (
-                    <Circle className="w-4 h-4 opacity-50" />
-                  )}
-                  <span className="text-sm font-medium whitespace-nowrap hidden md:inline">{stage.name}</span>
-                </div>
-                {index < pipelineStages.length - 1 && (
-                  <ChevronRight className="w-4 h-4 text-muted-foreground mx-1" />
-                )}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Main Content */}
+      <div className="flex-1 p-8 space-y-8 overflow-auto">
+        <div>
+          <h1 className="text-4xl font-bold text-foreground mb-2">Create AI Video Ad</h1>
+          <p className="text-muted-foreground">
+            Multi-layer production pipeline for professional video ads
+          </p>
+        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Input Section */}
         <Card className="bg-gradient-card border-border shadow-card">
           <CardHeader>
@@ -489,6 +494,7 @@ Tip: Keep sentences short (under 15 words) for better voice-over. ~60 words = 30
           </Card>
         </div>
       )}
+      </div>
     </div>
   );
 }
