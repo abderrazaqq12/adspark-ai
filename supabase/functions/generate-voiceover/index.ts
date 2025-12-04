@@ -1,6 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Helper function for base64 encoding without stack overflow
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const chunks: string[] = [];
+  const chunkSize = 32768;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.slice(i, i + chunkSize);
+    chunks.push(String.fromCharCode.apply(null, Array.from(chunk)));
+  }
+  return btoa(chunks.join(''));
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -42,14 +54,14 @@ serve(async (req) => {
     if (!elevenLabsKey) {
       return new Response(JSON.stringify({ 
         error: 'ElevenLabs API key not configured',
-        message: 'Please add ELEVENLABS_API_KEY to your secrets'
+        message: 'Please add ElevenLabs API key to your secrets in Settings'
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const { action, text, language = 'en', voiceId, model = 'eleven_multilingual_v2', scriptId } = await req.json();
+    const { action, text, language = 'en', voiceId, model = 'eleven_multilingual_v2', scriptId, preview } = await req.json();
 
     // Handle fetching user's voices
     if (action === 'get_voices') {
@@ -111,13 +123,16 @@ serve(async (req) => {
       'eleven_turbo_v2',
       'eleven_monolingual_v1',
       'eleven_multilingual_v1',
-      'eleven_flash_v2_5', // v3 Flash
-      'eleven_flash_v2', // v3 Flash legacy
+      'eleven_flash_v2_5',
+      'eleven_flash_v2',
     ];
 
     const modelToUse = supportedModels.includes(model) ? model : 'eleven_multilingual_v2';
 
-    console.log(`[generate-voiceover] Generating with voice: ${selectedVoice}, model: ${modelToUse}, language: ${language}`);
+    // For preview, use shorter text
+    const textToSpeak = preview ? text.slice(0, 100) : text;
+
+    console.log(`[generate-voiceover] Generating with voice: ${selectedVoice}, model: ${modelToUse}, language: ${language}, preview: ${preview}`);
 
     // Generate voice using ElevenLabs
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${selectedVoice}`, {
@@ -128,7 +143,7 @@ serve(async (req) => {
         'xi-api-key': elevenLabsKey,
       },
       body: JSON.stringify({
-        text,
+        text: textToSpeak,
         model_id: modelToUse,
         voice_settings: {
           stability: 0.5,
@@ -142,12 +157,27 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('ElevenLabs API error:', errorText);
-      throw new Error('Failed to generate voiceover');
+      throw new Error(`Failed to generate voiceover: ${errorText}`);
     }
 
     // Get audio as buffer
     const audioBuffer = await response.arrayBuffer();
-    const audioBase64 = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)));
+    
+    // Use chunked base64 encoding to avoid stack overflow
+    const audioBase64 = arrayBufferToBase64(audioBuffer);
+
+    console.log(`[generate-voiceover] Audio generated, size: ${audioBuffer.byteLength} bytes`);
+
+    // For preview, just return base64
+    if (preview) {
+      return new Response(JSON.stringify({ 
+        success: true, 
+        audio_base64: audioBase64,
+        format: 'mp3'
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Upload to storage
     const fileName = `voiceovers/${scriptId || crypto.randomUUID()}_${Date.now()}.mp3`;
