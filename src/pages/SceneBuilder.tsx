@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Progress } from "@/components/ui/progress";
 import { 
   Wand2, 
   GripVertical, 
@@ -21,7 +22,8 @@ import {
   Save,
   Sparkles,
   Download,
-  Eye
+  Eye,
+  Film
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSearchParams } from "react-router-dom";
@@ -29,6 +31,8 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import ExportVideoModal from "@/components/ExportVideoModal";
 import VideoPreviewPlayer from "@/components/VideoPreviewPlayer";
+import VideoTimelineEditor from "@/components/VideoTimelineEditor";
+import { useVideoUpload } from "@/hooks/useVideoUpload";
 
 interface Scene {
   id: string;
@@ -41,6 +45,8 @@ interface Scene {
   status: string;
   video_url: string | null;
   duration_sec: number;
+  transition_type: string;
+  transition_duration_ms: number;
 }
 
 interface Engine {
@@ -63,6 +69,9 @@ export default function SceneBuilder() {
   const [scriptId, setScriptId] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [previewScene, setPreviewScene] = useState<Scene | null>(null);
+  const [showTimeline, setShowTimeline] = useState(false);
+  const [uploadingSceneId, setUploadingSceneId] = useState<string | null>(null);
+  const { uploadVideo, uploading, progress } = useVideoUpload();
 
   useEffect(() => {
     fetchEngines();
@@ -211,6 +220,8 @@ export default function SceneBuilder() {
         scene_type: "broll",
         status: "pending",
         duration_sec: 5,
+        transition_type: "cut",
+        transition_duration_ms: 500,
       };
 
       const { data, error } = await supabase
@@ -225,6 +236,16 @@ export default function SceneBuilder() {
     } catch (error) {
       toast.error("Failed to add scene");
     }
+  };
+
+  const handleVideoUpload = async (sceneId: string, file: File) => {
+    setUploadingSceneId(sceneId);
+    const result = await uploadVideo(file, "custom-scenes", sceneId);
+    
+    if (result) {
+      await updateScene(sceneId, { video_url: result.url, status: "completed" });
+    }
+    setUploadingSceneId(null);
   };
 
   const getEnginesByType = (type: string) => engines.filter(e => e.type === type);
@@ -283,6 +304,15 @@ export default function SceneBuilder() {
           </Button>
           <Button 
             variant="outline" 
+            onClick={() => setShowTimeline(!showTimeline)}
+            disabled={scenes.length === 0}
+            className="border-border"
+          >
+            <Film className="w-4 h-4 mr-2" />
+            {showTimeline ? "Hide Timeline" : "Timeline"}
+          </Button>
+          <Button 
+            variant="outline" 
             onClick={() => setExportOpen(true)}
             disabled={scenes.length === 0 || !scriptId}
             className="border-border"
@@ -296,6 +326,18 @@ export default function SceneBuilder() {
           </Button>
         </div>
       </div>
+
+      {/* Timeline Editor */}
+      {showTimeline && scenes.length > 0 && (
+        <VideoTimelineEditor
+          scenes={scenes.map(s => ({
+            ...s,
+            transition_type: s.transition_type ?? "cut",
+            transition_duration_ms: s.transition_duration_ms ?? 500,
+          })) as Scene[]}
+          onScenesUpdate={(updatedScenes) => setScenes(updatedScenes as Scene[])}
+        />
+      )}
 
       {loading ? (
         <div className="space-y-4">
@@ -467,16 +509,41 @@ export default function SceneBuilder() {
                       </Button>
                       <Dialog>
                         <DialogTrigger asChild>
-                          <Button variant="outline" size="sm" className="border-border">
-                            <Upload className="w-4 h-4" />
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="border-border"
+                            disabled={uploadingSceneId === scene.id}
+                          >
+                            {uploadingSceneId === scene.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Upload className="w-4 h-4" />
+                            )}
                           </Button>
                         </DialogTrigger>
                         <DialogContent>
                           <DialogHeader>
                             <DialogTitle>Upload Custom Video</DialogTitle>
                           </DialogHeader>
-                          <div className="py-4">
-                            <Input type="file" accept="video/*" />
+                          <div className="py-4 space-y-4">
+                            <Input 
+                              type="file" 
+                              accept="video/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleVideoUpload(scene.id, file);
+                              }}
+                              disabled={uploading}
+                            />
+                            {uploading && uploadingSceneId === scene.id && (
+                              <div className="space-y-2">
+                                <Progress value={progress} className="h-2" />
+                                <p className="text-sm text-muted-foreground text-center">
+                                  Uploading... {progress}%
+                                </p>
+                              </div>
+                            )}
                           </div>
                         </DialogContent>
                       </Dialog>

@@ -250,6 +250,8 @@ export type Database = {
           status: string | null
           text: string
           thumbnail_url: string | null
+          transition_duration_ms: number | null
+          transition_type: string | null
           updated_at: string | null
           video_url: string | null
           visual_prompt: string | null
@@ -267,6 +269,8 @@ export type Database = {
           status?: string | null
           text: string
           thumbnail_url?: string | null
+          transition_duration_ms?: number | null
+          transition_type?: string | null
           updated_at?: string | null
           video_url?: string | null
           visual_prompt?: string | null
@@ -284,6 +288,8 @@ export type Database = {
           status?: string | null
           text?: string
           thumbnail_url?: string | null
+          transition_duration_ms?: number | null
+          transition_type?: string | null
           updated_at?: string | null
           video_url?: string | null
           visual_prompt?: string | null
