@@ -251,17 +251,17 @@ export default function CreateVideo() {
         <div>
           <h1 className="text-4xl font-bold text-foreground mb-2">Create AI Video Ad</h1>
           <p className="text-muted-foreground">
-            Multi-layer production pipeline for professional video ads
+            Multi-step production pipeline for professional video ads
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="flex flex-col gap-6">
         {/* Input Section */}
         <Card className="bg-gradient-card border-border shadow-card">
           <CardHeader>
             <CardTitle className="text-foreground flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" />
-              Layer 1: Script & Hooks
+              Step 1: Script & Hooks
             </CardTitle>
             <CardDescription className="text-muted-foreground">
               Enter your voice-over script, hooks, and marketing angles
@@ -364,7 +364,7 @@ Tip: Keep sentences short (under 15 words) for better voice-over. ~60 words = 30
           <CardHeader>
             <CardTitle className="text-foreground flex items-center gap-2">
               <Wand2 className="w-5 h-5 text-primary" />
-              Layer 2: AI Scene Breakdown
+              Step 2: AI Scene Breakdown
             </CardTitle>
             <CardDescription className="text-muted-foreground">
               {scenes.length > 0
