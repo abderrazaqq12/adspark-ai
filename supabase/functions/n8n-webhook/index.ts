@@ -2,13 +2,26 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-secret',
 }
 
 interface N8NPayload {
   action: string
   data: Record<string, unknown>
   userId?: string
+}
+
+// Simple UUID validation
+function isValidUUID(str: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+}
+
+// Validate string with max length
+function validateString(value: unknown, maxLength: number = 10000): string | null {
+  if (typeof value !== 'string') return null;
+  if (value.length > maxLength) return null;
+  return value;
 }
 
 Deno.serve(async (req) => {
@@ -18,6 +31,26 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // SECURITY: Validate webhook secret
+    const expectedSecret = Deno.env.get('N8N_WEBHOOK_SECRET')
+    const providedSecret = req.headers.get('x-webhook-secret')
+    
+    if (!expectedSecret) {
+      console.error('[n8n-webhook] N8N_WEBHOOK_SECRET not configured - rejecting request')
+      return new Response(
+        JSON.stringify({ error: 'Webhook not configured. Please set N8N_WEBHOOK_SECRET.' }),
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    
+    if (providedSecret !== expectedSecret) {
+      console.warn('[n8n-webhook] Invalid or missing webhook secret')
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: Invalid webhook secret' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
@@ -25,25 +58,56 @@ Deno.serve(async (req) => {
     const payload: N8NPayload = await req.json()
     const { action, data, userId } = payload
 
-    console.log(`[n8n-webhook] Received action: ${action}`, { data, userId })
+    // SECURITY: Validate required fields
+    if (!action || typeof action !== 'string') {
+      return new Response(
+        JSON.stringify({ error: 'Invalid request: action is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // SECURITY: Validate userId if provided (must be valid UUID)
+    if (userId && !isValidUUID(userId)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid request: userId must be a valid UUID' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    console.log(`[n8n-webhook] Received action: ${action}`, { hasUserId: !!userId })
 
     let result: unknown = null
 
     switch (action) {
       // ============ PROJECT OPERATIONS ============
       case 'create_project': {
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'userId is required for this action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         const { name, product_name, language, settings } = data as {
           name: string
           product_name?: string
           language?: string
           settings?: Record<string, unknown>
         }
+        
+        const validatedName = validateString(name, 255)
+        if (!validatedName) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid project name' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
         const { data: project, error } = await supabase
           .from('projects')
           .insert({
-            name,
-            product_name,
-            language: language || 'en',
+            name: validatedName,
+            product_name: validateString(product_name, 255),
+            language: validateString(language, 10) || 'en',
             settings,
             user_id: userId,
             status: 'draft'
@@ -57,13 +121,21 @@ Deno.serve(async (req) => {
       }
 
       case 'get_projects': {
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'userId is required for this action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         const { limit = 10 } = data as { limit?: number }
+        const safeLimit = Math.min(Math.max(1, limit), 100)
+        
         const { data: projects, error } = await supabase
           .from('projects')
           .select('*')
           .eq('user_id', userId)
           .order('created_at', { ascending: false })
-          .limit(limit)
+          .limit(safeLimit)
         
         if (error) throw error
         result = projects
@@ -72,9 +144,26 @@ Deno.serve(async (req) => {
 
       case 'update_project': {
         const { projectId, updates } = data as { projectId: string; updates: Record<string, unknown> }
+        
+        if (!projectId || !isValidUUID(projectId)) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid projectId' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
+        // Sanitize updates - only allow specific fields
+        const allowedFields = ['name', 'product_name', 'language', 'settings', 'status']
+        const sanitizedUpdates: Record<string, unknown> = {}
+        for (const key of allowedFields) {
+          if (key in updates) {
+            sanitizedUpdates[key] = updates[key]
+          }
+        }
+        
         const { data: project, error } = await supabase
           .from('projects')
-          .update(updates)
+          .update(sanitizedUpdates)
           .eq('id', projectId)
           .select()
           .single()
@@ -86,6 +175,14 @@ Deno.serve(async (req) => {
 
       case 'delete_project': {
         const { projectId } = data as { projectId: string }
+        
+        if (!projectId || !isValidUUID(projectId)) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid projectId' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
         const { error } = await supabase
           .from('projects')
           .delete()
@@ -106,14 +203,30 @@ Deno.serve(async (req) => {
           style?: string
           hooks?: string[]
         }
+        
+        if (!projectId || !isValidUUID(projectId)) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid projectId' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
+        const validatedText = validateString(raw_text, 50000)
+        if (!validatedText) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid raw_text' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
         const { data: script, error } = await supabase
           .from('scripts')
           .insert({
             project_id: projectId,
-            raw_text,
-            language: language || 'en',
-            tone,
-            style,
+            raw_text: validatedText,
+            language: validateString(language, 10) || 'en',
+            tone: validateString(tone, 50),
+            style: validateString(style, 50),
             hooks,
             status: 'draft'
           })
@@ -127,6 +240,14 @@ Deno.serve(async (req) => {
 
       case 'get_scripts': {
         const { projectId } = data as { projectId: string }
+        
+        if (!projectId || !isValidUUID(projectId)) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid projectId' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
         const { data: scripts, error } = await supabase
           .from('scripts')
           .select('*')
@@ -155,6 +276,14 @@ Deno.serve(async (req) => {
       // ============ SCENE OPERATIONS ============
       case 'get_scenes': {
         const { scriptId } = data as { scriptId: string }
+        
+        if (!scriptId || !isValidUUID(scriptId)) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid scriptId' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
         const { data: scenes, error } = await supabase
           .from('scenes')
           .select('*, ai_engines(*)')
@@ -176,15 +305,30 @@ Deno.serve(async (req) => {
           duration_sec?: number
           engine_id?: string
         }
+        
+        if (!scriptId || !isValidUUID(scriptId)) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid scriptId' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
+        if (engine_id && !isValidUUID(engine_id)) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid engine_id' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
         const { data: scene, error } = await supabase
           .from('scenes')
           .insert({
             script_id: scriptId,
-            text,
-            visual_prompt,
-            scene_type,
-            index,
-            duration_sec,
+            text: validateString(text, 10000) || '',
+            visual_prompt: validateString(visual_prompt, 10000),
+            scene_type: validateString(scene_type, 50),
+            index: Math.max(0, Math.min(index, 1000)),
+            duration_sec: duration_sec ? Math.max(0, Math.min(duration_sec, 300)) : null,
             engine_id,
             status: 'draft'
           })
@@ -198,9 +342,26 @@ Deno.serve(async (req) => {
 
       case 'update_scene': {
         const { sceneId, updates } = data as { sceneId: string; updates: Record<string, unknown> }
+        
+        if (!sceneId || !isValidUUID(sceneId)) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid sceneId' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
+        // Sanitize updates - only allow specific fields
+        const allowedFields = ['text', 'visual_prompt', 'scene_type', 'index', 'duration_sec', 'engine_id', 'status']
+        const sanitizedUpdates: Record<string, unknown> = {}
+        for (const key of allowedFields) {
+          if (key in updates) {
+            sanitizedUpdates[key] = updates[key]
+          }
+        }
+        
         const { data: scene, error } = await supabase
           .from('scenes')
-          .update(updates)
+          .update(sanitizedUpdates)
           .eq('id', sceneId)
           .select()
           .single()
@@ -240,6 +401,12 @@ Deno.serve(async (req) => {
       }
 
       case 'batch_generate': {
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'userId is required for this action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         // Call the batch-generate edge function
         const response = await fetch(`${supabaseUrl}/functions/v1/batch-generate`, {
           method: 'POST',
@@ -302,8 +469,8 @@ Deno.serve(async (req) => {
         const { type, status = 'active' } = data as { type?: string; status?: string }
         let query = supabase.from('ai_engines').select('*')
         
-        if (type) query = query.eq('type', type)
-        if (status) query = query.eq('status', status)
+        if (type && validateString(type, 50)) query = query.eq('type', type)
+        if (status && validateString(status, 20)) query = query.eq('status', status)
         
         const { data: engines, error } = await query.order('priority_score', { ascending: false })
         
@@ -329,6 +496,14 @@ Deno.serve(async (req) => {
       // ============ QUEUE STATUS ============
       case 'get_queue_status': {
         const { scriptId } = data as { scriptId?: string }
+        
+        if (scriptId && !isValidUUID(scriptId)) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid scriptId' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
         let query = supabase
           .from('generation_queue')
           .select('*, scenes(*), ai_engines(*)')
@@ -340,7 +515,7 @@ Deno.serve(async (req) => {
           query = query.eq('user_id', userId)
         }
         
-        const { data: queue, error } = await query.order('created_at', { ascending: false })
+        const { data: queue, error } = await query.order('created_at', { ascending: false }).limit(100)
         
         if (error) throw error
         result = queue
@@ -350,12 +525,26 @@ Deno.serve(async (req) => {
       // ============ VIDEO OUTPUTS ============
       case 'get_video_outputs': {
         const { projectId, scriptId } = data as { projectId?: string; scriptId?: string }
+        
+        if (projectId && !isValidUUID(projectId)) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid projectId' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        if (scriptId && !isValidUUID(scriptId)) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid scriptId' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
         let query = supabase.from('video_outputs').select('*')
         
         if (projectId) query = query.eq('project_id', projectId)
         if (scriptId) query = query.eq('script_id', scriptId)
         
-        const { data: outputs, error } = await query.order('created_at', { ascending: false })
+        const { data: outputs, error } = await query.order('created_at', { ascending: false }).limit(100)
         
         if (error) throw error
         result = outputs
@@ -367,10 +556,10 @@ Deno.serve(async (req) => {
         const { category } = data as { category?: string }
         let query = supabase.from('prompt_templates').select('*')
         
-        if (category) query = query.eq('category', category)
+        if (category && validateString(category, 50)) query = query.eq('category', category)
         if (userId) query = query.or(`user_id.eq.${userId},is_default.eq.true`)
         
-        const { data: templates, error } = await query.order('created_at', { ascending: false })
+        const { data: templates, error } = await query.order('created_at', { ascending: false }).limit(100)
         
         if (error) throw error
         result = templates
@@ -378,6 +567,12 @@ Deno.serve(async (req) => {
       }
 
       case 'create_template': {
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'userId is required for this action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         const { name, template_text, category, language, variables } = data as {
           name: string
           template_text: string
@@ -385,13 +580,24 @@ Deno.serve(async (req) => {
           language?: string
           variables?: Record<string, unknown>
         }
+        
+        const validatedName = validateString(name, 255)
+        const validatedText = validateString(template_text, 50000)
+        
+        if (!validatedName || !validatedText) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid name or template_text' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
         const { data: template, error } = await supabase
           .from('prompt_templates')
           .insert({
-            name,
-            template_text,
-            category,
-            language,
+            name: validatedName,
+            template_text: validatedText,
+            category: validateString(category, 50),
+            language: validateString(language, 10),
             variables,
             user_id: userId,
             is_default: false
@@ -406,6 +612,12 @@ Deno.serve(async (req) => {
 
       // ============ USER SETTINGS ============
       case 'get_user_settings': {
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'userId is required for this action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         const { data: settings, error } = await supabase
           .from('user_settings')
           .select('*')
@@ -418,10 +630,26 @@ Deno.serve(async (req) => {
       }
 
       case 'update_user_settings': {
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'userId is required for this action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         const { updates } = data as { updates: Record<string, unknown> }
+        
+        // Sanitize updates - only allow specific fields
+        const allowedFields = ['default_language', 'default_voice', 'use_free_tier_only', 'preferences']
+        const sanitizedUpdates: Record<string, unknown> = {}
+        for (const key of allowedFields) {
+          if (key in updates) {
+            sanitizedUpdates[key] = updates[key]
+          }
+        }
+        
         const { data: settings, error } = await supabase
           .from('user_settings')
-          .update(updates)
+          .update(sanitizedUpdates)
           .eq('user_id', userId)
           .select()
           .single()
@@ -448,6 +676,12 @@ Deno.serve(async (req) => {
 
       // ============ FULL PIPELINE ============
       case 'full_pipeline': {
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'userId is required for this action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         // Execute the full video generation pipeline
         const { projectName, product_name, scriptText, language, variationsPerScene } = data as {
           projectName: string
@@ -457,13 +691,23 @@ Deno.serve(async (req) => {
           variationsPerScene?: number
         }
 
+        const validatedProjectName = validateString(projectName, 255)
+        const validatedScriptText = validateString(scriptText, 50000)
+        
+        if (!validatedProjectName || !validatedScriptText) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid projectName or scriptText' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
         // Step 1: Create project
         const { data: project, error: projectError } = await supabase
           .from('projects')
           .insert({
-            name: projectName,
-            product_name,
-            language: language || 'en',
+            name: validatedProjectName,
+            product_name: validateString(product_name, 255),
+            language: validateString(language, 10) || 'en',
             user_id: userId,
             status: 'processing'
           })
@@ -477,8 +721,8 @@ Deno.serve(async (req) => {
           .from('scripts')
           .insert({
             project_id: project.id,
-            raw_text: scriptText,
-            language: language || 'en',
+            raw_text: validatedScriptText,
+            language: validateString(language, 10) || 'en',
             status: 'analyzing'
           })
           .select()
@@ -498,6 +742,7 @@ Deno.serve(async (req) => {
         const breakdownResult = await breakdownResponse.json()
 
         // Step 4: Start batch generation
+        const safeVariations = Math.min(Math.max(1, variationsPerScene || 3), 10)
         const batchResponse = await fetch(`${supabaseUrl}/functions/v1/batch-generate`, {
           method: 'POST',
           headers: {
@@ -506,7 +751,7 @@ Deno.serve(async (req) => {
           },
           body: JSON.stringify({
             scriptId: script.id,
-            variationsPerScene: variationsPerScene || 3,
+            variationsPerScene: safeVariations,
             randomEngines: true,
             userId
           })
@@ -516,15 +761,18 @@ Deno.serve(async (req) => {
         result = {
           project,
           script,
-          breakdown: breakdownResult,
-          batch: batchResult,
-          message: 'Full pipeline initiated. Check queue status for progress.'
+          scenesCreated: breakdownResult.scenes?.length || 0,
+          batchQueued: batchResult.queued || 0,
+          message: 'Pipeline started successfully'
         }
         break
       }
 
       default:
-        throw new Error(`Unknown action: ${action}`)
+        return new Response(
+          JSON.stringify({ error: `Unknown action: ${action}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
     }
 
     console.log(`[n8n-webhook] Action ${action} completed successfully`)
@@ -534,17 +782,12 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
-  } catch (error) {
-    console.error('[n8n-webhook] Error:', error)
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    console.error('[n8n-webhook] Error:', errorMessage)
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
-      }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
+      JSON.stringify({ error: errorMessage }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 })
