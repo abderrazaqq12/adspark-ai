@@ -12,30 +12,76 @@ serve(async (req) => {
   }
 
   try {
+    // Authentication check
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+
+    // Create client with user's auth context for verification
+    const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
+    if (authError || !user) {
+      console.error('Auth error:', authError);
+      return new Response(
+        JSON.stringify({ error: 'Invalid or expired token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Authenticated user:', user.id);
+
     const { videoUrl, sceneId } = await req.json();
 
     if (!videoUrl || !sceneId) {
       throw new Error("videoUrl and sceneId are required");
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
-    
+    // Use service role client for database operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Use AI to generate a thumbnail from video description
-    // Since we can't directly extract frames in edge functions,
-    // we'll generate a representative thumbnail using the scene's visual prompt
-    
-    const { data: scene } = await supabase
+    // Verify user owns this scene through the script -> project chain
+    const { data: scene, error: sceneError } = await supabase
       .from("scenes")
-      .select("visual_prompt, text")
+      .select(`
+        id,
+        visual_prompt,
+        text,
+        script:scripts!inner(
+          id,
+          project:projects!inner(
+            id,
+            user_id
+          )
+        )
+      `)
       .eq("id", sceneId)
       .single();
 
-    if (!scene) {
+    if (sceneError || !scene) {
+      console.error('Scene lookup error:', sceneError);
       throw new Error("Scene not found");
+    }
+
+    // Check ownership - extract user_id from nested structure
+    const scriptObj = scene.script as unknown as { project: { user_id: string } };
+    const ownerId = scriptObj?.project?.user_id;
+    if (ownerId !== user.id) {
+      return new Response(
+        JSON.stringify({ error: 'Access denied: You do not own this scene' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const prompt = scene.visual_prompt || scene.text;
