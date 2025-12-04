@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Save, Plus, Trash2, FileText, Loader2, Pencil, Webhook, Copy, CheckCircle, XCircle, ExternalLink, Zap, Key, Eye, EyeOff, Bot, RefreshCw, DollarSign, Sparkles, TrendingUp, Crown } from "lucide-react";
+import { Save, Plus, Trash2, FileText, Loader2, Pencil, Webhook, Copy, CheckCircle, XCircle, ExternalLink, Zap, Key, Eye, EyeOff, Bot, RefreshCw, DollarSign, Sparkles, TrendingUp, Crown, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -82,87 +82,195 @@ interface APIKeyCategory {
   keys: APIKeyConfig[];
 }
 
+// Global API providers with multiple models
+interface GlobalAPIProvider {
+  key: string;
+  label: string;
+  description: string;
+  placeholder: string;
+  models: { id: string; name: string; description: string }[];
+}
+
+const GLOBAL_API_PROVIDERS: GlobalAPIProvider[] = [
+  {
+    key: "AIMLAPI_API_KEY",
+    label: "AIML API",
+    description: "Access 200+ AI models including GPT-4, Claude, Llama",
+    placeholder: "aiml_xxxxxxxxxxxxxxxx",
+    models: [
+      { id: "gpt-4-turbo", name: "GPT-4 Turbo", description: "OpenAI's most capable model" },
+      { id: "gpt-4o", name: "GPT-4o", description: "OpenAI's fastest GPT-4" },
+      { id: "claude-3-opus", name: "Claude 3 Opus", description: "Anthropic's most powerful" },
+      { id: "claude-3-sonnet", name: "Claude 3 Sonnet", description: "Balanced performance" },
+      { id: "llama-3.1-70b", name: "Llama 3.1 70B", description: "Meta's open model" },
+      { id: "mistral-large", name: "Mistral Large", description: "Mistral's flagship" },
+      { id: "flux-pro", name: "Flux Pro", description: "Image generation" },
+      { id: "stable-diffusion-xl", name: "SDXL", description: "Image generation" },
+    ]
+  },
+  {
+    key: "OPENROUTER_API_KEY",
+    label: "OpenRouter",
+    description: "Unified API for all major LLMs with automatic fallbacks",
+    placeholder: "sk-or-v1-xxxxxxxxxxxxxxxx",
+    models: [
+      { id: "openai/gpt-4-turbo", name: "GPT-4 Turbo", description: "via OpenRouter" },
+      { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", description: "via OpenRouter" },
+      { id: "google/gemini-pro-1.5", name: "Gemini Pro 1.5", description: "via OpenRouter" },
+      { id: "meta-llama/llama-3.1-405b", name: "Llama 3.1 405B", description: "Largest Llama" },
+      { id: "mistral/mistral-large", name: "Mistral Large", description: "via OpenRouter" },
+      { id: "cohere/command-r-plus", name: "Command R+", description: "Cohere's best" },
+    ]
+  },
+  {
+    key: "EDENAI_API_KEY",
+    label: "Eden AI",
+    description: "Multi-provider AI APIs for text, image, video, audio",
+    placeholder: "eyJhbGciOiJIUzI1NiIs...",
+    models: [
+      { id: "text-generation", name: "Text Generation", description: "Multiple providers" },
+      { id: "image-generation", name: "Image Generation", description: "DALL-E, Stable Diffusion" },
+      { id: "speech-to-text", name: "Speech to Text", description: "Multiple providers" },
+      { id: "text-to-speech", name: "Text to Speech", description: "Multiple voices" },
+      { id: "video-analysis", name: "Video Analysis", description: "Content detection" },
+      { id: "translation", name: "Translation", description: "100+ languages" },
+    ]
+  },
+  {
+    key: "FAL_API_KEY",
+    label: "Fal AI",
+    description: "Fast inference for image & video models",
+    placeholder: "fal_xxxxxxxxxxxxxxxx",
+    models: [
+      { id: "flux-pro", name: "Flux Pro", description: "Best image quality" },
+      { id: "flux-dev", name: "Flux Dev", description: "Development model" },
+      { id: "flux-schnell", name: "Flux Schnell", description: "Fast generation" },
+      { id: "stable-video-diffusion", name: "Stable Video", description: "Image to video" },
+      { id: "animate-diff", name: "AnimateDiff", description: "Animation generation" },
+      { id: "lora-training", name: "LoRA Training", description: "Custom model training" },
+    ]
+  },
+  {
+    key: "APIFRAME_API_KEY",
+    label: "APIframe",
+    description: "Unified API for video generation platforms",
+    placeholder: "af_xxxxxxxxxxxxxxxx",
+    models: [
+      { id: "runway-gen3", name: "Runway Gen-3", description: "via APIframe" },
+      { id: "luma-dream", name: "Luma Dream Machine", description: "via APIframe" },
+      { id: "kling-ai", name: "Kling AI", description: "via APIframe" },
+      { id: "minimax-video", name: "MiniMax Video", description: "via APIframe" },
+      { id: "cogvideox", name: "CogVideoX", description: "via APIframe" },
+    ]
+  },
+  {
+    key: "GOOGLE_AI_STUDIO_KEY",
+    label: "Google AI Studio",
+    description: "Access Gemini models directly from Google",
+    placeholder: "AIzaSy...",
+    models: [
+      { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", description: "Best for complex tasks" },
+      { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash", description: "Fast & efficient" },
+      { id: "gemini-pro-vision", name: "Gemini Pro Vision", description: "Multimodal" },
+      { id: "text-embedding", name: "Text Embedding", description: "Semantic search" },
+      { id: "imagen-3", name: "Imagen 3", description: "Image generation" },
+    ]
+  },
+  {
+    key: "VERTEX_AI_KEY",
+    label: "Vertex AI",
+    description: "Google Cloud's enterprise AI platform",
+    placeholder: "ya29.xxxxxxxxxxxxxxxx",
+    models: [
+      { id: "gemini-1.5-pro-preview", name: "Gemini 1.5 Pro", description: "Enterprise grade" },
+      { id: "gemini-1.5-flash-preview", name: "Gemini 1.5 Flash", description: "Low latency" },
+      { id: "imagen-3", name: "Imagen 3", description: "Enterprise images" },
+      { id: "video-generation", name: "Video Generation", description: "Enterprise video" },
+      { id: "speech-to-text-v2", name: "Speech to Text v2", description: "High accuracy" },
+      { id: "text-to-speech-v2", name: "Text to Speech v2", description: "Natural voices" },
+    ]
+  },
+];
+
 const API_KEY_CATEGORIES: APIKeyCategory[] = [
   {
     name: "AI Assistants",
     keys: [
-      { key: "OPENAI_API_KEY", label: "OpenAI API Key", description: "For ChatGPT AI Assistant", placeholder: "sk-..." },
-      { key: "GEMINI_API_KEY", label: "Google Gemini API Key", description: "For Gemini AI Assistant", placeholder: "AIza..." },
+      { key: "OPENAI_API_KEY", label: "OpenAI API Key", description: "For ChatGPT AI Assistant", placeholder: "sk-proj-xxxxxxxxxxxxxxxx" },
+      { key: "GEMINI_API_KEY", label: "Google Gemini API Key", description: "For Gemini AI Assistant", placeholder: "AIzaSyxxxxxxxxxxxxxxxxxx" },
     ]
   },
   {
     name: "Text-to-Video Engines",
     keys: [
-      { key: "RUNWAY_API_KEY", label: "Runway API Key", description: "High-quality cinematic video generation", placeholder: "rw_..." },
-      { key: "PIKA_API_KEY", label: "Pika Labs API Key", description: "Creative & animated video generation", placeholder: "" },
-      { key: "HAILUO_API_KEY", label: "Hailuo AI API Key", description: "Fast video generation with realistic motion", placeholder: "" },
-      { key: "KLING_API_KEY", label: "Kling AI API Key", description: "High-quality AI video with long duration", placeholder: "" },
-      { key: "VIDU_API_KEY", label: "Vidu API Key", description: "Text-to-video with character consistency", placeholder: "" },
-      { key: "LTX_API_KEY", label: "LTX Studio API Key", description: "AI filmmaking and video creation", placeholder: "" },
-      { key: "WAN_API_KEY", label: "Wan Video API Key", description: "Fast text-to-video generation", placeholder: "" },
-      { key: "SKYREELS_API_KEY", label: "SkyReels API Key", description: "Cinematic video generation", placeholder: "" },
-      { key: "SEEDANCE_API_KEY", label: "Seedance API Key", description: "Dance & motion video generation", placeholder: "" },
-      { key: "HIGGSFIELD_API_KEY", label: "Higgsfield API Key", description: "Personalized AI video creation", placeholder: "" },
+      { key: "RUNWAY_API_KEY", label: "Runway API Key", description: "High-quality cinematic video generation", placeholder: "rw_xxxxxxxxxxxxxxxx" },
+      { key: "PIKA_API_KEY", label: "Pika Labs API Key", description: "Creative & animated video generation", placeholder: "pk_xxxxxxxxxxxxxxxx" },
+      { key: "HAILUO_API_KEY", label: "Hailuo AI API Key", description: "Fast video generation with realistic motion", placeholder: "hl_xxxxxxxxxxxxxxxx" },
+      { key: "KLING_API_KEY", label: "Kling AI API Key", description: "High-quality AI video with long duration", placeholder: "kl_xxxxxxxxxxxxxxxx" },
+      { key: "VIDU_API_KEY", label: "Vidu API Key", description: "Text-to-video with character consistency", placeholder: "vd_xxxxxxxxxxxxxxxx" },
+      { key: "LTX_API_KEY", label: "LTX Studio API Key", description: "AI filmmaking and video creation", placeholder: "ltx_xxxxxxxxxxxxxxxx" },
+      { key: "WAN_API_KEY", label: "Wan Video API Key", description: "Fast text-to-video generation", placeholder: "wan_xxxxxxxxxxxxxxxx" },
+      { key: "SKYREELS_API_KEY", label: "SkyReels API Key", description: "Cinematic video generation", placeholder: "sr_xxxxxxxxxxxxxxxx" },
+      { key: "SEEDANCE_API_KEY", label: "Seedance API Key", description: "Dance & motion video generation", placeholder: "sd_xxxxxxxxxxxxxxxx" },
+      { key: "HIGGSFIELD_API_KEY", label: "Higgsfield API Key", description: "Personalized AI video creation", placeholder: "hf_xxxxxxxxxxxxxxxx" },
     ]
   },
   {
     name: "Avatar & UGC Engines",
     keys: [
-      { key: "HEYGEN_API_KEY", label: "HeyGen API Key", description: "Professional avatar video generation", placeholder: "" },
-      { key: "ELAI_API_KEY", label: "Elai.io API Key", description: "AI avatar video from text", placeholder: "" },
-      { key: "ARCADS_API_KEY", label: "Arcads API Key", description: "UGC-style ad video generation", placeholder: "" },
-      { key: "CREATIFY_API_KEY", label: "Creatify API Key", description: "AI-powered ad creative generation", placeholder: "" },
-      { key: "JOGG_API_KEY", label: "Jogg AI API Key", description: "AI avatar marketing videos", placeholder: "" },
-      { key: "TWINADS_API_KEY", label: "TwinAds API Key", description: "AI twin avatar ads", placeholder: "" },
-      { key: "VIDNOZ_API_KEY", label: "Vidnoz API Key", description: "AI avatar video maker", placeholder: "" },
-      { key: "CELEBIFY_API_KEY", label: "CelebifyAI API Key", description: "Celebrity-style avatar videos", placeholder: "" },
-      { key: "OMNIHUMAN_API_KEY", label: "OmniHuman API Key", description: "Realistic human avatar generation", placeholder: "" },
-      { key: "HEDRA_API_KEY", label: "Hedra API Key", description: "AI character video generation", placeholder: "" },
+      { key: "HEYGEN_API_KEY", label: "HeyGen API Key", description: "Professional avatar video generation", placeholder: "hg_xxxxxxxxxxxxxxxx" },
+      { key: "ELAI_API_KEY", label: "Elai.io API Key", description: "AI avatar video from text", placeholder: "el_xxxxxxxxxxxxxxxx" },
+      { key: "ARCADS_API_KEY", label: "Arcads API Key", description: "UGC-style ad video generation", placeholder: "arc_xxxxxxxxxxxxxxxx" },
+      { key: "CREATIFY_API_KEY", label: "Creatify API Key", description: "AI-powered ad creative generation", placeholder: "cr_xxxxxxxxxxxxxxxx" },
+      { key: "JOGG_API_KEY", label: "Jogg AI API Key", description: "AI avatar marketing videos", placeholder: "jg_xxxxxxxxxxxxxxxx" },
+      { key: "TWINADS_API_KEY", label: "TwinAds API Key", description: "AI twin avatar ads", placeholder: "tw_xxxxxxxxxxxxxxxx" },
+      { key: "VIDNOZ_API_KEY", label: "Vidnoz API Key", description: "AI avatar video maker", placeholder: "vn_xxxxxxxxxxxxxxxx" },
+      { key: "CELEBIFY_API_KEY", label: "CelebifyAI API Key", description: "Celebrity-style avatar videos", placeholder: "cb_xxxxxxxxxxxxxxxx" },
+      { key: "OMNIHUMAN_API_KEY", label: "OmniHuman API Key", description: "Realistic human avatar generation", placeholder: "oh_xxxxxxxxxxxxxxxx" },
+      { key: "HEDRA_API_KEY", label: "Hedra API Key", description: "AI character video generation", placeholder: "hd_xxxxxxxxxxxxxxxx" },
     ]
   },
   {
     name: "Image-to-Video Engines",
     keys: [
-      { key: "LEONARDO_API_KEY", label: "Leonardo AI API Key", description: "Image generation & animation", placeholder: "" },
-      { key: "FAL_API_KEY", label: "Fal AI API Key", description: "Fast image-to-video generation", placeholder: "" },
-      { key: "FLUX_API_KEY", label: "Flux AI API Key", description: "Image-to-video transformation", placeholder: "" },
-      { key: "FLORAFAUNA_API_KEY", label: "Flora Fauna API Key", description: "Product image animation", placeholder: "" },
+      { key: "LEONARDO_API_KEY", label: "Leonardo AI API Key", description: "Image generation & animation", placeholder: "leo_xxxxxxxxxxxxxxxx" },
+      { key: "FLORAFAUNA_API_KEY", label: "Flora Fauna API Key", description: "Product image animation", placeholder: "ff_xxxxxxxxxxxxxxxx" },
     ]
   },
   {
     name: "Template & Editing Engines",
     keys: [
-      { key: "PICTORY_API_KEY", label: "Pictory API Key", description: "Script to video with templates", placeholder: "" },
-      { key: "QUSO_API_KEY", label: "Quso AI API Key", description: "Social media video automation", placeholder: "" },
-      { key: "TOPVIEW_API_KEY", label: "TopView API Key", description: "AI video ads from URLs", placeholder: "" },
-      { key: "FLEXCLIP_API_KEY", label: "FlexClip API Key", description: "Template-based video editor", placeholder: "" },
-      { key: "FLIKI_API_KEY", label: "Fliki API Key", description: "Text to video with voiceover", placeholder: "" },
-      { key: "INVIDEO_API_KEY", label: "InVideo API Key", description: "AI video creation platform", placeholder: "" },
-      { key: "CREATOMATE_API_KEY", label: "Creatomate API Key", description: "Video automation API", placeholder: "" },
-      { key: "JSON2VIDEO_API_KEY", label: "JSON2Video API Key", description: "Programmatic video generation", placeholder: "" },
-      { key: "SHOTSTACK_API_KEY", label: "Shotstack API Key", description: "Cloud video editing API", placeholder: "" },
-      { key: "WISECUT_API_KEY", label: "Wisecut API Key", description: "AI video editing automation", placeholder: "" },
-      { key: "ZEBRACAT_API_KEY", label: "Zebracat API Key", description: "AI marketing video creator", placeholder: "" },
-      { key: "OPUS_API_KEY", label: "Opus Pro API Key", description: "Long-form to short-form clips", placeholder: "" },
-      { key: "CAPTIONS_API_KEY", label: "Captions AI API Key", description: "AI captions & video editing", placeholder: "" },
-      { key: "NIM_API_KEY", label: "Nim Video API Key", description: "AI video summarization", placeholder: "" },
-      { key: "SCADE_API_KEY", label: "Scade Pro API Key", description: "AI workflow automation", placeholder: "" },
-      { key: "CRAYO_API_KEY", label: "Crayo AI API Key", description: "Short-form video automation", placeholder: "" },
+      { key: "PICTORY_API_KEY", label: "Pictory API Key", description: "Script to video with templates", placeholder: "pic_xxxxxxxxxxxxxxxx" },
+      { key: "QUSO_API_KEY", label: "Quso AI API Key", description: "Social media video automation", placeholder: "qs_xxxxxxxxxxxxxxxx" },
+      { key: "TOPVIEW_API_KEY", label: "TopView API Key", description: "AI video ads from URLs", placeholder: "tv_xxxxxxxxxxxxxxxx" },
+      { key: "FLEXCLIP_API_KEY", label: "FlexClip API Key", description: "Template-based video editor", placeholder: "fc_xxxxxxxxxxxxxxxx" },
+      { key: "FLIKI_API_KEY", label: "Fliki API Key", description: "Text to video with voiceover", placeholder: "fl_xxxxxxxxxxxxxxxx" },
+      { key: "INVIDEO_API_KEY", label: "InVideo API Key", description: "AI video creation platform", placeholder: "iv_xxxxxxxxxxxxxxxx" },
+      { key: "CREATOMATE_API_KEY", label: "Creatomate API Key", description: "Video automation API", placeholder: "cm_xxxxxxxxxxxxxxxx" },
+      { key: "JSON2VIDEO_API_KEY", label: "JSON2Video API Key", description: "Programmatic video generation", placeholder: "j2v_xxxxxxxxxxxxxxxx" },
+      { key: "SHOTSTACK_API_KEY", label: "Shotstack API Key", description: "Cloud video editing API", placeholder: "ss_xxxxxxxxxxxxxxxx" },
+      { key: "WISECUT_API_KEY", label: "Wisecut API Key", description: "AI video editing automation", placeholder: "wc_xxxxxxxxxxxxxxxx" },
+      { key: "ZEBRACAT_API_KEY", label: "Zebracat API Key", description: "AI marketing video creator", placeholder: "zb_xxxxxxxxxxxxxxxx" },
+      { key: "OPUS_API_KEY", label: "Opus Pro API Key", description: "Long-form to short-form clips", placeholder: "op_xxxxxxxxxxxxxxxx" },
+      { key: "CAPTIONS_API_KEY", label: "Captions AI API Key", description: "AI captions & video editing", placeholder: "cap_xxxxxxxxxxxxxxxx" },
+      { key: "NIM_API_KEY", label: "Nim Video API Key", description: "AI video summarization", placeholder: "nim_xxxxxxxxxxxxxxxx" },
+      { key: "SCADE_API_KEY", label: "Scade Pro API Key", description: "AI workflow automation", placeholder: "sc_xxxxxxxxxxxxxxxx" },
+      { key: "CRAYO_API_KEY", label: "Crayo AI API Key", description: "Short-form video automation", placeholder: "cy_xxxxxxxxxxxxxxxx" },
     ]
   },
   {
     name: "Voice & Audio",
     keys: [
-      { key: "ELEVENLABS_API_KEY", label: "ElevenLabs API Key", description: "High-quality voice synthesis", placeholder: "" },
-      { key: "FLAIR_API_KEY", label: "Flair AI API Key", description: "AI voiceover generation", placeholder: "" },
+      { key: "ELEVENLABS_API_KEY", label: "ElevenLabs API Key", description: "High-quality voice synthesis", placeholder: "xi_xxxxxxxxxxxxxxxx" },
+      { key: "FLAIR_API_KEY", label: "Flair AI API Key", description: "AI voiceover generation", placeholder: "flair_xxxxxxxxxxxxxxxx" },
     ]
   },
   {
     name: "AI Platforms",
     keys: [
-      { key: "HUGGINGFACE_API_KEY", label: "Hugging Face API Key", description: "Open-source AI models", placeholder: "hf_..." },
-      { key: "LIVGEN_API_KEY", label: "LivGen API Key", description: "Live AI video generation", placeholder: "" },
-      { key: "AIVIDEO_API_KEY", label: "AI Video API Key", description: "General AI video platform", placeholder: "" },
+      { key: "HUGGINGFACE_API_KEY", label: "Hugging Face API Key", description: "Open-source AI models", placeholder: "hf_xxxxxxxxxxxxxxxx" },
+      { key: "LIVGEN_API_KEY", label: "LivGen API Key", description: "Live AI video generation", placeholder: "lg_xxxxxxxxxxxxxxxx" },
+      { key: "AIVIDEO_API_KEY", label: "AI Video API Key", description: "General AI video platform", placeholder: "aiv_xxxxxxxxxxxxxxxx" },
     ]
   },
 ];
@@ -200,7 +308,9 @@ export default function Settings() {
   
   // API Keys state
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
+  const [activatedModels, setActivatedModels] = useState<Record<string, string[]>>({});
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [expandedProviders, setExpandedProviders] = useState<Record<string, boolean>>({});
   const [savingKeys, setSavingKeys] = useState(false);
   const [testingKey, setTestingKey] = useState<string | null>(null);
   const [keyTestResults, setKeyTestResults] = useState<Record<string, { success: boolean; message: string }>>({});
@@ -247,7 +357,21 @@ export default function Settings() {
       if (settingsRes.data) {
         setSettings(settingsRes.data as UserSettings);
         if (settingsRes.data.api_keys) {
-          setApiKeys(settingsRes.data.api_keys as Record<string, string>);
+          const keys = settingsRes.data.api_keys as Record<string, any>;
+          // Separate API keys from activated models
+          const apiKeysOnly: Record<string, string> = {};
+          const modelsOnly: Record<string, string[]> = {};
+          
+          Object.entries(keys).forEach(([key, value]) => {
+            if (key.endsWith('_MODELS') && Array.isArray(value)) {
+              modelsOnly[key.replace('_MODELS', '')] = value;
+            } else if (typeof value === 'string') {
+              apiKeysOnly[key] = value;
+            }
+          });
+          
+          setApiKeys(apiKeysOnly);
+          setActivatedModels(modelsOnly);
         }
       }
     } catch (error) {
@@ -347,18 +471,46 @@ export default function Settings() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
+      // Combine API keys with activated models
+      const combinedKeys: Record<string, any> = { ...apiKeys };
+      Object.entries(activatedModels).forEach(([provider, models]) => {
+        combinedKeys[`${provider}_MODELS`] = models;
+      });
+
       const { error } = await supabase
         .from("user_settings")
-        .update({ api_keys: apiKeys })
+        .update({ api_keys: combinedKeys })
         .eq("user_id", user.id);
 
       if (error) throw error;
-      toast.success("API keys saved securely");
+      toast.success("API keys and model preferences saved securely");
     } catch (error) {
       console.error("Error saving API keys:", error);
       toast.error("Failed to save API keys");
     } finally {
       setSavingKeys(false);
+    }
+  };
+
+  const toggleModel = (providerKey: string, modelId: string) => {
+    setActivatedModels(prev => {
+      const current = prev[providerKey] || [];
+      if (current.includes(modelId)) {
+        return { ...prev, [providerKey]: current.filter(m => m !== modelId) };
+      } else {
+        return { ...prev, [providerKey]: [...current, modelId] };
+      }
+    });
+  };
+
+  const toggleAllModels = (providerKey: string, models: { id: string }[]) => {
+    const current = activatedModels[providerKey] || [];
+    const allSelected = models.every(m => current.includes(m.id));
+    
+    if (allSelected) {
+      setActivatedModels(prev => ({ ...prev, [providerKey]: [] }));
+    } else {
+      setActivatedModels(prev => ({ ...prev, [providerKey]: models.map(m => m.id) }));
     }
   };
 
@@ -519,6 +671,160 @@ export default function Settings() {
                   {!apiKeys.OPENAI_API_KEY && <Badge variant="outline">ChatGPT (needs key)</Badge>}
                   {!apiKeys.GEMINI_API_KEY && <Badge variant="outline">Gemini (needs key)</Badge>}
                 </div>
+              </div>
+
+              {/* Global API Keys Section */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-semibold text-foreground">🌐 Global API Keys</h3>
+                  <Badge variant="secondary" className="text-xs bg-primary/20 text-primary">
+                    Multi-Model Providers
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  These providers give access to multiple AI models with a single API key. Select which models you want to activate.
+                </p>
+                
+                <div className="grid gap-4">
+                  {GLOBAL_API_PROVIDERS.map((provider) => {
+                    const isExpanded = expandedProviders[provider.key];
+                    const selectedModels = activatedModels[provider.key] || [];
+                    const hasKey = !!apiKeys[provider.key];
+                    
+                    return (
+                      <div key={provider.key} className="border border-border rounded-lg overflow-hidden">
+                        <div 
+                          className={`p-4 cursor-pointer transition-colors ${hasKey ? 'bg-primary/5' : 'bg-muted/20'}`}
+                          onClick={() => setExpandedProviders(prev => ({ ...prev, [provider.key]: !prev[provider.key] }))}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-2 h-2 rounded-full ${hasKey ? 'bg-green-500' : 'bg-muted-foreground'}`} />
+                              <div>
+                                <Label className="text-foreground font-medium cursor-pointer">{provider.label}</Label>
+                                <p className="text-xs text-muted-foreground">{provider.description}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {hasKey && selectedModels.length > 0 && (
+                                <Badge className="bg-primary/20 text-primary text-xs">
+                                  {selectedModels.length} models active
+                                </Badge>
+                              )}
+                              {hasKey && (
+                                <Badge variant="outline" className="text-green-500 border-green-500 text-xs">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Connected
+                                </Badge>
+                              )}
+                              <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {isExpanded && (
+                          <div className="p-4 border-t border-border bg-muted/10 space-y-4">
+                            {/* API Key Input */}
+                            <div className="space-y-2">
+                              <Label className="text-sm">API Key</Label>
+                              <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                  <Input
+                                    type={showKeys[provider.key] ? "text" : "password"}
+                                    placeholder={provider.placeholder}
+                                    value={apiKeys[provider.key] || ""}
+                                    onChange={(e) => setApiKeys({ ...apiKeys, [provider.key]: e.target.value })}
+                                    className="pr-10 h-9 text-sm"
+                                  />
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="absolute right-0 top-0 h-full w-9"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleKeyVisibility(provider.key);
+                                    }}
+                                  >
+                                    {showKeys[provider.key] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                                  </Button>
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-9"
+                                  disabled={!apiKeys[provider.key] || testingKey === provider.key}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    testApiKey(provider.key);
+                                  }}
+                                >
+                                  {testingKey === provider.key ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <RefreshCw className="w-3 h-3" />
+                                  )}
+                                  <span className="ml-1 text-xs">Test</span>
+                                </Button>
+                              </div>
+                            </div>
+                            
+                            {/* Model Selection */}
+                            {hasKey && (
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-sm">Available Models</Label>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleAllModels(provider.key, provider.models);
+                                    }}
+                                  >
+                                    {provider.models.every(m => selectedModels.includes(m.id)) ? 'Deselect All' : 'Select All'}
+                                  </Button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {provider.models.map((model) => {
+                                    const isSelected = selectedModels.includes(model.id);
+                                    return (
+                                      <button
+                                        key={model.id}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleModel(provider.key, model.id);
+                                        }}
+                                        className={`p-2 rounded-lg border text-left transition-all ${
+                                          isSelected
+                                            ? 'bg-primary/20 border-primary'
+                                            : 'bg-muted/20 border-border hover:border-primary/50'
+                                        }`}
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <div className={`w-3 h-3 rounded-sm border ${isSelected ? 'bg-primary border-primary' : 'border-muted-foreground'}`}>
+                                            {isSelected && <CheckCircle className="w-3 h-3 text-primary-foreground" />}
+                                          </div>
+                                          <div>
+                                            <p className={`text-xs font-medium ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                                              {model.name}
+                                            </p>
+                                            <p className="text-[10px] text-muted-foreground">{model.description}</p>
+                                          </div>
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <Separator className="bg-border" />
               </div>
 
               {API_KEY_CATEGORIES.map((category) => (

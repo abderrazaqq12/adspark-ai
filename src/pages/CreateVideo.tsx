@@ -266,13 +266,16 @@ export default function CreateVideo() {
           {pipelineStages.map((stage, index) => (
             <div key={stage.id} className="flex flex-col">
                 <button
-                  onClick={() => setExpandedStage(expandedStage === stage.id ? 0 : stage.id)}
-                  className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left w-full ${
+                  onClick={() => {
+                    setExpandedStage(stage.id);
+                    setCurrentStage(stage.id);
+                  }}
+                  className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left w-full cursor-pointer ${
                     expandedStage === stage.id 
                       ? 'bg-primary/20 text-primary' 
-                      : currentStage > stage.id || (stage.id === 3 && voiceGenerationDone)
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground hover:bg-muted/50'
+                      : currentStage > stage.id || currentStage === stage.id || (stage.id === 3 && voiceGenerationDone)
+                        ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                        : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                   }`}
                 >
                   {currentStage > stage.id || (stage.id === 3 && voiceGenerationDone) ? (
