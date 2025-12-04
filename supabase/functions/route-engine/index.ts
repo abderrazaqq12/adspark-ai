@@ -106,11 +106,32 @@ serve(async (req) => {
   }
 
   try {
-    const { sceneIds, userId } = await req.json();
-    
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Authenticate the request
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log(`[route-engine] Authenticated user: ${user.id}`);
+
+    const { sceneIds } = await req.json();
 
     // Get all engines
     const { data: engines } = await supabase
@@ -118,11 +139,11 @@ serve(async (req) => {
       .select('*')
       .eq('status', 'active');
 
-    // Get user settings
+    // Get user settings using authenticated user's ID
     const { data: userSettings } = await supabase
       .from('user_settings')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', user.id)
       .maybeSingle();
 
     const settings: UserSettings = {

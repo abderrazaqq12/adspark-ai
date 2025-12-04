@@ -15,6 +15,18 @@ interface WebhookPayload {
   metadata?: Record<string, unknown>
 }
 
+// UUID validation regex
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -25,13 +37,24 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Verify webhook secret (optional but recommended)
+    // Verify webhook secret - REQUIRED for security
     const webhookSecret = req.headers.get('x-webhook-secret')
-    const expectedSecret = Deno.env.get('WEBHOOK_SECRET')
+    const expectedSecret = Deno.env.get('AI_ENGINE_WEBHOOK_SECRET')
     
-    if (expectedSecret && webhookSecret !== expectedSecret) {
+    if (!expectedSecret) {
+      console.error('[ai-engine-webhook] AI_ENGINE_WEBHOOK_SECRET not configured')
+      return new Response(
+        JSON.stringify({ success: false, error: 'Webhook not configured' }),
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (webhookSecret !== expectedSecret) {
       console.warn('[ai-engine-webhook] Invalid webhook secret')
-      // Don't reject - many engines don't support custom headers
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid webhook secret' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     const payload: WebhookPayload = await req.json()
@@ -39,12 +62,37 @@ Deno.serve(async (req) => {
 
     const { engine, job_id, status, video_url, thumbnail_url, error_message, metadata } = payload
 
+    // Validate status
+    if (!['completed', 'failed', 'processing'].includes(status)) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid status value' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Validate URLs if provided
+    if (video_url && !isValidUrl(video_url)) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid video_url format' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (thumbnail_url && !isValidUrl(thumbnail_url)) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid thumbnail_url format' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // Find the queue item by external_job_id
     const { data: queueItem, error: findError } = await supabase
       .from('generation_queue')
       .select('*, scenes(*)')
       .eq('external_job_id', job_id)
       .single()
+
+    let item = queueItem
 
     if (findError || !queueItem) {
       console.error(`[ai-engine-webhook] Queue item not found for job_id: ${job_id}`)
@@ -62,9 +110,9 @@ Deno.serve(async (req) => {
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
+      
+      item = altQueueItem
     }
-
-    const item = queueItem
 
     if (status === 'completed' && video_url) {
       // Update scene with video URL
