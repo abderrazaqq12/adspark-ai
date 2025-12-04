@@ -17,7 +17,9 @@ import {
   Clock,
   DollarSign,
   Wand2,
-  ArrowRight
+  ArrowRight,
+  Layout,
+  ExternalLink
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -34,6 +36,8 @@ interface AIEngine {
   max_duration_sec: number | null;
   supported_ratios: string[] | null;
   priority_score: number | null;
+  api_base_url: string | null;
+  config: any;
 }
 
 export default function Engines() {
@@ -84,6 +88,8 @@ export default function Engines() {
         return <Image className="w-5 h-5" />;
       case "voice":
         return <Mic className="w-5 h-5" />;
+      case "template_based":
+        return <Layout className="w-5 h-5" />;
       default:
         return <Sparkles className="w-5 h-5" />;
     }
@@ -127,7 +133,29 @@ export default function Engines() {
     text_to_video: engines.filter(e => e.type === "text_to_video").length,
     avatar: engines.filter(e => e.type === "avatar").length,
     image_to_video: engines.filter(e => e.type === "image_to_video").length,
+    template_based: engines.filter(e => e.type === "template_based").length,
     voice: engines.filter(e => e.type === "voice").length,
+  };
+
+  const getSpecialtyBadge = (config: Record<string, any> | null) => {
+    if (!config?.specialty) return null;
+    const specialtyColors: Record<string, string> = {
+      cinematic: "bg-purple-500/20 text-purple-400",
+      animated: "bg-pink-500/20 text-pink-400",
+      realistic_motion: "bg-blue-500/20 text-blue-400",
+      long_form: "bg-indigo-500/20 text-indigo-400",
+      professional_avatar: "bg-emerald-500/20 text-emerald-400",
+      ugc_ads: "bg-orange-500/20 text-orange-400",
+      fast_i2v: "bg-cyan-500/20 text-cyan-400",
+      api_automation: "bg-yellow-500/20 text-yellow-400",
+      voice_synthesis: "bg-red-500/20 text-red-400",
+    };
+    const color = specialtyColors[config.specialty] || "bg-muted text-muted-foreground";
+    return (
+      <Badge className={`text-xs ${color}`}>
+        {config.specialty.replace(/_/g, " ")}
+      </Badge>
+    );
   };
 
   if (loading) {
@@ -160,12 +188,13 @@ export default function Engines() {
       </div>
 
       {/* Engine Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         {[
           { label: "All Engines", count: engineCounts.all, icon: Sparkles, color: "text-primary" },
           { label: "Video Gen", count: engineCounts.text_to_video, icon: Video, color: "text-blue-400" },
           { label: "Avatar/UGC", count: engineCounts.avatar, icon: UserCircle, color: "text-purple-400" },
           { label: "Image to Video", count: engineCounts.image_to_video, icon: Image, color: "text-green-400" },
+          { label: "Templates", count: engineCounts.template_based, icon: Layout, color: "text-yellow-400" },
           { label: "Voice", count: engineCounts.voice, icon: Mic, color: "text-orange-400" },
         ].map((stat) => (
           <Card key={stat.label} className="bg-gradient-card border-border">
@@ -184,12 +213,13 @@ export default function Engines() {
 
       {/* Tabs & Engine Grid */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-6">
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="text_to_video">Video Gen</TabsTrigger>
-          <TabsTrigger value="avatar">Avatar/UGC</TabsTrigger>
-          <TabsTrigger value="image_to_video">Image → Video</TabsTrigger>
-          <TabsTrigger value="voice">Voice</TabsTrigger>
+        <TabsList className="mb-6 flex-wrap">
+          <TabsTrigger value="all">All ({engineCounts.all})</TabsTrigger>
+          <TabsTrigger value="text_to_video">Video Gen ({engineCounts.text_to_video})</TabsTrigger>
+          <TabsTrigger value="avatar">Avatar/UGC ({engineCounts.avatar})</TabsTrigger>
+          <TabsTrigger value="image_to_video">Image → Video ({engineCounts.image_to_video})</TabsTrigger>
+          <TabsTrigger value="template_based">Templates ({engineCounts.template_based})</TabsTrigger>
+          <TabsTrigger value="voice">Voice ({engineCounts.voice})</TabsTrigger>
         </TabsList>
 
         <TabsContent value={activeTab}>
@@ -211,12 +241,23 @@ export default function Engines() {
                       </div>
                       <div>
                         <CardTitle className="text-foreground text-lg">{engine.name}</CardTitle>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
                           {getStatusBadge(engine.status)}
                           {getPricingBadge(engine.pricing_model)}
+                          {getSpecialtyBadge(engine.config as Record<string, any> | null)}
                         </div>
                       </div>
                     </div>
+                    {engine.api_base_url && (
+                      <a 
+                        href={engine.api_base_url.replace('/api', '').replace('api.', '')} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
                   </div>
                   <CardDescription className="text-muted-foreground mt-3">
                     {engine.description || "AI-powered video generation engine"}
