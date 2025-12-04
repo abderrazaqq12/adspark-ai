@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNavigate } from "react-router-dom";
 import { 
   Video, 
@@ -11,10 +12,12 @@ import {
   Clock, 
   Plus,
   ArrowRight,
-  Zap
+  Zap,
+  Activity
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import GenerationDashboard from "@/components/GenerationDashboard";
 
 interface Stats {
   totalProjects: number;
@@ -221,31 +224,51 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* How It Works */}
-      <Card className="bg-gradient-card border-border shadow-card">
-        <CardHeader>
-          <CardTitle className="text-foreground">How It Works</CardTitle>
-          <CardDescription className="text-muted-foreground">Generate professional video ads in 4 simple steps</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            {[
-              { step: 1, title: "Upload Content", desc: "Add your product images, scripts, and brand assets" },
-              { step: 2, title: "Generate Scripts", desc: "AI creates multiple script variations with hooks" },
-              { step: 3, title: "Build Scenes", desc: "Auto-route scenes to the best AI video engines" },
-              { step: 4, title: "Export Videos", desc: "Download in multiple formats for all platforms" },
-            ].map((item) => (
-              <div key={item.step} className="text-center">
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-3">
-                  <span className="text-xl font-bold text-primary">{item.step}</span>
-                </div>
-                <h4 className="font-semibold text-foreground mb-1">{item.title}</h4>
-                <p className="text-sm text-muted-foreground">{item.desc}</p>
+      {/* Generation Dashboard with Tabs */}
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 mb-6">
+          <TabsTrigger value="overview" className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="generation" className="flex items-center gap-2">
+            <Activity className="w-4 h-4" />
+            Generation Queue
+          </TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="overview">
+          {/* How It Works */}
+          <Card className="bg-gradient-card border-border shadow-card">
+            <CardHeader>
+              <CardTitle className="text-foreground">How It Works</CardTitle>
+              <CardDescription className="text-muted-foreground">Generate professional video ads in 4 simple steps</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                {[
+                  { step: 1, title: "Upload Content", desc: "Add your product images, scripts, and brand assets" },
+                  { step: 2, title: "Generate Scripts", desc: "AI creates multiple script variations with hooks" },
+                  { step: 3, title: "Build Scenes", desc: "Auto-route scenes to the best AI video engines" },
+                  { step: 4, title: "Export Videos", desc: "Download in multiple formats for all platforms" },
+                ].map((item) => (
+                  <div key={item.step} className="text-center">
+                    <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-3">
+                      <span className="text-xl font-bold text-primary">{item.step}</span>
+                    </div>
+                    <h4 className="font-semibold text-foreground mb-1">{item.title}</h4>
+                    <p className="text-sm text-muted-foreground">{item.desc}</p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="generation">
+          <GenerationDashboard />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

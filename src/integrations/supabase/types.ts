@@ -68,10 +68,12 @@ export type Database = {
       generation_queue: {
         Row: {
           attempts: number | null
+          callback_data: Json | null
           completed_at: string | null
           created_at: string | null
           engine_id: string | null
           error_message: string | null
+          external_job_id: string | null
           id: string
           max_attempts: number | null
           priority: number | null
@@ -82,10 +84,12 @@ export type Database = {
         }
         Insert: {
           attempts?: number | null
+          callback_data?: Json | null
           completed_at?: string | null
           created_at?: string | null
           engine_id?: string | null
           error_message?: string | null
+          external_job_id?: string | null
           id?: string
           max_attempts?: number | null
           priority?: number | null
@@ -96,10 +100,12 @@ export type Database = {
         }
         Update: {
           attempts?: number | null
+          callback_data?: Json | null
           completed_at?: string | null
           created_at?: string | null
           engine_id?: string | null
           error_message?: string | null
+          external_job_id?: string | null
           id?: string
           max_attempts?: number | null
           priority?: number | null
