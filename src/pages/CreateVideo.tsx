@@ -36,12 +36,22 @@ const pipelineStages = [
   { id: 6, name: "Export", icon: Globe, description: "Multi-format export" },
 ];
 
+interface ScriptSlot {
+  id: number;
+  text: string;
+  audioFile: File | null;
+  audioUrl: string | null;
+}
+
 export default function CreateVideo() {
-  const [script, setScript] = useState("");
+  const [scriptSlots, setScriptSlots] = useState<ScriptSlot[]>([
+    { id: 1, text: "", audioFile: null, audioUrl: null }
+  ]);
   const [hooks, setHooks] = useState("");
-  const [videoType, setVideoType] = useState("ugc");
+  const [videoType, setVideoType] = useState("ugc_review");
   const [targetLanguage, setTargetLanguage] = useState("ar");
   const [currentStage, setCurrentStage] = useState(1);
+  const [voiceGenerationDone, setVoiceGenerationDone] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [scenes, setScenes] = useState<any[]>([]);
@@ -77,7 +87,7 @@ export default function CreateVideo() {
       if (scripts && scripts.length > 0) {
         setScriptId(scripts[0].id);
         if (scripts[0].raw_text) {
-          setScript(scripts[0].raw_text);
+          setScriptSlots([{ id: 1, text: scripts[0].raw_text, audioFile: null, audioUrl: null }]);
         }
         
         // Load scenes
@@ -100,26 +110,58 @@ export default function CreateVideo() {
     }
   };
 
+  const addScriptSlot = () => {
+    if (scriptSlots.length >= 10) {
+      toast.error("Maximum 10 scripts allowed");
+      return;
+    }
+    setScriptSlots([...scriptSlots, { id: scriptSlots.length + 1, text: "", audioFile: null, audioUrl: null }]);
+  };
+
+  const removeScriptSlot = (id: number) => {
+    if (scriptSlots.length <= 1) return;
+    setScriptSlots(scriptSlots.filter(slot => slot.id !== id));
+  };
+
+  const updateScriptSlot = (id: number, field: keyof ScriptSlot, value: any) => {
+    setScriptSlots(scriptSlots.map(slot => 
+      slot.id === id ? { ...slot, [field]: value } : slot
+    ));
+  };
+
+  const handleAudioUpload = (id: number, file: File) => {
+    const url = URL.createObjectURL(file);
+    updateScriptSlot(id, "audioFile", file);
+    updateScriptSlot(id, "audioUrl", url);
+    
+    // Check if any slot has audio uploaded
+    const hasAudio = scriptSlots.some(s => s.audioFile !== null) || file !== null;
+    if (hasAudio) {
+      setVoiceGenerationDone(true);
+    }
+  };
+
   const handleAnalyzeScript = async () => {
-    if (!script.trim()) {
-      toast.error("Please enter a script first");
+    const allScripts = scriptSlots.map(s => s.text).filter(t => t.trim()).join("\n\n---\n\n");
+    if (!allScripts.trim()) {
+      toast.error("Please enter at least one script");
       return;
     }
 
     setIsAnalyzing(true);
     try {
       const { data, error } = await supabase.functions.invoke("analyze-script", {
-        body: { script },
+        body: { script: allScripts },
       });
 
       if (error) throw error;
 
       setScenes(data.scenes || []);
       setCurrentStage(2);
-      toast.success("Script analyzed successfully!");
+      toast.success("Scripts analyzed successfully!");
     } catch (error: any) {
       console.error("Error analyzing script:", error);
-      toast.error(error.message || "Failed to analyze script");
+      toast.error(error.message || "Failed to analyze scripts");
     } finally {
       setIsAnalyzing(false);
     }
@@ -156,12 +198,13 @@ export default function CreateVideo() {
       }
 
       // Create or update script
+      const allScriptsText = scriptSlots.map(s => s.text).filter(t => t.trim()).join("\n\n---\n\n");
       if (!currentScriptId) {
         const { data: scriptData, error: scriptError } = await supabase
           .from("scripts")
           .insert({
             project_id: currentProjectId,
-            raw_text: script,
+            raw_text: allScriptsText,
             hooks: hooks.split(",").map(h => h.trim()).filter(Boolean),
             language: targetLanguage,
             status: "analyzed",
@@ -175,7 +218,7 @@ export default function CreateVideo() {
       } else {
         await supabase
           .from("scripts")
-          .update({ raw_text: script })
+          .update({ raw_text: allScriptsText })
           .eq("id", currentScriptId);
       }
 
@@ -224,12 +267,12 @@ export default function CreateVideo() {
                 className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left w-full ${
                   currentStage === stage.id 
                     ? 'bg-primary/20 text-primary' 
-                    : currentStage > stage.id 
+                    : currentStage > stage.id || (stage.id === 3 && voiceGenerationDone)
                       ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:bg-muted/50'
                 }`}
               >
-                {currentStage > stage.id ? (
+                {currentStage > stage.id || (stage.id === 3 && voiceGenerationDone) ? (
                   <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
                 ) : currentStage === stage.id ? (
                   <stage.icon className="w-5 h-5 shrink-0" />
@@ -276,11 +319,16 @@ export default function CreateVideo() {
                   <SelectTrigger className="bg-muted/50">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    {videoTypes.map((type) => (
-                      <SelectItem key={type.id} value={type.id}>
-                        {type.name}
-                      </SelectItem>
+                  <SelectContent className="max-h-[300px]">
+                    {["UGC & Social Proof", "Product & Educational", "Creative & Engagement"].map(category => (
+                      <div key={category}>
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50">{category}</div>
+                        {videoTypes.filter(t => t.category === category).map((type) => (
+                          <SelectItem key={type.id} value={type.id}>
+                            {type.name}
+                          </SelectItem>
+                        ))}
+                      </div>
                     ))}
                   </SelectContent>
                 </Select>
@@ -294,7 +342,8 @@ export default function CreateVideo() {
                   <SelectContent>
                     <SelectItem value="ar">Arabic (العربية)</SelectItem>
                     <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="ar-gulf">Arabic (Gulf)</SelectItem>
+                    <SelectItem value="es">Spanish (Español)</SelectItem>
+                    <SelectItem value="fr">French (Français)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -315,28 +364,98 @@ export default function CreateVideo() {
               </p>
             </div>
 
-            {/* Script */}
-            <div className="space-y-2">
-              <Label htmlFor="script" className="text-foreground">Voice-Over Script</Label>
-              <Textarea
-                id="script"
-                placeholder="Enter your video script here...
-
-Tip: Keep sentences short (under 15 words) for better voice-over. ~60 words = 30 seconds."
-                className="min-h-[200px] bg-muted/50 border-input resize-none"
-                value={script}
-                onChange={(e) => setScript(e.target.value)}
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{script.split(/\s+/).filter(Boolean).length} words</span>
-                <span>~{Math.round(script.split(/\s+/).filter(Boolean).length / 2)}s duration</span>
+            {/* Scripts */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-foreground">Voice-Over Scripts ({scriptSlots.length}/10)</Label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={addScriptSlot}
+                  disabled={scriptSlots.length >= 10}
+                  className="text-xs"
+                >
+                  + Add Script
+                </Button>
               </div>
+              
+              {scriptSlots.map((slot, idx) => (
+                <div key={slot.id} className="p-4 rounded-lg bg-muted/30 border border-border space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-foreground">Script {idx + 1}</span>
+                    {scriptSlots.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeScriptSlot(slot.id)}
+                        className="text-destructive hover:text-destructive h-6 px-2"
+                      >
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                  
+                  <Textarea
+                    placeholder="Enter your video script here... (~60 words = 30 seconds)"
+                    className="min-h-[120px] bg-muted/50 border-input resize-none"
+                    value={slot.text}
+                    onChange={(e) => updateScriptSlot(slot.id, "text", e.target.value)}
+                  />
+                  
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-muted-foreground">
+                      {slot.text.split(/\s+/).filter(Boolean).length} words • ~{Math.round(slot.text.split(/\s+/).filter(Boolean).length / 2)}s
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      {slot.audioUrl ? (
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-xs">
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                            Audio uploaded
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              updateScriptSlot(slot.id, "audioFile", null);
+                              updateScriptSlot(slot.id, "audioUrl", null);
+                              // Check if any other slots have audio
+                              const otherHasAudio = scriptSlots.filter(s => s.id !== slot.id).some(s => s.audioFile !== null);
+                              setVoiceGenerationDone(otherHasAudio);
+                            }}
+                            className="h-6 px-2 text-xs"
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ) : (
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            accept="audio/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleAudioUpload(slot.id, file);
+                            }}
+                          />
+                          <Badge variant="outline" className="text-xs cursor-pointer hover:bg-muted">
+                            <Upload className="w-3 h-3 mr-1" />
+                            Upload Audio
+                          </Badge>
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
 
             <div className="flex gap-2">
               <Button
                 onClick={handleAnalyzeScript}
-                disabled={isAnalyzing || !script.trim()}
+                disabled={isAnalyzing || scriptSlots.every(s => !s.text.trim())}
                 className="flex-1 bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow"
               >
                 {isAnalyzing ? (
@@ -351,7 +470,13 @@ Tip: Keep sentences short (under 15 words) for better voice-over. ~60 words = 30
                   </>
                 )}
               </Button>
-              <Button variant="outline" disabled className="border-border">
+              {voiceGenerationDone && (
+                <Badge className="bg-primary/20 text-primary border-0 self-center">
+                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                  Voice Ready
+                </Badge>
+              )}
+              <Button variant="outline" disabled className="border-border" title="Coming soon">
                 <Upload className="w-4 h-4 mr-2" />
                 Audio
               </Button>

@@ -343,13 +343,32 @@ export const sceneRouting: SceneTypeRouting[] = [
   },
 ];
 
-// Video types for routing
+// Video types for routing - Full list
 export const videoTypes = [
-  { id: "ugc", name: "UGC Content", icon: "Users" },
-  { id: "product", name: "Product Ads", icon: "Package" },
-  { id: "luxury", name: "Luxury/Cinematic", icon: "Crown" },
-  { id: "social", name: "Social Media", icon: "Share2" },
-  { id: "testimonial", name: "Testimonials", icon: "MessageSquare" },
+  // UGC & Social Proof
+  { id: "ugc_review", name: "User-Generated Content (UGC) Review", category: "UGC & Social Proof" },
+  { id: "before_after", name: "Before & After", category: "UGC & Social Proof" },
+  { id: "testimonial", name: "Testimonial/Interview", category: "UGC & Social Proof" },
+  { id: "unboxing", name: "Unboxing Video", category: "UGC & Social Proof" },
+  { id: "social_proof", name: "Social Proof/Quote Montage", category: "UGC & Social Proof" },
+  { id: "day_in_life", name: "Day in the Life Integration", category: "UGC & Social Proof" },
+  // Product Focused & Educational
+  { id: "pas", name: "Problem/Agitate/Solve (PAS)", category: "Product & Educational" },
+  { id: "product_demo", name: "Product Demonstration", category: "Product & Educational" },
+  { id: "explainer", name: "Explainer Video (Animated or Live)", category: "Product & Educational" },
+  { id: "listicle", name: "3 Reasons Why / Listicle Ad", category: "Product & Educational" },
+  { id: "comparison", name: "Comparison/VS Ad", category: "Product & Educational" },
+  { id: "stop_motion", name: "Stop-Motion/Flat Lay", category: "Product & Educational" },
+  { id: "behind_scenes", name: "Behind-the-Scenes/How It's Made", category: "Product & Educational" },
+  // Creative & Engagement Hooks
+  { id: "trendjacking", name: "Trendjacking/Sound-Based Ad", category: "Creative & Engagement" },
+  { id: "pov", name: "POV (Point of View) Ad", category: "Creative & Engagement" },
+  { id: "skit", name: "Skit/Roleplay Ad", category: "Creative & Engagement" },
+  { id: "interactive", name: "Interactive Video Ad", category: "Creative & Engagement" },
+  { id: "mascot", name: "Hyper-Casual Animation/Mascot Ad", category: "Creative & Engagement" },
+  { id: "cinematic", name: "Cinematic/High Production Value Ad", category: "Creative & Engagement" },
+  { id: "question_hook", name: "Question Hook Ad", category: "Creative & Engagement" },
+  { id: "influencer", name: "Influencer Collaboration", category: "Creative & Engagement" },
 ];
 
 // Export formats
