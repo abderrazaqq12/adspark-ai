@@ -33,6 +33,7 @@ import ExportVideoModal from "@/components/ExportVideoModal";
 import VideoPreviewPlayer from "@/components/VideoPreviewPlayer";
 import VideoTimelineEditor from "@/components/VideoTimelineEditor";
 import { useVideoUpload } from "@/hooks/useVideoUpload";
+import EngineTierBadge from "@/components/EngineTierBadge";
 
 interface Scene {
   id: string;
@@ -54,6 +55,7 @@ interface Engine {
   name: string;
   type: string;
   status: string;
+  cost_tier: string;
 }
 
 export default function SceneBuilder() {
@@ -85,8 +87,9 @@ export default function SceneBuilder() {
   const fetchEngines = async () => {
     const { data } = await supabase
       .from("ai_engines")
-      .select("id, name, type, status")
-      .eq("status", "active");
+      .select("id, name, type, status, cost_tier")
+      .eq("status", "active")
+      .order("cost_tier");
     setEngines(data || []);
   };
 
@@ -487,7 +490,10 @@ export default function SceneBuilder() {
                       <SelectContent>
                         {engines.map((engine) => (
                           <SelectItem key={engine.id} value={engine.id}>
-                            {engine.name}
+                            <div className="flex items-center gap-2">
+                              <span>{engine.name}</span>
+                              <EngineTierBadge tier={engine.cost_tier || 'normal'} size="sm" />
+                            </div>
                           </SelectItem>
                         ))}
                       </SelectContent>

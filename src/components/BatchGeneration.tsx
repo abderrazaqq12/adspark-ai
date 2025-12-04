@@ -21,6 +21,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import SceneProgressTracker from "./SceneProgressTracker";
+import BatchCostPreview from "./BatchCostPreview";
 
 interface BatchGenerationProps {
   scriptId: string;
@@ -263,6 +264,12 @@ export default function BatchGeneration({ scriptId, scenesCount, onComplete }: B
                 <Switch checked={randomPacing} onCheckedChange={setRandomPacing} />
               </div>
             </div>
+
+            {/* Cost Preview */}
+            <BatchCostPreview 
+              scenesCount={scenesCount} 
+              variationsPerScene={variationsPerScene} 
+            />
 
             {/* Estimate */}
             <div className="p-4 rounded-lg bg-muted/30 border border-border">
