@@ -339,6 +339,10 @@ export default function Settings() {
   const [loadingWorkflows, setLoadingWorkflows] = useState(false);
   const [n8nWorkflows, setN8nWorkflows] = useState<any[]>([]);
   const [showWorkflowManager, setShowWorkflowManager] = useState(false);
+  
+  // Google Drive integration state
+  const [googleDriveFolderUrl, setGoogleDriveFolderUrl] = useState("");
+  const [savingGoogleDrive, setSavingGoogleDrive] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -391,11 +395,12 @@ export default function Settings() {
           setApiKeys(apiKeysOnly);
           setActivatedModels(modelsOnly);
         }
-        // Load n8n settings from preferences
+        // Load n8n settings and Google Drive from preferences
         const prefs = settingsRes.data.preferences as Record<string, any> | null;
         if (prefs) {
           setUserN8nWebhook(prefs.n8n_webhook_url || "");
           setN8nApiKey(prefs.n8n_api_key || "");
+          setGoogleDriveFolderUrl(prefs.google_drive_folder_url || "");
         }
       }
     } catch (error) {
@@ -705,6 +710,40 @@ export default function Settings() {
       toast.error("Failed to save n8n settings");
     } finally {
       setSavingN8nSettings(false);
+    }
+  };
+
+  const saveGoogleDriveSettings = async () => {
+    setSavingGoogleDrive(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // Get current preferences and merge
+      const { data: currentSettings } = await supabase
+        .from("user_settings")
+        .select("preferences")
+        .eq("user_id", user.id)
+        .single();
+
+      const currentPrefs = (currentSettings?.preferences as Record<string, any>) || {};
+      const updatedPrefs = {
+        ...currentPrefs,
+        google_drive_folder_url: googleDriveFolderUrl,
+      };
+
+      const { error } = await supabase
+        .from("user_settings")
+        .update({ preferences: updatedPrefs })
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+      toast.success("Google Drive settings saved. New projects will auto-create folders.");
+    } catch (error) {
+      console.error("Error saving Google Drive settings:", error);
+      toast.error("Failed to save Google Drive settings");
+    } finally {
+      setSavingGoogleDrive(false);
     }
   };
 
@@ -1302,6 +1341,41 @@ export default function Settings() {
 
         {/* n8n Integration Tab */}
         <TabsContent value="n8n" className="space-y-6">
+          {/* Google Drive Integration */}
+          <Card className="bg-gradient-card border-border shadow-card">
+            <CardHeader>
+              <CardTitle className="text-foreground flex items-center gap-2">
+                <ExternalLink className="w-5 h-5 text-blue-500" />
+                Google Drive Integration
+              </CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Automatically create folders for new projects in Google Drive
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-foreground">Google Drive Folder URL</Label>
+                <p className="text-xs text-muted-foreground">
+                  Paste a Google Drive folder link with editing access. New projects will auto-create subfolders here.
+                </p>
+                <Input
+                  placeholder="https://drive.google.com/drive/folders/..."
+                  value={googleDriveFolderUrl}
+                  onChange={(e) => setGoogleDriveFolderUrl(e.target.value)}
+                  className="font-mono text-sm"
+                />
+              </div>
+              <Button 
+                onClick={saveGoogleDriveSettings}
+                disabled={savingGoogleDrive}
+                className="bg-gradient-primary text-primary-foreground"
+              >
+                {savingGoogleDrive ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                Save Google Drive Settings
+              </Button>
+            </CardContent>
+          </Card>
+
           <Card className="bg-gradient-card border-border shadow-card">
             <CardHeader>
               <CardTitle className="text-foreground flex items-center gap-2">
