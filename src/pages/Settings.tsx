@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Save, Plus, Trash2, FileText, Loader2, Pencil, Webhook, Copy, CheckCircle, XCircle, ExternalLink, Zap, Key, Eye, EyeOff, Bot } from "lucide-react";
+import { Save, Plus, Trash2, FileText, Loader2, Pencil, Webhook, Copy, CheckCircle, XCircle, ExternalLink, Zap, Key, Eye, EyeOff, Bot, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -164,6 +164,8 @@ export default function Settings() {
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [savingKeys, setSavingKeys] = useState(false);
+  const [testingKey, setTestingKey] = useState<string | null>(null);
+  const [keyTestResults, setKeyTestResults] = useState<Record<string, { success: boolean; message: string }>>({});
   
   // n8n integration state
   const [testingConnection, setTestingConnection] = useState(false);
@@ -322,6 +324,43 @@ export default function Settings() {
     }
   };
 
+  const testApiKey = async (keyType: string) => {
+    const apiKey = apiKeys[keyType];
+    if (!apiKey) {
+      toast.error("Please enter an API key first");
+      return;
+    }
+
+    setTestingKey(keyType);
+    try {
+      const { data, error } = await supabase.functions.invoke('test-api-connection', {
+        body: { apiKeyType: keyType, apiKey },
+      });
+
+      if (error) throw error;
+
+      setKeyTestResults(prev => ({
+        ...prev,
+        [keyType]: { success: data.success, message: data.message },
+      }));
+
+      if (data.success) {
+        toast.success(data.message);
+      } else {
+        toast.error(data.message);
+      }
+    } catch (error) {
+      console.error("Error testing API key:", error);
+      setKeyTestResults(prev => ({
+        ...prev,
+        [keyType]: { success: false, message: "Connection test failed" },
+      }));
+      toast.error("Failed to test API connection");
+    } finally {
+      setTestingKey(null);
+    }
+  };
+
   const handleSaveSettings = async () => {
     if (!settings) return;
     
@@ -456,12 +495,23 @@ export default function Settings() {
                       <div key={config.key} className="p-3 bg-muted/20 rounded-lg space-y-2">
                         <div className="flex items-center justify-between">
                           <Label className="text-foreground font-medium">{config.label}</Label>
-                          {apiKeys[config.key] && (
-                            <Badge variant="outline" className="text-green-500 border-green-500 text-xs">
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              Connected
-                            </Badge>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {keyTestResults[config.key] && (
+                              <Badge 
+                                variant="outline" 
+                                className={`text-xs ${keyTestResults[config.key].success ? "text-green-500 border-green-500" : "text-red-500 border-red-500"}`}
+                              >
+                                {keyTestResults[config.key].success ? <CheckCircle className="w-3 h-3 mr-1" /> : <XCircle className="w-3 h-3 mr-1" />}
+                                {keyTestResults[config.key].success ? "Verified" : "Failed"}
+                              </Badge>
+                            )}
+                            {apiKeys[config.key] && !keyTestResults[config.key] && (
+                              <Badge variant="outline" className="text-green-500 border-green-500 text-xs">
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                Connected
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                         <p className="text-xs text-muted-foreground">{config.description}</p>
                         <div className="flex gap-2">
@@ -482,12 +532,33 @@ export default function Settings() {
                               {showKeys[config.key] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
                             </Button>
                           </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-9"
+                            disabled={!apiKeys[config.key] || testingKey === config.key}
+                            onClick={() => testApiKey(config.key)}
+                          >
+                            {testingKey === config.key ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <RefreshCw className="w-3 h-3" />
+                            )}
+                            <span className="ml-1 text-xs">Test</span>
+                          </Button>
                           {apiKeys[config.key] && (
                             <Button
                               variant="outline"
                               size="icon"
                               className="h-9 w-9"
-                              onClick={() => setApiKeys({ ...apiKeys, [config.key]: "" })}
+                              onClick={() => {
+                                setApiKeys({ ...apiKeys, [config.key]: "" });
+                                setKeyTestResults(prev => {
+                                  const newResults = { ...prev };
+                                  delete newResults[config.key];
+                                  return newResults;
+                                });
+                              }}
                             >
                               <Trash2 className="w-3 h-3 text-destructive" />
                             </Button>

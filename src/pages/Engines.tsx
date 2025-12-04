@@ -24,6 +24,8 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { sceneRouting, videoModels, avatarModels, voiceModels } from "@/data/aiModels";
+import CostEstimator from "@/components/CostEstimator";
+import EngineRecommendationWizard from "@/components/EngineRecommendationWizard";
 
 interface AIEngine {
   id: string;
@@ -436,6 +438,12 @@ export default function Engines() {
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* Cost Estimator */}
+      <CostEstimator />
+
+      {/* Engine Recommendation Wizard */}
+      <EngineRecommendationWizard />
     </div>
   );
 }
