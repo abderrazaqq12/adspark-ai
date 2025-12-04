@@ -12,6 +12,9 @@ import SceneBuilder from "./pages/SceneBuilder";
 import Engines from "./pages/Engines";
 import Settings from "./pages/Settings";
 import Videos from "./pages/Videos";
+import Analytics from "./pages/Analytics";
+import Templates from "./pages/Templates";
+import ABTesting from "./pages/ABTesting";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -36,6 +39,9 @@ const App = () => (
                   <Route path="/scene-builder" element={<SceneBuilder />} />
                   <Route path="/engines" element={<Engines />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route path="/analytics" element={<Analytics />} />
+                  <Route path="/templates" element={<Templates />} />
+                  <Route path="/ab-testing" element={<ABTesting />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </Layout>

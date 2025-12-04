@@ -25,6 +25,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { sceneRouting, videoTypes, exportFormats } from "@/data/aiModels";
 import BatchGeneration from "@/components/BatchGeneration";
+import AIAssistant from "@/components/AIAssistant";
 
 // Production pipeline stages based on roadmap
 const pipelineStages = [
@@ -654,6 +655,20 @@ export default function CreateVideo() {
         </div>
       )}
       </div>
+
+      {/* AI Assistant */}
+      <AIAssistant 
+        context="video ad creation with scripts, hooks, and marketing copy"
+        onSuggestion={(suggestion) => {
+          // Auto-fill script with AI suggestion
+          if (suggestion && scriptSlots.length > 0) {
+            const updatedSlots = [...scriptSlots];
+            updatedSlots[0] = { ...updatedSlots[0], text: suggestion };
+            setScriptSlots(updatedSlots);
+            toast.success("AI suggestion applied to script!");
+          }
+        }}
+      />
     </div>
   );
 }

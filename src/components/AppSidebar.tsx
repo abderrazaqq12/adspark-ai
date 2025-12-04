@@ -1,4 +1,4 @@
-import { Home, Video, FileText, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare } from "lucide-react";
+import { Home, Video, FileText, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, FlaskConical, LayoutTemplate } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,10 +22,13 @@ const navigationItems = [
   { title: "Create Video", url: "/create", icon: Video },
   { title: "My Projects", url: "/projects", icon: FolderOpen },
   { title: "Video Library", url: "/videos", icon: PlaySquare },
+  { title: "Templates", url: "/templates", icon: LayoutTemplate },
 ];
 
 const toolsItems = [
   { title: "Scene Builder", url: "/scene-builder", icon: FileText },
+  { title: "A/B Testing", url: "/ab-testing", icon: FlaskConical },
+  { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "AI Engines", url: "/engines", icon: Cpu },
   { title: "Settings", url: "/settings", icon: Settings },
 ];

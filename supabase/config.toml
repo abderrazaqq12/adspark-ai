@@ -32,3 +32,9 @@ verify_jwt = false
 
 [functions.ai-engine-webhook]
 verify_jwt = false
+
+[functions.ai-assistant]
+verify_jwt = false
+
+[functions.generate-thumbnail]
+verify_jwt = false
