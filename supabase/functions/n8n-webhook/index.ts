@@ -143,6 +143,13 @@ Deno.serve(async (req) => {
       }
 
       case 'update_project': {
+        // SECURITY: Require userId for ownership verification
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'userId is required for this action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         const { projectId, updates } = data as { projectId: string; updates: Record<string, unknown> }
         
         if (!projectId || !isValidUUID(projectId)) {
@@ -161,19 +168,34 @@ Deno.serve(async (req) => {
           }
         }
         
+        // SECURITY: Verify ownership by including user_id in query
         const { data: project, error } = await supabase
           .from('projects')
           .update(sanitizedUpdates)
           .eq('id', projectId)
+          .eq('user_id', userId)  // Verify ownership
           .select()
           .single()
         
         if (error) throw error
+        if (!project) {
+          return new Response(
+            JSON.stringify({ error: 'Project not found or access denied' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         result = project
         break
       }
 
       case 'delete_project': {
+        // SECURITY: Require userId for ownership verification
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'userId is required for this action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         const { projectId } = data as { projectId: string }
         
         if (!projectId || !isValidUUID(projectId)) {
@@ -183,18 +205,35 @@ Deno.serve(async (req) => {
           )
         }
         
-        const { error } = await supabase
+        // SECURITY: Verify ownership by including user_id in query
+        const { data: deleted, error } = await supabase
           .from('projects')
           .delete()
           .eq('id', projectId)
+          .eq('user_id', userId)  // Verify ownership
+          .select()
+          .single()
         
         if (error) throw error
+        if (!deleted) {
+          return new Response(
+            JSON.stringify({ error: 'Project not found or access denied' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         result = { success: true, projectId }
         break
       }
 
       // ============ SCRIPT OPERATIONS ============
       case 'create_script': {
+        // SECURITY: Require userId for ownership verification
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'userId is required for this action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         const { projectId, raw_text, language, tone, style, hooks } = data as {
           projectId: string
           raw_text: string
@@ -208,6 +247,21 @@ Deno.serve(async (req) => {
           return new Response(
             JSON.stringify({ error: 'Invalid projectId' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
+        // SECURITY: Verify user owns the project before creating script
+        const { data: projectCheck, error: projectCheckError } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('id', projectId)
+          .eq('user_id', userId)
+          .single()
+        
+        if (projectCheckError || !projectCheck) {
+          return new Response(
+            JSON.stringify({ error: 'Project not found or access denied' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
         
@@ -239,12 +293,34 @@ Deno.serve(async (req) => {
       }
 
       case 'get_scripts': {
+        // SECURITY: Require userId for ownership verification
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'userId is required for this action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         const { projectId } = data as { projectId: string }
         
         if (!projectId || !isValidUUID(projectId)) {
           return new Response(
             JSON.stringify({ error: 'Invalid projectId' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
+        // SECURITY: Verify user owns the project before fetching scripts
+        const { data: projectCheck, error: projectCheckError } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('id', projectId)
+          .eq('user_id', userId)
+          .single()
+        
+        if (projectCheckError || !projectCheck) {
+          return new Response(
+            JSON.stringify({ error: 'Project not found or access denied' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
         
@@ -341,12 +417,46 @@ Deno.serve(async (req) => {
       }
 
       case 'update_scene': {
+        // SECURITY: Require userId for ownership verification
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'userId is required for this action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         const { sceneId, updates } = data as { sceneId: string; updates: Record<string, unknown> }
         
         if (!sceneId || !isValidUUID(sceneId)) {
           return new Response(
             JSON.stringify({ error: 'Invalid sceneId' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
+        // SECURITY: Verify user owns the scene through script->project chain
+        const { data: sceneCheck, error: sceneCheckError } = await supabase
+          .from('scenes')
+          .select('id, scripts!inner(project_id, projects!inner(user_id))')
+          .eq('id', sceneId)
+          .single()
+        
+        if (sceneCheckError || !sceneCheck) {
+          return new Response(
+            JSON.stringify({ error: 'Scene not found' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
+        // Type assertion for nested query result
+        const sceneData = sceneCheck as unknown as { 
+          id: string; 
+          scripts: { project_id: string; projects: { user_id: string } } 
+        }
+        
+        if (sceneData.scripts?.projects?.user_id !== userId) {
+          return new Response(
+            JSON.stringify({ error: 'Access denied' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
         
