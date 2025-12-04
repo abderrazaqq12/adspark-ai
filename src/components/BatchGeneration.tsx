@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import SceneProgressTracker from "./SceneProgressTracker";
 
 interface BatchGenerationProps {
   scriptId: string;
@@ -283,10 +284,19 @@ export default function BatchGeneration({ scriptId, scenesCount, onComplete }: B
           </>
         ) : (
           <>
-            {/* Progress */}
+            {/* Real-time Scene Progress Tracker */}
+            <SceneProgressTracker 
+              scriptId={scriptId} 
+              onComplete={() => {
+                setIsGenerating(false);
+                onComplete?.();
+              }}
+            />
+
+            {/* Queue Progress */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-foreground">Progress</span>
+                <span className="text-sm font-medium text-foreground">Queue Progress</span>
                 <span className="text-sm text-muted-foreground">{progress}%</span>
               </div>
               <Progress value={progress} className="h-2" />
