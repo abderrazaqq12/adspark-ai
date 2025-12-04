@@ -8,7 +8,8 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Save, Plus, Trash2, FileText, Loader2, Pencil, Webhook, Copy, CheckCircle, XCircle, ExternalLink, Zap, Key, Eye, EyeOff, Bot, RefreshCw, DollarSign, Sparkles, TrendingUp, Crown, ChevronDown } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Save, Plus, Trash2, FileText, Loader2, Pencil, Webhook, Copy, CheckCircle, XCircle, ExternalLink, Zap, Key, Eye, EyeOff, Bot, RefreshCw, DollarSign, Sparkles, TrendingUp, Crown, ChevronDown, Power } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -92,7 +93,8 @@ const API_WEBSITE_URLS: Record<string, string> = {
   RUNWAY_API_KEY: "https://app.runwayml.com/settings/api-keys",
   PIKA_API_KEY: "https://pika.art/settings/api",
   HAILUO_API_KEY: "https://hailuoai.com/settings/api",
-  KLING_API_KEY: "https://klingai.com/developer/api-keys",
+  KLING_ACCESS_KEY: "https://app.klingai.com/global/dev/api-key",
+  KLING_SECRET_KEY: "https://app.klingai.com/global/dev/api-key",
   VIDU_API_KEY: "https://www.vidu.studio/settings/api",
   LTX_API_KEY: "https://ltx.studio/settings/api",
   WAN_API_KEY: "https://www.wan.video/api",
@@ -160,31 +162,34 @@ const GLOBAL_API_PROVIDERS: GlobalAPIProvider[] = [
   {
     key: "AIMLAPI_API_KEY",
     label: "AIML API",
-    description: "Access 200+ AI models including GPT-4, Claude, Llama",
+    description: "Free tier: 10 req/hour. Gemma 3 models FREE forever",
     placeholder: "aiml_xxxxxxxxxxxxxxxx",
     models: [
-      { id: "gpt-4-turbo", name: "GPT-4 Turbo", description: "OpenAI's most capable model" },
-      { id: "gpt-4o", name: "GPT-4o", description: "OpenAI's fastest GPT-4" },
-      { id: "claude-3-opus", name: "Claude 3 Opus", description: "Anthropic's most powerful" },
+      { id: "gemma-3-4b", name: "Gemma 3 4B (FREE)", description: "Free - Google's fast model" },
+      { id: "gemma-3-12b", name: "Gemma 3 12B (FREE)", description: "Free - Better reasoning" },
+      { id: "gemma-3-27b", name: "Gemma 3 27B (FREE)", description: "Free - Best open model" },
+      { id: "gpt-4-turbo", name: "GPT-4 Turbo", description: "OpenAI's most capable" },
       { id: "claude-3-sonnet", name: "Claude 3 Sonnet", description: "Balanced performance" },
       { id: "llama-3.1-70b", name: "Llama 3.1 70B", description: "Meta's open model" },
-      { id: "mistral-large", name: "Mistral Large", description: "Mistral's flagship" },
       { id: "flux-pro", name: "Flux Pro", description: "Image generation" },
-      { id: "stable-diffusion-xl", name: "SDXL", description: "Image generation" },
     ]
   },
   {
     key: "OPENROUTER_API_KEY",
     label: "OpenRouter",
-    description: "Unified API for all major LLMs with automatic fallbacks",
+    description: "29+ FREE models including Gemma 3, Llama 3.3, Gemini 2.0",
     placeholder: "sk-or-v1-xxxxxxxxxxxxxxxx",
     models: [
-      { id: "openai/gpt-4-turbo", name: "GPT-4 Turbo", description: "via OpenRouter" },
-      { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", description: "via OpenRouter" },
-      { id: "google/gemini-pro-1.5", name: "Gemini Pro 1.5", description: "via OpenRouter" },
-      { id: "meta-llama/llama-3.1-405b", name: "Llama 3.1 405B", description: "Largest Llama" },
-      { id: "mistral/mistral-large", name: "Mistral Large", description: "via OpenRouter" },
-      { id: "cohere/command-r-plus", name: "Command R+", description: "Cohere's best" },
+      { id: "google/gemma-3-4b-free", name: "Gemma 3 4B (FREE)", description: "$0/M tokens" },
+      { id: "google/gemma-3-12b-free", name: "Gemma 3 12B (FREE)", description: "$0/M tokens" },
+      { id: "google/gemma-3-27b-free", name: "Gemma 3 27B (FREE)", description: "$0/M tokens, 131K ctx" },
+      { id: "google/gemini-2.0-flash-exp-free", name: "Gemini 2.0 Flash (FREE)", description: "$0/M, 1M context" },
+      { id: "meta-llama/llama-3.3-70b-instruct-free", name: "Llama 3.3 70B (FREE)", description: "$0/M, 131K ctx" },
+      { id: "meta-llama/llama-3.2-3b-instruct-free", name: "Llama 3.2 3B (FREE)", description: "$0/M tokens" },
+      { id: "nousresearch/hermes-3-405b-instruct-free", name: "Hermes 3 405B (FREE)", description: "$0/M tokens" },
+      { id: "mistralai/mistral-7b-instruct-free", name: "Mistral 7B (FREE)", description: "$0/M tokens" },
+      { id: "amazon/nova-2-lite-free", name: "Nova 2 Lite (FREE)", description: "1M context" },
+      { id: "nvidia/nemotron-nano-12b-2-vl-free", name: "Nemotron 12B (FREE)", description: "Vision model" },
     ]
   },
   {
@@ -204,15 +209,16 @@ const GLOBAL_API_PROVIDERS: GlobalAPIProvider[] = [
   {
     key: "FAL_API_KEY",
     label: "Fal AI",
-    description: "Fast inference for image & video models",
+    description: "Fast video & image - Wan 2.5 $0.05/sec (CHEAPEST)",
     placeholder: "fal_xxxxxxxxxxxxxxxx",
     models: [
+      { id: "wan-2.5", name: "Wan 2.5 ($0.05/sec)", description: "CHEAPEST - 20 sec/$1" },
+      { id: "kling-2.5-turbo-pro", name: "Kling 2.5 Pro ($0.07/sec)", description: "14 sec/$1" },
+      { id: "veo-3", name: "Veo 3 ($0.40/sec)", description: "High quality" },
+      { id: "ovi", name: "Ovi ($0.20/video)", description: "5 videos/$1" },
       { id: "flux-pro", name: "Flux Pro", description: "Best image quality" },
-      { id: "flux-dev", name: "Flux Dev", description: "Development model" },
-      { id: "flux-schnell", name: "Flux Schnell", description: "Fast generation" },
+      { id: "flux-schnell", name: "Flux Schnell", description: "Fast image gen" },
       { id: "stable-video-diffusion", name: "Stable Video", description: "Image to video" },
-      { id: "animate-diff", name: "AnimateDiff", description: "Animation generation" },
-      { id: "lora-training", name: "LoRA Training", description: "Custom model training" },
     ]
   },
   {
@@ -271,10 +277,11 @@ const API_KEY_CATEGORIES: APIKeyCategory[] = [
       { key: "RUNWAY_API_KEY", label: "Runway API Key", description: "High-quality cinematic video generation", placeholder: "rw_xxxxxxxxxxxxxxxx" },
       { key: "PIKA_API_KEY", label: "Pika Labs API Key", description: "Creative & animated video generation", placeholder: "pk_xxxxxxxxxxxxxxxx" },
       { key: "HAILUO_API_KEY", label: "Hailuo AI API Key", description: "Fast video generation with realistic motion", placeholder: "hl_xxxxxxxxxxxxxxxx" },
-      { key: "KLING_API_KEY", label: "Kling AI API Key", description: "High-quality AI video with long duration", placeholder: "kl_xxxxxxxxxxxxxxxx" },
+      { key: "KLING_ACCESS_KEY", label: "Kling AI Access Key", description: "Kling AI Access Key (part 1 of 2)", placeholder: "A8faJnmkGtN9RfyH..." },
+      { key: "KLING_SECRET_KEY", label: "Kling AI Secret Key", description: "Kling AI Secret Key (part 2 of 2)", placeholder: "BPHb98dtYLtMdPAT..." },
       { key: "VIDU_API_KEY", label: "Vidu API Key", description: "Text-to-video with character consistency", placeholder: "vd_xxxxxxxxxxxxxxxx" },
       { key: "LTX_API_KEY", label: "LTX Studio API Key", description: "AI filmmaking and video creation", placeholder: "ltx_xxxxxxxxxxxxxxxx" },
-      { key: "WAN_API_KEY", label: "Wan Video API Key", description: "Fast text-to-video generation", placeholder: "wan_xxxxxxxxxxxxxxxx" },
+      { key: "WAN_API_KEY", label: "Wan Video API Key", description: "Fast text-to-video ($0.05/sec - cheapest)", placeholder: "wan_xxxxxxxxxxxxxxxx" },
       { key: "SKYREELS_API_KEY", label: "SkyReels API Key", description: "Cinematic video generation", placeholder: "sr_xxxxxxxxxxxxxxxx" },
       { key: "SEEDANCE_API_KEY", label: "Seedance API Key", description: "Dance & motion video generation", placeholder: "sd_xxxxxxxxxxxxxxxx" },
       { key: "HIGGSFIELD_API_KEY", label: "Higgsfield API Key", description: "Personalized AI video creation", placeholder: "hf_xxxxxxxxxxxxxxxx" },
@@ -379,6 +386,7 @@ export default function Settings() {
   const [savingKeys, setSavingKeys] = useState(false);
   const [testingKey, setTestingKey] = useState<string | null>(null);
   const [keyTestResults, setKeyTestResults] = useState<Record<string, { success: boolean; message: string }>>({});
+  const [activeApiKeys, setActiveApiKeys] = useState<Record<string, boolean>>({});
   
   // n8n integration state
   const [testingConnection, setTestingConnection] = useState(false);
@@ -445,20 +453,28 @@ export default function Settings() {
         setSettings(settingsRes.data as UserSettings);
         if (settingsRes.data.api_keys) {
           const keys = settingsRes.data.api_keys as Record<string, any>;
-          // Separate API keys from activated models
+          // Separate API keys from activated models and active states
           const apiKeysOnly: Record<string, string> = {};
           const modelsOnly: Record<string, string[]> = {};
+          const activeOnly: Record<string, boolean> = {};
           
           Object.entries(keys).forEach(([key, value]) => {
             if (key.endsWith('_MODELS') && Array.isArray(value)) {
               modelsOnly[key.replace('_MODELS', '')] = value;
+            } else if (key.endsWith('_ACTIVE') && typeof value === 'boolean') {
+              activeOnly[key.replace('_ACTIVE', '')] = value;
             } else if (typeof value === 'string') {
               apiKeysOnly[key] = value;
+              // Default to active if has value
+              if (!keys[`${key}_ACTIVE`]) {
+                activeOnly[key] = true;
+              }
             }
           });
           
           setApiKeys(apiKeysOnly);
           setActivatedModels(modelsOnly);
+          setActiveApiKeys(activeOnly);
         }
         // Load n8n settings and Google Drive from preferences
         const prefs = settingsRes.data.preferences as Record<string, any> | null;
@@ -565,10 +581,13 @@ export default function Settings() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Combine API keys with activated models
+      // Combine API keys with activated models and active states
       const combinedKeys: Record<string, any> = { ...apiKeys };
       Object.entries(activatedModels).forEach(([provider, models]) => {
         combinedKeys[`${provider}_MODELS`] = models;
+      });
+      Object.entries(activeApiKeys).forEach(([key, isActive]) => {
+        combinedKeys[`${key}_ACTIVE`] = isActive;
       });
 
       const { error } = await supabase
@@ -584,6 +603,13 @@ export default function Settings() {
     } finally {
       setSavingKeys(false);
     }
+  };
+
+  const toggleApiKeyActive = (key: string) => {
+    setActiveApiKeys(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
   };
 
   const toggleModel = (providerKey: string, modelId: string) => {
@@ -1172,92 +1198,150 @@ export default function Settings() {
                     </Badge>
                   </div>
                   <div className="grid gap-3">
-                    {category.keys.map((config) => (
-                      <div key={config.key} className="p-3 bg-muted/20 rounded-lg space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-foreground font-medium">{config.label}</Label>
-                          <div className="flex items-center gap-2">
-                            {keyTestResults[config.key] && (
-                              <Badge 
-                                variant="outline" 
-                                className={`text-xs ${keyTestResults[config.key].success ? "text-green-500 border-green-500" : "text-red-500 border-red-500"}`}
-                              >
-                                {keyTestResults[config.key].success ? <CheckCircle className="w-3 h-3 mr-1" /> : <XCircle className="w-3 h-3 mr-1" />}
-                                {keyTestResults[config.key].success ? "Verified" : "Failed"}
-                              </Badge>
-                            )}
-                            {apiKeys[config.key] && !keyTestResults[config.key] && (
-                              <Badge variant="outline" className="text-green-500 border-green-500 text-xs">
-                                <CheckCircle className="w-3 h-3 mr-1" />
-                                Connected
-                              </Badge>
-                            )}
+                    {category.keys.map((config) => {
+                      const isKlingKey = config.key === 'KLING_ACCESS_KEY' || config.key === 'KLING_SECRET_KEY';
+                      const isActive = activeApiKeys[config.key] !== false; // Default to active
+                      
+                      return (
+                        <div 
+                          key={config.key} 
+                          className={`p-3 rounded-lg space-y-2 border transition-all ${
+                            isActive 
+                              ? 'bg-muted/20 border-border' 
+                              : 'bg-muted/5 border-border/50 opacity-60'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <Switch
+                                checked={isActive}
+                                onCheckedChange={() => toggleApiKeyActive(config.key)}
+                                className="data-[state=checked]:bg-primary"
+                              />
+                              <Label className={`font-medium ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}>
+                                {config.label}
+                              </Label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {isActive && keyTestResults[config.key] && (
+                                <Badge 
+                                  variant="outline" 
+                                  className={`text-xs ${keyTestResults[config.key].success ? "text-green-500 border-green-500" : "text-red-500 border-red-500"}`}
+                                >
+                                  {keyTestResults[config.key].success ? <CheckCircle className="w-3 h-3 mr-1" /> : <XCircle className="w-3 h-3 mr-1" />}
+                                  {keyTestResults[config.key].success ? "Verified" : "Failed"}
+                                </Badge>
+                              )}
+                              {isActive && apiKeys[config.key] && !keyTestResults[config.key] && (
+                                <Badge variant="outline" className="text-green-500 border-green-500 text-xs">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Connected
+                                </Badge>
+                              )}
+                              {!isActive && (
+                                <Badge variant="outline" className="text-muted-foreground border-muted text-xs">
+                                  <Power className="w-3 h-3 mr-1" />
+                                  Disabled
+                                </Badge>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                        <p className="text-xs text-muted-foreground">{config.description}</p>
-                        <div className="flex gap-2">
-                          <div className="relative flex-1">
-                            <Input
-                              type={showKeys[config.key] ? "text" : "password"}
-                              placeholder={config.placeholder || "Enter API key..."}
-                              value={apiKeys[config.key] || ""}
-                              onChange={(e) => setApiKeys({ ...apiKeys, [config.key]: e.target.value })}
-                              className="pr-10 h-9 text-sm"
-                            />
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="absolute right-0 top-0 h-full w-9"
-                              onClick={() => toggleKeyVisibility(config.key)}
-                            >
-                              {showKeys[config.key] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                            </Button>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-9"
-                            disabled={!apiKeys[config.key] || testingKey === config.key}
-                            onClick={() => testApiKey(config.key)}
-                          >
-                            {testingKey === config.key ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <RefreshCw className="w-3 h-3" />
-                            )}
-                            <span className="ml-1 text-xs">Test</span>
-                          </Button>
-                          {API_WEBSITE_URLS[config.key] && (
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-9 w-9"
-                              onClick={() => window.open(API_WEBSITE_URLS[config.key], '_blank')}
-                              title={`Open ${config.label} settings page`}
-                            >
-                              <ExternalLink className="w-3 h-3 text-primary" />
-                            </Button>
+                          <p className="text-xs text-muted-foreground ml-10">{config.description}</p>
+                          {isActive && (
+                            <div className="flex gap-2 ml-10">
+                              <div className="relative flex-1">
+                                <Input
+                                  type={showKeys[config.key] ? "text" : "password"}
+                                  placeholder={config.placeholder || "Enter API key..."}
+                                  value={apiKeys[config.key] || ""}
+                                  onChange={(e) => {
+                                    setApiKeys({ ...apiKeys, [config.key]: e.target.value });
+                                    // For Kling, auto-enable when both keys are entered
+                                    if (e.target.value) {
+                                      setActiveApiKeys(prev => ({ ...prev, [config.key]: true }));
+                                    }
+                                  }}
+                                  className="pr-10 h-9 text-sm"
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="absolute right-0 top-0 h-full w-9"
+                                  onClick={() => toggleKeyVisibility(config.key)}
+                                >
+                                  {showKeys[config.key] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                                </Button>
+                              </div>
+                              {/* Test button - for Kling, test both keys together */}
+                              {!isKlingKey ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-9"
+                                  disabled={!apiKeys[config.key] || testingKey === config.key}
+                                  onClick={() => testApiKey(config.key)}
+                                >
+                                  {testingKey === config.key ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <RefreshCw className="w-3 h-3" />
+                                  )}
+                                  <span className="ml-1 text-xs">Test</span>
+                                </Button>
+                              ) : config.key === 'KLING_SECRET_KEY' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-9"
+                                  disabled={!apiKeys['KLING_ACCESS_KEY'] || !apiKeys['KLING_SECRET_KEY'] || testingKey === 'KLING_API_KEY'}
+                                  onClick={() => {
+                                    // Combine access and secret keys for testing
+                                    const combinedKey = `${apiKeys['KLING_ACCESS_KEY']}:${apiKeys['KLING_SECRET_KEY']}`;
+                                    setApiKeys(prev => ({ ...prev, 'KLING_API_KEY': combinedKey }));
+                                    testApiKey('KLING_API_KEY');
+                                  }}
+                                >
+                                  {testingKey === 'KLING_API_KEY' ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <RefreshCw className="w-3 h-3" />
+                                  )}
+                                  <span className="ml-1 text-xs">Test Kling</span>
+                                </Button>
+                              )}
+                              {API_WEBSITE_URLS[config.key] && (
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-9 w-9"
+                                  onClick={() => window.open(API_WEBSITE_URLS[config.key], '_blank')}
+                                  title={`Open ${config.label} settings page`}
+                                >
+                                  <ExternalLink className="w-3 h-3 text-primary" />
+                                </Button>
+                              )}
+                              {apiKeys[config.key] && (
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-9 w-9"
+                                  onClick={() => {
+                                    setApiKeys({ ...apiKeys, [config.key]: "" });
+                                    setKeyTestResults(prev => {
+                                      const newResults = { ...prev };
+                                      delete newResults[config.key];
+                                      return newResults;
+                                    });
+                                  }}
+                                >
+                                  <Trash2 className="w-3 h-3 text-destructive" />
+                                </Button>
+                              )}
+                            </div>
                           )}
-                          {apiKeys[config.key] && (
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-9 w-9"
-                              onClick={() => {
-                                setApiKeys({ ...apiKeys, [config.key]: "" });
-                                setKeyTestResults(prev => {
-                                  const newResults = { ...prev };
-                                  delete newResults[config.key];
-                                  return newResults;
-                                });
-                              }}
-                            >
-                              <Trash2 className="w-3 h-3 text-destructive" />
-                            </Button>
-                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   <Separator className="bg-border" />
                 </div>

@@ -143,20 +143,136 @@ async function testLeonardo(apiKey: string): Promise<TestResult> {
 async function testFal(apiKey: string): Promise<TestResult> {
   const start = Date.now();
   try {
-    const response = await fetch('https://rest.fal.run/fal-ai/fast-sdxl', {
-      method: 'POST',
+    // Use the models endpoint to verify API key
+    const response = await fetch('https://api.fal.ai/v1/models?limit=1', {
+      method: 'GET',
       headers: {
         'Authorization': `Key ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ prompt: 'test', num_images: 0 }),
     });
     const latency = Date.now() - start;
     
-    if (response.status !== 401 && response.status !== 403) {
-      return { success: true, message: 'Fal AI key format valid', latency };
+    if (response.ok) {
+      return { success: true, message: 'Fal AI connected successfully', latency };
     }
-    return { success: false, message: 'Invalid Fal AI API key' };
+    
+    if (response.status === 401 || response.status === 403) {
+      return { success: false, message: 'Invalid Fal AI API key' };
+    }
+    
+    const errorText = await response.text();
+    return { success: false, message: `Fal AI error: ${errorText}` };
+  } catch (e) {
+    const error = e as Error;
+    return { success: false, message: `Connection failed: ${error.message}` };
+  }
+}
+
+async function testKling(accessKey: string, secretKey: string): Promise<TestResult> {
+  const start = Date.now();
+  try {
+    // Kling AI uses JWT authentication with access key and secret key
+    // Generate JWT token
+    const header = { alg: 'HS256', typ: 'JWT' };
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+      iss: accessKey,
+      exp: now + 1800, // 30 minutes expiry
+      nbf: now - 5
+    };
+
+    // Base64url encode
+    const base64UrlEncode = (obj: any) => {
+      const str = JSON.stringify(obj);
+      const base64 = btoa(str);
+      return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    };
+
+    const headerB64 = base64UrlEncode(header);
+    const payloadB64 = base64UrlEncode(payload);
+    const signatureInput = `${headerB64}.${payloadB64}`;
+
+    // HMAC-SHA256 signature
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(secretKey);
+    const signData = encoder.encode(signatureInput);
+    
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    
+    const signature = await crypto.subtle.sign('HMAC', cryptoKey, signData);
+    const signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+
+    const jwtToken = `${headerB64}.${payloadB64}.${signatureB64}`;
+
+    // Test with Kling AI API
+    const response = await fetch('https://api.klingai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${jwtToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model_name: 'kling-v1',
+        prompt: 'test',
+        n: 1
+      }),
+    });
+    const latency = Date.now() - start;
+
+    if (response.ok || response.status === 200) {
+      return { success: true, message: 'Kling AI connected successfully', latency };
+    }
+    
+    if (response.status === 401 || response.status === 403) {
+      return { success: false, message: 'Invalid Kling AI credentials' };
+    }
+
+    // Even if we get an error about the request, it means auth worked
+    return { success: true, message: 'Kling AI credentials valid', latency };
+  } catch (e) {
+    const error = e as Error;
+    return { success: false, message: `Connection failed: ${error.message}` };
+  }
+}
+
+async function testOpenRouter(apiKey: string): Promise<TestResult> {
+  const start = Date.now();
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/models', {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    const latency = Date.now() - start;
+    
+    if (response.ok) {
+      return { success: true, message: 'OpenRouter connected successfully', latency };
+    }
+    return { success: false, message: 'Invalid OpenRouter API key' };
+  } catch (e) {
+    const error = e as Error;
+    return { success: false, message: `Connection failed: ${error.message}` };
+  }
+}
+
+async function testAIMLAPI(apiKey: string): Promise<TestResult> {
+  const start = Date.now();
+  try {
+    const response = await fetch('https://api.aimlapi.com/v1/models', {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    const latency = Date.now() - start;
+    
+    if (response.ok) {
+      return { success: true, message: 'AIML API connected successfully', latency };
+    }
+    return { success: false, message: 'Invalid AIML API key' };
   } catch (e) {
     const error = e as Error;
     return { success: false, message: `Connection failed: ${error.message}` };
@@ -227,6 +343,21 @@ serve(async (req) => {
         break;
       case 'FAL_API_KEY':
         result = await testFal(apiKey);
+        break;
+      case 'OPENROUTER_API_KEY':
+        result = await testOpenRouter(apiKey);
+        break;
+      case 'AIMLAPI_API_KEY':
+        result = await testAIMLAPI(apiKey);
+        break;
+      case 'KLING_API_KEY':
+        // Kling uses access_key:secret_key format
+        const [accessKey, secretKey] = apiKey.split(':');
+        if (accessKey && secretKey) {
+          result = await testKling(accessKey, secretKey);
+        } else {
+          result = { success: false, message: 'Kling AI requires format: access_key:secret_key' };
+        }
         break;
       default:
         // For other APIs, just validate key format
