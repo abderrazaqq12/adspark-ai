@@ -34,6 +34,9 @@ import { toast } from "sonner";
 import { sceneRouting, videoTypes, exportFormats } from "@/data/aiModels";
 import BatchGeneration from "@/components/BatchGeneration";
 import AIAssistant from "@/components/AIAssistant";
+import VoicePreview from "@/components/VoicePreview";
+import { VideoUploadPreview, generateVideoId } from "@/components/VideoUploadPreview";
+import BatchAssembly from "@/components/BatchAssembly";
 
 // ElevenLabs voices - expanded list with categories
 const ELEVENLABS_VOICES = [
@@ -208,6 +211,22 @@ export default function CreateVideo() {
   const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [isGeneratingFromTemplates, setIsGeneratingFromTemplates] = useState(false);
+
+  // Video upload state
+  const [uploadedVideos, setUploadedVideos] = useState<Array<{
+    id: string;
+    file: File;
+    url: string;
+    thumbnail: string | null;
+    type: 'scene' | 'broll';
+    duration: number | null;
+  }>>([]);
+
+  // Assembly options state
+  const [videosToGenerate, setVideosToGenerate] = useState(10);
+  const [transitionStyle, setTransitionStyle] = useState('mixed');
+  const [randomizeOrder, setRandomizeOrder] = useState(true);
+  const [autoAddMusic, setAutoAddMusic] = useState(true);
 
   // Load existing project, voices, and templates
   useEffect(() => {
@@ -847,26 +866,41 @@ export default function CreateVideo() {
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label className="text-foreground text-xs">Voice</Label>
-                      <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-                        <SelectTrigger className="bg-muted/50">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[300px]">
-                          {voiceSource === 'library' ? (
-                            ELEVENLABS_VOICES.map((voice) => (
-                              <SelectItem key={voice.id} value={voice.id}>
-                                {voice.name}
-                              </SelectItem>
-                            ))
-                          ) : (
-                            myVoices.map((voice) => (
-                              <SelectItem key={voice.id} value={voice.id}>
-                                {voice.name}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex gap-2">
+                        <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                          <SelectTrigger className="bg-muted/50 flex-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-[300px]">
+                            {voiceSource === 'library' ? (
+                              ELEVENLABS_VOICES.map((voice) => (
+                                <SelectItem key={voice.id} value={voice.id}>
+                                  <div className="flex items-center gap-2">
+                                    <span>{voice.name}</span>
+                                    <Badge variant="outline" className="text-[10px] px-1">
+                                      {voice.accent}
+                                    </Badge>
+                                  </div>
+                                </SelectItem>
+                              ))
+                            ) : (
+                              myVoices.map((voice) => (
+                                <SelectItem key={voice.id} value={voice.id}>
+                                  {voice.name}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <VoicePreview
+                          voiceId={selectedVoice}
+                          voiceName={
+                            voiceSource === 'library'
+                              ? ELEVENLABS_VOICES.find(v => v.id === selectedVoice)?.name || 'Voice'
+                              : myVoices.find(v => v.id === selectedVoice)?.name || 'Voice'
+                          }
+                        />
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Label className="text-foreground text-xs">Language</Label>
@@ -1318,7 +1352,9 @@ export default function CreateVideo() {
                       <Upload className="w-4 h-4 text-primary" />
                       Upload Your Own Videos
                     </h4>
-                    <Badge variant="outline" className="text-xs">Optional</Badge>
+                    <Badge variant="outline" className="text-xs">
+                      {uploadedVideos.length} uploaded
+                    </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Already have video content? Upload videos to use as scenes or B-roll footage.
@@ -1333,7 +1369,16 @@ export default function CreateVideo() {
                         onChange={(e) => {
                           const files = Array.from(e.target.files || []);
                           if (files.length > 0) {
-                            toast.success(`${files.length} video(s) ready to use as scenes`);
+                            const newVideos = files.map(file => ({
+                              id: generateVideoId(),
+                              file,
+                              url: URL.createObjectURL(file),
+                              thumbnail: null,
+                              type: 'scene' as const,
+                              duration: null,
+                            }));
+                            setUploadedVideos(prev => [...prev, ...newVideos]);
+                            toast.success(`${files.length} scene video(s) added`);
                           }
                         }}
                       />
@@ -1352,6 +1397,15 @@ export default function CreateVideo() {
                         onChange={(e) => {
                           const files = Array.from(e.target.files || []);
                           if (files.length > 0) {
+                            const newVideos = files.map(file => ({
+                              id: generateVideoId(),
+                              file,
+                              url: URL.createObjectURL(file),
+                              thumbnail: null,
+                              type: 'broll' as const,
+                              duration: null,
+                            }));
+                            setUploadedVideos(prev => [...prev, ...newVideos]);
                             toast.success(`${files.length} B-roll video(s) added`);
                           }
                         }}
@@ -1363,6 +1417,30 @@ export default function CreateVideo() {
                       </div>
                     </label>
                   </div>
+
+                  {/* Video Thumbnails Preview */}
+                  {uploadedVideos.length > 0 && (
+                    <div className="space-y-3 pt-2 border-t border-border">
+                      <VideoUploadPreview
+                        videos={uploadedVideos}
+                        onRemove={(id) => {
+                          const video = uploadedVideos.find(v => v.id === id);
+                          if (video) URL.revokeObjectURL(video.url);
+                          setUploadedVideos(prev => prev.filter(v => v.id !== id));
+                        }}
+                        type="scene"
+                      />
+                      <VideoUploadPreview
+                        videos={uploadedVideos}
+                        onRemove={(id) => {
+                          const video = uploadedVideos.find(v => v.id === id);
+                          if (video) URL.revokeObjectURL(video.url);
+                          setUploadedVideos(prev => prev.filter(v => v.id !== id));
+                        }}
+                        type="broll"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {scriptId ? (
@@ -1408,7 +1486,7 @@ export default function CreateVideo() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="text-xs">Videos to Generate</Label>
-                      <Select defaultValue="10">
+                      <Select value={String(videosToGenerate)} onValueChange={(v) => setVideosToGenerate(Number(v))}>
                         <SelectTrigger className="bg-muted/50 h-9">
                           <SelectValue />
                         </SelectTrigger>
@@ -1423,7 +1501,7 @@ export default function CreateVideo() {
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs">Transition Style</Label>
-                      <Select defaultValue="mixed">
+                      <Select value={transitionStyle} onValueChange={setTransitionStyle}>
                         <SelectTrigger className="bg-muted/50 h-9">
                           <SelectValue />
                         </SelectTrigger>
@@ -1443,7 +1521,7 @@ export default function CreateVideo() {
                       <p className="text-sm font-medium text-foreground">Randomize Scene Order</p>
                       <p className="text-xs text-muted-foreground">Create unique variations by shuffling scenes</p>
                     </div>
-                    <Checkbox defaultChecked />
+                    <Checkbox checked={randomizeOrder} onCheckedChange={(checked) => setRandomizeOrder(!!checked)} />
                   </div>
 
                   <div className="flex items-center justify-between p-3 rounded-lg bg-muted/20 border border-border">
@@ -1451,7 +1529,7 @@ export default function CreateVideo() {
                       <p className="text-sm font-medium text-foreground">Auto-add Music</p>
                       <p className="text-xs text-muted-foreground">AI selects background music per video</p>
                     </div>
-                    <Checkbox defaultChecked />
+                    <Checkbox checked={autoAddMusic} onCheckedChange={(checked) => setAutoAddMusic(!!checked)} />
                   </div>
                 </div>
 
@@ -1466,26 +1544,36 @@ export default function CreateVideo() {
                     <p className="text-xs text-muted-foreground">Duration</p>
                   </div>
                   <div className="p-3 rounded-lg bg-muted/20 border border-border text-center">
-                    <p className="text-2xl font-bold text-primary">10</p>
+                    <p className="text-2xl font-bold text-primary">{videosToGenerate}</p>
                     <p className="text-xs text-muted-foreground">Videos</p>
                   </div>
                 </div>
 
-                <div className="flex gap-2">
-                  <Button 
-                    className="flex-1 bg-gradient-primary hover:opacity-90 text-primary-foreground"
-                    onClick={() => {
-                      toast.success("Starting batch assembly of 10 videos...");
+                {/* Batch Assembly Component */}
+                {scriptId ? (
+                  <BatchAssembly
+                    scriptId={scriptId}
+                    scenesCount={scenes.length}
+                    videosToGenerate={videosToGenerate}
+                    transitionStyle={transitionStyle}
+                    randomizeOrder={randomizeOrder}
+                    autoAddMusic={autoAddMusic}
+                    onComplete={() => {
+                      toast.success("All videos assembled!");
+                      setExpandedStage(5);
+                      setCurrentStage(5);
                     }}
-                  >
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Auto-Assemble All ({10} videos)
-                  </Button>
-                  <Button variant="outline" className="flex-1">
-                    <Palette className="w-4 h-4 mr-2" />
-                    Open Timeline Editor
-                  </Button>
-                </div>
+                  />
+                ) : (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <p className="text-sm">Save your project first to start assembly</p>
+                  </div>
+                )}
+
+                <Button variant="outline" className="w-full">
+                  <Palette className="w-4 h-4 mr-2" />
+                  Open Timeline Editor
+                </Button>
               </CardContent>
             </Card>
           )}
