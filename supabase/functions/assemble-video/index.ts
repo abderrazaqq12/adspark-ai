@@ -15,6 +15,27 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Authenticate the request
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Invalid or expired token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    console.log(`[assemble-video] Authenticated user: ${user.id}`);
+
     const { 
       scriptId, 
       sceneVideoUrls, 
@@ -75,11 +96,10 @@ Deno.serve(async (req) => {
     console.log(`Processing ${videoUrls.length} video clips`);
 
     // Build FFmpeg filter complex for concatenation with transitions
-    const filterParts: string[] = [];
     const inputCount = videoUrls.length;
     
     // Create input specifications
-    const inputs = videoUrls.map((v: any, i: number) => {
+    const inputs = videoUrls.map((v: any) => {
       const url = typeof v === "string" ? v : v.url;
       return `-i "${url}"`;
     }).join(" ");
@@ -156,6 +176,7 @@ Deno.serve(async (req) => {
       .from("video_outputs")
       .insert({
         script_id: scriptId,
+        project_id: null, // Will be populated if needed
         status: "processing",
         format: outputFormat,
         has_subtitles: addSubtitles,
@@ -165,7 +186,8 @@ Deno.serve(async (req) => {
           input_videos: videoUrls.length,
           has_voiceover: !!audioUrl,
           transition_type: transitionType,
-          transition_duration: transitionDuration
+          transition_duration: transitionDuration,
+          user_id: user.id
         }
       })
       .select()

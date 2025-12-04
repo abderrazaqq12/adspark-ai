@@ -12,13 +12,34 @@ serve(async (req) => {
   }
 
   try {
-    const { projectId, templateId, variables, count = 10, language = 'en' } = await req.json();
-    
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
     
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Authenticate the request
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log(`[generate-scripts] Authenticated user: ${user.id}`);
+
+    const { projectId, templateId, variables, count = 10, language = 'en' } = await req.json();
 
     // Get template
     let template: any;
@@ -55,8 +76,6 @@ serve(async (req) => {
     }
 
     // Generate scripts using AI
-    const scripts: string[] = [];
-    
     const systemPrompt = `You are an expert video ad scriptwriter. Generate ${count} unique variations of the script based on the template. Each variation should be different in hooks, angles, and phrasing while maintaining the core message. Output as JSON array of strings.`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {

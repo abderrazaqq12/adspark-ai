@@ -12,13 +12,32 @@ serve(async (req) => {
   }
 
   try {
-    const { text, language = 'en', voiceId, scriptId } = await req.json();
-    
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY');
     
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Authenticate the request
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log(`[generate-voiceover] Authenticated user: ${user.id}`);
 
     if (!elevenLabsKey) {
       return new Response(JSON.stringify({ 
@@ -29,6 +48,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    const { text, language = 'en', voiceId, scriptId } = await req.json();
 
     // Map language to voice
     const voiceMap: Record<string, string> = {

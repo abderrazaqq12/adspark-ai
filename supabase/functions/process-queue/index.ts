@@ -15,11 +15,32 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Authenticate the request
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Invalid or expired token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    console.log(`[process-queue] Authenticated user: ${user.id}`);
+
     const { limit = 5 } = await req.json().catch(() => ({}));
 
     console.log(`Processing queue, limit: ${limit}`);
 
-    // Fetch queued items with highest priority
+    // Fetch queued items for the authenticated user with highest priority
     const { data: queueItems, error: fetchError } = await supabase
       .from("generation_queue")
       .select(`
@@ -40,6 +61,7 @@ Deno.serve(async (req) => {
         )
       `)
       .eq("status", "queued")
+      .eq("user_id", user.id)
       .lt("attempts", 3)
       .order("priority", { ascending: false })
       .order("created_at", { ascending: true })
@@ -82,7 +104,7 @@ Deno.serve(async (req) => {
 
         console.log(`Processing scene ${scene.id} with engine ${engine.name}`);
 
-        // Call the generate-scene-video function
+        // Call the generate-scene-video function with auth token
         const { data: genData, error: genError } = await supabase.functions.invoke(
           "generate-scene-video",
           {
@@ -91,6 +113,9 @@ Deno.serve(async (req) => {
               engineName: engine.name,
               prompt: scene.visual_prompt || scene.text,
             },
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
           }
         );
 
@@ -138,11 +163,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Check remaining queue items
+    // Check remaining queue items for this user
     const { count } = await supabase
       .from("generation_queue")
       .select("*", { count: "exact", head: true })
-      .eq("status", "queued");
+      .eq("status", "queued")
+      .eq("user_id", user.id);
 
     return new Response(
       JSON.stringify({
