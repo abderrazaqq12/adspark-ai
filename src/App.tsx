@@ -11,6 +11,7 @@ import Projects from "./pages/Projects";
 import SceneBuilder from "./pages/SceneBuilder";
 import Engines from "./pages/Engines";
 import Settings from "./pages/Settings";
+import Videos from "./pages/Videos";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -31,6 +32,7 @@ const App = () => (
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/create" element={<CreateVideo />} />
                   <Route path="/projects" element={<Projects />} />
+                  <Route path="/videos" element={<Videos />} />
                   <Route path="/scene-builder" element={<SceneBuilder />} />
                   <Route path="/engines" element={<Engines />} />
                   <Route path="/settings" element={<Settings />} />
