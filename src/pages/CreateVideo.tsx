@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,7 +18,8 @@ import {
   Circle,
   ChevronRight,
   Palette,
-  Globe
+  Globe,
+  Save
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -42,7 +43,62 @@ export default function CreateVideo() {
   const [targetLanguage, setTargetLanguage] = useState("ar");
   const [currentStage, setCurrentStage] = useState(1);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [scenes, setScenes] = useState<any[]>([]);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [scriptId, setScriptId] = useState<string | null>(null);
+
+  // Load existing project if user has one
+  useEffect(() => {
+    loadLatestProject();
+  }, []);
+
+  const loadLatestProject = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: projects } = await supabase
+      .from("projects")
+      .select("id, name")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (projects && projects.length > 0) {
+      setProjectId(projects[0].id);
+      
+      // Load script for this project
+      const { data: scripts } = await supabase
+        .from("scripts")
+        .select("id, raw_text")
+        .eq("project_id", projects[0].id)
+        .limit(1);
+
+      if (scripts && scripts.length > 0) {
+        setScriptId(scripts[0].id);
+        if (scripts[0].raw_text) {
+          setScript(scripts[0].raw_text);
+        }
+        
+        // Load scenes
+        const { data: scenesData } = await supabase
+          .from("scenes")
+          .select("*")
+          .eq("script_id", scripts[0].id)
+          .order("index");
+
+        if (scenesData && scenesData.length > 0) {
+          setScenes(scenesData.map(s => ({
+            title: `Scene ${s.index + 1}`,
+            description: s.text,
+            duration: s.duration_sec,
+            visualPrompt: s.visual_prompt,
+          })));
+          setCurrentStage(2);
+        }
+      }
+    }
+  };
 
   const handleAnalyzeScript = async () => {
     if (!script.trim()) {
@@ -59,12 +115,96 @@ export default function CreateVideo() {
       if (error) throw error;
 
       setScenes(data.scenes || []);
+      setCurrentStage(2);
       toast.success("Script analyzed successfully!");
     } catch (error: any) {
       console.error("Error analyzing script:", error);
       toast.error(error.message || "Failed to analyze script");
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const saveProjectAndScenes = async () => {
+    setIsSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Please sign in to save");
+        return;
+      }
+
+      let currentProjectId = projectId;
+      let currentScriptId = scriptId;
+
+      // Create project if needed
+      if (!currentProjectId) {
+        const { data: project, error: projectError } = await supabase
+          .from("projects")
+          .insert({
+            user_id: user.id,
+            name: `Video Project ${new Date().toLocaleDateString()}`,
+            language: targetLanguage,
+            status: "draft",
+          })
+          .select()
+          .single();
+
+        if (projectError) throw projectError;
+        currentProjectId = project.id;
+        setProjectId(project.id);
+      }
+
+      // Create or update script
+      if (!currentScriptId) {
+        const { data: scriptData, error: scriptError } = await supabase
+          .from("scripts")
+          .insert({
+            project_id: currentProjectId,
+            raw_text: script,
+            hooks: hooks.split(",").map(h => h.trim()).filter(Boolean),
+            language: targetLanguage,
+            status: "analyzed",
+          })
+          .select()
+          .single();
+
+        if (scriptError) throw scriptError;
+        currentScriptId = scriptData.id;
+        setScriptId(scriptData.id);
+      } else {
+        await supabase
+          .from("scripts")
+          .update({ raw_text: script })
+          .eq("id", currentScriptId);
+      }
+
+      // Delete existing scenes for this script
+      await supabase.from("scenes").delete().eq("script_id", currentScriptId);
+
+      // Insert new scenes
+      const scenesToInsert = scenes.map((scene, index) => ({
+        script_id: currentScriptId,
+        index,
+        text: scene.description || scene.title,
+        scene_type: "broll",
+        visual_prompt: scene.visualPrompt || null,
+        duration_sec: scene.duration || 5,
+        status: "pending",
+      }));
+
+      const { error: scenesError } = await supabase
+        .from("scenes")
+        .insert(scenesToInsert);
+
+      if (scenesError) throw scenesError;
+
+      toast.success("Project and scenes saved!");
+    } catch (error: any) {
+      console.error("Error saving:", error);
+      toast.error(error.message || "Failed to save project");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -286,12 +426,36 @@ Tip: Keep sentences short (under 15 words) for better voice-over. ~60 words = 30
 
       {scenes.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Batch Generation */}
-          <BatchGeneration 
-            scriptId="temp-script-id" 
-            scenesCount={scenes.length}
-            onComplete={() => toast.success("All videos generated!")}
-          />
+          {/* Save & Batch Generation */}
+          <div className="space-y-4">
+            {!scriptId && (
+              <Button
+                onClick={saveProjectAndScenes}
+                disabled={isSaving}
+                className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow"
+                size="lg"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Save Project & Scenes
+                  </>
+                )}
+              </Button>
+            )}
+            {scriptId && (
+              <BatchGeneration 
+                scriptId={scriptId} 
+                scenesCount={scenes.length}
+                onComplete={() => toast.success("All videos generated!")}
+              />
+            )}
+          </div>
 
           {/* Export Formats */}
           <Card className="bg-gradient-card border-border shadow-card">
