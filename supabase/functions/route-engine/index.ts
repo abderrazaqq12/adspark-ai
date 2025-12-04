@@ -20,11 +20,20 @@ interface Engine {
   supports_free_tier: boolean;
   priority_score: number;
   status: string;
+  cost_tier: string; // free, cheap, normal, expensive
 }
 
 interface UserSettings {
-  use_free_tier_only: boolean;
+  pricing_tier: string; // free, cheap, normal, expensive
 }
+
+// Define which cost tiers are allowed for each pricing tier
+const TIER_MAPPINGS: Record<string, string[]> = {
+  free: ['free'],
+  cheap: ['free', 'cheap'],
+  normal: ['free', 'cheap', 'normal'],
+  expensive: ['free', 'cheap', 'normal', 'expensive'],
+};
 
 function routeScene(
   scene: Scene,
@@ -33,14 +42,18 @@ function routeScene(
 ): Engine | null {
   const { scene_type, visual_prompt } = scene;
   const lowercasePrompt = visual_prompt?.toLowerCase() || '';
+  const pricingTier = userSettings.pricing_tier || 'normal';
 
-  // Filter active engines
-  let availableEngines = engines.filter(e => e.status === 'active');
+  // Get allowed cost tiers based on user's pricing tier
+  const allowedTiers = TIER_MAPPINGS[pricingTier] || TIER_MAPPINGS.normal;
 
-  // Apply free tier filter if needed
-  if (userSettings.use_free_tier_only) {
-    availableEngines = availableEngines.filter(e => e.supports_free_tier);
-  }
+  // Filter active engines and apply pricing tier filter
+  let availableEngines = engines.filter(e => 
+    e.status === 'active' && allowedTiers.includes(e.cost_tier || 'normal')
+  );
+
+  console.log(`[route-engine] User pricing tier: ${pricingTier}, allowed tiers: ${allowedTiers.join(', ')}`);
+  console.log(`[route-engine] Available engines after tier filter: ${availableEngines.map(e => e.name).join(', ')}`);
 
   // 1. Avatar/Talking Head scenes
   if (scene_type === 'avatar' || scene_type === 'testimonial' || 
@@ -64,7 +77,7 @@ function routeScene(
     }
   }
 
-  // 3. High complexity / cinematic scenes
+  // 3. High complexity / cinematic scenes - prioritize premium if available in tier
   if (scene_type === 'hook' || 
       lowercasePrompt.includes('cinematic') ||
       lowercasePrompt.includes('dramatic') ||
@@ -77,26 +90,26 @@ function routeScene(
     }
   }
 
-  // 4. Fast social / simple UGC
+  // 4. Fast social / simple UGC - prefer cheaper options
   if (scene_type === 'broll' || 
       scene_type === 'transition' ||
       lowercasePrompt.includes('simple') ||
       lowercasePrompt.includes('quick')) {
     const fastEngines = availableEngines.filter(e => 
-      e.type === 'text_to_video' && e.supports_free_tier
+      e.type === 'text_to_video' && (e.cost_tier === 'free' || e.cost_tier === 'cheap')
     );
     if (fastEngines.length > 0) {
       return fastEngines.sort((a, b) => b.priority_score - a.priority_score)[0];
     }
   }
 
-  // 5. Default: best available text_to_video engine
+  // 5. Default: best available text_to_video engine within tier
   const textToVideoEngines = availableEngines.filter(e => e.type === 'text_to_video');
   if (textToVideoEngines.length > 0) {
     return textToVideoEngines.sort((a, b) => b.priority_score - a.priority_score)[0];
   }
 
-  // Fallback to any available engine
+  // Fallback to any available engine within tier
   return availableEngines.sort((a, b) => b.priority_score - a.priority_score)[0] || null;
 }
 
@@ -133,7 +146,7 @@ serve(async (req) => {
 
     const { sceneIds } = await req.json();
 
-    // Get all engines
+    // Get all active engines
     const { data: engines } = await supabase
       .from('ai_engines')
       .select('*')
@@ -147,8 +160,10 @@ serve(async (req) => {
       .maybeSingle();
 
     const settings: UserSettings = {
-      use_free_tier_only: userSettings?.use_free_tier_only || false
+      pricing_tier: userSettings?.pricing_tier || 'normal'
     };
+
+    console.log(`[route-engine] User settings - pricing_tier: ${settings.pricing_tier}`);
 
     // Get scenes
     const { data: scenes } = await supabase
@@ -170,9 +185,12 @@ serve(async (req) => {
         scene_id: scene.id,
         engine_id: engine?.id || null,
         engine_name: engine?.name || 'Unknown',
-        engine_type: engine?.type || 'text_to_video'
+        engine_type: engine?.type || 'text_to_video',
+        cost_tier: engine?.cost_tier || 'normal'
       };
     });
+
+    console.log(`[route-engine] Routing results:`, routingResults);
 
     // Update scenes with routed engines
     for (const result of routingResults) {
@@ -187,6 +205,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ 
       success: true, 
+      pricing_tier: settings.pricing_tier,
       routing: routingResults
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
