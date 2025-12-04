@@ -351,12 +351,41 @@ Deno.serve(async (req) => {
 
       // ============ SCENE OPERATIONS ============
       case 'get_scenes': {
+        // SECURITY: Require userId for ownership verification
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'userId is required for this action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         const { scriptId } = data as { scriptId: string }
         
         if (!scriptId || !isValidUUID(scriptId)) {
           return new Response(
             JSON.stringify({ error: 'Invalid scriptId' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
+        // SECURITY: Verify user owns the script through project chain
+        const { data: scriptCheck, error: scriptCheckError } = await supabase
+          .from('scripts')
+          .select('id, projects!inner(user_id)')
+          .eq('id', scriptId)
+          .single()
+        
+        if (scriptCheckError || !scriptCheck) {
+          return new Response(
+            JSON.stringify({ error: 'Script not found' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
+        const scriptData = scriptCheck as unknown as { id: string; projects: { user_id: string } }
+        if (scriptData.projects?.user_id !== userId) {
+          return new Response(
+            JSON.stringify({ error: 'Access denied' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
         
@@ -372,6 +401,13 @@ Deno.serve(async (req) => {
       }
 
       case 'create_scene': {
+        // SECURITY: Require userId for ownership verification
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'userId is required for this action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         const { scriptId, text, visual_prompt, scene_type, index, duration_sec, engine_id } = data as {
           scriptId: string
           text: string
@@ -393,6 +429,28 @@ Deno.serve(async (req) => {
           return new Response(
             JSON.stringify({ error: 'Invalid engine_id' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
+        // SECURITY: Verify user owns the script through project chain
+        const { data: scriptCheck, error: scriptCheckError } = await supabase
+          .from('scripts')
+          .select('id, projects!inner(user_id)')
+          .eq('id', scriptId)
+          .single()
+        
+        if (scriptCheckError || !scriptCheck) {
+          return new Response(
+            JSON.stringify({ error: 'Script not found' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
+        const scriptData = scriptCheck as unknown as { id: string; projects: { user_id: string } }
+        if (scriptData.projects?.user_id !== userId) {
+          return new Response(
+            JSON.stringify({ error: 'Access denied' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
         
@@ -634,6 +692,13 @@ Deno.serve(async (req) => {
 
       // ============ VIDEO OUTPUTS ============
       case 'get_video_outputs': {
+        // SECURITY: Require userId for ownership verification
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'userId is required for this action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         const { projectId, scriptId } = data as { projectId?: string; scriptId?: string }
         
         if (projectId && !isValidUUID(projectId)) {
@@ -649,9 +714,31 @@ Deno.serve(async (req) => {
           )
         }
         
-        let query = supabase.from('video_outputs').select('*')
+        // SECURITY: Must have projectId to verify ownership
+        if (!projectId) {
+          return new Response(
+            JSON.stringify({ error: 'projectId is required for this action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         
-        if (projectId) query = query.eq('project_id', projectId)
+        // SECURITY: Verify user owns the project
+        const { data: projectCheck, error: projectCheckError } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('id', projectId)
+          .eq('user_id', userId)
+          .single()
+        
+        if (projectCheckError || !projectCheck) {
+          return new Response(
+            JSON.stringify({ error: 'Project not found or access denied' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
+        let query = supabase.from('video_outputs').select('*').eq('project_id', projectId)
+        
         if (scriptId) query = query.eq('script_id', scriptId)
         
         const { data: outputs, error } = await query.order('created_at', { ascending: false }).limit(100)
