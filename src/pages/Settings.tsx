@@ -39,13 +39,94 @@ interface APIKeyConfig {
   placeholder: string;
 }
 
-const API_KEY_CONFIGS: APIKeyConfig[] = [
-  { key: "OPENAI_API_KEY", label: "OpenAI API Key", description: "For ChatGPT AI Assistant", placeholder: "sk-..." },
-  { key: "GEMINI_API_KEY", label: "Google Gemini API Key", description: "For Gemini AI Assistant", placeholder: "AIza..." },
-  { key: "RUNWAY_API_KEY", label: "Runway API Key", description: "For Runway Gen-3 video generation", placeholder: "rw_..." },
-  { key: "HEYGEN_API_KEY", label: "HeyGen API Key", description: "For avatar video generation", placeholder: "" },
-  { key: "PIKA_API_KEY", label: "Pika Labs API Key", description: "For creative video generation", placeholder: "" },
-  { key: "ELEVENLABS_API_KEY", label: "ElevenLabs API Key", description: "For voice generation", placeholder: "" },
+interface APIKeyCategory {
+  name: string;
+  keys: APIKeyConfig[];
+}
+
+const API_KEY_CATEGORIES: APIKeyCategory[] = [
+  {
+    name: "AI Assistants",
+    keys: [
+      { key: "OPENAI_API_KEY", label: "OpenAI API Key", description: "For ChatGPT AI Assistant", placeholder: "sk-..." },
+      { key: "GEMINI_API_KEY", label: "Google Gemini API Key", description: "For Gemini AI Assistant", placeholder: "AIza..." },
+    ]
+  },
+  {
+    name: "Text-to-Video Engines",
+    keys: [
+      { key: "RUNWAY_API_KEY", label: "Runway API Key", description: "High-quality cinematic video generation", placeholder: "rw_..." },
+      { key: "PIKA_API_KEY", label: "Pika Labs API Key", description: "Creative & animated video generation", placeholder: "" },
+      { key: "HAILUO_API_KEY", label: "Hailuo AI API Key", description: "Fast video generation with realistic motion", placeholder: "" },
+      { key: "KLING_API_KEY", label: "Kling AI API Key", description: "High-quality AI video with long duration", placeholder: "" },
+      { key: "VIDU_API_KEY", label: "Vidu API Key", description: "Text-to-video with character consistency", placeholder: "" },
+      { key: "LTX_API_KEY", label: "LTX Studio API Key", description: "AI filmmaking and video creation", placeholder: "" },
+      { key: "WAN_API_KEY", label: "Wan Video API Key", description: "Fast text-to-video generation", placeholder: "" },
+      { key: "SKYREELS_API_KEY", label: "SkyReels API Key", description: "Cinematic video generation", placeholder: "" },
+      { key: "SEEDANCE_API_KEY", label: "Seedance API Key", description: "Dance & motion video generation", placeholder: "" },
+      { key: "HIGGSFIELD_API_KEY", label: "Higgsfield API Key", description: "Personalized AI video creation", placeholder: "" },
+    ]
+  },
+  {
+    name: "Avatar & UGC Engines",
+    keys: [
+      { key: "HEYGEN_API_KEY", label: "HeyGen API Key", description: "Professional avatar video generation", placeholder: "" },
+      { key: "ELAI_API_KEY", label: "Elai.io API Key", description: "AI avatar video from text", placeholder: "" },
+      { key: "ARCADS_API_KEY", label: "Arcads API Key", description: "UGC-style ad video generation", placeholder: "" },
+      { key: "CREATIFY_API_KEY", label: "Creatify API Key", description: "AI-powered ad creative generation", placeholder: "" },
+      { key: "JOGG_API_KEY", label: "Jogg AI API Key", description: "AI avatar marketing videos", placeholder: "" },
+      { key: "TWINADS_API_KEY", label: "TwinAds API Key", description: "AI twin avatar ads", placeholder: "" },
+      { key: "VIDNOZ_API_KEY", label: "Vidnoz API Key", description: "AI avatar video maker", placeholder: "" },
+      { key: "CELEBIFY_API_KEY", label: "CelebifyAI API Key", description: "Celebrity-style avatar videos", placeholder: "" },
+      { key: "OMNIHUMAN_API_KEY", label: "OmniHuman API Key", description: "Realistic human avatar generation", placeholder: "" },
+      { key: "HEDRA_API_KEY", label: "Hedra API Key", description: "AI character video generation", placeholder: "" },
+    ]
+  },
+  {
+    name: "Image-to-Video Engines",
+    keys: [
+      { key: "LEONARDO_API_KEY", label: "Leonardo AI API Key", description: "Image generation & animation", placeholder: "" },
+      { key: "FAL_API_KEY", label: "Fal AI API Key", description: "Fast image-to-video generation", placeholder: "" },
+      { key: "FLUX_API_KEY", label: "Flux AI API Key", description: "Image-to-video transformation", placeholder: "" },
+      { key: "FLORAFAUNA_API_KEY", label: "Flora Fauna API Key", description: "Product image animation", placeholder: "" },
+    ]
+  },
+  {
+    name: "Template & Editing Engines",
+    keys: [
+      { key: "PICTORY_API_KEY", label: "Pictory API Key", description: "Script to video with templates", placeholder: "" },
+      { key: "QUSO_API_KEY", label: "Quso AI API Key", description: "Social media video automation", placeholder: "" },
+      { key: "TOPVIEW_API_KEY", label: "TopView API Key", description: "AI video ads from URLs", placeholder: "" },
+      { key: "FLEXCLIP_API_KEY", label: "FlexClip API Key", description: "Template-based video editor", placeholder: "" },
+      { key: "FLIKI_API_KEY", label: "Fliki API Key", description: "Text to video with voiceover", placeholder: "" },
+      { key: "INVIDEO_API_KEY", label: "InVideo API Key", description: "AI video creation platform", placeholder: "" },
+      { key: "CREATOMATE_API_KEY", label: "Creatomate API Key", description: "Video automation API", placeholder: "" },
+      { key: "JSON2VIDEO_API_KEY", label: "JSON2Video API Key", description: "Programmatic video generation", placeholder: "" },
+      { key: "SHOTSTACK_API_KEY", label: "Shotstack API Key", description: "Cloud video editing API", placeholder: "" },
+      { key: "WISECUT_API_KEY", label: "Wisecut API Key", description: "AI video editing automation", placeholder: "" },
+      { key: "ZEBRACAT_API_KEY", label: "Zebracat API Key", description: "AI marketing video creator", placeholder: "" },
+      { key: "OPUS_API_KEY", label: "Opus Pro API Key", description: "Long-form to short-form clips", placeholder: "" },
+      { key: "CAPTIONS_API_KEY", label: "Captions AI API Key", description: "AI captions & video editing", placeholder: "" },
+      { key: "NIM_API_KEY", label: "Nim Video API Key", description: "AI video summarization", placeholder: "" },
+      { key: "SCADE_API_KEY", label: "Scade Pro API Key", description: "AI workflow automation", placeholder: "" },
+      { key: "CRAYO_API_KEY", label: "Crayo AI API Key", description: "Short-form video automation", placeholder: "" },
+    ]
+  },
+  {
+    name: "Voice & Audio",
+    keys: [
+      { key: "ELEVENLABS_API_KEY", label: "ElevenLabs API Key", description: "High-quality voice synthesis", placeholder: "" },
+      { key: "FLAIR_API_KEY", label: "Flair AI API Key", description: "AI voiceover generation", placeholder: "" },
+    ]
+  },
+  {
+    name: "AI Platforms",
+    keys: [
+      { key: "HUGGINGFACE_API_KEY", label: "Hugging Face API Key", description: "Open-source AI models", placeholder: "hf_..." },
+      { key: "LIVGEN_API_KEY", label: "LivGen API Key", description: "Live AI video generation", placeholder: "" },
+      { key: "AIVIDEO_API_KEY", label: "AI Video API Key", description: "General AI video platform", placeholder: "" },
+    ]
+  },
 ];
 
 const N8N_WEBHOOK_URL = "https://bedeukijnixeihjepbjg.supabase.co/functions/v1/n8n-webhook";
@@ -341,63 +422,17 @@ export default function Settings() {
                 API Keys Management
               </CardTitle>
               <CardDescription className="text-muted-foreground">
-                Connect your own API keys to use premium AI services. Keys are encrypted and stored securely.
+                Connect your own API keys to use premium AI video services. Keys are encrypted and stored securely.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {API_KEY_CONFIGS.map((config) => (
-                <div key={config.key} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-foreground">{config.label}</Label>
-                    {apiKeys[config.key] && (
-                      <Badge variant="outline" className="text-green-500 border-green-500">
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Connected
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{config.description}</p>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Input
-                        type={showKeys[config.key] ? "text" : "password"}
-                        placeholder={config.placeholder || "Enter API key..."}
-                        value={apiKeys[config.key] || ""}
-                        onChange={(e) => setApiKeys({ ...apiKeys, [config.key]: e.target.value })}
-                        className="pr-10"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-full"
-                        onClick={() => toggleKeyVisibility(config.key)}
-                      >
-                        {showKeys[config.key] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </Button>
-                    </div>
-                    {apiKeys[config.key] && (
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => setApiKeys({ ...apiKeys, [config.key]: "" })}
-                        className="text-destructive"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              <Separator className="bg-border" />
-
-              <div className="p-4 bg-muted/30 rounded-lg">
+              <div className="p-4 bg-muted/30 rounded-lg mb-4">
                 <h4 className="font-medium text-foreground flex items-center gap-2 mb-2">
                   <Bot className="w-4 h-4 text-primary" />
                   AI Assistant Access
                 </h4>
                 <p className="text-sm text-muted-foreground mb-3">
-                  With API keys configured, you can use the AI Assistant in the Create Video page with:
+                  With API keys configured, you can use the AI Assistant in the Create Video page:
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="secondary">Lovable AI (Free)</Badge>
@@ -408,13 +443,70 @@ export default function Settings() {
                 </div>
               </div>
 
+              {API_KEY_CATEGORIES.map((category) => (
+                <div key={category.name} className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-foreground">{category.name}</h3>
+                    <Badge variant="outline" className="text-xs">
+                      {category.keys.filter(k => apiKeys[k.key]).length}/{category.keys.length} connected
+                    </Badge>
+                  </div>
+                  <div className="grid gap-3">
+                    {category.keys.map((config) => (
+                      <div key={config.key} className="p-3 bg-muted/20 rounded-lg space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-foreground font-medium">{config.label}</Label>
+                          {apiKeys[config.key] && (
+                            <Badge variant="outline" className="text-green-500 border-green-500 text-xs">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Connected
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{config.description}</p>
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <Input
+                              type={showKeys[config.key] ? "text" : "password"}
+                              placeholder={config.placeholder || "Enter API key..."}
+                              value={apiKeys[config.key] || ""}
+                              onChange={(e) => setApiKeys({ ...apiKeys, [config.key]: e.target.value })}
+                              className="pr-10 h-9 text-sm"
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="absolute right-0 top-0 h-full w-9"
+                              onClick={() => toggleKeyVisibility(config.key)}
+                            >
+                              {showKeys[config.key] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                            </Button>
+                          </div>
+                          {apiKeys[config.key] && (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-9 w-9"
+                              onClick={() => setApiKeys({ ...apiKeys, [config.key]: "" })}
+                            >
+                              <Trash2 className="w-3 h-3 text-destructive" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <Separator className="bg-border" />
+                </div>
+              ))}
+
               <Button 
                 onClick={handleSaveApiKeys} 
                 disabled={savingKeys}
                 className="w-full bg-gradient-primary text-primary-foreground shadow-glow"
               >
                 {savingKeys ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                Save API Keys
+                Save All API Keys
               </Button>
             </CardContent>
           </Card>
