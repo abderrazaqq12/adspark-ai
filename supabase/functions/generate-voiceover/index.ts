@@ -14,7 +14,7 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY');
+    const elevenLabsKey = Deno.env.get('ElevenLabs');
     
     const supabase = createClient(supabaseUrl, supabaseKey);
 
