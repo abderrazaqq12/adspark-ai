@@ -19,12 +19,16 @@ import {
   Video,
   Loader2,
   Save,
-  Sparkles
+  Sparkles,
+  Download,
+  Eye
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import ExportVideoModal from "@/components/ExportVideoModal";
+import VideoPreviewPlayer from "@/components/VideoPreviewPlayer";
 
 interface Scene {
   id: string;
@@ -56,6 +60,9 @@ export default function SceneBuilder() {
   const [saving, setSaving] = useState(false);
   const [generatingScene, setGeneratingScene] = useState<string | null>(null);
   const [editingScene, setEditingScene] = useState<string | null>(null);
+  const [scriptId, setScriptId] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [previewScene, setPreviewScene] = useState<Scene | null>(null);
 
   useEffect(() => {
     fetchEngines();
@@ -84,6 +91,7 @@ export default function SceneBuilder() {
         .single();
 
       if (scripts) {
+        setScriptId(scripts.id);
         const { data: scenesData, error } = await supabase
           .from("scenes")
           .select("*")
@@ -273,6 +281,15 @@ export default function SceneBuilder() {
             <Plus className="w-4 h-4 mr-2" />
             Add Scene
           </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => setExportOpen(true)}
+            disabled={scenes.length === 0 || !scriptId}
+            className="border-border"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export Video
+          </Button>
           <Button className="bg-gradient-primary text-primary-foreground shadow-glow">
             <Sparkles className="w-4 h-4 mr-2" />
             Generate All Videos
@@ -341,13 +358,20 @@ export default function SceneBuilder() {
                   </div>
 
                   {/* Video Preview */}
-                  <div className="w-40 h-24 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                  <div className="w-40 h-24 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0 relative group">
                     {scene.video_url ? (
-                      <video 
-                        src={scene.video_url} 
-                        className="w-full h-full object-cover"
-                        controls
-                      />
+                      <>
+                        <video 
+                          src={scene.video_url} 
+                          className="w-full h-full object-cover"
+                        />
+                        <div 
+                          className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
+                          onClick={() => setPreviewScene(scene)}
+                        >
+                          <Eye className="w-6 h-6 text-white" />
+                        </div>
+                      </>
                     ) : (
                       <Video className="w-8 h-8 text-muted-foreground" />
                     )}
@@ -471,6 +495,34 @@ export default function SceneBuilder() {
             </Card>
           ))}
         </div>
+      )}
+
+      {/* Export Video Modal */}
+      {scriptId && (
+        <ExportVideoModal
+          open={exportOpen}
+          onOpenChange={setExportOpen}
+          scriptId={scriptId}
+          projectId={projectId || undefined}
+          scenesCount={scenes.length}
+        />
+      )}
+
+      {/* Video Preview Player */}
+      {previewScene && previewScene.video_url && (
+        <VideoPreviewPlayer
+          open={!!previewScene}
+          onOpenChange={(open) => !open && setPreviewScene(null)}
+          videoUrl={previewScene.video_url}
+          title={previewScene.text}
+          sceneIndex={previewScene.index}
+          engineName={previewScene.engine_name || undefined}
+          onDownload={() => {
+            if (previewScene.video_url) {
+              window.open(previewScene.video_url, '_blank');
+            }
+          }}
+        />
       )}
     </div>
   );
