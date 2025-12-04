@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import { sceneRouting, videoModels, avatarModels, voiceModels } from "@/data/aiModels";
 import CostEstimator from "@/components/CostEstimator";
 import EngineRecommendationWizard from "@/components/EngineRecommendationWizard";
+import TierComparisonTable from "@/components/TierComparisonTable";
 
 interface AIEngine {
   id: string;
@@ -438,6 +439,9 @@ export default function Engines() {
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* Tier Comparison */}
+      <TierComparisonTable />
 
       {/* Cost Estimator */}
       <CostEstimator />
