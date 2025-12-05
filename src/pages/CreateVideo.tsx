@@ -38,6 +38,8 @@ import VoicePreview from "@/components/VoicePreview";
 import { VideoUploadPreview, generateVideoId } from "@/components/VideoUploadPreview";
 import BatchAssembly from "@/components/BatchAssembly";
 import CostCalculatorPreview from "@/components/CostCalculatorPreview";
+import VideoTimelineEditor from "@/components/VideoTimelineEditor";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 // ElevenLabs voices - expanded list with categories
 const ELEVENLABS_VOICES = [
@@ -231,6 +233,9 @@ export default function CreateVideo() {
   
   // Cost & engine preferences
   const [freeEnginesOnly, setFreeEnginesOnly] = useState(true);
+  
+  // Timeline editor state
+  const [showTimelineEditor, setShowTimelineEditor] = useState(false);
 
   // Load existing project, voices, and templates
   useEffect(() => {
@@ -1645,7 +1650,17 @@ export default function CreateVideo() {
                   </div>
                 )}
 
-                <Button variant="outline" className="w-full">
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => {
+                    if (scenes.length === 0) {
+                      toast.error("No scenes available. Generate scenes first in Step 2.");
+                      return;
+                    }
+                    setShowTimelineEditor(true);
+                  }}
+                >
                   <Palette className="w-4 h-4 mr-2" />
                   Open Timeline Editor
                 </Button>
@@ -1771,6 +1786,43 @@ export default function CreateVideo() {
           }
         }}
       />
+
+      {/* Timeline Editor Dialog */}
+      <Dialog open={showTimelineEditor} onOpenChange={setShowTimelineEditor}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Palette className="w-5 h-5 text-primary" />
+              Timeline Editor
+            </DialogTitle>
+          </DialogHeader>
+          <VideoTimelineEditor 
+            scenes={scenes.map(s => ({
+              id: s.id,
+              index: s.index,
+              text: s.text,
+              scene_type: s.scene_type || null,
+              visual_prompt: s.visual_prompt || s.visualPrompt || null,
+              engine_name: s.engine_name || null,
+              engine_id: s.engine_id || null,
+              status: s.status || 'pending',
+              video_url: s.video_url || s.videoUrl || null,
+              duration_sec: s.duration_sec || s.duration || 5,
+              transition_type: s.transition_type || s.transitionType || 'cut',
+              transition_duration_ms: s.transition_duration_ms || s.transitionDuration || 500,
+            }))}
+            onScenesUpdate={(updatedScenes) => {
+              setScenes(updatedScenes.map(s => ({
+                ...s,
+                visual_prompt: s.visual_prompt,
+                transition_type: s.transition_type,
+                transition_duration_ms: s.transition_duration_ms,
+              })));
+              toast.success("Timeline updated!");
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
