@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { 
   Play, 
   Pause, 
@@ -14,7 +15,10 @@ import {
   Wand2,
   GripVertical,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Volume2,
+  VolumeX,
+  Maximize2
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -55,9 +59,36 @@ export default function VideoTimelineEditor({ scenes, onScenesUpdate }: VideoTim
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const totalDuration = scenes.reduce((acc, scene) => acc + scene.duration_sec, 0);
   const selectedScene = scenes.find(s => s.id === selectedSceneId);
+  
+  // Get the current scene based on currentTime
+  const getCurrentScene = () => {
+    let accTime = 0;
+    for (const scene of scenes) {
+      if (currentTime >= accTime && currentTime < accTime + scene.duration_sec) {
+        return scene;
+      }
+      accTime += scene.duration_sec;
+    }
+    return scenes[scenes.length - 1];
+  };
+  
+  const currentScene = getCurrentScene();
+
+  // Sync video with timeline scrubber
+  useEffect(() => {
+    if (videoRef.current && currentScene?.video_url) {
+      const sceneStart = getSceneStartTime(currentScene.index);
+      const videoTime = currentTime - sceneStart;
+      if (Math.abs(videoRef.current.currentTime - videoTime) > 0.5) {
+        videoRef.current.currentTime = Math.max(0, videoTime);
+      }
+    }
+  }, [currentTime, currentScene]);
 
   const getSceneStartTime = (index: number) => {
     return scenes.slice(0, index).reduce((acc, scene) => acc + scene.duration_sec, 0);
@@ -143,25 +174,114 @@ export default function VideoTimelineEditor({ scenes, onScenesUpdate }: VideoTim
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Playback Controls */}
-        <div className="flex items-center justify-center gap-4">
-          <Button variant="outline" size="icon" onClick={() => skipToScene("prev")}>
-            <SkipBack className="w-4 h-4" />
-          </Button>
-          <Button 
-            variant="outline" 
-            size="icon" 
-            className="w-12 h-12"
-            onClick={playPause}
-          >
-            {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-          </Button>
-          <Button variant="outline" size="icon" onClick={() => skipToScene("next")}>
-            <SkipForward className="w-4 h-4" />
-          </Button>
-          <div className="text-sm text-muted-foreground ml-4">
-            {Math.floor(currentTime / 60)}:{(currentTime % 60).toString().padStart(2, "0")} / {Math.floor(totalDuration / 60)}:{(totalDuration % 60).toString().padStart(2, "0")}
+        {/* Video Preview Panel */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
+                <Film className="w-4 h-4 text-primary" />
+                Preview
+              </h4>
+              <Badge variant="outline" className="text-xs">
+                Scene {currentScene ? currentScene.index + 1 : 1}
+              </Badge>
+            </div>
+            <AspectRatio ratio={16 / 9} className="bg-muted rounded-lg overflow-hidden border border-border">
+              {currentScene?.video_url ? (
+                <video
+                  ref={videoRef}
+                  src={currentScene.video_url}
+                  className="w-full h-full object-cover"
+                  muted={isMuted}
+                  playsInline
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground">
+                  <Film className="w-12 h-12 mb-2 opacity-50" />
+                  <p className="text-sm">No video for current scene</p>
+                  <p className="text-xs opacity-70">Generate videos in Step 3</p>
+                </div>
+              )}
+            </AspectRatio>
+            
+            {/* Video Controls */}
+            <div className="flex items-center justify-center gap-2">
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => skipToScene("prev")}>
+                <SkipBack className="w-4 h-4" />
+              </Button>
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-10 w-10"
+                onClick={() => {
+                  if (videoRef.current) {
+                    if (isPlaying) {
+                      videoRef.current.pause();
+                    } else {
+                      videoRef.current.play();
+                    }
+                  }
+                  playPause();
+                }}
+              >
+                {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+              </Button>
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => skipToScene("next")}>
+                <SkipForward className="w-4 h-4" />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 ml-2"
+                onClick={() => setIsMuted(!isMuted)}
+              >
+                {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              </Button>
+            </div>
           </div>
+
+          {/* Current Scene Info */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium text-foreground">Current Scene Details</h4>
+            {currentScene ? (
+              <div className="space-y-3 p-3 rounded-lg bg-muted/30 border border-border">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Transition</span>
+                  <Badge variant="secondary" className="text-xs">
+                    {currentScene.transition_type}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Duration</span>
+                  <span className="text-sm font-medium">{currentScene.duration_sec}s</span>
+                </div>
+                {currentScene.transition_type !== "cut" && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Transition Duration</span>
+                    <span className="text-sm font-medium">{currentScene.transition_duration_ms}ms</span>
+                  </div>
+                )}
+                <div className="pt-2 border-t border-border">
+                  <span className="text-xs text-muted-foreground">Script</span>
+                  <p className="text-sm text-foreground mt-1 line-clamp-3">
+                    {currentScene.text}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 rounded-lg bg-muted/30 border border-border text-center text-muted-foreground">
+                No scene selected
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Timeline Time Display */}
+        <div className="flex items-center justify-center text-sm text-muted-foreground">
+          <Clock className="w-4 h-4 mr-2" />
+          {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60).toString().padStart(2, "0")} / {Math.floor(totalDuration / 60)}:{Math.floor(totalDuration % 60).toString().padStart(2, "0")}
         </div>
 
         {/* Timeline Scrubber */}
