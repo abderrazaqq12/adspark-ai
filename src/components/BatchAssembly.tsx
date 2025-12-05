@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   Sparkles, 
   Loader2, 
@@ -9,7 +10,8 @@ import {
   XCircle, 
   Video,
   Clock,
-  Download
+  Download,
+  Info
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -150,14 +152,36 @@ export default function BatchAssembly({
     <div className="space-y-4">
       {/* Start Button */}
       {!isAssembling && jobs.length === 0 && (
-        <Button
-          className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground"
-          onClick={startBatchAssembly}
-          disabled={!scriptId || scenesCount === 0}
-        >
-          <Sparkles className="w-4 h-4 mr-2" />
-          Auto-Assemble All ({videosToGenerate} videos)
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="w-full">
+                <Button
+                  className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground"
+                  onClick={startBatchAssembly}
+                  disabled={!scriptId || scenesCount === 0}
+                >
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Auto-Assemble All ({videosToGenerate} videos)
+                  {(!scriptId || scenesCount === 0) && (
+                    <Info className="w-3 h-3 ml-2 opacity-70" />
+                  )}
+                </Button>
+              </div>
+            </TooltipTrigger>
+            {(!scriptId || scenesCount === 0) && (
+              <TooltipContent side="top" className="max-w-xs">
+                <p className="text-sm">
+                  {!scriptId 
+                    ? "Save your project first to enable assembly" 
+                    : scenesCount === 0 
+                    ? "Generate scenes in Step 2 before assembly"
+                    : "Ready to assemble"}
+                </p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
       )}
 
       {/* Progress Section */}
