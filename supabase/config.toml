@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.create-google-drive-folder]
 verify_jwt = false
+
+[functions.autopilot-generate]
+verify_jwt = false
