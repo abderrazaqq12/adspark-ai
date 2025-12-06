@@ -118,6 +118,77 @@ export type Database = {
           },
         ]
       }
+      autopilot_jobs: {
+        Row: {
+          completed_at: string | null
+          completed_videos: number | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          language: string | null
+          pricing_tier: string | null
+          product_description: string | null
+          product_image_url: string | null
+          product_name: string
+          progress: Json | null
+          project_id: string | null
+          scripts_count: number | null
+          started_at: string | null
+          status: string | null
+          total_videos: number | null
+          user_id: string
+          variations_per_scene: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          completed_videos?: number | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          language?: string | null
+          pricing_tier?: string | null
+          product_description?: string | null
+          product_image_url?: string | null
+          product_name: string
+          progress?: Json | null
+          project_id?: string | null
+          scripts_count?: number | null
+          started_at?: string | null
+          status?: string | null
+          total_videos?: number | null
+          user_id: string
+          variations_per_scene?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          completed_videos?: number | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          language?: string | null
+          pricing_tier?: string | null
+          product_description?: string | null
+          product_image_url?: string | null
+          product_name?: string
+          progress?: Json | null
+          project_id?: string | null
+          scripts_count?: number | null
+          started_at?: string | null
+          status?: string | null
+          total_videos?: number | null
+          user_id?: string
+          variations_per_scene?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "autopilot_jobs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       engine_usage_analytics: {
         Row: {
           cost_estimate: number | null
