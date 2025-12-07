@@ -1,4 +1,4 @@
-import { Home, Video, FileText, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, FlaskConical, LayoutTemplate, ChevronLeft, ChevronRight, Zap } from "lucide-react";
+import { Home, Video, FileText, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, FlaskConical, LayoutTemplate, ChevronLeft, ChevronRight, Zap, Layers } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,6 +22,7 @@ import {
 const navigationItems = [
   { title: "Dashboard", url: "/", icon: Home },
   { title: "Quick Generate", url: "/quick-generate", icon: Zap },
+  { title: "Studio", url: "/studio", icon: Layers },
   { title: "Create Video", url: "/create", icon: Video },
   { title: "My Projects", url: "/projects", icon: FolderOpen },
   { title: "Video Library", url: "/videos", icon: PlaySquare },

@@ -18,6 +18,7 @@ import ABTesting from "./pages/ABTesting";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import QuickGenerate from "./pages/QuickGenerate";
+import Studio from "./pages/Studio";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,7 @@ const App = () => (
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/create" element={<CreateVideo />} />
                   <Route path="/quick-generate" element={<QuickGenerate />} />
+                  <Route path="/studio" element={<Studio />} />
                   <Route path="/projects" element={<Projects />} />
                   <Route path="/videos" element={<Videos />} />
                   <Route path="/scene-builder" element={<SceneBuilder />} />
