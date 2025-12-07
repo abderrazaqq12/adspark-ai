@@ -703,6 +703,22 @@ export default function CreateVideo() {
         <div className="mb-6">
           <h2 className="text-lg font-semibold text-foreground">Pipeline</h2>
           <p className="text-xs text-muted-foreground">Production stages</p>
+          {/* Progress Indicator */}
+          <div className="mt-3 space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Progress</span>
+              <span className="font-medium text-primary">{Math.round((currentStage / (pipelineStages.length - 1)) * 100)}%</span>
+            </div>
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-gradient-primary transition-all duration-500 ease-out"
+                style={{ width: `${(currentStage / (pipelineStages.length - 1)) * 100}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              {currentStage} of {pipelineStages.length - 1} steps completed
+            </p>
+          </div>
         </div>
         <div className="flex flex-col gap-1">
           {pipelineStages.map((stage, index) => (
@@ -775,29 +791,64 @@ export default function CreateVideo() {
             }} />
           )}
 
-          {/* Stage 1: Studio Product Content */}
+          {/* Stage 1: Studio Product Content (Optional) */}
           {expandedStage === 1 && (
-            <StudioMarketingEngine onNext={() => {
-              setExpandedStage(2);
-              setCurrentStage(2);
-            }} />
+            <div className="space-y-4">
+              <StudioMarketingEngine onNext={() => {
+                setExpandedStage(2);
+                setCurrentStage(2);
+              }} />
+              <Button 
+                variant="ghost" 
+                className="w-full text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setExpandedStage(2);
+                  setCurrentStage(Math.max(currentStage, 2));
+                }}
+              >
+                Skip this step →
+              </Button>
+            </div>
           )}
 
-          {/* Stage 2: Studio Image Generation */}
+          {/* Stage 2: Studio Image Generation (Optional) */}
           {expandedStage === 2 && (
-            <StudioImageGeneration onNext={() => {
-              setExpandedStage(3);
-              setCurrentStage(3);
-            }} />
+            <div className="space-y-4">
+              <StudioImageGeneration onNext={() => {
+                setExpandedStage(3);
+                setCurrentStage(3);
+              }} />
+              <Button 
+                variant="ghost" 
+                className="w-full text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setExpandedStage(3);
+                  setCurrentStage(Math.max(currentStage, 3));
+                }}
+              >
+                Skip this step →
+              </Button>
+            </div>
           )}
 
-          {/* Stage 3: Studio Landing Page */}
+          {/* Stage 3: Studio Landing Page (Optional) */}
           {expandedStage === 3 && (
-            <StudioLandingPage onNext={() => {
-              // Skip to Scripts stage (stage 4) - Product Info was merged into stage 0
-              setExpandedStage(4);
-              setCurrentStage(4);
-            }} />
+            <div className="space-y-4">
+              <StudioLandingPage onNext={() => {
+                setExpandedStage(4);
+                setCurrentStage(4);
+              }} />
+              <Button 
+                variant="ghost" 
+                className="w-full text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setExpandedStage(4);
+                  setCurrentStage(Math.max(currentStage, 4));
+                }}
+              >
+                Skip this step →
+              </Button>
+            </div>
           )}
 
           {/* Stage 4: Video Script Text & Audio */}

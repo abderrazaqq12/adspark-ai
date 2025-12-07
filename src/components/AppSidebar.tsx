@@ -1,4 +1,4 @@
-import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Layers, Rocket, Building2, Database, Clapperboard } from "lucide-react";
+import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Building2, Database, Clapperboard } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,10 +18,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-// Main workflows - the three core user journeys
+// Main workflows - simplified to Agency Mode only
 const workflowItems = [
-  { title: "Quick Commerce", url: "/quick-commerce", icon: Rocket, description: "1-click video ads" },
-  { title: "Studio", url: "/studio", icon: Layers, description: "Advanced editing" },
   { title: "Agency Mode", url: "/agency", icon: Building2, description: "Batch generation" },
 ];
 
