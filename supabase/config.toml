@@ -59,3 +59,12 @@ verify_jwt = true
 
 [functions.smart-route-engine]
 verify_jwt = false
+
+[functions.ai-quality-check]
+verify_jwt = false
+
+[functions.ai-image-generator]
+verify_jwt = true
+
+[functions.ai-content-factory]
+verify_jwt = true
