@@ -55,7 +55,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.ai-operator]
-verify_jwt = false
+verify_jwt = true
 
 [functions.smart-route-engine]
 verify_jwt = false
