@@ -17,10 +17,13 @@ import Templates from "./pages/Templates";
 import ABTesting from "./pages/ABTesting";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
-import QuickGenerate from "./pages/QuickGenerate";
 import Studio from "./pages/Studio";
 import QuickCommerce from "./pages/QuickCommerce";
 import AgencyMode from "./pages/AgencyMode";
+import Images from "./pages/Images";
+import Scripts from "./pages/Scripts";
+import Voiceovers from "./pages/Voiceovers";
+import LandingPages from "./pages/LandingPages";
 
 const queryClient = new QueryClient();
 
@@ -38,12 +41,16 @@ const App = () => (
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/create" element={<CreateVideo />} />
-                  <Route path="/quick-generate" element={<QuickGenerate />} />
+                  <Route path="/quick-generate" element={<CreateVideo />} />
                   <Route path="/quick-commerce" element={<QuickCommerce />} />
                   <Route path="/agency" element={<AgencyMode />} />
                   <Route path="/studio" element={<Studio />} />
                   <Route path="/projects" element={<Projects />} />
                   <Route path="/videos" element={<Videos />} />
+                  <Route path="/images" element={<Images />} />
+                  <Route path="/scripts" element={<Scripts />} />
+                  <Route path="/voiceovers" element={<Voiceovers />} />
+                  <Route path="/landing-pages" element={<LandingPages />} />
                   <Route path="/scene-builder" element={<SceneBuilder />} />
                   <Route path="/engines" element={<Engines />} />
                   <Route path="/settings" element={<Settings />} />

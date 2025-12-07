@@ -1,4 +1,4 @@
-import { Home, Video, FileText, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, FlaskConical, LayoutTemplate, ChevronLeft, ChevronRight, Zap, Layers, Rocket, Building2, Wand2 } from "lucide-react";
+import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, FlaskConical, LayoutTemplate, ChevronLeft, ChevronRight, Layers, Rocket, Building2, Image, FileText, Mic, FileCode } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,7 +15,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarFooter,
-  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 
@@ -26,23 +25,25 @@ const workflowItems = [
   { title: "Agency Mode", url: "/agency", icon: Building2, description: "Batch generation" },
 ];
 
-// Quick access items
+// Quick access items - merged Quick Generate into Create Video
 const quickAccessItems = [
   { title: "Dashboard", url: "/", icon: Home },
-  { title: "Quick Generate", url: "/quick-generate", icon: Zap },
   { title: "Create Video", url: "/create", icon: Video },
 ];
 
-// Library items
+// Library items - expanded to show all asset types
 const libraryItems = [
   { title: "My Projects", url: "/projects", icon: FolderOpen },
-  { title: "Video Library", url: "/videos", icon: PlaySquare },
+  { title: "Videos", url: "/videos", icon: PlaySquare },
+  { title: "Images", url: "/images", icon: Image },
+  { title: "Scripts", url: "/scripts", icon: FileText },
+  { title: "Voiceovers", url: "/voiceovers", icon: Mic },
+  { title: "Landing Pages", url: "/landing-pages", icon: FileCode },
   { title: "Templates", url: "/templates", icon: LayoutTemplate },
 ];
 
 // Tools items
 const toolsItems = [
-  { title: "Scene Builder", url: "/scene-builder", icon: FileText },
   { title: "A/B Testing", url: "/ab-testing", icon: FlaskConical },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "AI Engines", url: "/engines", icon: Cpu },
@@ -72,8 +73,8 @@ export function AppSidebar() {
           </div>
           {open && (
             <div className="flex flex-col min-w-0">
-              <span className="font-bold text-base text-sidebar-foreground truncate">VideoAI</span>
-              <span className="text-[11px] text-muted-foreground truncate">Ad Generator</span>
+              <span className="font-bold text-base text-sidebar-foreground truncate">FlowScale</span>
+              <span className="text-[11px] text-muted-foreground truncate">Video AI Studio</span>
             </div>
           )}
         </div>
