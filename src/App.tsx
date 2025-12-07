@@ -16,8 +16,6 @@ import Analytics from "./pages/Analytics";
 import Templates from "./pages/Templates";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
-import Studio from "./pages/Studio";
-import QuickCommerce from "./pages/QuickCommerce";
 import AgencyMode from "./pages/AgencyMode";
 
 const queryClient = new QueryClient();
@@ -37,9 +35,7 @@ const App = () => (
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/create" element={<CreateVideo />} />
                   <Route path="/quick-generate" element={<CreateVideo />} />
-                  <Route path="/quick-commerce" element={<QuickCommerce />} />
                   <Route path="/agency" element={<AgencyMode />} />
-                  <Route path="/studio" element={<Studio />} />
                   <Route path="/projects" element={<Projects />} />
                   <Route path="/videos" element={<Videos />} />
                   <Route path="/scene-builder" element={<SceneBuilder />} />
