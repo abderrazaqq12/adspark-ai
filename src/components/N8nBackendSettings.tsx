@@ -20,7 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface N8nBackendSettingsProps {
-  userSettings: {
+  userSettings?: {
     use_n8n_backend?: boolean;
     ai_operator_enabled?: boolean;
     preferences?: {
@@ -28,10 +28,10 @@ interface N8nBackendSettingsProps {
       n8n_api_key?: string;
     };
   } | null;
-  onSettingsUpdate: () => void;
+  onSettingsUpdate?: () => void;
 }
 
-export default function N8nBackendSettings({ userSettings, onSettingsUpdate }: N8nBackendSettingsProps) {
+export default function N8nBackendSettings({ userSettings: propSettings, onSettingsUpdate }: N8nBackendSettingsProps) {
   const [useN8nBackend, setUseN8nBackend] = useState(false);
   const [aiOperatorEnabled, setAiOperatorEnabled] = useState(false);
   const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
@@ -39,13 +39,46 @@ export default function N8nBackendSettings({ userSettings, onSettingsUpdate }: N
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(!propSettings);
+  const [localSettings, setLocalSettings] = useState(propSettings);
+
+  // Fetch settings if not provided as props
+  useEffect(() => {
+    if (!propSettings) {
+      fetchSettings();
+    }
+  }, [propSettings]);
+
+  const fetchSettings = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('user_settings')
+        .select('use_n8n_backend, ai_operator_enabled, preferences')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (data) {
+        setLocalSettings(data as any);
+      }
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const userSettings = propSettings || localSettings;
 
   useEffect(() => {
     if (userSettings) {
       setUseN8nBackend(userSettings.use_n8n_backend || false);
       setAiOperatorEnabled(userSettings.ai_operator_enabled || false);
-      setN8nWebhookUrl(userSettings.preferences?.n8n_webhook_url || '');
-      setN8nApiKey(userSettings.preferences?.n8n_api_key || '');
+      const prefs = userSettings.preferences as { n8n_webhook_url?: string; n8n_api_key?: string } | undefined;
+      setN8nWebhookUrl(prefs?.n8n_webhook_url || '');
+      setN8nApiKey(prefs?.n8n_api_key || '');
     }
   }, [userSettings]);
 
@@ -107,7 +140,9 @@ export default function N8nBackendSettings({ userSettings, onSettingsUpdate }: N
       if (error) throw error;
 
       toast.success('Settings saved');
-      onSettingsUpdate();
+      onSettingsUpdate?.();
+      // Refresh local settings
+      await fetchSettings();
     } catch (error: any) {
       toast.error(error.message || 'Failed to save settings');
     } finally {
@@ -119,6 +154,14 @@ export default function N8nBackendSettings({ userSettings, onSettingsUpdate }: N
     navigator.clipboard.writeText('https://your-n8n-instance.app.n8n.cloud/webhook/flowscale');
     toast.success('Example URL copied');
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
