@@ -1430,7 +1430,18 @@ export default function CreateVideo() {
           )}
 
           {/* Stage 3: Video Generation */}
-          {expandedStage === 3 && (
+          {expandedStage === 3 && scriptId && (
+            <VideoGenerationStage 
+              scriptId={scriptId}
+              onComplete={() => {
+                setExpandedStage(4);
+                setCurrentStage(4);
+              }}
+            />
+          )}
+
+          {/* Stage 3 Fallback - Upload when no scriptId */}
+          {expandedStage === 3 && !scriptId && (
             <Card className="bg-gradient-card border-border shadow-card">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">

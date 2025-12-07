@@ -13,11 +13,13 @@ import {
   Plus,
   ArrowRight,
   Zap,
-  Activity
+  Activity,
+  Bot
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import GenerationDashboard from "@/components/GenerationDashboard";
+import AIOperatorDashboard from "@/components/AIOperatorDashboard";
 
 interface Stats {
   totalProjects: number;
@@ -226,7 +228,7 @@ export default function Dashboard() {
 
       {/* Generation Dashboard with Tabs */}
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-6">
+        <TabsList className="grid w-full grid-cols-3 mb-6">
           <TabsTrigger value="overview" className="flex items-center gap-2">
             <Sparkles className="w-4 h-4" />
             Overview
@@ -234,6 +236,10 @@ export default function Dashboard() {
           <TabsTrigger value="generation" className="flex items-center gap-2">
             <Activity className="w-4 h-4" />
             Generation Queue
+          </TabsTrigger>
+          <TabsTrigger value="operator" className="flex items-center gap-2">
+            <Bot className="w-4 h-4" />
+            AI Operator
           </TabsTrigger>
         </TabsList>
         
@@ -267,6 +273,10 @@ export default function Dashboard() {
         
         <TabsContent value="generation">
           <GenerationDashboard />
+        </TabsContent>
+        
+        <TabsContent value="operator">
+          <AIOperatorDashboard />
         </TabsContent>
       </Tabs>
     </div>
