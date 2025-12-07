@@ -2,85 +2,92 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Package, 
+  Lightbulb, 
+  Image,
+  Layout,
   Mic, 
-  Wand2, 
   Video, 
-  Palette, 
-  Globe,
+  Download,
   ChevronRight,
   CheckCircle2,
-  Circle,
   Settings,
   ArrowLeft
 } from 'lucide-react';
 import { StudioProductInput } from '@/components/studio/StudioProductInput';
-import { StudioAIProcessing } from '@/components/studio/StudioAIProcessing';
-import { StudioAssetBuilder } from '@/components/studio/StudioAssetBuilder';
+import { StudioMarketingEngine } from '@/components/studio/StudioMarketingEngine';
+import { StudioImageGeneration } from '@/components/studio/StudioImageGeneration';
+import { StudioLandingPage } from '@/components/studio/StudioLandingPage';
+import { StudioVoiceover } from '@/components/studio/StudioVoiceover';
+import { StudioVideoCreation } from '@/components/studio/StudioVideoCreation';
+import { StudioExport } from '@/components/studio/StudioExport';
 
-// Full pipeline stages from CreateVideo
+// 7-step pipeline
 const pipelineStages = [
-  { id: 0, name: "Product Info", icon: Package, description: "Product details for your video" },
-  { id: 1, name: "AI Orchestration", icon: Wand2, description: "Automated content generation pipeline" },
-  { id: 2, name: "Assets Preview", icon: Video, description: "Review and manage generated assets" },
+  { id: 0, key: 'product', name: "Product Input", icon: Package, description: "Product details & targeting" },
+  { id: 1, key: 'marketing', name: "Marketing Intelligence", icon: Lightbulb, description: "Angles, scripts & content" },
+  { id: 2, key: 'images', name: "Image Generation", icon: Image, description: "Product images & mockups" },
+  { id: 3, key: 'landing', name: "Landing Page", icon: Layout, description: "Sales page content" },
+  { id: 4, key: 'voiceover', name: "Voiceover", icon: Mic, description: "AI voice generation" },
+  { id: 5, key: 'video', name: "Video Creation", icon: Video, description: "Scene builder & generation" },
+  { id: 6, key: 'export', name: "Export", icon: Download, description: "Download & variations" },
 ];
 
-export type WorkflowLayer = 'input' | 'processing' | 'assets';
+export type StudioStep = 'product' | 'marketing' | 'images' | 'landing' | 'voiceover' | 'video' | 'export';
 
 const Studio = () => {
   const navigate = useNavigate();
-  const [activeLayer, setActiveLayer] = useState<WorkflowLayer>('input');
-  const [completedStages, setCompletedStages] = useState<number[]>([]);
+  const [activeStep, setActiveStep] = useState<StudioStep>('product');
+  const [completedSteps, setCompletedSteps] = useState<number[]>([]);
 
-  const getActiveStageIndex = () => {
-    switch (activeLayer) {
-      case 'input': return 0;
-      case 'processing': return 1;
-      case 'assets': return 2;
-      default: return 0;
+  const getActiveStepIndex = () => {
+    const stage = pipelineStages.find(s => s.key === activeStep);
+    return stage?.id || 0;
+  };
+
+  const handleStepComplete = (stepId: number) => {
+    if (!completedSteps.includes(stepId)) {
+      setCompletedSteps(prev => [...prev, stepId]);
     }
   };
 
-  const handleStageComplete = (stageId: number) => {
-    if (!completedStages.includes(stageId)) {
-      setCompletedStages(prev => [...prev, stageId]);
+  const handleNext = (currentStep: StudioStep) => {
+    const currentIndex = pipelineStages.findIndex(s => s.key === currentStep);
+    handleStepComplete(currentIndex);
+    
+    if (currentIndex < pipelineStages.length - 1) {
+      const nextStep = pipelineStages[currentIndex + 1];
+      setActiveStep(nextStep.key as StudioStep);
     }
   };
 
-  const handleNext = (currentLayer: WorkflowLayer) => {
-    switch (currentLayer) {
-      case 'input':
-        handleStageComplete(0);
-        setActiveLayer('processing');
-        break;
-      case 'processing':
-        handleStageComplete(1);
-        setActiveLayer('assets');
-        break;
-    }
+  const handleStepClick = (step: StudioStep) => {
+    setActiveStep(step);
   };
 
-  const handleLayerClick = (layer: WorkflowLayer) => {
-    setActiveLayer(layer);
-  };
-
-  const renderLayerContent = () => {
-    switch (activeLayer) {
-      case 'input':
-        return <StudioProductInput onNext={() => handleNext('input')} />;
-      case 'processing':
-        return <StudioAIProcessing onNext={() => handleNext('processing')} />;
-      case 'assets':
-        return <StudioAssetBuilder />;
+  const renderStepContent = () => {
+    switch (activeStep) {
+      case 'product':
+        return <StudioProductInput onNext={() => handleNext('product')} />;
+      case 'marketing':
+        return <StudioMarketingEngine onNext={() => handleNext('marketing')} />;
+      case 'images':
+        return <StudioImageGeneration onNext={() => handleNext('images')} />;
+      case 'landing':
+        return <StudioLandingPage onNext={() => handleNext('landing')} />;
+      case 'voiceover':
+        return <StudioVoiceover onNext={() => handleNext('voiceover')} />;
+      case 'video':
+        return <StudioVideoCreation onNext={() => handleNext('video')} />;
+      case 'export':
+        return <StudioExport />;
       default:
-        return <StudioProductInput onNext={() => handleNext('input')} />;
+        return <StudioProductInput onNext={() => handleNext('product')} />;
     }
   };
 
-  const activeIndex = getActiveStageIndex();
+  const activeIndex = getActiveStepIndex();
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -105,17 +112,16 @@ const Studio = () => {
         </div>
 
         {/* Pipeline Stages */}
-        <div className="flex-1 p-4 space-y-2">
-          {pipelineStages.map((stage, index) => {
-            const isActive = index === activeIndex;
-            const isCompleted = completedStages.includes(stage.id);
+        <div className="flex-1 p-3 space-y-1 overflow-y-auto">
+          {pipelineStages.map((stage) => {
+            const isActive = stage.id === activeIndex;
+            const isCompleted = completedSteps.includes(stage.id);
             const IconComponent = stage.icon;
-            const layerKey = index === 0 ? 'input' : index === 1 ? 'processing' : 'assets';
 
             return (
               <button
                 key={stage.id}
-                onClick={() => handleLayerClick(layerKey as WorkflowLayer)}
+                onClick={() => handleStepClick(stage.key as StudioStep)}
                 className={`w-full text-left p-3 rounded-lg transition-all duration-200 flex items-start gap-3 ${
                   isActive 
                     ? 'bg-primary/10 border border-primary/30 shadow-sm' 
@@ -124,7 +130,7 @@ const Studio = () => {
                     : 'bg-muted/30 border border-transparent hover:bg-muted/50'
                 }`}
               >
-                <div className={`p-2 rounded-lg ${
+                <div className={`p-2 rounded-lg flex-shrink-0 ${
                   isActive 
                     ? 'bg-primary/20' 
                     : isCompleted 
@@ -152,7 +158,7 @@ const Studio = () => {
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5 truncate">{stage.description}</p>
                 </div>
-                {isActive && <ChevronRight className="w-4 h-4 text-primary mt-1" />}
+                {isActive && <ChevronRight className="w-4 h-4 text-primary mt-1 flex-shrink-0" />}
               </button>
             );
           })}
@@ -164,13 +170,13 @@ const Studio = () => {
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground">Progress</span>
               <span className="text-xs font-medium text-foreground">
-                {completedStages.length}/{pipelineStages.length}
+                {completedSteps.length}/{pipelineStages.length}
               </span>
             </div>
             <div className="h-1.5 bg-muted rounded-full overflow-hidden">
               <div 
                 className="h-full bg-primary rounded-full transition-all duration-300"
-                style={{ width: `${(completedStages.length / pipelineStages.length) * 100}%` }}
+                style={{ width: `${(completedSteps.length / pipelineStages.length) * 100}%` }}
               />
             </div>
           </div>
@@ -191,8 +197,8 @@ const Studio = () => {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
-        <div className="p-8">
-          {renderLayerContent()}
+        <div className="p-8 max-w-6xl mx-auto">
+          {renderStepContent()}
         </div>
       </main>
     </div>

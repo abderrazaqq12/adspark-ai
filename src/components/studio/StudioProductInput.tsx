@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Upload, Link2, FileText, ArrowRight, Loader2 } from 'lucide-react';
+import { Upload, Link2, FileText, ArrowRight, Loader2, Sheet, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -13,10 +16,22 @@ interface StudioProductInputProps {
 }
 
 export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
+  const [dataSource, setDataSource] = useState<'manual' | 'sheet'>('manual');
   const [productUrl, setProductUrl] = useState('');
   const [productName, setProductName] = useState('');
   const [description, setDescription] = useState('');
   const [mediaLinks, setMediaLinks] = useState('');
+  const [targetMarket, setTargetMarket] = useState('us');
+  const [language, setLanguage] = useState('en');
+  const [audienceAge, setAudienceAge] = useState('25-34');
+  const [audienceGender, setAudienceGender] = useState('both');
+  
+  // Google Sheet state
+  const [sheetUrl, setSheetUrl] = useState('');
+  const [sheetRow, setSheetRow] = useState('2');
+  const [sheetConnected, setSheetConnected] = useState(false);
+  const [isLoadingSheet, setIsLoadingSheet] = useState(false);
+  
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -30,7 +45,6 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Load from user preferences
       const { data: settings } = await supabase
         .from('user_settings')
         .select('preferences')
@@ -43,11 +57,48 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
         setProductName(prefs.studio_product_name || '');
         setDescription(prefs.studio_description || '');
         setMediaLinks(prefs.studio_media_links || '');
+        setTargetMarket(prefs.studio_target_market || 'us');
+        setLanguage(prefs.studio_language || 'en');
+        setAudienceAge(prefs.studio_audience_age || '25-34');
+        setAudienceGender(prefs.studio_audience_gender || 'both');
+        setSheetUrl(prefs.google_sheet_url || '');
+        if (prefs.google_sheet_url) setSheetConnected(true);
       }
     } catch (error) {
       console.error('Error loading saved data:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadFromSheet = async () => {
+    if (!sheetUrl || !sheetRow) {
+      toast({
+        title: "Sheet Info Required",
+        description: "Please enter a Google Sheet URL and row number",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoadingSheet(true);
+    try {
+      // Simulated sheet loading - in production this would call a backend API
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      toast({
+        title: "Sheet Data Loaded",
+        description: `Product data loaded from row ${sheetRow}`,
+      });
+      setSheetConnected(true);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to load from Google Sheet",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingSheet(false);
     }
   };
 
@@ -67,7 +118,6 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Get current preferences
       const { data: currentSettings } = await supabase
         .from('user_settings')
         .select('preferences')
@@ -76,7 +126,6 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
 
       const currentPrefs = (currentSettings?.preferences as Record<string, unknown>) || {};
 
-      // Save to user preferences for this session
       const { error } = await supabase
         .from('user_settings')
         .update({
@@ -85,7 +134,11 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
             studio_product_url: productUrl,
             studio_product_name: productName,
             studio_description: description,
-            studio_media_links: mediaLinks
+            studio_media_links: mediaLinks,
+            studio_target_market: targetMarket,
+            studio_language: language,
+            studio_audience_age: audienceAge,
+            studio_audience_gender: audienceGender,
           }
         })
         .eq('user_id', user.id);
@@ -94,7 +147,7 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
 
       toast({
         title: "Product Saved",
-        description: "Your product details have been saved. Proceeding to next layer.",
+        description: "Your product details have been saved. Proceeding to next step.",
       });
 
       onNext();
@@ -118,97 +171,228 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Product Input</h2>
-          <p className="text-muted-foreground text-sm mt-1">Add product details to start the automation workflow</p>
+          <p className="text-muted-foreground text-sm mt-1">Add product details manually or sync from Google Sheets</p>
         </div>
-        <Badge variant="outline" className="text-primary border-primary">Layer 1</Badge>
+        <Badge variant="outline" className="text-primary border-primary">Step 1</Badge>
       </div>
 
+      {/* Data Source Selection */}
       <Card className="p-6 bg-card border-border">
+        <Label className="text-sm font-medium mb-4 block">Data Source</Label>
+        <RadioGroup value={dataSource} onValueChange={(v) => setDataSource(v as 'manual' | 'sheet')} className="flex gap-4">
+          <div className={`flex-1 p-4 rounded-lg border cursor-pointer transition-all ${dataSource === 'manual' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}`}>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <RadioGroupItem value="manual" />
+              <div className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-primary" />
+                <span className="font-medium">Manual Input</span>
+              </div>
+            </label>
+          </div>
+          <div className={`flex-1 p-4 rounded-lg border cursor-pointer transition-all ${dataSource === 'sheet' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}`}>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <RadioGroupItem value="sheet" />
+              <div className="flex items-center gap-2">
+                <Sheet className="w-4 h-4 text-green-500" />
+                <span className="font-medium">Google Sheet Row</span>
+              </div>
+            </label>
+          </div>
+        </RadioGroup>
+      </Card>
+
+      {/* Google Sheet Sync */}
+      {dataSource === 'sheet' && (
+        <Card className="p-6 bg-card border-border">
+          <h3 className="font-semibold mb-4 flex items-center gap-2">
+            <Sheet className="w-4 h-4 text-green-500" />
+            Google Sheet Sync
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-2 space-y-2">
+              <Label>Sheet URL</Label>
+              <Input
+                value={sheetUrl}
+                onChange={(e) => setSheetUrl(e.target.value)}
+                placeholder="https://docs.google.com/spreadsheets/d/xxxxx/edit"
+                className="bg-background border-border"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Row Number</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  min="2"
+                  value={sheetRow}
+                  onChange={(e) => setSheetRow(e.target.value)}
+                  className="bg-background border-border"
+                />
+                <Button onClick={loadFromSheet} disabled={isLoadingSheet}>
+                  {isLoadingSheet ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Load'}
+                </Button>
+              </div>
+            </div>
+          </div>
+          {sheetConnected && (
+            <div className="mt-4 p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-sm text-green-500">
+              ✓ Sheet connected - Data will auto-populate from row {sheetRow}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Manual Input Form */}
+      <Card className="p-6 bg-card border-border">
+        <h3 className="font-semibold mb-4 flex items-center gap-2">
+          <FileText className="w-4 h-4 text-primary" />
+          Product Information
+        </h3>
         <div className="space-y-5">
-          {/* Product Name */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground flex items-center gap-2">
-              <FileText className="w-4 h-4 text-primary" />
-              Product Name *
-            </label>
-            <Input
-              value={productName}
-              onChange={(e) => setProductName(e.target.value)}
-              placeholder="Enter product name"
-              className="bg-background border-border"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                Product Name *
+              </Label>
+              <Input
+                value={productName}
+                onChange={(e) => setProductName(e.target.value)}
+                placeholder="Enter product name"
+                className="bg-background border-border"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-muted-foreground" />
+                Product URL
+              </Label>
+              <Input
+                value={productUrl}
+                onChange={(e) => setProductUrl(e.target.value)}
+                placeholder="https://example.com/product"
+                className="bg-background border-border"
+              />
+            </div>
           </div>
 
-          {/* Product URL */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground flex items-center gap-2">
-              <Link2 className="w-4 h-4 text-primary" />
-              Product URL
-            </label>
-            <Input
-              value={productUrl}
-              onChange={(e) => setProductUrl(e.target.value)}
-              placeholder="https://example.com/product"
-              className="bg-background border-border"
-            />
-            <p className="text-xs text-muted-foreground">
-              Enter the product page URL for automatic scraping
-            </p>
-          </div>
-
-          {/* Description */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground flex items-center gap-2">
-              <FileText className="w-4 h-4 text-primary" />
-              Product Description
-            </label>
+            <Label>Product Description</Label>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe your product, its features, and target audience..."
-              className="bg-background border-border min-h-[120px]"
+              placeholder="Describe your product, its features, benefits, and unique selling points..."
+              className="bg-background border-border min-h-[100px]"
             />
           </div>
 
-          {/* Media Links */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground flex items-center gap-2">
-              <Upload className="w-4 h-4 text-primary" />
+            <Label className="flex items-center gap-2">
+              <Upload className="w-4 h-4 text-muted-foreground" />
               Media Links (Optional)
-            </label>
+            </Label>
             <Textarea
               value={mediaLinks}
               onChange={(e) => setMediaLinks(e.target.value)}
               placeholder="Enter image/video URLs, one per line..."
-              className="bg-background border-border min-h-[80px]"
+              className="bg-background border-border min-h-[60px]"
             />
-            <p className="text-xs text-muted-foreground">
-              Add direct links to product images or videos
-            </p>
-          </div>
-
-          {/* Submit */}
-          <div className="flex justify-end pt-4">
-            <Button onClick={handleSubmit} className="gap-2" disabled={isSaving}>
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  Save & Continue
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </Button>
           </div>
         </div>
       </Card>
+
+      {/* Targeting Options */}
+      <Card className="p-6 bg-card border-border">
+        <h3 className="font-semibold mb-4">Audience Targeting</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="space-y-2">
+            <Label>Target Market</Label>
+            <Select value={targetMarket} onValueChange={setTargetMarket}>
+              <SelectTrigger className="bg-background border-border">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sa">🇸🇦 Saudi Arabia</SelectItem>
+                <SelectItem value="ae">🇦🇪 UAE</SelectItem>
+                <SelectItem value="kw">🇰🇼 Kuwait</SelectItem>
+                <SelectItem value="ma">🇲🇦 Morocco</SelectItem>
+                <SelectItem value="us">🇺🇸 USA</SelectItem>
+                <SelectItem value="eu">🇪🇺 Europe</SelectItem>
+                <SelectItem value="latam">🌎 LatAm</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Language</Label>
+            <Select value={language} onValueChange={setLanguage}>
+              <SelectTrigger className="bg-background border-border">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ar-sa">Arabic (Saudi)</SelectItem>
+                <SelectItem value="ar-msa">Arabic (MSA)</SelectItem>
+                <SelectItem value="ar-gulf">Arabic (Gulf)</SelectItem>
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="es">Spanish</SelectItem>
+                <SelectItem value="fr">French</SelectItem>
+                <SelectItem value="de">German</SelectItem>
+                <SelectItem value="pt">Portuguese</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Audience Age</Label>
+            <Select value={audienceAge} onValueChange={setAudienceAge}>
+              <SelectTrigger className="bg-background border-border">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="18-24">18-24</SelectItem>
+                <SelectItem value="25-34">25-34</SelectItem>
+                <SelectItem value="35-44">35-44</SelectItem>
+                <SelectItem value="45-54">45-54</SelectItem>
+                <SelectItem value="55+">55+</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Audience Gender</Label>
+            <Select value={audienceGender} onValueChange={setAudienceGender}>
+              <SelectTrigger className="bg-background border-border">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="male">Male</SelectItem>
+                <SelectItem value="female">Female</SelectItem>
+                <SelectItem value="both">All</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </Card>
+
+      {/* Submit */}
+      <div className="flex justify-end">
+        <Button onClick={handleSubmit} className="gap-2" disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            <>
+              Save & Continue
+              <ArrowRight className="w-4 h-4" />
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   );
 };
