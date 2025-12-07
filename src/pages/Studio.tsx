@@ -26,7 +26,7 @@ import { StudioExport } from '@/components/studio/StudioExport';
 // 7-step pipeline
 const pipelineStages = [
   { id: 0, key: 'product', name: "Product Input", icon: Package, description: "Product details & targeting" },
-  { id: 1, key: 'marketing', name: "Marketing Intelligence", icon: Lightbulb, description: "Angles, scripts & content" },
+  { id: 1, key: 'marketing', name: "Product Content", icon: Lightbulb, description: "Angles, scripts & content" },
   { id: 2, key: 'images', name: "Image Generation", icon: Image, description: "Product images & mockups" },
   { id: 3, key: 'landing', name: "Landing Page", icon: Layout, description: "Sales page content" },
   { id: 4, key: 'voiceover', name: "Voiceover", icon: Mic, description: "AI voice generation" },

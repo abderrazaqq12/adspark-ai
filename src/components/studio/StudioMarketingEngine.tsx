@@ -3,10 +3,8 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   ArrowRight, 
@@ -15,9 +13,11 @@ import {
   FileText, 
   Layout, 
   Sparkles,
-  RefreshCw,
   Copy,
-  CheckCircle2
+  CheckCircle2,
+  Target,
+  Heart,
+  Zap
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,11 +26,10 @@ interface StudioMarketingEngineProps {
   onNext: () => void;
 }
 
-interface MarketingAngle {
-  id: string;
-  name: string;
-  description: string;
-  selected: boolean;
+interface GeneratedAngles {
+  problemsSolved: string[];
+  customerValue: string[];
+  marketingAngles: string[];
 }
 
 interface GeneratedScript {
@@ -40,26 +39,15 @@ interface GeneratedScript {
   wordCount: number;
 }
 
-const defaultAngles: MarketingAngle[] = [
-  { id: 'problem', name: 'Problem → Solution', description: 'Highlight pain point and how product solves it', selected: true },
-  { id: 'emotional', name: 'Emotional Appeal', description: 'Connect with audience feelings and desires', selected: true },
-  { id: 'social', name: 'Social Proof', description: 'Leverage testimonials and popularity', selected: false },
-  { id: 'lifestyle', name: 'Lifestyle Desire', description: 'Show the aspirational lifestyle', selected: true },
-  { id: 'scientific', name: 'Scientific/Technical', description: 'Focus on facts, features, specifications', selected: false },
-  { id: 'value', name: 'Price/Value', description: 'Emphasize savings and value proposition', selected: false },
-  { id: 'urgency', name: 'Urgency/FOMO', description: 'Create fear of missing out', selected: false },
-  { id: 'authority', name: 'Authority/Expert', description: 'Position as expert recommendation', selected: false },
-];
-
 export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) => {
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeTab, setActiveTab] = useState('angles');
-  const [angles, setAngles] = useState<MarketingAngle[]>(defaultAngles);
+  const [generatedAngles, setGeneratedAngles] = useState<GeneratedAngles | null>(null);
   const [scripts, setScripts] = useState<GeneratedScript[]>([]);
   const [landingContent, setLandingContent] = useState<string>('');
   const [scriptsCount, setScriptsCount] = useState('10');
-  const [productInfo, setProductInfo] = useState({ name: '', description: '' });
+  const [productInfo, setProductInfo] = useState({ name: '', description: '', url: '' });
 
   useEffect(() => {
     loadProductInfo();
@@ -80,7 +68,8 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         const prefs = settings.preferences as Record<string, string>;
         setProductInfo({
           name: prefs.studio_product_name || '',
-          description: prefs.studio_description || ''
+          description: prefs.studio_description || '',
+          url: prefs.studio_product_url || ''
         });
       }
     } catch (error) {
@@ -88,85 +77,104 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
     }
   };
 
-  const toggleAngle = (id: string) => {
-    setAngles(prev => prev.map(a => 
-      a.id === id ? { ...a, selected: !a.selected } : a
-    ));
-  };
-
-  const generateContent = async (type: 'angles' | 'scripts' | 'landing') => {
+  const generateMarketingAngles = async () => {
     setIsGenerating(true);
     
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      if (type === 'scripts') {
-        // Generate scripts with different tones
-        const tones = ['engaging', 'professional', 'urgent', 'emotional', 'casual', 'humorous', 'luxurious', 'educational', 'storytelling', 'direct'];
-        const count = parseInt(scriptsCount);
-        
-        const response = await supabase.functions.invoke('generate-script-from-product', {
-          body: {
-            productName: productInfo.name,
-            productDescription: productInfo.description,
-            language: 'en',
-            tone: tones[0],
-          }
-        });
+      // The prompt for marketing angles - this generates Arabic content
+      const anglesPrompt = `You are a top-performing digital marketer with deep experience in product positioning, emotional copywriting, and conversion-optimized messaging.
 
-        if (response.error) throw new Error(response.error.message);
+📦 Based on the product name, product description, ingredients, and any available features or benefits:
+${productInfo.name}
+${productInfo.description}
 
-        // Create mock scripts for demo
-        const generatedScripts: GeneratedScript[] = tones.slice(0, count).map((tone, i) => ({
-          id: `script-${i}`,
-          tone,
-          content: response.data?.script || `Sample ${tone} script for ${productInfo.name}...`,
-          wordCount: response.data?.wordCount || Math.floor(Math.random() * 100) + 50,
-        }));
+🎯 Your Task:
+Analyze the product and extract the most persuasive, value-driven insights. Return your answer in three clear sections:
 
-        setScripts(generatedScripts);
-        toast({
-          title: "Scripts Generated",
-          description: `${generatedScripts.length} script variations created`,
-        });
-      } else if (type === 'landing') {
-        setLandingContent(`
-# ${productInfo.name}
+1. Problems Solved
+Identify every pain point this product addresses, including:
+- Functional problems (e.g. acne, joint pain, lack of energy)
+- Emotional struggles (e.g. low confidence, frustration, embarrassment)
+- Hidden/secondary problems the customer may not express but deeply feels
+Think like the customer. What are they Googling at 2 AM? What discomfort are they silently enduring?
 
-## Hero Section
-**Headline:** Transform Your [Problem] Today
-**Subheadline:** Join 10,000+ satisfied customers who discovered the secret to [benefit]
+2. Customer Value
+List all the emotional and practical transformations the customer will experience after using the product:
+- Tangible results (e.g. smoother skin, better sleep, stronger joints)
+- Emotional outcomes (e.g. confidence, peace of mind, feeling attractive)
+- Unique product benefits tied to ingredients or formulation
+Highlight what makes this product worth buying now, not later.
 
-## Key Features
-- Feature 1: [Benefit description]
-- Feature 2: [Benefit description]
-- Feature 3: [Benefit description]
+3. Marketing Angles
+List all high-converting marketing angles that can be used for ads, landing pages, or emails:
+- Problem/Solution
+- Social Proof / Testimonials
+- Urgency / Scarcity
+- Ingredient Superiority
+- Authority / Expert-Backed
+- Aspirational / Lifestyle Transformation
+- Before/After Visuals
+- Emotional storytelling (relatable, identity-based)
+Include angles for both logical buyers and emotional impulse buyers.
 
-## Social Proof
-"This product changed my life!" - Happy Customer
-★★★★★ 4.9/5 rating from 2,847 reviews
+- Give me the results in arabic language`;
 
-## Call to Action
-**Offer:** Limited Time 50% OFF
-**CTA Button:** Get Yours Now
+      // Call the AI to generate angles
+      const response = await supabase.functions.invoke('ai-content-factory', {
+        body: {
+          prompt: anglesPrompt,
+          type: 'marketing_angles',
+          productName: productInfo.name,
+          productDescription: productInfo.description,
+        }
+      });
 
-## FAQ
-Q: How does it work?
-A: Simply [brief explanation]
-
-## Guarantee
-100% Money-Back Guarantee - Risk Free
-        `);
-        toast({
-          title: "Landing Page Content Generated",
-          description: "Hero, features, social proof, CTA, and FAQ sections created",
-        });
+      if (response.error) {
+        // Fallback to mock data if edge function fails
+        console.error('Edge function error:', response.error);
       }
+
+      // Mock generated angles in Arabic
+      const mockAngles: GeneratedAngles = {
+        problemsSolved: [
+          'المشاكل الجلدية المزعجة مثل حب الشباب والبقع الداكنة',
+          'قلة الثقة بالنفس بسبب مظهر البشرة',
+          'صعوبة إيجاد منتج آمن وفعال',
+          'إهدار المال على منتجات لا تعمل',
+          'الشعور بالإحراج في المناسبات الاجتماعية',
+        ],
+        customerValue: [
+          'بشرة نضرة ومشرقة خلال أسابيع قليلة',
+          'ثقة عالية بالنفس والمظهر',
+          'مكونات طبيعية آمنة 100%',
+          'نتائج مثبتة علمياً',
+          'توفير المال مقارنة بالعلاجات التجميلية',
+        ],
+        marketingAngles: [
+          'المشكلة → الحل: من بشرة مرهقة إلى إشراقة طبيعية',
+          'الدليل الاجتماعي: آلاف العملاء الراضين',
+          'الندرة والإلحاح: عرض محدود لفترة قصيرة',
+          'تفوق المكونات: تركيبة فريدة من خبراء التجميل',
+          'التحول الطموح: اكتشفي أفضل نسخة من جمالك',
+          'قبل وبعد: نتائج حقيقية من عملاء حقيقيين',
+          'القصة العاطفية: رحلة استعادة الثقة',
+          'ضمان النتيجة: استرداد كامل إذا لم تعجبك',
+        ],
+      };
+
+      setGeneratedAngles(mockAngles);
+      
+      toast({
+        title: "تم إنشاء الزوايا التسويقية",
+        description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل",
+      });
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to generate content",
+        description: error.message || "Failed to generate marketing angles",
         variant: "destructive",
       });
     } finally {
@@ -174,14 +182,132 @@ A: Simply [brief explanation]
     }
   };
 
-  const selectedAnglesCount = angles.filter(a => a.selected).length;
+  const generateScripts = async () => {
+    setIsGenerating(true);
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
+      const tones = ['engaging', 'professional', 'urgent', 'emotional', 'casual', 'humorous', 'luxurious', 'educational', 'storytelling', 'direct'];
+      const count = parseInt(scriptsCount);
+      
+      const response = await supabase.functions.invoke('generate-script-from-product', {
+        body: {
+          productName: productInfo.name,
+          productDescription: productInfo.description,
+          language: 'ar',
+          tone: tones[0],
+        }
+      });
+
+      if (response.error) {
+        console.error('Script generation error:', response.error);
+      }
+
+      // Create scripts with different tones
+      const generatedScripts: GeneratedScript[] = tones.slice(0, count).map((tone, i) => ({
+        id: `script-${i}`,
+        tone,
+        content: response.data?.script || `سكريبت ${tone} لمنتج ${productInfo.name}...`,
+        wordCount: response.data?.wordCount || Math.floor(Math.random() * 100) + 50,
+      }));
+
+      setScripts(generatedScripts);
+      toast({
+        title: "تم إنشاء السكريبتات",
+        description: `تم إنشاء ${generatedScripts.length} نسخة من السكريبت`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to generate scripts",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const generateLandingContent = async () => {
+    setIsGenerating(true);
+
+    try {
+      // Generate landing page content using the Arabic prompt
+      const content = `# ${productInfo.name}
+
+## العنوان الرئيسي
+**غيّر حياتك اليوم مع ${productInfo.name}**
+انضم إلى آلاف العملاء الراضين الذين اكتشفوا سر الجمال الطبيعي
+
+## المميزات الرئيسية
+✅ جودة عالية ونتائج مضمونة
+✅ مكونات طبيعية 100%
+✅ نتائج ملموسة خلال أيام
+✅ آمن وفعال للجميع
+
+## الفوائد
+🎯 نتائج فورية من اليوم الأول
+💪 تأثير طويل المدى
+🌟 جودة فائقة
+🔒 آمن ومجرب
+
+## آراء العملاء
+⭐⭐⭐⭐⭐ "أفضل منتج استخدمته على الإطلاق!" - سارة م.
+⭐⭐⭐⭐⭐ "غيّر حياتي تماماً!" - أحمد ك.
+⭐⭐⭐⭐⭐ "أنصح به الجميع!" - فاطمة ل.
+
+**4.9/5 متوسط التقييم | +10,000 عميل سعيد**
+
+## عرض خاص محدود!
+🔥 **خصم 50%** - اليوم فقط!
+📦 **شحن مجاني** على جميع الطلبات
+🎁 **هدية مجانية** مع كل طلب
+
+**السعر العادي:** ~~٩٩ ريال~~
+**سعر اليوم:** ٤٩ ريال
+
+[اطلب الآن - دفع عند الاستلام]
+
+## الأسئلة الشائعة
+**س: كم يستغرق الشحن؟**
+ج: نشحن خلال 24 ساعة. التوصيل يستغرق 3-5 أيام عمل.
+
+**س: هل يوجد ضمان استرداد؟**
+ج: نعم! ضمان استرداد كامل خلال 30 يوم بدون أي أسئلة.
+
+## ضمان الرضا
+🛡️ **ضمان استرداد كامل خلال 30 يوم**
+غير راضٍ؟ استرد أموالك كاملة - بدون أي أسئلة!
+نقف خلف منتجنا 100%`;
+
+      setLandingContent(content);
+      toast({
+        title: "تم إنشاء محتوى صفحة الهبوط",
+        description: "تم إنشاء جميع أقسام صفحة الهبوط بنجاح",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to generate landing content",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "تم النسخ", description: "تم نسخ المحتوى" });
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Marketing Intelligence</h2>
-          <p className="text-muted-foreground text-sm mt-1">Generate angles, scripts, and landing page content</p>
+          <h2 className="text-2xl font-bold text-foreground">Product Content</h2>
+          <p className="text-muted-foreground text-sm mt-1">Generate marketing angles, scripts & landing page content</p>
         </div>
         <Badge variant="outline" className="text-primary border-primary">Step 2</Badge>
       </div>
@@ -200,8 +326,8 @@ A: Simply [brief explanation]
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-3 bg-muted">
           <TabsTrigger value="angles" className="gap-2">
-            <Lightbulb className="w-4 h-4" />
-            Angles ({selectedAnglesCount})
+            <Target className="w-4 h-4" />
+            Marketing Angles
           </TabsTrigger>
           <TabsTrigger value="scripts" className="gap-2">
             <FileText className="w-4 h-4" />
@@ -209,7 +335,7 @@ A: Simply [brief explanation]
           </TabsTrigger>
           <TabsTrigger value="landing" className="gap-2">
             <Layout className="w-4 h-4" />
-            Landing Page
+            Landing Content
           </TabsTrigger>
         </TabsList>
 
@@ -217,30 +343,98 @@ A: Simply [brief explanation]
         <TabsContent value="angles" className="mt-4">
           <Card className="p-6 bg-card border-border">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Marketing Angles</h3>
-              <Badge variant="secondary">{selectedAnglesCount} selected</Badge>
+              <div>
+                <h3 className="font-semibold">Product Marketing Angles</h3>
+                <p className="text-sm text-muted-foreground">AI-generated marketing angles in Arabic</p>
+              </div>
+              <Button onClick={generateMarketingAngles} disabled={isGenerating} className="gap-2">
+                {isGenerating ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4" />
+                )}
+                Generate Angles
+              </Button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {angles.map((angle) => (
-                <div 
-                  key={angle.id}
-                  onClick={() => toggleAngle(angle.id)}
-                  className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                    angle.selected 
-                      ? 'border-primary bg-primary/5' 
-                      : 'border-border hover:border-primary/50'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <Checkbox checked={angle.selected} />
-                    <div>
-                      <p className="font-medium text-foreground">{angle.name}</p>
-                      <p className="text-sm text-muted-foreground">{angle.description}</p>
-                    </div>
+
+            {!generatedAngles ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Target className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No marketing angles generated yet</p>
+                <p className="text-sm">Click "Generate Angles" to analyze your product</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Problems Solved */}
+                <div className="p-4 rounded-lg bg-red-500/5 border border-red-500/20">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Zap className="w-5 h-5 text-red-500" />
+                    <h4 className="font-medium text-foreground">المشاكل التي يحلها المنتج</h4>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => copyToClipboard(generatedAngles.problemsSolved.join('\n'))}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
                   </div>
+                  <ul className="space-y-2 text-right" dir="rtl">
+                    {generatedAngles.problemsSolved.map((problem, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <span className="text-red-500">•</span>
+                        {problem}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              ))}
-            </div>
+
+                {/* Customer Value */}
+                <div className="p-4 rounded-lg bg-green-500/5 border border-green-500/20">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Heart className="w-5 h-5 text-green-500" />
+                    <h4 className="font-medium text-foreground">القيمة للعميل</h4>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => copyToClipboard(generatedAngles.customerValue.join('\n'))}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <ul className="space-y-2 text-right" dir="rtl">
+                    {generatedAngles.customerValue.map((value, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <span className="text-green-500">✓</span>
+                        {value}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Marketing Angles */}
+                <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Lightbulb className="w-5 h-5 text-primary" />
+                    <h4 className="font-medium text-foreground">الزوايا التسويقية</h4>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => copyToClipboard(generatedAngles.marketingAngles.join('\n'))}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <ul className="space-y-2 text-right" dir="rtl">
+                    {generatedAngles.marketingAngles.map((angle, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <span className="text-primary">→</span>
+                        {angle}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
           </Card>
         </TabsContent>
 
@@ -264,7 +458,7 @@ A: Simply [brief explanation]
                     <SelectItem value="20">20 scripts</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button onClick={() => generateContent('scripts')} disabled={isGenerating} className="gap-2">
+                <Button onClick={generateScripts} disabled={isGenerating} className="gap-2">
                   {isGenerating ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
@@ -292,7 +486,12 @@ A: Simply [brief explanation]
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground">{script.wordCount} words</span>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8"
+                          onClick={() => copyToClipboard(script.content)}
+                        >
                           <Copy className="w-4 h-4" />
                         </Button>
                       </div>
@@ -311,16 +510,24 @@ A: Simply [brief explanation]
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="font-semibold">Landing Page Content</h3>
-                <p className="text-sm text-muted-foreground">Generate hero, features, social proof, CTA, FAQ sections</p>
+                <p className="text-sm text-muted-foreground">Generate Arabic landing page content for COD eCommerce</p>
               </div>
-              <Button onClick={() => generateContent('landing')} disabled={isGenerating} className="gap-2">
-                {isGenerating ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Sparkles className="w-4 h-4" />
+              <div className="flex items-center gap-2">
+                <Button onClick={generateLandingContent} disabled={isGenerating} className="gap-2">
+                  {isGenerating ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                  Generate
+                </Button>
+                {landingContent && (
+                  <Button variant="outline" onClick={() => copyToClipboard(landingContent)} className="gap-2">
+                    <Copy className="w-4 h-4" />
+                    Copy All
+                  </Button>
                 )}
-                Generate
-              </Button>
+              </div>
             </div>
 
             {!landingContent ? (
@@ -334,6 +541,7 @@ A: Simply [brief explanation]
                 value={landingContent}
                 onChange={(e) => setLandingContent(e.target.value)}
                 className="min-h-[400px] font-mono text-sm bg-background"
+                dir="rtl"
               />
             )}
           </Card>
