@@ -1386,6 +1386,11 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
+        {/* Prompts Tab */}
+        <TabsContent value="prompts" className="space-y-6">
+          <StudioPrompts />
+        </TabsContent>
+
         {/* Analytics Tab */}
         <TabsContent value="analytics" className="space-y-6">
           <EngineUsageAnalytics />
