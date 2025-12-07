@@ -27,8 +27,15 @@ import {
   Volume2,
   X,
   LayoutTemplate,
-  RefreshCw
+  RefreshCw,
+  Lightbulb,
+  Image,
+  Layout
 } from "lucide-react";
+import { StudioProductInput } from "@/components/studio/StudioProductInput";
+import { StudioMarketingEngine } from "@/components/studio/StudioMarketingEngine";
+import { StudioImageGeneration } from "@/components/studio/StudioImageGeneration";
+import { StudioLandingPage } from "@/components/studio/StudioLandingPage";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { sceneRouting, videoTypes, exportFormats } from "@/data/aiModels";
@@ -145,14 +152,18 @@ interface ElevenLabsVoice {
   preview_url?: string;
 }
 
-// Production pipeline stages based on roadmap
+// Production pipeline stages - includes Studio steps before video creation
 const pipelineStages = [
-  { id: 0, name: "Product Info", icon: Package, description: "Product details for your video" },
-  { id: 1, name: "Video Script Text & Audio", icon: Mic, description: "Voice-over scripts and audio" },
-  { id: 2, name: "Scene Builder", icon: Wand2, description: "AI breaks down script into visual scenes" },
-  { id: 3, name: "Video Generation", icon: Video, description: "AI creates video for each scene" },
-  { id: 4, name: "Assembly & Edit", icon: Palette, description: "Combine, sync, add branding" },
-  { id: 5, name: "Export", icon: Globe, description: "Multi-format export" },
+  { id: 0, key: 'studio-product', name: "Product Input", icon: Package, description: "Product details & targeting" },
+  { id: 1, key: 'studio-content', name: "Product Content", icon: Lightbulb, description: "Angles, scripts & content" },
+  { id: 2, key: 'studio-images', name: "Image Generation", icon: Image, description: "Product images & mockups" },
+  { id: 3, key: 'studio-landing', name: "Landing Page", icon: Layout, description: "Sales page content" },
+  { id: 4, key: 'product-info', name: "Product Info", icon: Package, description: "Product details for your video" },
+  { id: 5, key: 'scripts', name: "Video Script Text & Audio", icon: Mic, description: "Voice-over scripts and audio" },
+  { id: 6, key: 'scenes', name: "Scene Builder", icon: Wand2, description: "AI breaks down script into visual scenes" },
+  { id: 7, key: 'video-gen', name: "Video Generation", icon: Video, description: "AI creates video for each scene" },
+  { id: 8, key: 'assembly', name: "Assembly & Edit", icon: Palette, description: "Combine, sync, add branding" },
+  { id: 9, key: 'export', name: "Export", icon: Globe, description: "Multi-format export" },
 ];
 
 interface ScriptSlot {
@@ -290,7 +301,7 @@ export default function CreateVideo() {
             duration: s.duration_sec,
             visualPrompt: s.visual_prompt,
           })));
-          setCurrentStage(2);
+          setCurrentStage(6);
         }
       }
     }
@@ -344,7 +355,7 @@ export default function CreateVideo() {
   const generateScriptsFromTemplates = async () => {
     if (!productInfo.name.trim()) {
       toast.error("Please enter product name first");
-      setExpandedStage(0);
+      setExpandedStage(4);
       return;
     }
 
@@ -418,7 +429,7 @@ export default function CreateVideo() {
   const generateScriptFromProduct = async (slotId: number) => {
     if (!productInfo.name.trim()) {
       toast.error("Please enter product name first");
-      setExpandedStage(0);
+      setExpandedStage(4);
       return;
     }
 
@@ -561,8 +572,8 @@ export default function CreateVideo() {
       if (error) throw error;
 
       setScenes(data.scenes || []);
-      setCurrentStage(2);
-      setExpandedStage(2);
+      setCurrentStage(6);
+      setExpandedStage(6);
       toast.success("Scripts analyzed successfully!");
     } catch (error: any) {
       console.error("Error analyzing script:", error);
@@ -575,7 +586,7 @@ export default function CreateVideo() {
   const saveProjectAndScenes = async () => {
     if (!productInfo.name.trim()) {
       toast.error("Please enter a product name first");
-      setExpandedStage(0);
+      setExpandedStage(4);
       return;
     }
 
@@ -737,12 +748,12 @@ export default function CreateVideo() {
           </div>
           <PipelineStatusIndicator 
             pipelineStatus={{
-              product_info: currentStage > 0 ? 'completed' : expandedStage === 0 ? 'in_progress' : 'pending',
-              scripts: currentStage > 1 ? 'completed' : expandedStage === 1 ? 'in_progress' : 'pending',
-              scenes: currentStage > 2 ? 'completed' : expandedStage === 2 ? 'in_progress' : 'pending',
-              video_generation: currentStage > 3 ? 'completed' : expandedStage === 3 ? 'in_progress' : 'pending',
-              assembly: currentStage > 4 ? 'completed' : expandedStage === 4 ? 'in_progress' : 'pending',
-              export: currentStage > 5 ? 'completed' : expandedStage === 5 ? 'in_progress' : 'pending',
+              product_info: currentStage > 4 ? 'completed' : expandedStage === 4 ? 'in_progress' : 'pending',
+              scripts: currentStage > 5 ? 'completed' : expandedStage === 5 ? 'in_progress' : 'pending',
+              scenes: currentStage > 6 ? 'completed' : expandedStage === 6 ? 'in_progress' : 'pending',
+              video_generation: currentStage > 7 ? 'completed' : expandedStage === 7 ? 'in_progress' : 'pending',
+              assembly: currentStage > 8 ? 'completed' : expandedStage === 8 ? 'in_progress' : 'pending',
+              export: currentStage > 9 ? 'completed' : expandedStage === 9 ? 'in_progress' : 'pending',
             }}
             currentStage={expandedStage}
             onStageClick={(stageId, index) => setExpandedStage(index)}
@@ -751,8 +762,40 @@ export default function CreateVideo() {
         </div>
 
         <div className="flex flex-col gap-6">
-          {/* Stage 0: Product Info */}
+          {/* Stage 0: Studio Product Input */}
           {expandedStage === 0 && (
+            <StudioProductInput onNext={() => {
+              setExpandedStage(1);
+              setCurrentStage(1);
+            }} />
+          )}
+
+          {/* Stage 1: Studio Product Content */}
+          {expandedStage === 1 && (
+            <StudioMarketingEngine onNext={() => {
+              setExpandedStage(2);
+              setCurrentStage(2);
+            }} />
+          )}
+
+          {/* Stage 2: Studio Image Generation */}
+          {expandedStage === 2 && (
+            <StudioImageGeneration onNext={() => {
+              setExpandedStage(3);
+              setCurrentStage(3);
+            }} />
+          )}
+
+          {/* Stage 3: Studio Landing Page */}
+          {expandedStage === 3 && (
+            <StudioLandingPage onNext={() => {
+              setExpandedStage(4);
+              setCurrentStage(4);
+            }} />
+          )}
+
+          {/* Stage 4: Product Info */}
+          {expandedStage === 4 && (
             <Card className="bg-gradient-card border-border shadow-card">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
@@ -836,8 +879,8 @@ export default function CreateVideo() {
 
                 <Button
                   onClick={() => {
-                    setExpandedStage(1);
-                    setCurrentStage(1);
+                    setExpandedStage(5);
+                    setCurrentStage(5);
                   }}
                   disabled={!canProceedFromProductInfo}
                   className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow"
@@ -849,13 +892,13 @@ export default function CreateVideo() {
             </Card>
           )}
 
-          {/* Stage 1: Video Script Text & Audio */}
-          {expandedStage === 1 && (
+          {/* Stage 5: Video Script Text & Audio */}
+          {expandedStage === 5 && (
             <Card className="bg-gradient-card border-border shadow-card">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <Mic className="w-5 h-5 text-primary" />
-                  Step 1: Video Script Text & Audio
+                  Video Script Text & Audio
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
                   Enter voice-over scripts or upload audio files. Generate AI voice with ElevenLabs.
@@ -1250,13 +1293,13 @@ export default function CreateVideo() {
             </Card>
           )}
 
-          {/* Stage 2: Scene Builder */}
-          {expandedStage === 2 && (
+          {/* Stage 6: Scene Builder */}
+          {expandedStage === 6 && (
             <Card className="bg-gradient-card border-border shadow-card">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <Wand2 className="w-5 h-5 text-primary" />
-                  Step 2: Scene Builder
+                  Scene Builder
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
                   Configure video type and review AI-generated scenes
@@ -1333,7 +1376,7 @@ export default function CreateVideo() {
                 {scenes.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
                     <Sparkles className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>Enter a script and click "Analyze & Build Scenes" in Step 1</p>
+                    <p>Enter a script and click "Analyze & Build Scenes" in Video Script Text & Audio</p>
                     <p className="text-xs mt-2">AI will auto-route each scene to the best {freeEnginesOnly ? 'free ' : ''}model</p>
                   </div>
                 ) : (
@@ -1412,12 +1455,11 @@ export default function CreateVideo() {
                   </div>
                 )}
 
-                {/* Next Step Button */}
                 {scenes.length > 0 && (
                   <Button
                     onClick={() => {
-                      setExpandedStage(3);
-                      setCurrentStage(3);
+                      setExpandedStage(7);
+                      setCurrentStage(7);
                     }}
                     className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow"
                   >
@@ -1429,24 +1471,24 @@ export default function CreateVideo() {
             </Card>
           )}
 
-          {/* Stage 3: Video Generation */}
-          {expandedStage === 3 && scriptId && (
+          {/* Stage 7: Video Generation */}
+          {expandedStage === 7 && scriptId && (
             <VideoGenerationStage 
               scriptId={scriptId}
               onComplete={() => {
-                setExpandedStage(4);
-                setCurrentStage(4);
+                setExpandedStage(8);
+                setCurrentStage(8);
               }}
             />
           )}
 
-          {/* Stage 3 Fallback - Upload when no scriptId */}
-          {expandedStage === 3 && !scriptId && (
+          {/* Stage 7 Fallback - Upload when no scriptId */}
+          {expandedStage === 7 && !scriptId && (
             <Card className="bg-gradient-card border-border shadow-card">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <Video className="w-5 h-5 text-primary" />
-                  Step 3: Video Generation
+                  Video Generation
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
                   Generate video for each scene using AI engines or upload your own
@@ -1561,20 +1603,20 @@ export default function CreateVideo() {
                   <div className="text-center py-8 text-muted-foreground">
                     <Video className="w-12 h-12 mx-auto mb-4 opacity-50" />
                     <p>Save your project first to start video generation</p>
-                    <p className="text-xs mt-2">Complete Steps 0-2 and save your project</p>
+                    <p className="text-xs mt-2">Complete earlier steps and save your project</p>
                   </div>
                 )}
               </CardContent>
             </Card>
           )}
 
-          {/* Stage 4: Assembly & Edit */}
-          {expandedStage === 4 && (
+          {/* Stage 8: Assembly & Edit */}
+          {expandedStage === 8 && (
             <Card className="bg-gradient-card border-border shadow-card">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <Palette className="w-5 h-5 text-primary" />
-                  Step 4: Assembly & Edit
+                  Assembly & Edit
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
                   Combine scenes, sync audio, and generate multiple final videos
@@ -1668,8 +1710,8 @@ export default function CreateVideo() {
                     autoAddMusic={autoAddMusic}
                     onComplete={() => {
                       toast.success("All videos assembled!");
-                      setExpandedStage(5);
-                      setCurrentStage(5);
+                      setExpandedStage(9);
+                      setCurrentStage(9);
                     }}
                   />
                 ) : (
@@ -1683,7 +1725,7 @@ export default function CreateVideo() {
                   className="w-full"
                   onClick={() => {
                     if (scenes.length === 0) {
-                      toast.error("No scenes available. Generate scenes first in Step 2.");
+                      toast.error("No scenes available. Generate scenes first in Scene Builder.");
                       return;
                     }
                     setShowTimelineEditor(true);
@@ -1696,13 +1738,13 @@ export default function CreateVideo() {
             </Card>
           )}
 
-          {/* Stage 5: Export */}
-          {expandedStage === 5 && (
+          {/* Stage 9: Export */}
+          {expandedStage === 9 && (
             <Card className="bg-gradient-card border-border shadow-card">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <Globe className="w-5 h-5 text-primary" />
-                  Step 5: Export
+                  Export
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
                   Select output formats for your videos (select all that apply)
@@ -1772,7 +1814,7 @@ export default function CreateVideo() {
           )}
 
           {/* Save Button - shown when scenes exist */}
-          {scenes.length > 0 && !scriptId && expandedStage <= 2 && (
+          {scenes.length > 0 && !scriptId && expandedStage <= 6 && (
             <Button
               onClick={saveProjectAndScenes}
               disabled={isSaving}
