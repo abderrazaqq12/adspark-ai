@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Upload, Link2, FileText, ArrowRight, Loader2, Sheet, Database } from 'lucide-react';
+import { Upload, Link2, FileText, ArrowRight, Loader2, Sheet, Database, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -21,8 +21,8 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
   const [productName, setProductName] = useState('');
   const [description, setDescription] = useState('');
   const [mediaLinks, setMediaLinks] = useState('');
-  const [targetMarket, setTargetMarket] = useState('us');
-  const [language, setLanguage] = useState('en');
+  const [targetMarket, setTargetMarket] = useState('sa');
+  const [language, setLanguage] = useState('ar-sa');
   const [audienceAge, setAudienceAge] = useState('25-34');
   const [audienceGender, setAudienceGender] = useState('both');
   
@@ -57,8 +57,8 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
         setProductName(prefs.studio_product_name || '');
         setDescription(prefs.studio_description || '');
         setMediaLinks(prefs.studio_media_links || '');
-        setTargetMarket(prefs.studio_target_market || 'us');
-        setLanguage(prefs.studio_language || 'en');
+        setTargetMarket(prefs.studio_target_market || 'sa');
+        setLanguage(prefs.studio_language || 'ar-sa');
         setAudienceAge(prefs.studio_audience_age || '25-34');
         setAudienceGender(prefs.studio_audience_gender || 'both');
         setSheetUrl(prefs.google_sheet_url || '');
@@ -83,12 +83,28 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
 
     setIsLoadingSheet(true);
     try {
-      // Simulated sheet loading - in production this would call a backend API
+      // In production, this would call a backend API to fetch Google Sheet data
+      // For now, we simulate loading data from the sheet
       await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Simulated sheet data - in production this comes from Google Sheets API
+      // The sheet should have columns: Product Name, Product URL, Product Description, Media Links
+      const simulatedSheetData = {
+        productName: `Product from Row ${sheetRow}`,
+        productUrl: `https://example.com/product-${sheetRow}`,
+        productDescription: `This is the description for product in row ${sheetRow}. Contains details about features and benefits.`,
+        mediaLinks: `https://example.com/image1.jpg\nhttps://example.com/image2.jpg`,
+      };
+
+      // Auto-fill the form with sheet data
+      setProductName(simulatedSheetData.productName);
+      setProductUrl(simulatedSheetData.productUrl);
+      setDescription(simulatedSheetData.productDescription);
+      setMediaLinks(simulatedSheetData.mediaLinks);
       
       toast({
         title: "Sheet Data Loaded",
-        description: `Product data loaded from row ${sheetRow}`,
+        description: `Product data loaded from row ${sheetRow}. All fields have been populated.`,
       });
       setSheetConnected(true);
     } catch (error: any) {
@@ -212,6 +228,9 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
             <Sheet className="w-4 h-4 text-green-500" />
             Google Sheet Sync
           </h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Your sheet should have columns: <strong>Product Name</strong>, <strong>Product URL</strong>, <strong>Product Description</strong>, <strong>Media Links</strong>
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2 space-y-2">
               <Label>Sheet URL</Label>
@@ -240,7 +259,7 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
           </div>
           {sheetConnected && (
             <div className="mt-4 p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-sm text-green-500">
-              ✓ Sheet connected - Data will auto-populate from row {sheetRow}
+              ✓ Sheet connected - Data loaded from row {sheetRow}
             </div>
           )}
         </Card>
@@ -251,6 +270,9 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
         <h3 className="font-semibold mb-4 flex items-center gap-2">
           <FileText className="w-4 h-4 text-primary" />
           Product Information
+          {dataSource === 'sheet' && sheetConnected && (
+            <Badge variant="secondary" className="ml-2">Loaded from Sheet</Badge>
+          )}
         </h3>
         <div className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -291,8 +313,8 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
 
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
-              <Upload className="w-4 h-4 text-muted-foreground" />
-              Media Links (Optional)
+              <ImageIcon className="w-4 h-4 text-muted-foreground" />
+              Media Links (Images/Videos)
             </Label>
             <Textarea
               value={mediaLinks}
@@ -300,6 +322,7 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
               placeholder="Enter image/video URLs, one per line..."
               className="bg-background border-border min-h-[60px]"
             />
+            <p className="text-xs text-muted-foreground">Enter URLs for product images and videos, one per line</p>
           </div>
         </div>
       </Card>

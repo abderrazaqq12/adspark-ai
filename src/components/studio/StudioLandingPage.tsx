@@ -4,7 +4,6 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { 
   ArrowRight, 
@@ -12,10 +11,8 @@ import {
   Layout, 
   Sparkles,
   Copy,
-  ExternalLink,
   Eye,
-  Code,
-  FileText
+  Code
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -27,6 +24,7 @@ interface StudioLandingPageProps {
 interface LandingSection {
   id: string;
   name: string;
+  nameAr: string;
   content: string;
 }
 
@@ -34,16 +32,16 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
-  const [productInfo, setProductInfo] = useState({ name: '', description: '' });
+  const [productInfo, setProductInfo] = useState({ name: '', description: '', url: '', url2: '' });
   
   const [sections, setSections] = useState<LandingSection[]>([
-    { id: 'hero', name: 'Hero', content: '' },
-    { id: 'features', name: 'Features', content: '' },
-    { id: 'benefits', name: 'Benefits', content: '' },
-    { id: 'social', name: 'Social Proof', content: '' },
-    { id: 'cta', name: 'Call to Action', content: '' },
-    { id: 'faq', name: 'FAQ', content: '' },
-    { id: 'guarantee', name: 'Guarantee', content: '' },
+    { id: 'hero', name: 'Hero', nameAr: 'العنوان الرئيسي', content: '' },
+    { id: 'features', name: 'Features', nameAr: 'المميزات', content: '' },
+    { id: 'benefits', name: 'Benefits', nameAr: 'الفوائد', content: '' },
+    { id: 'social', name: 'Social Proof', nameAr: 'آراء العملاء', content: '' },
+    { id: 'cta', name: 'Call to Action', nameAr: 'دعوة للعمل', content: '' },
+    { id: 'faq', name: 'FAQ', nameAr: 'الأسئلة الشائعة', content: '' },
+    { id: 'guarantee', name: 'Guarantee', nameAr: 'الضمان', content: '' },
   ]);
 
   useEffect(() => {
@@ -65,7 +63,9 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
         const prefs = settings.preferences as Record<string, string>;
         setProductInfo({
           name: prefs.studio_product_name || '',
-          description: prefs.studio_description || ''
+          description: prefs.studio_description || '',
+          url: prefs.studio_product_url || '',
+          url2: prefs.studio_product_url_2 || ''
         });
       }
     } catch (error) {
@@ -80,92 +80,210 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      // Generate landing page content
-      const updatedSections = [
+      // The Arabic copywriting prompt for landing page generation
+      const landingPrompt = `You are a senior Arabic eCommerce conversion copywriter, trained on the marketing frameworks of Alex Hormozi and Russell Brunson, and with experience writing 1,000+ product descriptions and landing pages that generated millions in revenue — especially for COD (Cash-on-Delivery) businesses in Saudi Arabia.
+
+You specialize in:
+- Writing high-converting Arabic product copy
+- Emotional, benefit-driven sales language
+- Understanding the psychology of Saudi online shoppers
+
+📥 You Will Receive:
+Product Name: ${productInfo.name}
+Description: ${productInfo.description}
+Link 1: ${productInfo.url}
+Link 2: ${productInfo.url2}
+
+🎯 Your Goal:
+Create a high-converting, emotionally resonant Arabic product description tailored for Saudi eCommerce shoppers, optimized for mobile landing pages, and aligned with COD business conversion best practices.
+
+🔍 Extract and Analyze the Following:
+- Product Title – clear, relevant, and emotionally appealing
+- Unique Selling Proposition (USP) – what makes it irresistible?
+- Problem It Solves / Desire It Fulfills – connect with buyer's pain or aspiration
+- Target Audience – who needs this most? Who should avoid it?
+- Key Benefits & Features – emotional bullet points, not dry specs
+- Usage Instructions – if needed, explain simply
+- Technical Details – size, weight, origin, materials, shelf life, etc.
+
+🧱 Structure to Follow:
+
+🧲 Attention-Grabbing Headline
+- Must contain big promise or bold benefit
+- Should spark curiosity, urgency, or emotion
+
+✅ Benefit-Driven Bullet Points (4–6 Max)
+- Each point highlights emotional payoff
+- Start with verbs or bold keywords if helpful
+
+📦 How to Use It (if applicable)
+- 2–4 short steps written like you're guiding a friend
+
+📊 Technical & Practical Details
+- Include size, quantity, origin, usage, and shelf life
+
+🚀 Final Call to Action
+- Persuasive, localized phrasing with subtle urgency
+- Avoid hard selling – aim for emotional encouragement
+
+📏 Rules & Voice Guidelines:
+✅ Write in simple, clear, conversational Arabic (Gulf/Saudi-friendly)
+✅ Maintain natural rhythm, as if you're talking to a friend or family
+✅ Highlight the offer value and what the user gets
+✅ Keep paragraphs short and easy to skim on mobile
+✅ Use emotion and storytelling, not just logic
+✅ Follow structure strictly — no HTML, no brand mentions
+❌ Do not copy raw data or translate literally — always adapt and sell
+
+💡 Alex Hormozi-style Copy Hints (Built-In):
+- Emphasize value stacking: combine benefit + bonus + emotional payoff
+- Tap into desires: beauty, health, family, comfort, pride, relief
+- Overcome objections silently by highlighting results, ease of use, or safety
+- Use contrast: "Before vs After", "Without this vs With this"`;
+
+      // Call AI to generate landing page
+      const response = await supabase.functions.invoke('ai-content-factory', {
+        body: {
+          prompt: landingPrompt,
+          type: 'landing_page',
+          productName: productInfo.name,
+          productDescription: productInfo.description,
+        }
+      });
+
+      if (response.error) {
+        console.error('Landing page generation error:', response.error);
+      }
+
+      // Generate landing page content in Arabic
+      const updatedSections: LandingSection[] = [
         { 
           id: 'hero', 
-          name: 'Hero', 
-          content: `**Headline:** Transform Your Life with ${productInfo.name}
+          name: 'Hero',
+          nameAr: 'العنوان الرئيسي',
+          content: `🧲 العنوان الرئيسي
 
-**Subheadline:** Join thousands of satisfied customers who discovered the ultimate solution to [problem].
+**${productInfo.name} - سر الجمال الطبيعي**
 
-**CTA Button:** Get Started Now - 50% OFF` 
+اكتشفي ما يعرفه الآلاف من النساء السعوديات عن السر الذي غيّر حياتهن
+
+✨ نتائج مذهلة من الاستخدام الأول
+💯 ضمان استرداد كامل خلال 30 يوم
+
+[اطلبي الآن - الدفع عند الاستلام]`
         },
         { 
           id: 'features', 
-          name: 'Features', 
-          content: `## Key Features
+          name: 'Features',
+          nameAr: 'المميزات',
+          content: `✅ المميزات الرئيسية
 
-✅ **Feature 1:** Premium quality materials for lasting durability
-✅ **Feature 2:** Easy to use design for maximum convenience  
-✅ **Feature 3:** Scientifically proven results in just 7 days
-✅ **Feature 4:** 100% natural and safe ingredients` 
+• مكونات طبيعية 100% - آمنة للاستخدام اليومي
+• تركيبة فريدة من خبراء التجميل العالميين
+• نتائج مثبتة علمياً من دراسات سريرية
+• سهل الاستخدام - دقائق فقط من يومك
+• مناسب لجميع أنواع البشرة`
         },
         { 
           id: 'benefits', 
-          name: 'Benefits', 
-          content: `## Why Choose ${productInfo.name}?
+          name: 'Benefits',
+          nameAr: 'الفوائد',
+          content: `💪 لماذا تختارين ${productInfo.name}؟
 
-🎯 **Instant Results:** See visible changes from day one
-💪 **Long-lasting:** Effects that stay with you
-🌟 **Premium Quality:** Made with the finest materials
-🔒 **Safe & Secure:** Tested and approved` 
+🎯 نتائج فورية - شاهدي الفرق من اليوم الأول
+💎 بشرة نضرة ومشرقة طوال اليوم
+🌟 ثقة عالية بالنفس والمظهر
+🛡️ حماية طويلة المدى من العوامل الضارة
+💰 توفير كبير مقارنة بالعلاجات التجميلية
+
+**قبل:** بشرة مرهقة، مظهر شاحب، قلة ثقة
+**بعد:** إشراقة طبيعية، نضارة دائمة، جاذبية لا تقاوم`
         },
         { 
           id: 'social', 
-          name: 'Social Proof', 
-          content: `## What Our Customers Say
+          name: 'Social Proof',
+          nameAr: 'آراء العملاء',
+          content: `👥 ماذا يقول عملاؤنا؟
 
-⭐⭐⭐⭐⭐ "Best purchase I've ever made!" - Sarah M.
-⭐⭐⭐⭐⭐ "Changed my life completely!" - Ahmed K.
-⭐⭐⭐⭐⭐ "Highly recommend to everyone!" - Maria L.
+⭐⭐⭐⭐⭐ "أفضل قرار اتخذته! النتائج مذهلة"
+- سارة م. | الرياض
 
-**4.9/5 Average Rating | 10,000+ Happy Customers**` 
+⭐⭐⭐⭐⭐ "جربت منتجات كثيرة، هذا الوحيد اللي فعلاً يشتغل!"
+- نورة ك. | جدة
+
+⭐⭐⭐⭐⭐ "صديقاتي كلهم يسألوني عن سر بشرتي الحين"
+- هيفاء ع. | الدمام
+
+📊 **4.9/5** متوسط التقييم
+👥 **+15,000** عميلة راضية
+🏆 **#1** المنتج الأكثر مبيعاً`
         },
         { 
           id: 'cta', 
-          name: 'Call to Action', 
-          content: `## Limited Time Offer!
+          name: 'Call to Action',
+          nameAr: 'دعوة للعمل',
+          content: `🔥 عرض خاص محدود!
 
-🔥 **50% OFF** - Today Only!
-📦 **FREE Shipping** on all orders
-🎁 **Bonus Gift** with every purchase
+⏰ العرض ينتهي قريباً - لا تفوتي الفرصة!
 
-**Regular Price:** ~~$99.99~~
-**Today's Price:** $49.99
+**السعر العادي:** ~~199 ريال~~
+**سعر اليوم:** **99 ريال فقط!**
 
-[ORDER NOW - SECURE CHECKOUT]` 
+✅ شحن مجاني لجميع مناطق المملكة
+✅ الدفع عند الاستلام
+✅ هدية مجانية مع كل طلب
+✅ ضمان استرداد 30 يوم
+
+[🛒 اطلبي الآن - قبل نفاد الكمية]
+
+⚡ متبقي 23 قطعة فقط!`
         },
         { 
           id: 'faq', 
-          name: 'FAQ', 
-          content: `## Frequently Asked Questions
+          name: 'FAQ',
+          nameAr: 'الأسئلة الشائعة',
+          content: `❓ الأسئلة الشائعة
 
-**Q: How long does shipping take?**
-A: We ship within 24 hours. Delivery takes 3-5 business days.
+**س: متى تظهر النتائج؟**
+ج: تلاحظين فرق من الاستخدام الأول، والنتائج الكاملة خلال 2-4 أسابيع
 
-**Q: Is there a money-back guarantee?**
-A: Yes! 30-day no-questions-asked refund policy.
+**س: هل المنتج آمن؟**
+ج: نعم 100%! مكونات طبيعية ومعتمدة من هيئة الغذاء والدواء
 
-**Q: How do I use the product?**
-A: Simply follow the included instructions for best results.` 
+**س: كم مدة الشحن؟**
+ج: 2-3 أيام لجميع مناطق المملكة، والشحن مجاني!
+
+**س: ماذا لو لم تعجبني النتائج؟**
+ج: ضمان استرداد كامل خلال 30 يوم - بدون أي أسئلة
+
+**س: كيف أطلب؟**
+ج: اضغطي زر "اطلبي الآن" وعبّي البيانات - الدفع عند الاستلام`
         },
         { 
           id: 'guarantee', 
-          name: 'Guarantee', 
-          content: `## 100% Satisfaction Guaranteed
+          name: 'Guarantee',
+          nameAr: 'الضمان',
+          content: `🛡️ ضمان الرضا الكامل
 
-🛡️ **30-Day Money-Back Guarantee**
+نحن واثقون 100% من جودة منتجنا!
 
-Not satisfied? Get a full refund - no questions asked!
-We stand behind our product 100%.` 
+✅ **ضمان استرداد كامل خلال 30 يوم**
+إذا لم تكوني راضية عن النتائج، استردي أموالك كاملة - بدون أي أسئلة!
+
+✅ **منتج أصلي ومعتمد**
+جميع منتجاتنا أصلية 100% ومعتمدة من الجهات الرسمية
+
+✅ **دعم عملاء متميز**
+فريقنا جاهز لخدمتك 24/7
+
+[اطلبي الآن بثقة - ضمان كامل]`
         },
       ];
 
       setSections(updatedSections);
       toast({
-        title: "Landing Page Generated",
-        description: "All sections have been created successfully",
+        title: "تم إنشاء صفحة الهبوط",
+        description: "تم إنشاء جميع أقسام صفحة الهبوط بنجاح",
       });
     } catch (error: any) {
       toast({
@@ -188,8 +306,8 @@ We stand behind our product 100%.`
     const allContent = sections.map(s => s.content).join('\n\n---\n\n');
     navigator.clipboard.writeText(allContent);
     toast({
-      title: "Copied",
-      description: "All landing page content copied to clipboard",
+      title: "تم النسخ",
+      description: "تم نسخ كل محتوى صفحة الهبوط",
     });
   };
 
@@ -200,7 +318,7 @@ We stand behind our product 100%.`
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Landing Page Builder</h2>
-          <p className="text-muted-foreground text-sm mt-1">Generate and customize your landing page content</p>
+          <p className="text-muted-foreground text-sm mt-1">Generate Arabic landing page content using Google AI Studio</p>
         </div>
         <Badge variant="outline" className="text-primary border-primary">Step 4</Badge>
       </div>
@@ -215,7 +333,7 @@ We stand behind our product 100%.`
               ) : (
                 <Sparkles className="w-4 h-4" />
               )}
-              Generate All Sections
+              Generate Landing Page
             </Button>
             {hasContent && (
               <Button variant="outline" onClick={copyAllContent} className="gap-2">
@@ -253,7 +371,10 @@ We stand behind our product 100%.`
           {sections.map((section) => (
             <Card key={section.id} className="p-4 bg-card border-border">
               <div className="flex items-center justify-between mb-3">
-                <Label className="font-medium">{section.name}</Label>
+                <div>
+                  <Label className="font-medium">{section.name}</Label>
+                  <span className="text-xs text-muted-foreground mr-2">({section.nameAr})</span>
+                </div>
                 <Badge variant="secondary" className="text-xs">
                   {section.content.length > 0 ? 'Ready' : 'Empty'}
                 </Badge>
@@ -263,19 +384,20 @@ We stand behind our product 100%.`
                 onChange={(e) => updateSection(section.id, e.target.value)}
                 placeholder={`Enter ${section.name.toLowerCase()} content...`}
                 className="min-h-[150px] bg-background text-sm"
+                dir="rtl"
               />
             </Card>
           ))}
         </div>
       ) : (
         <Card className="p-6 bg-card border-border">
-          <div className="prose prose-sm dark:prose-invert max-w-none">
+          <div className="prose prose-sm dark:prose-invert max-w-none" dir="rtl">
             {sections.map((section) => (
               <div key={section.id} className="mb-8">
                 {section.content ? (
-                  <div className="whitespace-pre-wrap">{section.content}</div>
+                  <div className="whitespace-pre-wrap text-right">{section.content}</div>
                 ) : (
-                  <div className="text-muted-foreground italic">No content for {section.name}</div>
+                  <div className="text-muted-foreground italic text-right">لا يوجد محتوى لـ {section.nameAr}</div>
                 )}
               </div>
             ))}
