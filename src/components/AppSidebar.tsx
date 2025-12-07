@@ -1,4 +1,4 @@
-import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Layers, Rocket, Building2, Database } from "lucide-react";
+import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Layers, Rocket, Building2, Database, Clapperboard } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,9 +25,10 @@ const workflowItems = [
   { title: "Agency Mode", url: "/agency", icon: Building2, description: "Batch generation" },
 ];
 
-// Quick access items - Dashboard first in header style
+// Quick access items - Dashboard and Create Video
 const quickAccessItems = [
   { title: "Dashboard", url: "/", icon: Home },
+  { title: "Create Video", url: "/create", icon: Clapperboard },
 ];
 
 // Library items - Projects only, other assets accessible within projects
