@@ -5,6 +5,89 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// SSRF Protection: Validate URLs to prevent internal network scanning
+function isValidExternalUrl(urlString: string): { valid: boolean; error?: string } {
+  try {
+    const url = new URL(urlString);
+    
+    // Require HTTPS only
+    if (url.protocol !== "https:") {
+      return { valid: false, error: "Only HTTPS URLs are allowed" };
+    }
+    
+    const hostname = url.hostname.toLowerCase();
+    
+    // Block localhost and loopback addresses
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+      return { valid: false, error: "Localhost URLs are not allowed" };
+    }
+    
+    // Block internal IP ranges
+    const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (ipv4Match) {
+      const [, a, b, c] = ipv4Match.map(Number);
+      
+      // 10.0.0.0/8 - Private network
+      if (a === 10) {
+        return { valid: false, error: "Private IP addresses (10.x.x.x) are not allowed" };
+      }
+      
+      // 172.16.0.0/12 - Private network
+      if (a === 172 && b >= 16 && b <= 31) {
+        return { valid: false, error: "Private IP addresses (172.16-31.x.x) are not allowed" };
+      }
+      
+      // 192.168.0.0/16 - Private network
+      if (a === 192 && b === 168) {
+        return { valid: false, error: "Private IP addresses (192.168.x.x) are not allowed" };
+      }
+      
+      // 169.254.0.0/16 - Link-local / Cloud metadata
+      if (a === 169 && b === 254) {
+        return { valid: false, error: "Link-local addresses (169.254.x.x) are not allowed" };
+      }
+      
+      // 127.0.0.0/8 - Loopback
+      if (a === 127) {
+        return { valid: false, error: "Loopback addresses are not allowed" };
+      }
+      
+      // 0.0.0.0/8 - Current network
+      if (a === 0) {
+        return { valid: false, error: "Invalid IP address" };
+      }
+    }
+    
+    // Block common internal hostnames
+    const blockedPatterns = [
+      /^internal\./i,
+      /^intranet\./i,
+      /^private\./i,
+      /\.local$/i,
+      /\.internal$/i,
+      /\.corp$/i,
+      /^metadata\./i,
+    ];
+    
+    for (const pattern of blockedPatterns) {
+      if (pattern.test(hostname)) {
+        return { valid: false, error: "Internal hostnames are not allowed" };
+      }
+    }
+    
+    // Block AWS/GCP/Azure metadata endpoints
+    if (hostname === "metadata.google.internal" || 
+        hostname === "metadata.goog" ||
+        hostname.includes("169.254.169.254")) {
+      return { valid: false, error: "Cloud metadata endpoints are not allowed" };
+    }
+    
+    return { valid: true };
+  } catch {
+    return { valid: false, error: "Invalid URL format" };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -167,6 +250,19 @@ async function deployWorkflow(baseUrl: string, apiKey: string, workflow: any) {
   try {
     // Clean the base URL
     const cleanUrl = baseUrl.replace(/\/mcp-server\/http\/?$/, "").replace(/\/$/, "");
+    
+    // Validate URL to prevent SSRF
+    const validation = isValidExternalUrl(cleanUrl);
+    if (!validation.valid) {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: `Invalid n8n URL: ${validation.error}` 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
     const apiUrl = `${cleanUrl}/api/v1/workflows`;
     
     console.log("Deploying workflow to:", apiUrl);
@@ -218,10 +314,23 @@ async function deployWorkflow(baseUrl: string, apiKey: string, workflow: any) {
 async function listWorkflows(baseUrl: string, apiKey: string) {
   try {
     const cleanUrl = baseUrl.replace(/\/mcp-server\/http\/?$/, "").replace(/\/$/, "");
+    
+    // Validate URL to prevent SSRF
+    const validation = isValidExternalUrl(cleanUrl);
+    if (!validation.valid) {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: `Invalid n8n URL: ${validation.error}` 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
     const apiUrl = `${cleanUrl}/api/v1/workflows`;
     
     console.log("Listing workflows from:", apiUrl);
-    
+
     const response = await fetch(apiUrl, {
       method: "GET",
       headers: {
@@ -267,10 +376,23 @@ async function listWorkflows(baseUrl: string, apiKey: string) {
 async function activateWorkflow(baseUrl: string, apiKey: string, workflowId: string, active: boolean) {
   try {
     const cleanUrl = baseUrl.replace(/\/mcp-server\/http\/?$/, "").replace(/\/$/, "");
+    
+    // Validate URL to prevent SSRF
+    const validation = isValidExternalUrl(cleanUrl);
+    if (!validation.valid) {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: `Invalid n8n URL: ${validation.error}` 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
     const apiUrl = `${cleanUrl}/api/v1/workflows/${workflowId}`;
     
     console.log("Activating workflow:", workflowId, "active:", active);
-    
+
     const response = await fetch(apiUrl, {
       method: "PATCH",
       headers: {
