@@ -13,7 +13,8 @@ import {
   Code,
   ExternalLink,
   FileCode,
-  RefreshCw
+  RefreshCw,
+  CheckCircle2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -29,7 +30,8 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
   const { getPrompt, loading: promptsLoading } = useStudioPrompts();
   const { aiAgent, loading: aiAgentLoading } = useAIAgent();
   const [isGenerating, setIsGenerating] = useState(false);
-  const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
+  const [generationType, setGenerationType] = useState<'content' | 'code' | null>(null);
+  const [viewMode, setViewMode] = useState<'content' | 'preview'>('content');
   const [productInfo, setProductInfo] = useState({ name: '', description: '', url: '', url2: '' });
   const [marketingContent, setMarketingContent] = useState('');
   const [generatedContent, setGeneratedContent] = useState('');
@@ -58,7 +60,6 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
           url: prefs.studio_product_url || '',
           url2: prefs.studio_product_url_2 || ''
         });
-        // Load marketing content from previous step
         setMarketingContent(prefs.studio_marketing_content || '');
       }
     } catch (error) {
@@ -68,12 +69,12 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
 
   const generateLandingPage = async () => {
     setIsGenerating(true);
+    setGenerationType('content');
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      // Get the landing page prompt from settings
       const landingPrompt = getPrompt('landing_page_content', {
         product_name: productInfo.name,
         product_description: productInfo.description,
@@ -82,7 +83,6 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
         marketing_content: marketingContent
       });
 
-      // Call AI to generate landing page content with selected model
       const response = await supabase.functions.invoke('ai-content-factory', {
         body: {
           prompt: landingPrompt,
@@ -100,6 +100,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
 
       const content = response.data?.content || response.data?.text || '';
       setGeneratedContent(content);
+      setViewMode('content');
 
       toast({
         title: "تم إنشاء صفحة الهبوط",
@@ -113,24 +114,24 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
       });
     } finally {
       setIsGenerating(false);
+      setGenerationType(null);
     }
   };
 
   const generateLandingCode = async () => {
     setIsGenerating(true);
+    setGenerationType('code');
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      // Get the landing page builder code prompt
       const builderPrompt = getPrompt('landing_page_builder', {
         product_name: productInfo.name,
         product_description: productInfo.description,
         landing_content: generatedContent || marketingContent,
       });
 
-      // Call AI to generate landing page HTML code with selected model
       const response = await supabase.functions.invoke('ai-content-factory', {
         body: {
           prompt: builderPrompt,
@@ -161,11 +162,12 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
       });
     } finally {
       setIsGenerating(false);
+      setGenerationType(null);
     }
   };
 
   const copyContent = () => {
-    const content = viewMode === 'edit' ? generatedContent : generatedCode;
+    const content = viewMode === 'content' ? generatedContent : generatedCode;
     navigator.clipboard.writeText(content);
     toast({
       title: "تم النسخ",
@@ -181,6 +183,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Landing Page Builder</h2>
@@ -188,158 +191,198 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
             Generate Arabic landing page content using Google AI Studio
           </p>
         </div>
-        <Badge variant="outline" className="text-primary border-primary">Step 4</Badge>
+        <Badge variant="outline" className="text-primary border-primary px-3 py-1">Step 4</Badge>
       </div>
 
-      {/* Google AI Studio Link */}
-      <Card className="p-4 bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
+      {/* Google AI Studio Integration Card */}
+      <Card className="p-5 bg-slate-900/50 border-primary/30 backdrop-blur-sm">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/20">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-primary/20 border border-primary/30">
               <Sparkles className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <p className="font-medium text-foreground">Google AI Studio Integration</p>
-              <p className="text-xs text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <p className="font-semibold text-foreground">Google AI Studio Integration</p>
+                <div className="flex items-center gap-1 text-xs text-green-400">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>Connected</span>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
                 Uses your prompts from Settings → Prompts to generate content
               </p>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={openGoogleAIStudio} className="gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={openGoogleAIStudio} 
+            className="gap-2 border-primary/50 hover:bg-primary/10 hover:border-primary"
+          >
             <ExternalLink className="w-4 h-4" />
             Open AI Studio
           </Button>
         </div>
       </Card>
 
-      {/* Actions */}
-      <Card className="p-4 bg-card border-border">
+      {/* Control Panel */}
+      <Card className="p-4 bg-card/50 border-border backdrop-blur-sm">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* Action Buttons */}
+          <div className="flex items-center gap-3">
             <Button 
               onClick={generateLandingPage} 
-              disabled={isGenerating || promptsLoading} 
-              className="gap-2"
+              disabled={isGenerating || promptsLoading}
+              className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25 px-5"
             >
-              {isGenerating ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+              {isGenerating && generationType === 'content' ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Generating...
+                </>
               ) : (
-                <Sparkles className="w-4 h-4" />
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  Generate Content
+                </>
               )}
-              Generate Content
             </Button>
             
             {generatedContent && (
               <Button 
                 onClick={generateLandingCode} 
-                disabled={isGenerating} 
+                disabled={isGenerating}
                 variant="secondary"
                 className="gap-2"
               >
-                {isGenerating ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                {isGenerating && generationType === 'code' ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating...
+                  </>
                 ) : (
-                  <FileCode className="w-4 h-4" />
+                  <>
+                    <FileCode className="w-4 h-4" />
+                    Generate HTML Code
+                  </>
                 )}
-                Generate HTML Code
               </Button>
             )}
 
             {hasContent && (
-              <Button variant="outline" onClick={copyContent} className="gap-2">
+              <Button variant="outline" onClick={copyContent} size="icon" className="h-9 w-9">
                 <Copy className="w-4 h-4" />
-                Copy
               </Button>
             )}
           </div>
           
-          <div className="flex items-center gap-2">
-            <Button 
-              variant={viewMode === 'edit' ? 'secondary' : 'ghost'} 
-              size="sm"
-              onClick={() => setViewMode('edit')}
-              className="gap-2"
+          {/* View Mode Toggle - Segmented Control */}
+          <div className="flex items-center bg-slate-800/50 rounded-lg p-1 border border-border">
+            <button 
+              onClick={() => setViewMode('content')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                viewMode === 'content' 
+                  ? 'bg-primary text-primary-foreground shadow-md' 
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
             >
               <Code className="w-4 h-4" />
               Content
-            </Button>
-            <Button 
-              variant={viewMode === 'preview' ? 'secondary' : 'ghost'} 
-              size="sm"
-              onClick={() => setViewMode('preview')}
-              className="gap-2"
+            </button>
+            <button 
+              onClick={() => generatedCode && setViewMode('preview')}
               disabled={!generatedCode}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                viewMode === 'preview' 
+                  ? 'bg-primary text-primary-foreground shadow-md' 
+                  : 'text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed'
+              }`}
             >
               <Eye className="w-4 h-4" />
               Preview
-            </Button>
+            </button>
           </div>
         </div>
       </Card>
 
-      {/* Content Editor / Preview */}
-      <Card className="p-6 bg-card border-border min-h-[400px]">
-        {viewMode === 'edit' ? (
-          <div className="space-y-4">
+      {/* Content/Preview Area */}
+      <Card className="bg-card/30 border-primary/20 overflow-hidden">
+        {viewMode === 'content' ? (
+          <div className="p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <Label className="text-lg font-medium">Landing Page Content</Label>
+              <Label className="text-lg font-semibold text-foreground">Landing Page Content</Label>
               {generatedContent && (
                 <Button 
                   variant="ghost" 
                   size="sm" 
                   onClick={generateLandingPage}
-                  className="gap-2"
+                  disabled={isGenerating}
+                  className="gap-2 text-muted-foreground hover:text-foreground"
                 >
-                  <RefreshCw className="w-4 h-4" />
+                  <RefreshCw className={`w-4 h-4 ${isGenerating && generationType === 'content' ? 'animate-spin' : ''}`} />
                   Regenerate
                 </Button>
               )}
             </div>
-            <Textarea
-              value={generatedContent}
-              onChange={(e) => setGeneratedContent(e.target.value)}
-              placeholder="Click 'Generate Content' to create Arabic landing page content using your prompts from Settings..."
-              className="min-h-[350px] bg-background text-sm font-mono"
-              dir="rtl"
-            />
+            <div className="relative">
+              <Textarea
+                value={generatedContent}
+                onChange={(e) => setGeneratedContent(e.target.value)}
+                placeholder="Click 'Generate Content' to create Arabic landing page content using your prompts from Settings..."
+                className="min-h-[400px] bg-slate-900/50 border-primary/30 text-sm font-mono resize-none focus:border-primary/50 focus:ring-primary/20"
+                dir="rtl"
+              />
+              {!generatedContent && !isGenerating && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="text-center text-muted-foreground">
+                    <Sparkles className="w-10 h-10 mx-auto mb-3 text-primary/30" />
+                    <p className="text-sm">Click 'Generate Content' to create Arabic landing page</p>
+                    <p className="text-xs mt-1">...content using your prompts from Settings</p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label className="text-lg font-medium">HTML Code Preview</Label>
+          <div className="space-y-0">
+            <div className="flex items-center justify-between p-4 border-b border-border bg-slate-900/30">
+              <Label className="text-lg font-semibold text-foreground">HTML Preview</Label>
               {generatedCode && (
                 <Button 
                   variant="ghost" 
                   size="sm" 
                   onClick={generateLandingCode}
-                  className="gap-2"
+                  disabled={isGenerating}
+                  className="gap-2 text-muted-foreground hover:text-foreground"
                 >
-                  <RefreshCw className="w-4 h-4" />
+                  <RefreshCw className={`w-4 h-4 ${isGenerating && generationType === 'code' ? 'animate-spin' : ''}`} />
                   Regenerate Code
                 </Button>
               )}
             </div>
             {generatedCode ? (
-              <div className="border border-border rounded-lg overflow-hidden">
+              <div className="bg-white">
                 <iframe
                   srcDoc={generatedCode}
-                  className="w-full min-h-[400px] bg-white"
+                  className="w-full min-h-[500px]"
                   title="Landing Page Preview"
                   sandbox="allow-scripts"
                 />
               </div>
             ) : (
-              <div className="flex items-center justify-center min-h-[350px] text-muted-foreground">
-                Generate content first, then click "Generate HTML Code" to see preview
+              <div className="flex flex-col items-center justify-center min-h-[400px] text-muted-foreground p-6">
+                <Eye className="w-10 h-10 mb-3 text-primary/30" />
+                <p className="text-sm text-center">Generate content first, then click "Generate HTML Code" to see preview</p>
               </div>
             )}
           </div>
         )}
       </Card>
 
-      {/* Continue */}
-      <div className="flex justify-end">
-        <Button onClick={onNext} className="gap-2">
+      {/* Continue Button */}
+      <div className="flex justify-end pt-2">
+        <Button onClick={onNext} className="gap-2 px-6">
           Continue to Voiceover
           <ArrowRight className="w-4 h-4" />
         </Button>
