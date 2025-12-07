@@ -97,13 +97,32 @@ export function useStudioPrompts(): UseStudioPromptsReturn {
 
       if (fetchError) throw fetchError;
 
-      const savedPrompts = (settings?.preferences as Record<string, any>)?.studio_prompts || {};
+      const prefs = settings?.preferences as Record<string, any>;
+      const savedPromptsV2 = prefs?.studio_prompts_v2?.prompts || {};
+      const savedPromptsV1 = prefs?.studio_prompts || {};
+      const customPrompts = prefs?.studio_prompts_v2?.custom_prompts || [];
 
       // Merge default prompts with saved prompts (saved takes priority)
       const mergedPrompts = { ...DEFAULT_PROMPTS };
-      Object.entries(savedPrompts).forEach(([key, value]) => {
+      
+      // First apply v1 format (backward compatibility)
+      Object.entries(savedPromptsV1).forEach(([key, value]) => {
         if (typeof value === 'string' && value.trim()) {
           mergedPrompts[key] = value;
+        }
+      });
+
+      // Then apply v2 format (overrides v1)
+      Object.entries(savedPromptsV2).forEach(([key, value]: [string, any]) => {
+        if (value?.prompt && typeof value.prompt === 'string' && value.prompt.trim()) {
+          mergedPrompts[key] = value.prompt;
+        }
+      });
+
+      // Add custom prompts
+      customPrompts.forEach((custom: any) => {
+        if (custom?.function && custom?.prompt) {
+          mergedPrompts[custom.function] = custom.prompt;
         }
       });
 
