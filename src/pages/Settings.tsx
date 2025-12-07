@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import BatchApiKeyTester from "@/components/BatchApiKeyTester";
 import EngineUsageAnalytics from "@/components/EngineUsageAnalytics";
+import N8nBackendSettings from "@/components/N8nBackendSettings";
 
 interface PromptTemplate {
   id: string;
@@ -988,6 +989,7 @@ export default function Settings() {
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
           <TabsTrigger value="n8n">n8n Integration</TabsTrigger>
+          <TabsTrigger value="backend">Backend Mode</TabsTrigger>
           <TabsTrigger value="preferences">Preferences</TabsTrigger>
         </TabsList>
 
@@ -2085,6 +2087,11 @@ export default function Settings() {
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Backend Mode Tab */}
+        <TabsContent value="backend" className="space-y-6">
+          <N8nBackendSettings />
         </TabsContent>
       </Tabs>
     </div>

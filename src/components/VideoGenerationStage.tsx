@@ -368,14 +368,14 @@ export default function VideoGenerationStage({
       </div>
 
       {/* Video Preview Modal */}
-      {previewScene && (
+      {previewScene && previewScene.video_url && (
         <VideoPreviewPlayer
-          scene={{
-            ...previewScene,
-            transition_type: 'cut',
-            transition_duration_ms: 500
-          }}
-          onClose={() => setPreviewScene(null)}
+          open={!!previewScene}
+          onOpenChange={(open) => !open && setPreviewScene(null)}
+          videoUrl={previewScene.video_url}
+          title={`Scene ${previewScene.index + 1}`}
+          sceneIndex={previewScene.index}
+          engineName={previewScene.engine_name || undefined}
         />
       )}
     </div>

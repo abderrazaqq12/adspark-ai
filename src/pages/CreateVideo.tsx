@@ -39,6 +39,8 @@ import { VideoUploadPreview, generateVideoId } from "@/components/VideoUploadPre
 import BatchAssembly from "@/components/BatchAssembly";
 import CostCalculatorPreview from "@/components/CostCalculatorPreview";
 import VideoTimelineEditor from "@/components/VideoTimelineEditor";
+import { PipelineStatusIndicator } from "@/components/PipelineStatusIndicator";
+import VideoGenerationStage from "@/components/VideoGenerationStage";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 // ElevenLabs voices - expanded list with categories
@@ -726,11 +728,26 @@ export default function CreateVideo() {
 
       {/* Main Content */}
       <div className="flex-1 p-8 space-y-8 overflow-auto">
-        <div>
-          <h1 className="text-4xl font-bold text-foreground mb-2">Create AI Video Ad</h1>
-          <p className="text-muted-foreground">
-            Multi-step production pipeline for professional video ads
-          </p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-foreground mb-2">Create AI Video Ad</h1>
+            <p className="text-muted-foreground">
+              Multi-step production pipeline for professional video ads
+            </p>
+          </div>
+          <PipelineStatusIndicator 
+            pipelineStatus={{
+              product_info: currentStage > 0 ? 'completed' : expandedStage === 0 ? 'in_progress' : 'pending',
+              scripts: currentStage > 1 ? 'completed' : expandedStage === 1 ? 'in_progress' : 'pending',
+              scenes: currentStage > 2 ? 'completed' : expandedStage === 2 ? 'in_progress' : 'pending',
+              video_generation: currentStage > 3 ? 'completed' : expandedStage === 3 ? 'in_progress' : 'pending',
+              assembly: currentStage > 4 ? 'completed' : expandedStage === 4 ? 'in_progress' : 'pending',
+              export: currentStage > 5 ? 'completed' : expandedStage === 5 ? 'in_progress' : 'pending',
+            }}
+            currentStage={expandedStage}
+            onStageClick={(stageId, index) => setExpandedStage(index)}
+            compact={true}
+          />
         </div>
 
         <div className="flex flex-col gap-6">
