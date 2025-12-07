@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useStudioPrompts } from '@/hooks/useStudioPrompts';
 
 interface StudioMarketingEngineProps {
   onNext: () => void;
@@ -41,6 +42,7 @@ interface GeneratedScript {
 
 export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) => {
   const { toast } = useToast();
+  const { getPrompt, loading: promptsLoading } = useStudioPrompts();
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeTab, setActiveTab] = useState('angles');
   const [generatedAngles, setGeneratedAngles] = useState<GeneratedAngles | null>(null);
@@ -84,43 +86,11 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      // The prompt for marketing angles - this generates Arabic content
-      const anglesPrompt = `You are a top-performing digital marketer with deep experience in product positioning, emotional copywriting, and conversion-optimized messaging.
-
-📦 Based on the product name, product description, ingredients, and any available features or benefits:
-${productInfo.name}
-${productInfo.description}
-
-🎯 Your Task:
-Analyze the product and extract the most persuasive, value-driven insights. Return your answer in three clear sections:
-
-1. Problems Solved
-Identify every pain point this product addresses, including:
-- Functional problems (e.g. acne, joint pain, lack of energy)
-- Emotional struggles (e.g. low confidence, frustration, embarrassment)
-- Hidden/secondary problems the customer may not express but deeply feels
-Think like the customer. What are they Googling at 2 AM? What discomfort are they silently enduring?
-
-2. Customer Value
-List all the emotional and practical transformations the customer will experience after using the product:
-- Tangible results (e.g. smoother skin, better sleep, stronger joints)
-- Emotional outcomes (e.g. confidence, peace of mind, feeling attractive)
-- Unique product benefits tied to ingredients or formulation
-Highlight what makes this product worth buying now, not later.
-
-3. Marketing Angles
-List all high-converting marketing angles that can be used for ads, landing pages, or emails:
-- Problem/Solution
-- Social Proof / Testimonials
-- Urgency / Scarcity
-- Ingredient Superiority
-- Authority / Expert-Backed
-- Aspirational / Lifestyle Transformation
-- Before/After Visuals
-- Emotional storytelling (relatable, identity-based)
-Include angles for both logical buyers and emotional impulse buyers.
-
-- Give me the results in arabic language`;
+      // Get the prompt from Settings with variable replacement
+      const anglesPrompt = getPrompt('product_content', {
+        product_name: productInfo.name,
+        product_description: productInfo.description,
+      });
 
       // Call the AI to generate angles
       const response = await supabase.functions.invoke('ai-content-factory', {
