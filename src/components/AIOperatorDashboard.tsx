@@ -31,11 +31,11 @@ interface OperatorJob {
 }
 
 interface AIOperatorDashboardProps {
-  projectId: string | null;
-  enabled: boolean;
+  projectId?: string | null;
+  enabled?: boolean;
 }
 
-export default function AIOperatorDashboard({ projectId, enabled }: AIOperatorDashboardProps) {
+export default function AIOperatorDashboard({ projectId, enabled = true }: AIOperatorDashboardProps) {
   const [jobs, setJobs] = useState<OperatorJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
@@ -47,23 +47,24 @@ export default function AIOperatorDashboard({ projectId, enabled }: AIOperatorDa
   });
 
   useEffect(() => {
-    if (projectId) {
-      fetchJobs();
-      subscribeToJobs();
-    }
+    loadJobs();
+    const unsubscribe = subscribeToJobs();
+    return () => unsubscribe?.();
   }, [projectId]);
 
-  const fetchJobs = async () => {
-    if (!projectId) return;
-
+  const loadJobs = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('operator_jobs')
         .select('*')
-        .eq('project_id', projectId)
         .order('created_at', { ascending: false })
         .limit(20);
+      
+      if (projectId) {
+        query = query.eq('project_id', projectId);
+      }
 
+      const { data, error } = await query;
       if (error) throw error;
 
       setJobs(data || []);
@@ -84,8 +85,6 @@ export default function AIOperatorDashboard({ projectId, enabled }: AIOperatorDa
   };
 
   const subscribeToJobs = () => {
-    if (!projectId) return;
-
     const channel = supabase
       .channel('operator-jobs')
       .on(
@@ -93,11 +92,10 @@ export default function AIOperatorDashboard({ projectId, enabled }: AIOperatorDa
         {
           event: '*',
           schema: 'public',
-          table: 'operator_jobs',
-          filter: `project_id=eq.${projectId}`
+          table: 'operator_jobs'
         },
         () => {
-          fetchJobs();
+          loadJobs();
         }
       )
       .subscribe();
@@ -108,8 +106,6 @@ export default function AIOperatorDashboard({ projectId, enabled }: AIOperatorDa
   };
 
   const runOperator = async (action: string) => {
-    if (!projectId) return;
-
     setIsRunning(true);
     
     try {
@@ -127,7 +123,7 @@ export default function AIOperatorDashboard({ projectId, enabled }: AIOperatorDa
       if (error) throw error;
 
       toast.success(`AI Operator: ${action.replace(/_/g, ' ')}`);
-      fetchJobs();
+      loadJobs();
     } catch (error: any) {
       toast.error(error.message || 'AI Operator action failed');
     } finally {
