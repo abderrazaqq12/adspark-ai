@@ -18,6 +18,7 @@ import BatchApiKeyTester from "@/components/BatchApiKeyTester";
 import EngineUsageAnalytics from "@/components/EngineUsageAnalytics";
 import N8nBackendSettings from "@/components/N8nBackendSettings";
 import { StudioDataSettings } from "@/components/studio/StudioDataSettings";
+import StudioPrompts from "@/components/StudioPrompts";
 
 interface PromptTemplate {
   id: string;
@@ -987,6 +988,7 @@ export default function Settings() {
       <Tabs defaultValue="api-keys" className="space-y-6">
           <TabsList className="bg-muted/50 flex-wrap h-auto p-1">
           <TabsTrigger value="api-keys">API Keys</TabsTrigger>
+          <TabsTrigger value="prompts">Prompts</TabsTrigger>
           <TabsTrigger value="data">Data</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
