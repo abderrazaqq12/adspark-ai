@@ -53,3 +53,9 @@ verify_jwt = false
 
 [functions.autopilot-generate]
 verify_jwt = false
+
+[functions.ai-operator]
+verify_jwt = false
+
+[functions.smart-route-engine]
+verify_jwt = false
