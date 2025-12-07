@@ -25,10 +25,10 @@ const workflowItems = [
   { title: "Agency Mode", url: "/agency", icon: Building2, description: "Batch generation" },
 ];
 
-// Quick access items - Dashboard and Create Video
+// Quick access items - Dashboard only, Create Video moved to Studio
 const quickAccessItems = [
   { title: "Dashboard", url: "/", icon: Home },
-  { title: "Create Video", url: "/create", icon: Clapperboard },
+  { title: "Create Video", url: "/studio", icon: Clapperboard },
 ];
 
 // Library items - Projects only, other assets accessible within projects
