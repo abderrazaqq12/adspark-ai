@@ -154,16 +154,15 @@ interface ElevenLabsVoice {
 
 // Production pipeline stages - includes Studio steps before video creation
 const pipelineStages = [
-  { id: 0, key: 'studio-product', name: "Product Input", icon: Package, description: "Product details & targeting" },
-  { id: 1, key: 'studio-content', name: "Product Content", icon: Lightbulb, description: "Angles, scripts & content" },
-  { id: 2, key: 'studio-images', name: "Image Generation", icon: Image, description: "Product images & mockups" },
-  { id: 3, key: 'studio-landing', name: "Landing Page", icon: Layout, description: "Sales page content" },
-  { id: 4, key: 'product-info', name: "Product Info", icon: Package, description: "Product details for your video" },
-  { id: 5, key: 'scripts', name: "Video Script Text & Audio", icon: Mic, description: "Voice-over scripts and audio" },
-  { id: 6, key: 'scenes', name: "Scene Builder", icon: Wand2, description: "AI breaks down script into visual scenes" },
-  { id: 7, key: 'video-gen', name: "Video Generation", icon: Video, description: "AI creates video for each scene" },
-  { id: 8, key: 'assembly', name: "Assembly & Edit", icon: Palette, description: "Combine, sync, add branding" },
-  { id: 9, key: 'export', name: "Export", icon: Globe, description: "Multi-format export" },
+  { id: 0, key: 'studio-product', name: "Product Input", icon: Package, description: "Product details & targeting", required: true },
+  { id: 1, key: 'studio-content', name: "Product Content", icon: Lightbulb, description: "Angles, scripts & content", required: false },
+  { id: 2, key: 'studio-images', name: "Image Generation", icon: Image, description: "Product images & mockups", required: false },
+  { id: 3, key: 'studio-landing', name: "Landing Page", icon: Layout, description: "Sales page content", required: false },
+  { id: 4, key: 'scripts', name: "Video Script Text & Audio", icon: Mic, description: "Voice-over scripts and audio", required: true },
+  { id: 5, key: 'scenes', name: "Scene Builder", icon: Wand2, description: "AI breaks down script into visual scenes", required: true },
+  { id: 6, key: 'video-gen', name: "Video Generation", icon: Video, description: "AI creates video for each scene", required: true },
+  { id: 7, key: 'assembly', name: "Assembly & Edit", icon: Palette, description: "Combine, sync, add branding", required: true },
+  { id: 8, key: 'export', name: "Export", icon: Globe, description: "Multi-format export", required: true },
 ];
 
 interface ScriptSlot {
@@ -301,7 +300,7 @@ export default function CreateVideo() {
             duration: s.duration_sec,
             visualPrompt: s.visual_prompt,
           })));
-          setCurrentStage(6);
+          setCurrentStage(5);
         }
       }
     }
@@ -355,7 +354,7 @@ export default function CreateVideo() {
   const generateScriptsFromTemplates = async () => {
     if (!productInfo.name.trim()) {
       toast.error("Please enter product name first");
-      setExpandedStage(4);
+      setExpandedStage(0);
       return;
     }
 
@@ -572,8 +571,8 @@ export default function CreateVideo() {
       if (error) throw error;
 
       setScenes(data.scenes || []);
-      setCurrentStage(6);
-      setExpandedStage(6);
+      setCurrentStage(5);
+      setExpandedStage(5);
       toast.success("Scripts analyzed successfully!");
     } catch (error: any) {
       console.error("Error analyzing script:", error);
@@ -727,7 +726,12 @@ export default function CreateVideo() {
                 ) : (
                   <Circle className="w-5 h-5 opacity-50 shrink-0" />
                 )}
-                <span className="text-sm font-medium">{stage.name}</span>
+                <div className="flex flex-col flex-1 min-w-0">
+                  <span className="text-sm font-medium">{stage.name}</span>
+                  <span className={`text-[10px] ${stage.required ? 'text-destructive/80' : 'text-muted-foreground'}`}>
+                    {stage.required ? '● Required' : '○ Optional'}
+                  </span>
+                </div>
               </button>
               {index < pipelineStages.length - 1 && (
                 <div className="ml-6 h-4 border-l-2 border-muted-foreground/20" />
@@ -748,12 +752,12 @@ export default function CreateVideo() {
           </div>
           <PipelineStatusIndicator 
             pipelineStatus={{
-              product_info: currentStage > 4 ? 'completed' : expandedStage === 4 ? 'in_progress' : 'pending',
-              scripts: currentStage > 5 ? 'completed' : expandedStage === 5 ? 'in_progress' : 'pending',
-              scenes: currentStage > 6 ? 'completed' : expandedStage === 6 ? 'in_progress' : 'pending',
-              video_generation: currentStage > 7 ? 'completed' : expandedStage === 7 ? 'in_progress' : 'pending',
-              assembly: currentStage > 8 ? 'completed' : expandedStage === 8 ? 'in_progress' : 'pending',
-              export: currentStage > 9 ? 'completed' : expandedStage === 9 ? 'in_progress' : 'pending',
+              product_info: currentStage > 0 ? 'completed' : expandedStage === 0 ? 'in_progress' : 'pending',
+              scripts: currentStage > 4 ? 'completed' : expandedStage === 4 ? 'in_progress' : 'pending',
+              scenes: currentStage > 5 ? 'completed' : expandedStage === 5 ? 'in_progress' : 'pending',
+              video_generation: currentStage > 6 ? 'completed' : expandedStage === 6 ? 'in_progress' : 'pending',
+              assembly: currentStage > 7 ? 'completed' : expandedStage === 7 ? 'in_progress' : 'pending',
+              export: currentStage > 8 ? 'completed' : expandedStage === 8 ? 'in_progress' : 'pending',
             }}
             currentStage={expandedStage}
             onStageClick={(stageId, index) => setExpandedStage(index)}
@@ -789,111 +793,14 @@ export default function CreateVideo() {
           {/* Stage 3: Studio Landing Page */}
           {expandedStage === 3 && (
             <StudioLandingPage onNext={() => {
+              // Skip to Scripts stage (stage 4) - Product Info was merged into stage 0
               setExpandedStage(4);
               setCurrentStage(4);
             }} />
           )}
 
-          {/* Stage 4: Product Info */}
+          {/* Stage 4: Video Script Text & Audio */}
           {expandedStage === 4 && (
-            <Card className="bg-gradient-card border-border shadow-card">
-              <CardHeader>
-                <CardTitle className="text-foreground flex items-center gap-2">
-                  <Package className="w-5 h-5 text-primary" />
-                  Product Info
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Enter your product details. Product name will be used as project name.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="productName" className="text-foreground">
-                    Product Name <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="productName"
-                    placeholder="e.g., Premium Wireless Earbuds"
-                    className="bg-muted/50 border-input"
-                    value={productInfo.name}
-                    onChange={(e) => setProductInfo({ ...productInfo, name: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    This will be used as your project name
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="productDescription" className="text-foreground">
-                    Product Description <span className="text-muted-foreground">(optional)</span>
-                  </Label>
-                  <Textarea
-                    id="productDescription"
-                    placeholder="Brief description of your product..."
-                    className="bg-muted/50 border-input min-h-[80px]"
-                    value={productInfo.description}
-                    onChange={(e) => setProductInfo({ ...productInfo, description: e.target.value })}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="productImageUrl" className="text-foreground">
-                      Product Image URL <span className="text-muted-foreground">(optional)</span>
-                    </Label>
-                    <Input
-                      id="productImageUrl"
-                      placeholder="https://..."
-                      className="bg-muted/50 border-input"
-                      value={productInfo.imageUrl}
-                      onChange={(e) => setProductInfo({ ...productInfo, imageUrl: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="productLink" className="text-foreground">
-                      Product Link <span className="text-muted-foreground">(optional)</span>
-                    </Label>
-                    <Input
-                      id="productLink"
-                      placeholder="https://..."
-                      className="bg-muted/50 border-input"
-                      value={productInfo.link}
-                      onChange={(e) => setProductInfo({ ...productInfo, link: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                {productInfo.imageUrl && (
-                  <div className="p-4 rounded-lg bg-muted/30 border border-border">
-                    <p className="text-xs text-muted-foreground mb-2">Image Preview:</p>
-                    <img 
-                      src={productInfo.imageUrl} 
-                      alt="Product preview" 
-                      className="max-h-32 rounded-lg object-contain"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                  </div>
-                )}
-
-                <Button
-                  onClick={() => {
-                    setExpandedStage(5);
-                    setCurrentStage(5);
-                  }}
-                  disabled={!canProceedFromProductInfo}
-                  className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow"
-                >
-                  <ChevronRight className="w-4 h-4 mr-2" />
-                  Next: Add Scripts & Audio
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Stage 5: Video Script Text & Audio */}
-          {expandedStage === 5 && (
             <Card className="bg-gradient-card border-border shadow-card">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
@@ -1293,8 +1200,8 @@ export default function CreateVideo() {
             </Card>
           )}
 
-          {/* Stage 6: Scene Builder */}
-          {expandedStage === 6 && (
+          {/* Stage 5: Scene Builder */}
+          {expandedStage === 5 && (
             <Card className="bg-gradient-card border-border shadow-card">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
@@ -1458,8 +1365,8 @@ export default function CreateVideo() {
                 {scenes.length > 0 && (
                   <Button
                     onClick={() => {
-                      setExpandedStage(7);
-                      setCurrentStage(7);
+                      setExpandedStage(6);
+                      setCurrentStage(6);
                     }}
                     className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow"
                   >
@@ -1471,19 +1378,19 @@ export default function CreateVideo() {
             </Card>
           )}
 
-          {/* Stage 7: Video Generation */}
-          {expandedStage === 7 && scriptId && (
+          {/* Stage 6: Video Generation */}
+          {expandedStage === 6 && scriptId && (
             <VideoGenerationStage 
               scriptId={scriptId}
               onComplete={() => {
-                setExpandedStage(8);
-                setCurrentStage(8);
+                setExpandedStage(7);
+                setCurrentStage(7);
               }}
             />
           )}
 
-          {/* Stage 7 Fallback - Upload when no scriptId */}
-          {expandedStage === 7 && !scriptId && (
+          {/* Stage 6 Fallback - Upload when no scriptId */}
+          {expandedStage === 6 && !scriptId && (
             <Card className="bg-gradient-card border-border shadow-card">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
@@ -1610,8 +1517,8 @@ export default function CreateVideo() {
             </Card>
           )}
 
-          {/* Stage 8: Assembly & Edit */}
-          {expandedStage === 8 && (
+          {/* Stage 7: Assembly & Edit */}
+          {expandedStage === 7 && (
             <Card className="bg-gradient-card border-border shadow-card">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
@@ -1710,8 +1617,8 @@ export default function CreateVideo() {
                     autoAddMusic={autoAddMusic}
                     onComplete={() => {
                       toast.success("All videos assembled!");
-                      setExpandedStage(9);
-                      setCurrentStage(9);
+                      setExpandedStage(8);
+                      setCurrentStage(8);
                     }}
                   />
                 ) : (
@@ -1738,8 +1645,8 @@ export default function CreateVideo() {
             </Card>
           )}
 
-          {/* Stage 9: Export */}
-          {expandedStage === 9 && (
+          {/* Stage 8: Export */}
+          {expandedStage === 8 && (
             <Card className="bg-gradient-card border-border shadow-card">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
