@@ -299,6 +299,72 @@ export type Database = {
           },
         ]
       }
+      operator_jobs: {
+        Row: {
+          attempts: number | null
+          completed_at: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          input_data: Json | null
+          job_type: string
+          max_attempts: number | null
+          output_data: Json | null
+          project_id: string | null
+          scene_id: string | null
+          started_at: string | null
+          status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          attempts?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          input_data?: Json | null
+          job_type: string
+          max_attempts?: number | null
+          output_data?: Json | null
+          project_id?: string | null
+          scene_id?: string | null
+          started_at?: string | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          attempts?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          input_data?: Json | null
+          job_type?: string
+          max_attempts?: number | null
+          output_data?: Json | null
+          project_id?: string | null
+          scene_id?: string | null
+          started_at?: string | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_jobs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operator_jobs_scene_id_fkey"
+            columns: ["scene_id"]
+            isOneToOne: false
+            referencedRelation: "scenes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -333,6 +399,7 @@ export type Database = {
           language: string | null
           name: string
           output_count: number | null
+          pipeline_status: Json | null
           product_name: string | null
           settings: Json | null
           status: string | null
@@ -345,6 +412,7 @@ export type Database = {
           language?: string | null
           name: string
           output_count?: number | null
+          pipeline_status?: Json | null
           product_name?: string | null
           settings?: Json | null
           status?: string | null
@@ -357,6 +425,7 @@ export type Database = {
           language?: string | null
           name?: string
           output_count?: number | null
+          pipeline_status?: Json | null
           product_name?: string | null
           settings?: Json | null
           status?: string | null
@@ -413,6 +482,9 @@ export type Database = {
           id: string
           index: number
           metadata: Json | null
+          quality_score: number | null
+          requires_visual_prompt: boolean | null
+          retry_count: number | null
           scene_type: string | null
           script_id: string | null
           status: string | null
@@ -432,6 +504,9 @@ export type Database = {
           id?: string
           index: number
           metadata?: Json | null
+          quality_score?: number | null
+          requires_visual_prompt?: boolean | null
+          retry_count?: number | null
           scene_type?: string | null
           script_id?: string | null
           status?: string | null
@@ -451,6 +526,9 @@ export type Database = {
           id?: string
           index?: number
           metadata?: Json | null
+          quality_score?: number | null
+          requires_visual_prompt?: boolean | null
+          retry_count?: number | null
           scene_type?: string | null
           script_id?: string | null
           status?: string | null
@@ -610,6 +688,7 @@ export type Database = {
       }
       user_settings: {
         Row: {
+          ai_operator_enabled: boolean | null
           api_keys: Json | null
           created_at: string | null
           default_language: string | null
@@ -619,9 +698,11 @@ export type Database = {
           pricing_tier: string | null
           updated_at: string | null
           use_free_tier_only: boolean | null
+          use_n8n_backend: boolean | null
           user_id: string | null
         }
         Insert: {
+          ai_operator_enabled?: boolean | null
           api_keys?: Json | null
           created_at?: string | null
           default_language?: string | null
@@ -631,9 +712,11 @@ export type Database = {
           pricing_tier?: string | null
           updated_at?: string | null
           use_free_tier_only?: boolean | null
+          use_n8n_backend?: boolean | null
           user_id?: string | null
         }
         Update: {
+          ai_operator_enabled?: boolean | null
           api_keys?: Json | null
           created_at?: string | null
           default_language?: string | null
@@ -643,6 +726,7 @@ export type Database = {
           pricing_tier?: string | null
           updated_at?: string | null
           use_free_tier_only?: boolean | null
+          use_n8n_backend?: boolean | null
           user_id?: string | null
         }
         Relationships: []
