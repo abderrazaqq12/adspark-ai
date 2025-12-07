@@ -15,7 +15,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { 
   Building2, Upload, Play, Pause, RotateCcw, Download,
   Package, Video, CheckCircle, XCircle, Clock, Loader2,
-  Settings, Users, Globe, Zap, FileSpreadsheet
+  Settings, Users, Globe, Zap, FileSpreadsheet, TrendingUp,
+  Layers, BarChart3, ArrowRight, Sparkles
 } from 'lucide-react';
 import { 
   LANGUAGE_NAMES, MARKET_NAMES, AUDIENCE_NAMES,
@@ -138,7 +139,6 @@ const AgencyMode = () => {
         return;
       }
       
-      // Create batch job
       const { data: job, error } = await supabase
         .from('batch_jobs')
         .insert([{
@@ -164,8 +164,7 @@ const AgencyMode = () => {
       setActiveTab('monitor');
       loadBatchJobs();
       
-      // In production, this would trigger parallel processing
-      // For now, simulate progress
+      // Simulate progress
       for (let i = 0; i < products.length; i++) {
         await new Promise(r => setTimeout(r, 2000));
         setProducts(prev => prev.map((p, idx) => 
@@ -224,6 +223,16 @@ const AgencyMode = () => {
     }
   };
   
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed': return 'bg-green-500/20 text-green-500';
+      case 'failed': return 'bg-red-500/20 text-red-500';
+      case 'processing': return 'bg-blue-500/20 text-blue-500';
+      case 'paused': return 'bg-yellow-500/20 text-yellow-500';
+      default: return 'bg-muted text-muted-foreground';
+    }
+  };
+  
   const completedProducts = products.filter(p => p.status === 'completed').length;
   const totalProgress = products.length > 0 
     ? (completedProducts / products.length) * 100 
@@ -231,321 +240,385 @@ const AgencyMode = () => {
   
   return (
     <Layout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Building2 className="h-6 w-6 text-primary" />
-              Agency Mode
-            </h1>
-            <p className="text-muted-foreground">
-              Bulk generate 100+ products → 1000+ videos
-            </p>
+      <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
+        <div className="container mx-auto p-6 lg:p-8 space-y-8">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary mb-4">
+                <Building2 className="h-5 w-5" />
+                <span className="font-medium">Agency Mode</span>
+              </div>
+              <h1 className="text-4xl font-bold text-foreground">
+                Bulk Video Generation
+              </h1>
+              <p className="text-lg text-muted-foreground mt-2">
+                Generate 100+ products → 1000+ video ads at scale
+              </p>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-3">
+              <Card className="p-4 bg-card/50 backdrop-blur-sm border-border">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <Package className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-foreground">{products.length}</p>
+                    <p className="text-xs text-muted-foreground">Products</p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-4 bg-card/50 backdrop-blur-sm border-border">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-blue-500/10">
+                    <Video className="h-5 w-5 text-blue-500" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-foreground">{products.length * videosPerProduct}</p>
+                    <p className="text-xs text-muted-foreground">Total Videos</p>
+                  </div>
+                </div>
+              </Card>
+            </div>
           </div>
           
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="gap-1">
-              <Package className="h-3 w-3" />
-              {products.length} Products
-            </Badge>
-            <Badge variant="outline" className="gap-1">
-              <Video className="h-3 w-3" />
-              {products.length * videosPerProduct} Videos
-            </Badge>
-          </div>
-        </div>
-        
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
-            <TabsTrigger value="import">
-              <Upload className="h-4 w-4 mr-2" />
-              Import Products
-            </TabsTrigger>
-            <TabsTrigger value="settings">
-              <Settings className="h-4 w-4 mr-2" />
-              Batch Settings
-            </TabsTrigger>
-            <TabsTrigger value="monitor">
-              <Zap className="h-4 w-4 mr-2" />
-              Monitor Jobs
-            </TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="import" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Import Products</CardTitle>
-                <CardDescription>
-                  Paste CSV data or import from Google Sheets
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>Batch Name</Label>
-                  <Input 
-                    placeholder="e.g., Black Friday Campaign"
-                    value={batchName}
-                    onChange={(e) => setBatchName(e.target.value)}
-                  />
-                </div>
-                
-                <div>
-                  <Label>CSV Data (title, description, image_url)</Label>
-                  <Textarea 
-                    placeholder="title,description,image_url
-Product 1,Description 1,https://example.com/img1.jpg
-Product 2,Description 2,https://example.com/img2.jpg"
-                    rows={8}
-                    value={csvData}
-                    onChange={(e) => setCsvData(e.target.value)}
-                  />
-                </div>
-                
-                <div className="flex gap-2">
-                  <Button onClick={handleCsvImport}>
-                    <FileSpreadsheet className="h-4 w-4 mr-2" />
-                    Parse CSV
-                  </Button>
-                  <Button variant="outline">
-                    <Upload className="h-4 w-4 mr-2" />
-                    Import from Google Sheets
-                  </Button>
-                </div>
-                
-                {products.length > 0 && (
-                  <div className="mt-4">
-                    <h3 className="font-medium mb-2">Imported Products ({products.length})</h3>
-                    <ScrollArea className="h-48 border rounded-lg p-2">
-                      {products.map((product, index) => (
-                        <div key={product.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                          <div className="flex items-center gap-2">
-                            {getStatusIcon(product.status)}
-                            <span className="text-sm">{product.title}</span>
-                          </div>
-                          <Badge variant="outline">
-                            {product.videosGenerated}/{product.totalVideos}
-                          </Badge>
-                        </div>
-                      ))}
-                    </ScrollArea>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="settings" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Batch Generation Settings</CardTitle>
-                <CardDescription>
-                  Configure localization and output settings for all products
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div>
-                    <Label>Language</Label>
-                    <Select value={language} onValueChange={(v) => setLanguage(v as Language)}>
-                      <SelectTrigger>
-                        <Globe className="h-4 w-4 mr-2" />
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(LANGUAGE_NAMES).map(([key, { english }]) => (
-                          <SelectItem key={key} value={key}>{english}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div>
-                    <Label>Target Market</Label>
-                    <Select value={market} onValueChange={(v) => setMarket(v as Market)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(MARKET_NAMES).map(([key, { name, flag }]) => (
-                          <SelectItem key={key} value={key}>{flag} {name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div>
-                    <Label>Target Audience</Label>
-                    <Select value={audience} onValueChange={(v) => setAudience(v as Audience)}>
-                      <SelectTrigger>
-                        <Users className="h-4 w-4 mr-2" />
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(AUDIENCE_NAMES).map(([key, name]) => (
-                          <SelectItem key={key} value={key}>{name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                
-                <div>
-                  <Label>Videos Per Product</Label>
-                  <Select 
-                    value={videosPerProduct.toString()} 
-                    onValueChange={(v) => setVideosPerProduct(parseInt(v))}
-                  >
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="20">20</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                      <SelectItem value="100">100</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="pt-4 border-t">
-                  <h3 className="font-medium mb-2">Estimated Output</h3>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <Card className="p-4">
-                      <p className="text-2xl font-bold">{products.length}</p>
-                      <p className="text-sm text-muted-foreground">Products</p>
-                    </Card>
-                    <Card className="p-4">
-                      <p className="text-2xl font-bold">{products.length * videosPerProduct}</p>
-                      <p className="text-sm text-muted-foreground">Total Videos</p>
-                    </Card>
-                    <Card className="p-4">
-                      <p className="text-2xl font-bold">~{Math.ceil(products.length * videosPerProduct * 0.5)} min</p>
-                      <p className="text-sm text-muted-foreground">Est. Time</p>
-                    </Card>
-                  </div>
-                </div>
-                
-                <Button 
-                  onClick={handleStartBatch} 
-                  disabled={isProcessing || products.length === 0}
-                  className="w-full"
-                  size="lg"
-                >
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-4 w-4 mr-2" />
-                      Start Batch Generation
-                    </>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="monitor" className="space-y-4">
-            {/* Current Progress */}
-            {products.length > 0 && (
-              <Card>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="bg-muted/50 p-1 h-auto">
+              <TabsTrigger value="import" className="gap-2 py-3 px-4">
+                <Upload className="h-4 w-4" />
+                Import Products
+              </TabsTrigger>
+              <TabsTrigger value="settings" className="gap-2 py-3 px-4">
+                <Settings className="h-4 w-4" />
+                Settings
+              </TabsTrigger>
+              <TabsTrigger value="monitor" className="gap-2 py-3 px-4">
+                <BarChart3 className="h-4 w-4" />
+                Monitor
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="import" className="mt-6 space-y-6">
+              <Card className="bg-card/50 backdrop-blur-sm border-border">
                 <CardHeader>
-                  <CardTitle>Current Batch Progress</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <Upload className="h-5 w-5 text-primary" />
+                    Import Products
+                  </CardTitle>
+                  <CardDescription>
+                    Paste CSV data or import from Google Sheets to bulk add products
+                  </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">
-                      {completedProducts} / {products.length} products completed
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      {Math.round(totalProgress)}%
-                    </span>
+                <CardContent className="space-y-6">
+                  <div className="space-y-2">
+                    <Label className="text-foreground">Batch Name</Label>
+                    <Input 
+                      placeholder="e.g., Black Friday Campaign 2024"
+                      value={batchName}
+                      onChange={(e) => setBatchName(e.target.value)}
+                      className="bg-background border-border h-12"
+                    />
                   </div>
-                  <Progress value={totalProgress} className="h-3" />
+                  
+                  <div className="space-y-2">
+                    <Label className="text-foreground">CSV Data (title, description, image_url)</Label>
+                    <Textarea 
+                      placeholder={`title,description,image_url
+Smart Watch Pro,Premium smartwatch with health tracking,https://example.com/img1.jpg
+Wireless Earbuds,High-quality audio earbuds,https://example.com/img2.jpg`}
+                      rows={10}
+                      value={csvData}
+                      onChange={(e) => setCsvData(e.target.value)}
+                      className="bg-background border-border font-mono text-sm"
+                    />
+                  </div>
+                  
+                  <div className="flex gap-3">
+                    <Button onClick={handleCsvImport} variant="outline" size="lg">
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Parse CSV
+                    </Button>
+                    <Button variant="outline" size="lg">
+                      <Upload className="h-4 w-4 mr-2" />
+                      Import from Google Sheets
+                    </Button>
+                  </div>
+                  
+                  {products.length > 0 && (
+                    <div className="mt-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-semibold text-foreground">Imported Products ({products.length})</h3>
+                        <Badge variant="outline" className="gap-1">
+                          <Video className="h-3 w-3" />
+                          {products.length * videosPerProduct} videos
+                        </Badge>
+                      </div>
+                      <ScrollArea className="h-64 border border-border rounded-xl">
+                        <div className="p-4 space-y-2">
+                          {products.map((product, index) => (
+                            <div 
+                              key={product.id} 
+                              className="flex items-center justify-between py-3 px-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="text-sm text-muted-foreground w-8">#{index + 1}</span>
+                                {getStatusIcon(product.status)}
+                                <span className="text-sm font-medium text-foreground">{product.title}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge className={getStatusColor(product.status)}>
+                                  {product.status}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {product.videosGenerated}/{product.totalVideos}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
-            )}
+            </TabsContent>
             
-            {/* Job History */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Batch Job History</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {batchJobs.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-8">
-                    No batch jobs yet. Import products and start a batch.
-                  </p>
-                ) : (
-                  <div className="space-y-4">
-                    {batchJobs.map((job) => (
-                      <div 
-                        key={job.id} 
-                        className="flex items-center justify-between p-4 border rounded-lg"
-                      >
-                        <div className="flex items-center gap-4">
-                          {getStatusIcon(job.status)}
+            <TabsContent value="settings" className="mt-6 space-y-6">
+              <Card className="bg-card/50 backdrop-blur-sm border-border">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Settings className="h-5 w-5 text-primary" />
+                    Batch Settings
+                  </CardTitle>
+                  <CardDescription>
+                    Configure localization and output settings for all products
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid gap-6 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label className="text-foreground">Language</Label>
+                      <Select value={language} onValueChange={(v) => setLanguage(v as Language)}>
+                        <SelectTrigger className="h-12 bg-background border-border">
+                          <Globe className="h-4 w-4 mr-2 text-primary" />
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(LANGUAGE_NAMES).map(([key, { english }]) => (
+                            <SelectItem key={key} value={key}>{english}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label className="text-foreground">Target Market</Label>
+                      <Select value={market} onValueChange={(v) => setMarket(v as Market)}>
+                        <SelectTrigger className="h-12 bg-background border-border">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(MARKET_NAMES).map(([key, { name, flag }]) => (
+                            <SelectItem key={key} value={key}>{flag} {name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label className="text-foreground">Target Audience</Label>
+                      <Select value={audience} onValueChange={(v) => setAudience(v as Audience)}>
+                        <SelectTrigger className="h-12 bg-background border-border">
+                          <Users className="h-4 w-4 mr-2 text-primary" />
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(AUDIENCE_NAMES).map(([key, name]) => (
+                            <SelectItem key={key} value={key}>{name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-foreground">Videos Per Product</Label>
+                    <Select 
+                      value={videosPerProduct.toString()} 
+                      onValueChange={(v) => setVideosPerProduct(parseInt(v))}
+                    >
+                      <SelectTrigger className="w-48 h-12 bg-background border-border">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10 videos</SelectItem>
+                        <SelectItem value="20">20 videos</SelectItem>
+                        <SelectItem value="50">50 videos</SelectItem>
+                        <SelectItem value="100">100 videos</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="pt-6 border-t border-border">
+                    <h3 className="font-semibold mb-4 text-foreground flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-primary" />
+                      Estimated Output
+                    </h3>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <Card className="p-4 bg-muted/30 border-border">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-primary/10">
+                            <Package className="h-5 w-5 text-primary" />
+                          </div>
                           <div>
-                            <h4 className="font-medium">{job.name}</h4>
-                            <p className="text-sm text-muted-foreground">
-                              {job.completedVideos} / {job.totalVideos} videos
-                            </p>
+                            <p className="text-2xl font-bold text-foreground">{products.length}</p>
+                            <p className="text-sm text-muted-foreground">Products</p>
                           </div>
                         </div>
-                        
-                        <div className="flex items-center gap-2">
-                          <Badge variant={
-                            job.status === 'completed' ? 'default' :
-                            job.status === 'failed' ? 'destructive' :
-                            job.status === 'processing' ? 'secondary' :
-                            'outline'
-                          }>
-                            {job.status}
-                          </Badge>
-                          
-                          {job.status === 'processing' && (
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => handlePauseBatch(job.id)}
-                            >
-                              <Pause className="h-4 w-4" />
-                            </Button>
-                          )}
-                          
-                          {job.status === 'paused' && (
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => handleResumeBatch(job.id)}
-                            >
-                              <Play className="h-4 w-4" />
-                            </Button>
-                          )}
-                          
-                          {job.status === 'completed' && (
-                            <Button variant="outline" size="sm">
-                              <Download className="h-4 w-4" />
-                            </Button>
-                          )}
-                          
-                          {job.status === 'failed' && (
-                            <Button variant="outline" size="sm">
-                              <RotateCcw className="h-4 w-4" />
-                            </Button>
-                          )}
+                      </Card>
+                      <Card className="p-4 bg-muted/30 border-border">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-blue-500/10">
+                            <Video className="h-5 w-5 text-blue-500" />
+                          </div>
+                          <div>
+                            <p className="text-2xl font-bold text-foreground">{products.length * videosPerProduct}</p>
+                            <p className="text-sm text-muted-foreground">Total Videos</p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      </Card>
+                      <Card className="p-4 bg-muted/30 border-border">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-amber-500/10">
+                            <Clock className="h-5 w-5 text-amber-500" />
+                          </div>
+                          <div>
+                            <p className="text-2xl font-bold text-foreground">~{Math.ceil(products.length * videosPerProduct * 0.5)} min</p>
+                            <p className="text-sm text-muted-foreground">Est. Time</p>
+                          </div>
+                        </div>
+                      </Card>
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                  
+                  <Button 
+                    onClick={handleStartBatch} 
+                    disabled={isProcessing || products.length === 0}
+                    className="w-full h-14 text-lg bg-gradient-primary shadow-glow"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-5 w-5 mr-2" />
+                        Start Batch Generation
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="monitor" className="mt-6 space-y-6">
+              {/* Current Progress */}
+              {products.length > 0 && (
+                <Card className="bg-card/50 backdrop-blur-sm border-border">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Zap className="h-5 w-5 text-primary" />
+                      Current Batch Progress
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-foreground">
+                        {completedProducts} / {products.length} products completed
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        {Math.round(totalProgress)}%
+                      </span>
+                    </div>
+                    <Progress value={totalProgress} className="h-3" />
+                  </CardContent>
+                </Card>
+              )}
+              
+              {/* Job History */}
+              <Card className="bg-card/50 backdrop-blur-sm border-border">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Layers className="h-5 w-5 text-primary" />
+                    Batch Job History
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {batchJobs.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Layers className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                      <p className="text-muted-foreground">No batch jobs yet</p>
+                      <p className="text-sm text-muted-foreground mt-1">Import products and start your first batch</p>
+                    </div>
+                  ) : (
+                    <ScrollArea className="h-80">
+                      <div className="space-y-3">
+                        {batchJobs.map((job) => (
+                          <div
+                            key={job.id}
+                            className="p-4 rounded-xl bg-muted/30 border border-border hover:border-primary/30 transition-all"
+                          >
+                            <div className="flex items-center justify-between mb-3">
+                              <div>
+                                <h4 className="font-medium text-foreground">{job.name}</h4>
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(job.createdAt).toLocaleDateString()} • {job.totalProducts} products • {job.totalVideos} videos
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge className={getStatusColor(job.status)}>
+                                  {job.status}
+                                </Badge>
+                                {job.status === 'processing' && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handlePauseBatch(job.id)}
+                                  >
+                                    <Pause className="h-3 w-3" />
+                                  </Button>
+                                )}
+                                {job.status === 'paused' && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleResumeBatch(job.id)}
+                                  >
+                                    <Play className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                            <Progress 
+                              value={(job.completedVideos / job.totalVideos) * 100} 
+                              className="h-2" 
+                            />
+                            <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                              <span>{job.completedVideos} / {job.totalVideos} videos</span>
+                              <span>{Math.round((job.completedVideos / job.totalVideos) * 100)}%</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
     </Layout>
   );

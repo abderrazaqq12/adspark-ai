@@ -1,4 +1,4 @@
-import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, FlaskConical, LayoutTemplate, ChevronLeft, ChevronRight, Layers, Rocket, Building2, Image, FileText, Mic, FileCode } from "lucide-react";
+import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Layers, Rocket, Building2, Database } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,28 +25,22 @@ const workflowItems = [
   { title: "Agency Mode", url: "/agency", icon: Building2, description: "Batch generation" },
 ];
 
-// Quick access items - merged Quick Generate into Create Video
+// Quick access items - Dashboard first in header style
 const quickAccessItems = [
   { title: "Dashboard", url: "/", icon: Home },
-  { title: "Create Video", url: "/create", icon: Video },
 ];
 
-// Library items - expanded to show all asset types
+// Library items - Projects only, other assets accessible within projects
 const libraryItems = [
   { title: "My Projects", url: "/projects", icon: FolderOpen },
-  { title: "Videos", url: "/videos", icon: PlaySquare },
-  { title: "Images", url: "/images", icon: Image },
-  { title: "Scripts", url: "/scripts", icon: FileText },
-  { title: "Voiceovers", url: "/voiceovers", icon: Mic },
-  { title: "Landing Pages", url: "/landing-pages", icon: FileCode },
   { title: "Templates", url: "/templates", icon: LayoutTemplate },
 ];
 
-// Tools items
+// Tools items - removed A/B Testing, added Data section
 const toolsItems = [
-  { title: "A/B Testing", url: "/ab-testing", icon: FlaskConical },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "AI Engines", url: "/engines", icon: Cpu },
+  { title: "Data", url: "/settings?tab=data", icon: Database },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
@@ -66,8 +60,11 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
       <SidebarContent className="py-2">
-        {/* Logo/Brand */}
-        <div className={`flex items-center gap-3 px-3 py-4 ${open ? '' : 'justify-center'}`}>
+        {/* Logo/Brand with Dashboard */}
+        <div 
+          className={`flex items-center gap-3 px-3 py-4 cursor-pointer hover:bg-sidebar-accent/50 rounded-lg mx-2 transition-colors ${open ? '' : 'justify-center'}`}
+          onClick={() => navigate('/')}
+        >
           <div className="w-9 h-9 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow shrink-0">
             <Sparkles className="w-5 h-5 text-primary-foreground" />
           </div>
@@ -79,18 +76,16 @@ export function AppSidebar() {
           )}
         </div>
 
-        {/* Workflows - Primary Actions */}
+        {/* Dashboard Quick Access */}
         <SidebarGroup className="px-2">
-          <SidebarGroupLabel className={`text-[11px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-1 ${open ? 'px-2' : 'sr-only'}`}>
-            Workflows
-          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-0.5">
-              {workflowItems.map((item) => (
+              {quickAccessItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild className="h-10">
                     <NavLink 
-                      to={item.url}
+                      to={item.url} 
+                      end={item.url === "/"}
                       className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-all duration-200 ${!open ? 'justify-center px-0' : ''}`}
                       activeClassName="bg-primary/10 text-primary font-medium shadow-sm"
                     >
@@ -109,19 +104,18 @@ export function AppSidebar() {
           <div className="h-px bg-sidebar-border" />
         </div>
 
-        {/* Quick Access */}
+        {/* Workflows - Primary Actions */}
         <SidebarGroup className="px-2">
           <SidebarGroupLabel className={`text-[11px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-1 ${open ? 'px-2' : 'sr-only'}`}>
-            Quick Access
+            Workflows
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-0.5">
-              {quickAccessItems.map((item) => (
+              {workflowItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild className="h-10">
                     <NavLink 
-                      to={item.url} 
-                      end={item.url === "/"}
+                      to={item.url}
                       className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-all duration-200 ${!open ? 'justify-center px-0' : ''}`}
                       activeClassName="bg-primary/10 text-primary font-medium shadow-sm"
                     >
