@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Bot, 
   RefreshCw, 
@@ -14,10 +15,15 @@ import {
   Eye,
   Sparkles,
   Clock,
-  Activity
+  Activity,
+  Play,
+  Pause,
+  Settings2,
+  AlertTriangle
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import AutopilotProgress from "./AutopilotProgress";
 
 interface OperatorJob {
   id: string;
@@ -33,12 +39,15 @@ interface OperatorJob {
 interface AIOperatorDashboardProps {
   projectId?: string | null;
   enabled?: boolean;
+  showAutopilot?: boolean;
 }
 
-export default function AIOperatorDashboard({ projectId, enabled = true }: AIOperatorDashboardProps) {
+export default function AIOperatorDashboard({ projectId, enabled = true, showAutopilot = false }: AIOperatorDashboardProps) {
   const [jobs, setJobs] = useState<OperatorJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
+  const [activeTab, setActiveTab] = useState<"operator" | "autopilot">("operator");
+  const [autopilotJobId, setAutopilotJobId] = useState<string | null>(null);
   const [stats, setStats] = useState({
     total: 0,
     completed: 0,
@@ -171,111 +180,198 @@ export default function AIOperatorDashboard({ projectId, enabled = true }: AIOpe
 
   return (
     <div className="space-y-4">
-      {/* Stats & Actions */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Activity className="w-5 h-5 text-primary" />
-            <span className="text-foreground font-medium">AI Operator</span>
-          </div>
-          <div className="flex gap-2">
-            <Badge variant="outline" className="border-primary/30 text-primary">
-              {stats.completed} completed
-            </Badge>
-            <Badge variant="outline" className="border-secondary/30 text-secondary">
-              {stats.pending} pending
-            </Badge>
-            {stats.failed > 0 && (
-              <Badge variant="outline" className="border-destructive/30 text-destructive">
-                {stats.failed} failed
-              </Badge>
-            )}
-          </div>
-        </div>
-
-        <div className="flex gap-2">
+      {/* Tab Switcher */}
+      {showAutopilot && (
+        <div className="flex gap-2 p-1 bg-muted/30 rounded-lg w-fit">
           <Button
-            variant="outline"
+            variant={activeTab === "operator" ? "default" : "ghost"}
             size="sm"
-            onClick={() => runOperator('monitor_pipeline')}
-            disabled={isRunning}
-            className="border-border"
+            onClick={() => setActiveTab("operator")}
+            className={activeTab === "operator" ? "bg-primary" : ""}
           >
-            {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4 mr-2" />}
-            Scan Pipeline
+            <Bot className="w-4 h-4 mr-2" />
+            AI Operator
           </Button>
           <Button
-            variant="outline"
+            variant={activeTab === "autopilot" ? "default" : "ghost"}
             size="sm"
-            onClick={() => runOperator('retry_failed_jobs')}
-            disabled={isRunning || stats.failed === 0}
-            className="border-border"
+            onClick={() => setActiveTab("autopilot")}
+            className={activeTab === "autopilot" ? "bg-primary" : ""}
           >
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Retry Failed
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => runOperator('optimize_cost')}
-            disabled={isRunning}
-            className="border-border"
-          >
-            <TrendingDown className="w-4 h-4 mr-2" />
-            Optimize Cost
+            <Play className="w-4 h-4 mr-2" />
+            Autopilot
           </Button>
         </div>
-      </div>
+      )}
 
-      {/* Jobs List */}
-      <Card className="bg-gradient-card border-border shadow-card">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-foreground">Recent Operations</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      {/* Autopilot Tab */}
+      {showAutopilot && activeTab === "autopilot" && autopilotJobId && (
+        <AutopilotProgress 
+          jobId={autopilotJobId}
+          onComplete={() => {
+            toast.success('Autopilot completed!');
+            loadJobs();
+          }}
+        />
+      )}
+
+      {showAutopilot && activeTab === "autopilot" && !autopilotJobId && (
+        <Card className="bg-gradient-card border-border shadow-card">
+          <CardContent className="py-8 text-center">
+            <Play className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="text-lg font-semibold text-foreground mb-2">No Active Autopilot Job</h3>
+            <p className="text-muted-foreground text-sm mb-4">
+              Start an Autopilot job from Quick Commerce to see real-time progress here.
+            </p>
+            <Button variant="outline" onClick={() => window.location.href = '/quick-commerce'}>
+              Go to Quick Commerce
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Operator Tab */}
+      {activeTab === "operator" && (
+        <>
+          {/* Stats & Actions */}
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-primary" />
+                <span className="text-foreground font-medium">AI Operator</span>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <Badge variant="outline" className="border-primary/30 text-primary">
+                  {stats.completed} completed
+                </Badge>
+                <Badge variant="outline" className="border-secondary/30 text-secondary">
+                  {stats.pending} pending
+                </Badge>
+                {stats.failed > 0 && (
+                  <Badge variant="outline" className="border-destructive/30 text-destructive">
+                    {stats.failed} failed
+                  </Badge>
+                )}
+              </div>
             </div>
-          ) : jobs.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-sm">
-              No operator jobs yet. Click "Scan Pipeline" to start.
+
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => runOperator('monitor_pipeline')}
+                disabled={isRunning}
+                className="border-border"
+              >
+                {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4 mr-2" />}
+                Scan Pipeline
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => runOperator('auto_regenerate_low_quality')}
+                disabled={isRunning}
+                className="border-border"
+              >
+                <Sparkles className="w-4 h-4 mr-2" />
+                Auto-Regenerate
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => runOperator('retry_failed_jobs')}
+                disabled={isRunning || stats.failed === 0}
+                className="border-border"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Retry Failed
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => runOperator('full_autonomous_run')}
+                disabled={isRunning}
+                className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+              >
+                <Zap className="w-4 h-4 mr-2" />
+                Full Auto Run
+              </Button>
             </div>
-          ) : (
-            <div className="space-y-2 max-h-[300px] overflow-y-auto">
-              {jobs.map((job) => (
-                <div 
-                  key={job.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/30"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                      {getJobTypeIcon(job.job_type)}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-foreground capitalize">
-                        {job.job_type.replace(/_/g, ' ')}
-                      </p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {new Date(job.created_at).toLocaleTimeString()}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {job.error_message && (
-                      <span className="text-xs text-destructive max-w-[150px] truncate" title={job.error_message}>
-                        {job.error_message}
-                      </span>
-                    )}
-                    {getStatusBadge(job.status)}
-                  </div>
+          </div>
+
+          {/* Jobs List */}
+          <Card className="bg-gradient-card border-border shadow-card">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm text-foreground">Recent Operations</CardTitle>
+                <Button variant="ghost" size="sm" onClick={loadJobs} className="h-6">
+                  <RefreshCw className="w-3 h-3" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              ) : jobs.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                  No operator jobs yet. Click "Scan Pipeline" to start.
+                </div>
+              ) : (
+                <ScrollArea className="h-[300px]">
+                  <div className="space-y-2 pr-4">
+                    {jobs.map((job) => (
+                      <div 
+                        key={job.id}
+                        className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
+                          job.status === 'running' 
+                            ? 'bg-primary/5 border border-primary/20' 
+                            : 'bg-muted/30'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                            job.status === 'running' 
+                              ? 'bg-primary/20 text-primary animate-pulse' 
+                              : 'bg-primary/10 text-primary'
+                          }`}>
+                            {getJobTypeIcon(job.job_type)}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground capitalize">
+                              {job.job_type.replace(/_/g, ' ')}
+                            </p>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {new Date(job.created_at).toLocaleTimeString()}
+                              {job.status === 'running' && (
+                                <span className="ml-2 text-primary">In progress...</span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {job.error_message && (
+                            <span 
+                              className="text-xs text-destructive max-w-[150px] truncate flex items-center gap-1" 
+                              title={job.error_message}
+                            >
+                              <AlertTriangle className="w-3 h-3" />
+                              {job.error_message}
+                            </span>
+                          )}
+                          {getStatusBadge(job.status)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }
