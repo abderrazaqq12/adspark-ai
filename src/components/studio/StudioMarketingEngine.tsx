@@ -55,6 +55,43 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
     loadProductInfo();
   }, []);
 
+  // Save content to database whenever it changes
+  const saveContent = async (data: { angles?: GeneratedAngles | null; scripts?: GeneratedScript[]; landingContent?: string }) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: existingSettings } = await supabase
+        .from('user_settings')
+        .select('preferences')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const currentPrefs = (existingSettings?.preferences as Record<string, unknown>) || {};
+      
+      const updatedPrefs: Record<string, unknown> = {
+        ...currentPrefs,
+      };
+      
+      if (data.angles !== undefined) {
+        updatedPrefs.studio_marketing_angles = JSON.parse(JSON.stringify(data.angles));
+      }
+      if (data.scripts !== undefined) {
+        updatedPrefs.studio_scripts = JSON.parse(JSON.stringify(data.scripts));
+      }
+      if (data.landingContent !== undefined) {
+        updatedPrefs.studio_landing_content = data.landingContent;
+      }
+
+      await supabase
+        .from('user_settings')
+        .update({ preferences: updatedPrefs as any })
+        .eq('user_id', user.id);
+    } catch (error) {
+      console.error('Error saving content:', error);
+    }
+  };
+
   const loadProductInfo = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -67,12 +104,22 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         .maybeSingle();
 
       if (settings?.preferences) {
-        const prefs = settings.preferences as Record<string, string>;
+        const prefs = settings.preferences as Record<string, any>;
         setProductInfo({
           name: prefs.studio_product_name || '',
           description: prefs.studio_description || '',
           url: prefs.studio_product_url || ''
         });
+        // Load saved content
+        if (prefs.studio_marketing_angles) {
+          setGeneratedAngles(prefs.studio_marketing_angles);
+        }
+        if (prefs.studio_scripts) {
+          setScripts(prefs.studio_scripts);
+        }
+        if (prefs.studio_landing_content) {
+          setLandingContent(prefs.studio_landing_content);
+        }
       }
     } catch (error) {
       console.error('Error loading product info:', error);
@@ -136,6 +183,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       };
 
       setGeneratedAngles(mockAngles);
+      saveContent({ angles: mockAngles });
       
       toast({
         title: "تم إنشاء الزوايا التسويقية",
@@ -184,6 +232,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       }));
 
       setScripts(generatedScripts);
+      saveContent({ scripts: generatedScripts });
       toast({
         title: "تم إنشاء السكريبتات",
         description: `تم إنشاء ${generatedScripts.length} نسخة من السكريبت`,
@@ -203,6 +252,12 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
     setIsGenerating(true);
 
     try {
+      // Get the landing page content prompt from Settings
+      const landingPrompt = getPrompt('landing_page_content', {
+        product_name: productInfo.name,
+        product_description: productInfo.description,
+      });
+
       // Generate landing page content using the Arabic prompt
       const content = `# ${productInfo.name}
 
@@ -252,6 +307,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
 نقف خلف منتجنا 100%`;
 
       setLandingContent(content);
+      saveContent({ landingContent: content });
       toast({
         title: "تم إنشاء محتوى صفحة الهبوط",
         description: "تم إنشاء جميع أقسام صفحة الهبوط بنجاح",
@@ -305,7 +361,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
           </TabsTrigger>
           <TabsTrigger value="landing" className="gap-2">
             <Layout className="w-4 h-4" />
-            Landing Content
+            Landing Page Content
           </TabsTrigger>
         </TabsList>
 
