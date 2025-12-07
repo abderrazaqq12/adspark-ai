@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
-import { Save, Plus, Trash2, FileText, Loader2, Pencil, Webhook, Copy, CheckCircle, XCircle, ExternalLink, Zap, Key, Eye, EyeOff, Bot, RefreshCw, DollarSign, Sparkles, TrendingUp, Crown, ChevronDown, Power } from "lucide-react";
+import { Save, Plus, Trash2, FileText, Loader2, Pencil, Webhook, Copy, CheckCircle, XCircle, ExternalLink, Zap, Key, Eye, EyeOff, Bot, RefreshCw, DollarSign, Sparkles, TrendingUp, Crown, ChevronDown, Power, Database } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import BatchApiKeyTester from "@/components/BatchApiKeyTester";
 import EngineUsageAnalytics from "@/components/EngineUsageAnalytics";
 import N8nBackendSettings from "@/components/N8nBackendSettings";
+import { StudioDataSettings } from "@/components/studio/StudioDataSettings";
 
 interface PromptTemplate {
   id: string;
@@ -1361,6 +1362,24 @@ export default function Settings() {
                 {savingKeys ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
                 Save All API Keys
               </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Data Tab */}
+        <TabsContent value="data" className="space-y-6">
+          <Card className="bg-gradient-card border-border shadow-card">
+            <CardHeader>
+              <CardTitle className="text-foreground flex items-center gap-2">
+                <Database className="w-5 h-5 text-primary" />
+                Data Integrations
+              </CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Connect Google Drive and Google Sheets for seamless Studio workflow automation
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <StudioDataSettings />
             </CardContent>
           </Card>
         </TabsContent>
