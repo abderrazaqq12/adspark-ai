@@ -22,6 +22,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useStudioPrompts } from '@/hooks/useStudioPrompts';
+import { useAIAgent, getModelName } from '@/hooks/useAIAgent';
 
 interface StudioMarketingEngineProps {
   onNext: () => void;
@@ -43,6 +44,7 @@ interface GeneratedScript {
 export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) => {
   const { toast } = useToast();
   const { getPrompt, loading: promptsLoading } = useStudioPrompts();
+  const { aiAgent, loading: aiAgentLoading } = useAIAgent();
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeTab, setActiveTab] = useState('angles');
   const [generatedAngles, setGeneratedAngles] = useState<GeneratedAngles | null>(null);
@@ -139,13 +141,14 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         product_description: productInfo.description,
       });
 
-      // Call the AI to generate angles
+      // Call the AI to generate angles with selected model
       const response = await supabase.functions.invoke('ai-content-factory', {
         body: {
           prompt: anglesPrompt,
           type: 'marketing_angles',
           productName: productInfo.name,
           productDescription: productInfo.description,
+          model: getModelName(aiAgent),
         }
       });
 
@@ -216,6 +219,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
           productDescription: productInfo.description,
           language: 'ar',
           tone: tones[0],
+          model: getModelName(aiAgent),
         }
       });
 
