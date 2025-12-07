@@ -39,7 +39,7 @@ const App = () => (
                   <Route path="/quick-generate" element={<CreateVideo />} />
                   <Route path="/quick-commerce" element={<QuickCommerce />} />
                   <Route path="/agency" element={<AgencyMode />} />
-                  <Route path="/studio" element={<CreateVideo />} />
+                  <Route path="/studio" element={<Studio />} />
                   <Route path="/projects" element={<Projects />} />
                   <Route path="/videos" element={<Videos />} />
                   <Route path="/scene-builder" element={<SceneBuilder />} />
