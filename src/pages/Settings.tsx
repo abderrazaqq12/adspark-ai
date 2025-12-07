@@ -2090,22 +2090,57 @@ export default function Settings() {
 
               <Separator className="bg-border" />
 
-              <div className="space-y-2">
-                <Label className="text-foreground">Default Language</Label>
-                <Select 
-                  value={settings?.default_language || "en"} 
-                  onValueChange={(v) => setSettings(s => s ? { ...s, default_language: v } : null)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="ar">Arabic (Saudi)</SelectItem>
-                    <SelectItem value="es">Spanish</SelectItem>
-                    <SelectItem value="fr">French</SelectItem>
-                  </SelectContent>
-                </Select>
+              {/* Default Audience Settings */}
+              <div className="space-y-3">
+                <Label className="text-foreground text-lg font-semibold">Default Audience</Label>
+                <p className="text-sm text-muted-foreground">
+                  Set default language and market for content generation
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-foreground">Default Language</Label>
+                  <Select 
+                    value={settings?.default_language || "ar"} 
+                    onValueChange={(v) => setSettings(s => s ? { ...s, default_language: v } : null)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ar">Arabic (Saudi Dialect)</SelectItem>
+                      <SelectItem value="ar-msa">Arabic (Modern Standard)</SelectItem>
+                      <SelectItem value="ar-gulf">Arabic (Gulf)</SelectItem>
+                      <SelectItem value="en">English</SelectItem>
+                      <SelectItem value="es">Spanish</SelectItem>
+                      <SelectItem value="fr">French</SelectItem>
+                      <SelectItem value="de">German</SelectItem>
+                      <SelectItem value="pt">Portuguese</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-foreground">Default Market</Label>
+                  <Select 
+                    value={(settings as any)?.default_market || "saudi"} 
+                    onValueChange={(v) => setSettings(s => s ? { ...s, default_market: v } as any : null)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="saudi">Saudi Arabia</SelectItem>
+                      <SelectItem value="uae">UAE</SelectItem>
+                      <SelectItem value="kuwait">Kuwait</SelectItem>
+                      <SelectItem value="morocco">Morocco</SelectItem>
+                      <SelectItem value="europe">Europe</SelectItem>
+                      <SelectItem value="usa">USA</SelectItem>
+                      <SelectItem value="latam">Latin America</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <Button onClick={handleSaveSettings} disabled={saving} className="bg-gradient-primary text-primary-foreground shadow-glow">
