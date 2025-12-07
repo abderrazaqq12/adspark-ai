@@ -604,6 +604,36 @@ export type Database = {
           },
         ]
       }
+      secure_api_keys: {
+        Row: {
+          created_at: string | null
+          encrypted_key: string
+          id: string
+          is_active: boolean | null
+          provider: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          encrypted_key: string
+          id?: string
+          is_active?: boolean | null
+          provider: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          encrypted_key?: string
+          id?: string
+          is_active?: boolean | null
+          provider?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       subtitles: {
         Row: {
           created_at: string | null
@@ -793,7 +823,26 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      delete_my_api_key: { Args: { p_provider: string }; Returns: boolean }
+      get_my_api_key_providers: {
+        Args: never
+        Returns: {
+          is_active: boolean
+          provider: string
+        }[]
+      }
+      toggle_api_key_active: {
+        Args: { p_is_active: boolean; p_provider: string }
+        Returns: boolean
+      }
+      upsert_secure_api_key: {
+        Args: {
+          p_encrypted_key: string
+          p_is_active?: boolean
+          p_provider: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

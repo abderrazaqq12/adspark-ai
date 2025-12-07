@@ -18,28 +18,101 @@ serve(async (req) => {
     const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { action, projectId, userId, sceneId } = await req.json();
+    // ============ AUTHENTICATION CHECK ============
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.error('[ai-operator] Missing or invalid Authorization header');
+      return new Response(JSON.stringify({ error: 'Unauthorized - missing auth token' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-    console.log(`[ai-operator] Action: ${action}, Project: ${projectId}`);
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      console.error('[ai-operator] Invalid auth token:', authError?.message);
+      return new Response(JSON.stringify({ error: 'Unauthorized - invalid token' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const authenticatedUserId = user.id;
+    // ============ END AUTHENTICATION ============
+
+    const { action, projectId, sceneId } = await req.json();
+
+    console.log(`[ai-operator] Action: ${action}, Project: ${projectId}, User: ${authenticatedUserId}`);
+
+    // For project-based actions, verify ownership
+    if (projectId) {
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
+        .select('user_id')
+        .eq('id', projectId)
+        .single();
+
+      if (projectError || !project) {
+        return new Response(JSON.stringify({ error: 'Project not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (project.user_id !== authenticatedUserId) {
+        console.error(`[ai-operator] Unauthorized access attempt: User ${authenticatedUserId} tried to access project ${projectId} owned by ${project.user_id}`);
+        return new Response(JSON.stringify({ error: 'Forbidden - not your project' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    // For scene-based actions, verify ownership through project chain
+    if (sceneId && !projectId) {
+      const { data: scene, error: sceneError } = await supabase
+        .from('scenes')
+        .select('script_id, scripts(project_id, projects(user_id))')
+        .eq('id', sceneId)
+        .single();
+
+      if (sceneError || !scene) {
+        return new Response(JSON.stringify({ error: 'Scene not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const sceneOwnerId = (scene as any).scripts?.projects?.user_id;
+      if (sceneOwnerId !== authenticatedUserId) {
+        console.error(`[ai-operator] Unauthorized access attempt: User ${authenticatedUserId} tried to access scene ${sceneId}`);
+        return new Response(JSON.stringify({ error: 'Forbidden - not your scene' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
 
     switch (action) {
       case 'monitor_pipeline':
-        return await monitorPipeline(supabase, projectId, userId);
+        return await monitorPipeline(supabase, projectId, authenticatedUserId);
       
       case 'retry_failed_jobs':
-        return await retryFailedJobs(supabase, projectId, userId);
+        return await retryFailedJobs(supabase, projectId, authenticatedUserId);
       
       case 'switch_engine':
-        return await switchEngineForScene(supabase, sceneId, userId);
+        return await switchEngineForScene(supabase, sceneId, authenticatedUserId);
       
       case 'quality_check':
         return await qualityCheckScene(supabase, sceneId, lovableApiKey);
       
       case 'optimize_cost':
-        return await optimizeCostTier(supabase, projectId, userId);
+        return await optimizeCostTier(supabase, projectId, authenticatedUserId);
       
       case 'generate_variations':
-        return await generateVariations(supabase, projectId, userId);
+        return await generateVariations(supabase, projectId, authenticatedUserId);
       
       case 'auto_generate_prompts':
         return await autoGenerateVisualPrompts(supabase, projectId, lovableApiKey);
