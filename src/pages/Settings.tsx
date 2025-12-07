@@ -984,8 +984,9 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="api-keys" className="space-y-6">
-          <TabsList className="bg-muted/50">
+          <TabsList className="bg-muted/50 flex-wrap h-auto p-1">
           <TabsTrigger value="api-keys">API Keys</TabsTrigger>
+          <TabsTrigger value="data">Data</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
           <TabsTrigger value="n8n">n8n Integration</TabsTrigger>
