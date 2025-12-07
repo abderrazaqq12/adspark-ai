@@ -35,8 +35,8 @@ const App = () => (
               <Layout>
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
-                  <Route path="/create" element={<Studio />} />
-                  <Route path="/quick-generate" element={<Studio />} />
+                  <Route path="/create" element={<CreateVideo />} />
+                  <Route path="/quick-generate" element={<CreateVideo />} />
                   <Route path="/quick-commerce" element={<QuickCommerce />} />
                   <Route path="/agency" element={<AgencyMode />} />
                   <Route path="/studio" element={<Studio />} />
