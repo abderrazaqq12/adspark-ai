@@ -75,6 +75,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
+      // Get the landing page prompt from settings
       const landingPrompt = getPrompt('landing_page_content', {
         product_name: productInfo.name,
         product_description: productInfo.description,
@@ -83,13 +84,10 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
         marketing_content: marketingContent
       });
 
-      const response = await supabase.functions.invoke('ai-content-factory', {
+      // Use the AI assistant edge function for content generation
+      const response = await supabase.functions.invoke('ai-assistant', {
         body: {
-          prompt: landingPrompt,
-          type: 'landing_page',
-          productName: productInfo.name,
-          productDescription: productInfo.description,
-          marketingContent: marketingContent,
+          message: landingPrompt,
           model: getModelName(aiAgent),
         }
       });
@@ -98,7 +96,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
         throw new Error(response.error.message || 'Failed to generate landing page');
       }
 
-      const content = response.data?.content || response.data?.text || '';
+      const content = response.data?.response || response.data?.content || response.data?.text || '';
       setGeneratedContent(content);
       setViewMode('content');
 
@@ -107,6 +105,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
         description: "تم إنشاء محتوى صفحة الهبوط بنجاح",
       });
     } catch (error: any) {
+      console.error('Landing page generation error:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to generate landing page",
@@ -126,18 +125,17 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
+      // Get the landing page builder code prompt
       const builderPrompt = getPrompt('landing_page_builder', {
         product_name: productInfo.name,
         product_description: productInfo.description,
         landing_content: generatedContent || marketingContent,
       });
 
-      const response = await supabase.functions.invoke('ai-content-factory', {
+      // Use the AI assistant edge function for HTML code generation
+      const response = await supabase.functions.invoke('ai-assistant', {
         body: {
-          prompt: builderPrompt,
-          type: 'landing_page_code',
-          productName: productInfo.name,
-          content: generatedContent,
+          message: builderPrompt,
           model: getModelName(aiAgent),
         }
       });
@@ -146,7 +144,20 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
         throw new Error(response.error.message || 'Failed to generate landing page code');
       }
 
-      const code = response.data?.content || response.data?.code || '';
+      let code = response.data?.response || response.data?.content || response.data?.code || '';
+      
+      // Extract HTML code if wrapped in markdown code blocks
+      const htmlMatch = code.match(/```html\s*([\s\S]*?)```/);
+      if (htmlMatch) {
+        code = htmlMatch[1].trim();
+      } else {
+        // Try generic code block
+        const codeMatch = code.match(/```\s*([\s\S]*?)```/);
+        if (codeMatch) {
+          code = codeMatch[1].trim();
+        }
+      }
+      
       setGeneratedCode(code);
       setViewMode('preview');
 
@@ -155,6 +166,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
         description: "تم إنشاء كود صفحة الهبوط بنجاح",
       });
     } catch (error: any) {
+      console.error('Landing code generation error:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to generate landing page code",
