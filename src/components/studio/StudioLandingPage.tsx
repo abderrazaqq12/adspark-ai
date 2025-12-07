@@ -18,6 +18,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useStudioPrompts } from '@/hooks/useStudioPrompts';
+import { useAIAgent, getModelName } from '@/hooks/useAIAgent';
 
 interface StudioLandingPageProps {
   onNext: () => void;
@@ -26,6 +27,7 @@ interface StudioLandingPageProps {
 export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
   const { toast } = useToast();
   const { getPrompt, loading: promptsLoading } = useStudioPrompts();
+  const { aiAgent, loading: aiAgentLoading } = useAIAgent();
   const [isGenerating, setIsGenerating] = useState(false);
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [productInfo, setProductInfo] = useState({ name: '', description: '', url: '', url2: '' });
@@ -80,7 +82,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
         marketing_content: marketingContent
       });
 
-      // Call AI to generate landing page content
+      // Call AI to generate landing page content with selected model
       const response = await supabase.functions.invoke('ai-content-factory', {
         body: {
           prompt: landingPrompt,
@@ -88,6 +90,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
           productName: productInfo.name,
           productDescription: productInfo.description,
           marketingContent: marketingContent,
+          model: getModelName(aiAgent),
         }
       });
 
@@ -127,13 +130,14 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
         landing_content: generatedContent || marketingContent,
       });
 
-      // Call AI to generate landing page HTML code
+      // Call AI to generate landing page HTML code with selected model
       const response = await supabase.functions.invoke('ai-content-factory', {
         body: {
           prompt: builderPrompt,
           type: 'landing_page_code',
           productName: productInfo.name,
           content: generatedContent,
+          model: getModelName(aiAgent),
         }
       });
 
