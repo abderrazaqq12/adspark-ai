@@ -117,6 +117,15 @@ serve(async (req) => {
       case 'auto_generate_prompts':
         return await autoGenerateVisualPrompts(supabase, projectId, lovableApiKey);
       
+      case 'auto_regenerate_low_quality':
+        return await autoRegenerateLowQuality(supabase, projectId, authenticatedUserId, lovableApiKey);
+      
+      case 'full_autonomous_run':
+        return await fullAutonomousRun(supabase, projectId, authenticatedUserId, lovableApiKey);
+      
+      case 'get_status':
+        return await getOperatorStatus(supabase, projectId, authenticatedUserId);
+      
       default:
         return new Response(JSON.stringify({ error: 'Unknown action' }), {
           status: 400,
@@ -643,6 +652,252 @@ async function autoGenerateVisualPrompts(supabase: any, projectId: string, apiKe
     success: true,
     prompts_generated: updates.length,
     total_scenes: scenes.length
+  }), {
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// ============ NEW AUTONOMOUS FUNCTIONS ============
+
+async function autoRegenerateLowQuality(supabase: any, projectId: string, userId: string, apiKey: string) {
+  // Get project and scenes
+  const { data: project } = await supabase
+    .from('projects')
+    .select('*, scripts(id)')
+    .eq('id', projectId)
+    .single();
+
+  const scriptIds = project?.scripts?.map((s: any) => s.id) || [];
+  
+  // Find scenes with low quality scores or marked for regeneration
+  const { data: lowQualityScenes } = await supabase
+    .from('scenes')
+    .select('*')
+    .in('script_id', scriptIds)
+    .or('needs_regeneration.eq.true,ai_quality_score.lt.5')
+    .limit(10);
+
+  if (!lowQualityScenes || lowQualityScenes.length === 0) {
+    return new Response(JSON.stringify({ 
+      message: 'No low-quality scenes found',
+      regenerated: 0
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const results = [];
+
+  for (const scene of lowQualityScenes) {
+    console.log(`[ai-operator] Auto-regenerating scene ${scene.id} (quality: ${scene.ai_quality_score})`);
+
+    // First, try to improve the visual prompt
+    const improvedPrompt = await improveVisualPrompt(scene, apiKey);
+    
+    // Switch to a potentially better engine
+    const { data: engines } = await supabase
+      .from('ai_engines')
+      .select('*')
+      .eq('status', 'active')
+      .neq('name', scene.engine_name)
+      .order('priority_score', { ascending: false })
+      .limit(3);
+
+    const newEngine = engines?.[0];
+
+    // Update scene for regeneration
+    const { error } = await supabase.from('scenes')
+      .update({ 
+        status: 'pending',
+        visual_prompt: improvedPrompt || scene.visual_prompt,
+        engine_id: newEngine?.id || scene.engine_id,
+        engine_name: newEngine?.name || scene.engine_name,
+        needs_regeneration: false,
+        retry_count: (scene.retry_count || 0) + 1
+      })
+      .eq('id', scene.id);
+
+    if (!error) {
+      // Create operator job for tracking
+      await supabase.from('operator_jobs').insert({
+        user_id: userId,
+        project_id: projectId,
+        scene_id: scene.id,
+        job_type: 'auto_regenerate',
+        status: 'pending',
+        input_data: { 
+          reason: 'low_quality',
+          original_score: scene.ai_quality_score,
+          new_engine: newEngine?.name 
+        }
+      });
+
+      results.push({ 
+        scene_id: scene.id, 
+        new_engine: newEngine?.name,
+        improved_prompt: !!improvedPrompt
+      });
+    }
+  }
+
+  return new Response(JSON.stringify({ 
+    success: true,
+    scenes_regenerated: results.length,
+    details: results
+  }), {
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+async function improveVisualPrompt(scene: any, apiKey: string): Promise<string | null> {
+  try {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a video production expert. Improve the given visual prompt to be more specific, cinematic, and better suited for AI video generation. Add specific camera angles, lighting details, and motion descriptions.'
+          },
+          {
+            role: 'user',
+            content: `Improve this visual prompt for a ${scene.scene_type || 'general'} scene:\n\nOriginal: "${scene.visual_prompt || scene.text}"\n\nProvide only the improved prompt, no explanations.`
+          }
+        ],
+      }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content?.slice(0, 500) || null;
+    }
+  } catch (e) {
+    console.error('[ai-operator] Failed to improve prompt:', e);
+  }
+  return null;
+}
+
+async function fullAutonomousRun(supabase: any, projectId: string, userId: string, apiKey: string) {
+  console.log(`[ai-operator] Starting full autonomous run for project ${projectId}`);
+
+  const steps = [];
+  
+  // Step 1: Monitor pipeline
+  const monitorResult = await monitorPipeline(supabase, projectId, userId);
+  const monitorData = await monitorResult.clone().json();
+  steps.push({ step: 'monitor_pipeline', result: monitorData });
+
+  // Step 2: Generate visual prompts for scenes without them
+  const promptResult = await autoGenerateVisualPrompts(supabase, projectId, apiKey);
+  const promptData = await promptResult.clone().json();
+  steps.push({ step: 'generate_prompts', result: promptData });
+
+  // Step 3: Retry failed jobs
+  const retryResult = await retryFailedJobs(supabase, projectId, userId);
+  const retryData = await retryResult.clone().json();
+  steps.push({ step: 'retry_failed', result: retryData });
+
+  // Step 4: Auto-regenerate low quality scenes
+  const regenerateResult = await autoRegenerateLowQuality(supabase, projectId, userId, apiKey);
+  const regenerateData = await regenerateResult.clone().json();
+  steps.push({ step: 'regenerate_low_quality', result: regenerateData });
+
+  // Step 5: Optimize cost
+  const costResult = await optimizeCostTier(supabase, projectId, userId);
+  const costData = await costResult.clone().json();
+  steps.push({ step: 'optimize_cost', result: costData });
+
+  // Update project status
+  await supabase.from('projects')
+    .update({ 
+      updated_at: new Date().toISOString(),
+      settings: {
+        last_autonomous_run: new Date().toISOString(),
+        autonomous_steps: steps.length
+      }
+    })
+    .eq('id', projectId);
+
+  // Log analytics event
+  await supabase.from('analytics_events').insert({
+    user_id: userId,
+    project_id: projectId,
+    event_type: 'ai_operator_autonomous_run',
+    event_data: { steps_completed: steps.length }
+  });
+
+  return new Response(JSON.stringify({ 
+    success: true,
+    message: 'Full autonomous run completed',
+    steps
+  }), {
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+async function getOperatorStatus(supabase: any, projectId: string, userId: string) {
+  // Get operator jobs for this project
+  const { data: jobs } = await supabase
+    .from('operator_jobs')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  // Get project scenes status
+  const { data: project } = await supabase
+    .from('projects')
+    .select('*, scripts(id)')
+    .eq('id', projectId)
+    .single();
+
+  const scriptIds = project?.scripts?.map((s: any) => s.id) || [];
+  
+  const { data: scenes } = await supabase
+    .from('scenes')
+    .select('status, ai_quality_score, needs_regeneration')
+    .in('script_id', scriptIds);
+
+  // Calculate stats
+  const statusCounts: Record<string, number> = {};
+  let totalQuality = 0;
+  let qualityCount = 0;
+  let needsRegeneration = 0;
+
+  for (const scene of scenes || []) {
+    statusCounts[scene.status] = (statusCounts[scene.status] || 0) + 1;
+    if (scene.ai_quality_score) {
+      totalQuality += scene.ai_quality_score;
+      qualityCount++;
+    }
+    if (scene.needs_regeneration) needsRegeneration++;
+  }
+
+  const jobStatusCounts: Record<string, number> = {};
+  for (const job of jobs || []) {
+    jobStatusCounts[job.status] = (jobStatusCounts[job.status] || 0) + 1;
+  }
+
+  return new Response(JSON.stringify({ 
+    operator_enabled: true,
+    project_id: projectId,
+    scenes: {
+      total: scenes?.length || 0,
+      by_status: statusCounts,
+      average_quality: qualityCount > 0 ? (totalQuality / qualityCount).toFixed(1) : null,
+      needs_regeneration: needsRegeneration
+    },
+    jobs: {
+      total: jobs?.length || 0,
+      by_status: jobStatusCounts,
+      recent: jobs?.slice(0, 5)
+    },
+    last_run: project?.settings?.last_autonomous_run || null
   }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });

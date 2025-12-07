@@ -14,12 +14,16 @@ import {
   ArrowRight,
   Zap,
   Activity,
-  Bot
+  Bot,
+  Rocket,
+  FileText
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import GenerationDashboard from "@/components/GenerationDashboard";
 import AIOperatorDashboard from "@/components/AIOperatorDashboard";
+import { WorkflowCards, WorkflowStats } from "@/components/WorkflowCards";
+import { ContentFactory } from "@/components/ContentFactory";
 
 interface Stats {
   totalProjects: number;
@@ -111,16 +115,38 @@ export default function Dashboard() {
             Generate 10-100+ unique video ads using multiple AI engines. 
             Multi-language support with automatic scene routing.
           </p>
-          <Button 
-            size="lg" 
-            onClick={() => navigate("/create")}
-            className="bg-background text-primary hover:bg-background/90 shadow-lg"
-          >
-            <Plus className="w-5 h-5 mr-2" />
-            Create New Video
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button 
+              size="lg" 
+              onClick={() => navigate("/quick-commerce")}
+              className="bg-background text-primary hover:bg-background/90 shadow-lg"
+            >
+              <Rocket className="w-5 h-5 mr-2" />
+              Quick Start
+            </Button>
+            <Button 
+              size="lg" 
+              variant="outline"
+              onClick={() => navigate("/create")}
+              className="border-background/30 text-foreground hover:bg-background/10"
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              Create Video
+            </Button>
+          </div>
         </div>
         <div className="absolute right-0 top-0 w-1/2 h-full opacity-20" />
+      </div>
+
+      {/* Workflow Cards */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-foreground">Choose Your Workflow</h2>
+            <p className="text-muted-foreground">Select the best approach for your needs</p>
+          </div>
+        </div>
+        <WorkflowCards />
       </div>
 
       {/* Stats Grid */}
@@ -228,10 +254,14 @@ export default function Dashboard() {
 
       {/* Generation Dashboard with Tabs */}
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-6">
+        <TabsList className="grid w-full grid-cols-4 mb-6">
           <TabsTrigger value="overview" className="flex items-center gap-2">
             <Sparkles className="w-4 h-4" />
             Overview
+          </TabsTrigger>
+          <TabsTrigger value="content" className="flex items-center gap-2">
+            <FileText className="w-4 h-4" />
+            Content Factory
           </TabsTrigger>
           <TabsTrigger value="generation" className="flex items-center gap-2">
             <Activity className="w-4 h-4" />
@@ -269,6 +299,10 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="content">
+          <ContentFactory />
         </TabsContent>
         
         <TabsContent value="generation">
