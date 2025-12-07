@@ -36,6 +36,7 @@ import { StudioProductInput } from "@/components/studio/StudioProductInput";
 import { StudioMarketingEngine } from "@/components/studio/StudioMarketingEngine";
 import { StudioImageGeneration } from "@/components/studio/StudioImageGeneration";
 import { StudioLandingPage } from "@/components/studio/StudioLandingPage";
+import { StudioExport } from "@/components/studio/StudioExport";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { sceneRouting, videoTypes, exportFormats } from "@/data/aiModels";
@@ -1647,77 +1648,7 @@ export default function CreateVideo() {
 
           {/* Stage 8: Export */}
           {expandedStage === 8 && (
-            <Card className="bg-gradient-card border-border shadow-card">
-              <CardHeader>
-                <CardTitle className="text-foreground flex items-center gap-2">
-                  <Globe className="w-5 h-5 text-primary" />
-                  Export
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Select output formats for your videos (select all that apply)
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-wrap gap-3">
-                  {exportFormats.map((format) => {
-                    const isSelected = selectedFormats.includes(format.id);
-                    return (
-                      <button
-                        key={format.id}
-                        onClick={() => {
-                          if (isSelected) {
-                            setSelectedFormats(selectedFormats.filter(f => f !== format.id));
-                          } else {
-                            setSelectedFormats([...selectedFormats, format.id]);
-                          }
-                        }}
-                        className={`px-4 py-3 rounded-lg border transition-all flex flex-col items-center gap-1 min-w-[140px] ${
-                          isSelected 
-                            ? 'bg-primary/20 border-primary ring-2 ring-primary/50 shadow-glow' 
-                            : 'bg-muted/30 border-border hover:bg-muted/50 hover:border-primary/50'
-                        }`}
-                      >
-                        <span className={`text-sm font-medium ${isSelected ? 'text-primary' : 'text-foreground'}`}>
-                          {format.name}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {format.width}×{format.height}
-                        </span>
-                        {isSelected && (
-                          <CheckCircle2 className="w-4 h-4 text-primary mt-1" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="p-4 rounded-lg bg-muted/30 border border-border flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">
-                    {scenes.length} scenes • ~{scenes.reduce((acc, s) => acc + (s.duration || 3), 0)}s total duration
-                  </p>
-                  <Badge variant="secondary" className="text-primary">
-                    {selectedFormats.length} format{selectedFormats.length !== 1 ? 's' : ''} selected
-                  </Badge>
-                </div>
-                
-                {selectedFormats.length === 0 && (
-                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                    <p className="text-sm text-amber-500">Please select at least one export format</p>
-                  </div>
-                )}
-                
-                {selectedFormats.length > 0 && (
-                  <Button
-                    onClick={() => {
-                      toast.success(`Exporting in ${selectedFormats.length} format(s)!`);
-                    }}
-                    className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground"
-                  >
-                    <Globe className="w-4 h-4 mr-2" />
-                    Export Videos ({selectedFormats.length} formats)
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
+            <StudioExport />
           )}
 
           {/* Save Button - shown when scenes exist */}
