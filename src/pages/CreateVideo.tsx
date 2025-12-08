@@ -50,6 +50,12 @@ import VideoTimelineEditor from "@/components/VideoTimelineEditor";
 import { PipelineStatusIndicator } from "@/components/PipelineStatusIndicator";
 import VideoGenerationStage from "@/components/VideoGenerationStage";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { RealTimeCostTracker } from "@/components/RealTimeCostTracker";
+import { AIBrainRecommendations } from "@/components/AIBrainRecommendations";
+import { PipelineJobsTracker } from "@/components/PipelineJobsTracker";
+import { SmartDefaultsBanner } from "@/components/SmartDefaultsBanner";
+import { useSmartDefaults } from "@/hooks/useSmartDefaults";
+import { useRealTimeCost } from "@/hooks/useRealTimeCost";
 
 // ElevenLabs voices - expanded list with categories
 const ELEVENLABS_VOICES = [
@@ -249,6 +255,10 @@ export default function CreateVideo() {
   
   // Timeline editor state
   const [showTimelineEditor, setShowTimelineEditor] = useState(false);
+
+  // Smart defaults and cost tracking hooks
+  const { defaults, recordChoice, getDefaultForContext, suggestEngine } = useSmartDefaults(projectId || undefined);
+  const { costs, projectCost, estimatedTotal, recordCost } = useRealTimeCost(projectId || undefined);
 
   // Load existing project, voices, and templates
   useEffect(() => {
@@ -780,6 +790,39 @@ export default function CreateVideo() {
             onStageClick={(stageId, index) => setExpandedStage(index)}
             compact={true}
           />
+        </div>
+
+        {/* Smart Defaults Banner */}
+        <SmartDefaultsBanner 
+          projectId={projectId || undefined} 
+          onApplyDefaults={(appliedDefaults) => {
+            if (appliedDefaults.preferredVoice) {
+              setSelectedVoice(appliedDefaults.preferredVoice);
+            }
+            if (appliedDefaults.variationsPerProject) {
+              setVideosToGenerate(appliedDefaults.variationsPerProject);
+            }
+            toast.success('Smart defaults applied!');
+          }}
+        />
+
+        {/* AI Brain Insights & Cost Tracking Row */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <AIBrainRecommendations 
+            projectId={projectId || undefined}
+            stage={pipelineStages[expandedStage]?.key}
+            language={voiceLanguage}
+            market={defaults.preferredMarket}
+            onActionClick={(action, data) => {
+              if (action === 'go_to_stage_0') {
+                setExpandedStage(0);
+              } else if (action === 'regenerate_scenes' && data?.scene_ids) {
+                toast.info('Scene regeneration triggered');
+              }
+            }}
+          />
+          <RealTimeCostTracker projectId={projectId || undefined} budget={10} />
+          <PipelineJobsTracker projectId={projectId || undefined} />
         </div>
 
         <div className="flex flex-col gap-6">
