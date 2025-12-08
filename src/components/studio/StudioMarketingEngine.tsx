@@ -119,8 +119,12 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
             description: prefs.studio_description || '',
             url: prefs.studio_product_url || ''
           });
-          // Load webhook URL from Backend Mode
-          setN8nWebhookUrl(prefs.n8n_webhook_url || '');
+          // Load webhook URL from per-stage webhooks
+          const stageWebhooks = prefs.stage_webhooks || {};
+          const productContentWebhook = stageWebhooks.product_content;
+          if (productContentWebhook?.webhook_url) {
+            setN8nWebhookUrl(productContentWebhook.webhook_url);
+          }
           // Load saved content
           if (prefs.studio_marketing_angles) {
             setGeneratedAngles(prefs.studio_marketing_angles);
