@@ -46,6 +46,7 @@ import VoicePreview from "@/components/VoicePreview";
 import { VideoUploadPreview, generateVideoId } from "@/components/VideoUploadPreview";
 import BatchAssembly from "@/components/BatchAssembly";
 import CostCalculatorPreview from "@/components/CostCalculatorPreview";
+import { VideoVarietyEngine } from "@/components/VideoVarietyEngine";
 import VideoTimelineEditor from "@/components/VideoTimelineEditor";
 import { PipelineStatusIndicator } from "@/components/PipelineStatusIndicator";
 import VideoGenerationStage from "@/components/VideoGenerationStage";
@@ -1700,6 +1701,18 @@ export default function CreateVideo() {
                     <p className="text-xs text-muted-foreground">Videos</p>
                   </div>
                 </div>
+
+                {/* Video Variety Engine - Generate 20-100 variations */}
+                {projectId && (
+                  <VideoVarietyEngine
+                    projectId={projectId}
+                    scriptId={scriptId || undefined}
+                    scenesCount={scenes.length || 1}
+                    onComplete={(variations) => {
+                      toast.success(`Generated ${variations.length} video variations!`);
+                    }}
+                  />
+                )}
 
                 {/* Batch Assembly Component */}
                 {scriptId ? (
