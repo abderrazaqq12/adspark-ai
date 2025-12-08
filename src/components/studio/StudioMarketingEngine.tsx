@@ -141,39 +141,49 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         product_description: productInfo.description,
       });
 
-      // Call the AI to generate angles with selected model
-      const response = await supabase.functions.invoke('ai-content-factory', {
-        body: {
-          prompt: anglesPrompt,
-          type: 'marketing_angles',
+      // Call n8n webhook for Product Content generation
+      const N8N_WEBHOOK_URL = 'https://n8n.srv854030.hstgr.cloud/webhook/flowscale-ai-Product_content';
+      
+      const response = await fetch(N8N_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'generate_marketing_angles',
           productName: productInfo.name,
           productDescription: productInfo.description,
+          productUrl: productInfo.url,
+          prompt: anglesPrompt,
           model: getModelName(aiAgent),
-        }
+          userId: session.user.id,
+          timestamp: new Date().toISOString(),
+        }),
       });
 
-      if (response.error) {
-        // Fallback to mock data if edge function fails
-        console.error('Edge function error:', response.error);
+      if (!response.ok) {
+        throw new Error(`Webhook error: ${response.status}`);
       }
 
-      // Mock generated angles in Arabic
-      const mockAngles: GeneratedAngles = {
-        problemsSolved: [
+      const data = await response.json();
+
+      // Use webhook response or fallback to default structure
+      const angles: GeneratedAngles = data?.problemsSolved ? data : {
+        problemsSolved: data?.problems_solved || [
           'المشاكل الجلدية المزعجة مثل حب الشباب والبقع الداكنة',
           'قلة الثقة بالنفس بسبب مظهر البشرة',
           'صعوبة إيجاد منتج آمن وفعال',
           'إهدار المال على منتجات لا تعمل',
           'الشعور بالإحراج في المناسبات الاجتماعية',
         ],
-        customerValue: [
+        customerValue: data?.customer_value || [
           'بشرة نضرة ومشرقة خلال أسابيع قليلة',
           'ثقة عالية بالنفس والمظهر',
           'مكونات طبيعية آمنة 100%',
           'نتائج مثبتة علمياً',
           'توفير المال مقارنة بالعلاجات التجميلية',
         ],
-        marketingAngles: [
+        marketingAngles: data?.marketing_angles || [
           'المشكلة → الحل: من بشرة مرهقة إلى إشراقة طبيعية',
           'الدليل الاجتماعي: آلاف العملاء الراضين',
           'الندرة والإلحاح: عرض محدود لفترة قصيرة',
@@ -185,14 +195,15 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         ],
       };
 
-      setGeneratedAngles(mockAngles);
-      saveContent({ angles: mockAngles });
+      setGeneratedAngles(angles);
+      saveContent({ angles });
       
       toast({
         title: "تم إنشاء الزوايا التسويقية",
         description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل",
       });
     } catch (error: any) {
+      console.error('Webhook error:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to generate marketing angles",
