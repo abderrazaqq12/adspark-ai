@@ -76,25 +76,51 @@ export default function VideoGenerationStage({
     if (propEngines) setEngines(propEngines);
   }, [propEngines]);
 
-  // Load scenes and engines if scriptId is provided
+  // Load scenes and engines if scriptId or projectId is provided
   useEffect(() => {
-    if (scriptId && !propScenes) {
+    if ((scriptId || projectId) && !propScenes) {
       loadScenes();
     }
     if (!propEngines) {
       loadEngines();
     }
-  }, [scriptId]);
+  }, [scriptId, projectId]);
 
   const loadScenes = async () => {
-    if (!scriptId) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('scenes')
-        .select('*')
-        .eq('script_id', scriptId)
-        .order('index');
+      let data = null;
+      let error = null;
+
+      // Try loading by scriptId first
+      if (scriptId) {
+        const result = await supabase
+          .from('scenes')
+          .select('*')
+          .eq('script_id', scriptId)
+          .order('index');
+        data = result.data;
+        error = result.error;
+      }
+
+      // If no scenes found and we have projectId, try loading via project's scripts
+      if ((!data || data.length === 0) && projectId) {
+        const { data: scripts } = await supabase
+          .from('scripts')
+          .select('id')
+          .eq('project_id', projectId)
+          .limit(1);
+
+        if (scripts && scripts.length > 0) {
+          const result = await supabase
+            .from('scenes')
+            .select('*')
+            .eq('script_id', scripts[0].id)
+            .order('index');
+          data = result.data;
+          error = result.error;
+        }
+      }
 
       if (error) throw error;
       setScenes(data || []);

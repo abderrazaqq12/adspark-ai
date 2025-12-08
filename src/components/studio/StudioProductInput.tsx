@@ -13,9 +13,17 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface StudioProductInputProps {
   onNext: () => void;
+  onProjectCreated?: (projectId: string) => void;
+  productInfo?: { name: string; description: string; imageUrl: string; link: string };
+  onProductInfoChange?: (info: { name: string; description: string; imageUrl: string; link: string }) => void;
 }
 
-export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
+export const StudioProductInput = ({ 
+  onNext, 
+  onProjectCreated,
+  productInfo: externalProductInfo,
+  onProductInfoChange 
+}: StudioProductInputProps) => {
   const [dataSource, setDataSource] = useState<'manual' | 'sheet'>('manual');
   const [productUrl, setProductUrl] = useState('');
   const [productName, setProductName] = useState('');
@@ -36,14 +44,39 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
+  // Sync with external productInfo if provided
+  useEffect(() => {
+    if (externalProductInfo) {
+      setProductName(externalProductInfo.name || '');
+      setDescription(externalProductInfo.description || '');
+      setProductUrl(externalProductInfo.link || '');
+      setMediaLinks(externalProductInfo.imageUrl || '');
+    }
+  }, [externalProductInfo]);
+
   useEffect(() => {
     loadSavedData();
   }, []);
 
+  // Notify parent of changes
+  useEffect(() => {
+    if (onProductInfoChange) {
+      onProductInfoChange({
+        name: productName,
+        description: description,
+        imageUrl: mediaLinks.split('\n')[0] || '',
+        link: productUrl,
+      });
+    }
+  }, [productName, description, mediaLinks, productUrl, onProductInfoChange]);
+
   const loadSavedData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
 
       const { data: settings } = await supabase
         .from('user_settings')
@@ -53,10 +86,13 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
 
       if (settings?.preferences) {
         const prefs = settings.preferences as Record<string, string>;
-        setProductUrl(prefs.studio_product_url || '');
-        setProductName(prefs.studio_product_name || '');
-        setDescription(prefs.studio_description || '');
-        setMediaLinks(prefs.studio_media_links || '');
+        // Only set if not already provided externally
+        if (!externalProductInfo) {
+          setProductUrl(prefs.studio_product_url || '');
+          setProductName(prefs.studio_product_name || '');
+          setDescription(prefs.studio_description || '');
+          setMediaLinks(prefs.studio_media_links || '');
+        }
         setTargetMarket(prefs.studio_target_market || 'sa');
         setLanguage(prefs.studio_language || 'ar-sa');
         setAudienceAge(prefs.studio_audience_age || '25-34');
@@ -84,11 +120,8 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
     setIsLoadingSheet(true);
     try {
       // In production, this would call a backend API to fetch Google Sheet data
-      // For now, we simulate loading data from the sheet
       await new Promise(resolve => setTimeout(resolve, 1500));
       
-      // Simulated sheet data - in production this comes from Google Sheets API
-      // The sheet should have columns: Product Name, Product URL, Product Description, Media Links
       const simulatedSheetData = {
         productName: `Product from Row ${sheetRow}`,
         productUrl: `https://example.com/product-${sheetRow}`,
@@ -96,7 +129,6 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
         mediaLinks: `https://example.com/image1.jpg\nhttps://example.com/image2.jpg`,
       };
 
-      // Auto-fill the form with sheet data
       setProductName(simulatedSheetData.productName);
       setProductUrl(simulatedSheetData.productUrl);
       setDescription(simulatedSheetData.productDescription);
@@ -134,6 +166,7 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
+      // Save to user_settings
       const { data: currentSettings } = await supabase
         .from('user_settings')
         .select('preferences')
@@ -142,9 +175,10 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
 
       const currentPrefs = (currentSettings?.preferences as Record<string, unknown>) || {};
 
-      const { error } = await supabase
+      await supabase
         .from('user_settings')
-        .update({
+        .upsert({
+          user_id: user.id,
           preferences: {
             ...currentPrefs,
             studio_product_url: productUrl,
@@ -156,10 +190,67 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
             studio_audience_age: audienceAge,
             studio_audience_gender: audienceGender,
           }
-        })
-        .eq('user_id', user.id);
+        }, { onConflict: 'user_id' });
 
-      if (error) throw error;
+      // Create project if product name is provided
+      if (productName.trim()) {
+        const { data: existingProject } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('product_name', productName)
+          .maybeSingle();
+
+        let projectId = existingProject?.id;
+
+        if (!projectId) {
+          const { data: newProject, error: projectError } = await supabase
+            .from('projects')
+            .insert({
+              user_id: user.id,
+              name: productName,
+              product_name: productName,
+              language: language.split('-')[0],
+              market: targetMarket,
+              audience: audienceGender,
+              status: 'draft',
+              settings: {
+                product_description: description,
+                product_image_url: mediaLinks.split('\n')[0] || '',
+                product_link: productUrl,
+                audience_age: audienceAge,
+              }
+            })
+            .select()
+            .single();
+
+          if (projectError) throw projectError;
+          projectId = newProject.id;
+        } else {
+          // Update existing project
+          await supabase
+            .from('projects')
+            .update({
+              name: productName,
+              product_name: productName,
+              language: language.split('-')[0],
+              market: targetMarket,
+              audience: audienceGender,
+              settings: {
+                product_description: description,
+                product_image_url: mediaLinks.split('\n')[0] || '',
+                product_link: productUrl,
+                audience_age: audienceAge,
+              }
+            })
+            .eq('id', projectId);
+        }
+
+        // Notify parent of project creation
+        if (onProjectCreated && projectId) {
+          onProjectCreated(projectId);
+        }
+      }
 
       toast({
         title: "Product Saved",
@@ -168,6 +259,7 @@ export const StudioProductInput = ({ onNext }: StudioProductInputProps) => {
 
       onNext();
     } catch (error: any) {
+      console.error('Error saving:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to save product details",

@@ -829,10 +829,19 @@ export default function CreateVideo() {
         <div className="flex flex-col gap-6">
           {/* Stage 0: Studio Product Input */}
           {expandedStage === 0 && (
-            <StudioProductInput onNext={() => {
-              setExpandedStage(1);
-              setCurrentStage(1);
-            }} />
+            <StudioProductInput 
+              onNext={() => {
+                setExpandedStage(1);
+                setCurrentStage(1);
+              }}
+              onProjectCreated={(newProjectId) => {
+                setProjectId(newProjectId);
+              }}
+              productInfo={productInfo}
+              onProductInfoChange={(info) => {
+                setProductInfo(info);
+              }}
+            />
           )}
 
           {/* Stage 1: Studio Product Content (Optional) */}
@@ -858,10 +867,13 @@ export default function CreateVideo() {
           {/* Stage 2: Studio Image Generation (Optional) */}
           {expandedStage === 2 && (
             <div className="space-y-4">
-              <StudioImageGeneration onNext={() => {
-                setExpandedStage(3);
-                setCurrentStage(3);
-              }} />
+              <StudioImageGeneration 
+                onNext={() => {
+                  setExpandedStage(3);
+                  setCurrentStage(3);
+                }}
+                projectId={projectId}
+              />
               <Button 
                 variant="ghost" 
                 className="w-full text-muted-foreground hover:text-foreground"
