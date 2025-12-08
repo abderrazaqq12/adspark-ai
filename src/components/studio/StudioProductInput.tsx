@@ -119,8 +119,12 @@ export const StudioProductInput = ({
           setSheetUrl(prefs.google_sheet_url || '');
           if (prefs.google_sheet_url) setSheetConnected(true);
           
-          // Load webhook URL from preferences
-          setN8nWebhookUrl(prefs.n8n_webhook_url || '');
+          // Load webhook URL from per-stage webhooks
+          const stageWebhooks = prefs.stage_webhooks || {};
+          const productInputWebhook = stageWebhooks.product_input;
+          if (productInputWebhook?.webhook_url) {
+            setN8nWebhookUrl(productInputWebhook.webhook_url);
+          }
         }
       }
     } catch (error) {
