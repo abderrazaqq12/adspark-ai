@@ -43,6 +43,7 @@ export const StudioProductInput = ({
   // Webhook settings from Backend Mode
   const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
   const [useN8nBackend, setUseN8nBackend] = useState(false);
+  const [webhookResponse, setWebhookResponse] = useState<any>(null);
   
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -280,7 +281,7 @@ export const StudioProductInput = ({
       if (useN8nBackend && n8nWebhookUrl) {
         try {
           console.log('Calling Product Input webhook:', n8nWebhookUrl);
-          const webhookResponse = await fetch(n8nWebhookUrl, {
+          const fetchResponse = await fetch(n8nWebhookUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -301,15 +302,17 @@ export const StudioProductInput = ({
             }),
           });
 
-          if (webhookResponse.ok) {
-            const webhookData = await webhookResponse.json();
+          if (fetchResponse.ok) {
+            const webhookData = await fetchResponse.json();
             console.log('Webhook response:', webhookData);
+            setWebhookResponse(webhookData);
             toast({
               title: "Webhook Triggered",
               description: "Product data sent to n8n workflow",
             });
           } else {
-            console.error('Webhook error:', webhookResponse.status);
+            console.error('Webhook error:', fetchResponse.status);
+            setWebhookResponse({ error: `HTTP ${fetchResponse.status}` });
           }
         } catch (webhookError) {
           console.error('Webhook call failed:', webhookError);
@@ -555,6 +558,19 @@ export const StudioProductInput = ({
           <Webhook className="w-3 h-3 text-green-500" />
           <span>Webhook enabled: {n8nWebhookUrl.substring(0, 50)}...</span>
         </div>
+      )}
+
+      {/* Webhook Response Preview */}
+      {webhookResponse && (
+        <Card className="p-4 bg-card/50 border-border">
+          <div className="flex items-center gap-2 mb-3">
+            <Webhook className="w-4 h-4 text-primary" />
+            <h4 className="font-medium text-sm text-foreground">Webhook Response</h4>
+          </div>
+          <pre className="text-xs bg-background p-3 rounded-md overflow-auto max-h-48 text-muted-foreground">
+            {JSON.stringify(webhookResponse, null, 2)}
+          </pre>
+        </Card>
       )}
 
       {/* Submit */}
