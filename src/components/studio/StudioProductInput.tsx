@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Upload, Link2, FileText, ArrowRight, Loader2, Sheet, Database, Image as ImageIcon } from 'lucide-react';
+import { Upload, Link2, FileText, ArrowRight, Loader2, Sheet, Database, Image as ImageIcon, Webhook } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -39,6 +39,10 @@ export const StudioProductInput = ({
   const [sheetRow, setSheetRow] = useState('2');
   const [sheetConnected, setSheetConnected] = useState(false);
   const [isLoadingSheet, setIsLoadingSheet] = useState(false);
+  
+  // Webhook settings
+  const [productInputWebhookUrl, setProductInputWebhookUrl] = useState('');
+  const [webhookEnabled, setWebhookEnabled] = useState(false);
   
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -95,7 +99,7 @@ export const StudioProductInput = ({
         .maybeSingle();
 
       if (settings?.preferences) {
-        const prefs = settings.preferences as Record<string, string>;
+        const prefs = settings.preferences as Record<string, any>;
         // Only set if not already provided externally
         if (!externalProductInfo) {
           setProductUrl(prefs.studio_product_url || '');
@@ -109,6 +113,13 @@ export const StudioProductInput = ({
         setAudienceGender(prefs.studio_audience_gender || 'both');
         setSheetUrl(prefs.google_sheet_url || '');
         if (prefs.google_sheet_url) setSheetConnected(true);
+        
+        // Load webhook settings from stage_webhooks
+        if (prefs.stage_webhooks?.product_input) {
+          const productInputWebhook = prefs.stage_webhooks.product_input;
+          setProductInputWebhookUrl(productInputWebhook.webhook_url || '');
+          setWebhookEnabled(productInputWebhook.enabled || false);
+        }
       }
     } catch (error) {
       console.error('Error loading saved data:', error);
@@ -202,6 +213,8 @@ export const StudioProductInput = ({
           }
         }, { onConflict: 'user_id' });
 
+      let projectId: string | undefined;
+
       // Create project if product name is provided
       if (productName.trim()) {
         const { data: existingProject } = await supabase
@@ -211,7 +224,7 @@ export const StudioProductInput = ({
           .eq('product_name', productName)
           .maybeSingle();
 
-        let projectId = existingProject?.id;
+        projectId = existingProject?.id;
 
         if (!projectId) {
           const { data: newProject, error: projectError } = await supabase
@@ -262,6 +275,47 @@ export const StudioProductInput = ({
         }
       }
 
+      // Call webhook if enabled and URL is configured
+      if (webhookEnabled && productInputWebhookUrl) {
+        try {
+          console.log('Calling Product Input webhook:', productInputWebhookUrl);
+          const webhookResponse = await fetch(productInputWebhookUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              action: 'product_input',
+              productName,
+              productDescription: description,
+              productUrl,
+              mediaLinks: mediaLinks.split('\n').filter(Boolean),
+              targetMarket,
+              language,
+              audienceAge,
+              audienceGender,
+              projectId,
+              userId: user.id,
+              timestamp: new Date().toISOString(),
+            }),
+          });
+
+          if (webhookResponse.ok) {
+            const webhookData = await webhookResponse.json();
+            console.log('Webhook response:', webhookData);
+            toast({
+              title: "Webhook Triggered",
+              description: "Product data sent to n8n workflow",
+            });
+          } else {
+            console.error('Webhook error:', webhookResponse.status);
+          }
+        } catch (webhookError) {
+          console.error('Webhook call failed:', webhookError);
+          // Don't block the flow if webhook fails
+        }
+      }
+
       toast({
         title: "Product Saved",
         description: "Your product details have been saved. Proceeding to next step.",
@@ -290,13 +344,78 @@ export const StudioProductInput = ({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Product Input</h2>
-          <p className="text-muted-foreground text-sm mt-1">Add product details manually or sync from Google Sheets</p>
+      {/* Audience Targeting Header */}
+      <Card className="p-4 bg-card border-border">
+        <h3 className="font-semibold mb-3 text-foreground">Audience Targeting</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Target Market</Label>
+            <Select value={targetMarket} onValueChange={setTargetMarket}>
+              <SelectTrigger className="bg-background border-border h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sa">🇸🇦 Saudi...</SelectItem>
+                <SelectItem value="ae">🇦🇪 UAE</SelectItem>
+                <SelectItem value="kw">🇰🇼 Kuwait</SelectItem>
+                <SelectItem value="ma">🇲🇦 Morocco</SelectItem>
+                <SelectItem value="us">🇺🇸 USA</SelectItem>
+                <SelectItem value="eu">🇪🇺 Europe</SelectItem>
+                <SelectItem value="latam">🌎 LatAm</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Language</Label>
+            <Select value={language} onValueChange={setLanguage}>
+              <SelectTrigger className="bg-background border-border h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ar-sa">Arabic...</SelectItem>
+                <SelectItem value="ar-msa">Arabic (MSA)</SelectItem>
+                <SelectItem value="ar-gulf">Arabic (Gulf)</SelectItem>
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="es">Spanish</SelectItem>
+                <SelectItem value="fr">French</SelectItem>
+                <SelectItem value="de">German</SelectItem>
+                <SelectItem value="pt">Portuguese</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Audience Age</Label>
+            <Select value={audienceAge} onValueChange={setAudienceAge}>
+              <SelectTrigger className="bg-background border-border h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="18-24">18-24</SelectItem>
+                <SelectItem value="25-34">25-34</SelectItem>
+                <SelectItem value="35-44">35-44</SelectItem>
+                <SelectItem value="45-54">45-54</SelectItem>
+                <SelectItem value="55+">55+</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Audience Gender</Label>
+            <Select value={audienceGender} onValueChange={setAudienceGender}>
+              <SelectTrigger className="bg-background border-border h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="male">Male</SelectItem>
+                <SelectItem value="female">Female</SelectItem>
+                <SelectItem value="both">All</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <Badge variant="outline" className="text-primary border-primary">Step 1</Badge>
-      </div>
+      </Card>
 
       {/* Data Source Selection */}
       <Card className="p-6 bg-card border-border">
@@ -429,78 +548,13 @@ export const StudioProductInput = ({
         </div>
       </Card>
 
-      {/* Targeting Options */}
-      <Card className="p-6 bg-card border-border">
-        <h3 className="font-semibold mb-4">Audience Targeting</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="space-y-2">
-            <Label>Target Market</Label>
-            <Select value={targetMarket} onValueChange={setTargetMarket}>
-              <SelectTrigger className="bg-background border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="sa">🇸🇦 Saudi Arabia</SelectItem>
-                <SelectItem value="ae">🇦🇪 UAE</SelectItem>
-                <SelectItem value="kw">🇰🇼 Kuwait</SelectItem>
-                <SelectItem value="ma">🇲🇦 Morocco</SelectItem>
-                <SelectItem value="us">🇺🇸 USA</SelectItem>
-                <SelectItem value="eu">🇪🇺 Europe</SelectItem>
-                <SelectItem value="latam">🌎 LatAm</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Language</Label>
-            <Select value={language} onValueChange={setLanguage}>
-              <SelectTrigger className="bg-background border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ar-sa">Arabic (Saudi)</SelectItem>
-                <SelectItem value="ar-msa">Arabic (MSA)</SelectItem>
-                <SelectItem value="ar-gulf">Arabic (Gulf)</SelectItem>
-                <SelectItem value="en">English</SelectItem>
-                <SelectItem value="es">Spanish</SelectItem>
-                <SelectItem value="fr">French</SelectItem>
-                <SelectItem value="de">German</SelectItem>
-                <SelectItem value="pt">Portuguese</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Audience Age</Label>
-            <Select value={audienceAge} onValueChange={setAudienceAge}>
-              <SelectTrigger className="bg-background border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="18-24">18-24</SelectItem>
-                <SelectItem value="25-34">25-34</SelectItem>
-                <SelectItem value="35-44">35-44</SelectItem>
-                <SelectItem value="45-54">45-54</SelectItem>
-                <SelectItem value="55+">55+</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Audience Gender</Label>
-            <Select value={audienceGender} onValueChange={setAudienceGender}>
-              <SelectTrigger className="bg-background border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="male">Male</SelectItem>
-                <SelectItem value="female">Female</SelectItem>
-                <SelectItem value="both">All</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+      {/* Webhook indicator */}
+      {webhookEnabled && productInputWebhookUrl && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground px-2">
+          <Webhook className="w-3 h-3 text-green-500" />
+          <span>Webhook enabled: {productInputWebhookUrl.substring(0, 50)}...</span>
         </div>
-      </Card>
+      )}
 
       {/* Submit */}
       <div className="flex justify-end">

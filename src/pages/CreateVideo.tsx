@@ -793,38 +793,21 @@ export default function CreateVideo() {
           />
         </div>
 
-        {/* Smart Defaults Banner */}
-        <SmartDefaultsBanner 
-          projectId={projectId || undefined} 
-          onApplyDefaults={(appliedDefaults) => {
-            if (appliedDefaults.preferredVoice) {
-              setSelectedVoice(appliedDefaults.preferredVoice);
-            }
-            if (appliedDefaults.variationsPerProject) {
-              setVideosToGenerate(appliedDefaults.variationsPerProject);
-            }
-            toast.success('Smart defaults applied!');
-          }}
-        />
-
-        {/* AI Brain Insights & Cost Tracking Row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <AIBrainRecommendations 
-            projectId={projectId || undefined}
-            stage={pipelineStages[expandedStage]?.key}
-            language={voiceLanguage}
-            market={defaults.preferredMarket}
-            onActionClick={(action, data) => {
-              if (action === 'go_to_stage_0') {
-                setExpandedStage(0);
-              } else if (action === 'regenerate_scenes' && data?.scene_ids) {
-                toast.info('Scene regeneration triggered');
+        {/* Smart Defaults Banner - only show when not on Product Input stage */}
+        {expandedStage !== 0 && (
+          <SmartDefaultsBanner 
+            projectId={projectId || undefined} 
+            onApplyDefaults={(appliedDefaults) => {
+              if (appliedDefaults.preferredVoice) {
+                setSelectedVoice(appliedDefaults.preferredVoice);
               }
+              if (appliedDefaults.variationsPerProject) {
+                setVideosToGenerate(appliedDefaults.variationsPerProject);
+              }
+              toast.success('Smart defaults applied!');
             }}
           />
-          <RealTimeCostTracker projectId={projectId || undefined} budget={10} />
-          <PipelineJobsTracker projectId={projectId || undefined} />
-        </div>
+        )}
 
         <div className="flex flex-col gap-6">
           {/* Stage 0: Studio Product Input */}
