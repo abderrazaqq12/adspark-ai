@@ -40,9 +40,9 @@ export const StudioProductInput = ({
   const [sheetConnected, setSheetConnected] = useState(false);
   const [isLoadingSheet, setIsLoadingSheet] = useState(false);
   
-  // Webhook settings
-  const [productInputWebhookUrl, setProductInputWebhookUrl] = useState('');
-  const [webhookEnabled, setWebhookEnabled] = useState(false);
+  // Webhook settings from Backend Mode
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
+  const [useN8nBackend, setUseN8nBackend] = useState(false);
   
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -94,31 +94,32 @@ export const StudioProductInput = ({
 
       const { data: settings } = await supabase
         .from('user_settings')
-        .select('preferences')
+        .select('preferences, use_n8n_backend')
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (settings?.preferences) {
-        const prefs = settings.preferences as Record<string, any>;
-        // Only set if not already provided externally
-        if (!externalProductInfo) {
-          setProductUrl(prefs.studio_product_url || '');
-          setProductName(prefs.studio_product_name || '');
-          setDescription(prefs.studio_description || '');
-          setMediaLinks(prefs.studio_media_links || '');
-        }
-        setTargetMarket(prefs.studio_target_market || 'sa');
-        setLanguage(prefs.studio_language || 'ar-sa');
-        setAudienceAge(prefs.studio_audience_age || '25-34');
-        setAudienceGender(prefs.studio_audience_gender || 'both');
-        setSheetUrl(prefs.google_sheet_url || '');
-        if (prefs.google_sheet_url) setSheetConnected(true);
+      if (settings) {
+        // Load Backend Mode setting from column
+        setUseN8nBackend(settings.use_n8n_backend || false);
         
-        // Load webhook settings from stage_webhooks
-        if (prefs.stage_webhooks?.product_input) {
-          const productInputWebhook = prefs.stage_webhooks.product_input;
-          setProductInputWebhookUrl(productInputWebhook.webhook_url || '');
-          setWebhookEnabled(productInputWebhook.enabled || false);
+        const prefs = settings.preferences as Record<string, any>;
+        if (prefs) {
+          // Only set if not already provided externally
+          if (!externalProductInfo) {
+            setProductUrl(prefs.studio_product_url || '');
+            setProductName(prefs.studio_product_name || '');
+            setDescription(prefs.studio_description || '');
+            setMediaLinks(prefs.studio_media_links || '');
+          }
+          setTargetMarket(prefs.studio_target_market || 'sa');
+          setLanguage(prefs.studio_language || 'ar-sa');
+          setAudienceAge(prefs.studio_audience_age || '25-34');
+          setAudienceGender(prefs.studio_audience_gender || 'both');
+          setSheetUrl(prefs.google_sheet_url || '');
+          if (prefs.google_sheet_url) setSheetConnected(true);
+          
+          // Load webhook URL from preferences
+          setN8nWebhookUrl(prefs.n8n_webhook_url || '');
         }
       }
     } catch (error) {
@@ -275,11 +276,11 @@ export const StudioProductInput = ({
         }
       }
 
-      // Call webhook if enabled and URL is configured
-      if (webhookEnabled && productInputWebhookUrl) {
+      // Call webhook if n8n Backend Mode is enabled
+      if (useN8nBackend && n8nWebhookUrl) {
         try {
-          console.log('Calling Product Input webhook:', productInputWebhookUrl);
-          const webhookResponse = await fetch(productInputWebhookUrl, {
+          console.log('Calling Product Input webhook:', n8nWebhookUrl);
+          const webhookResponse = await fetch(n8nWebhookUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -549,10 +550,10 @@ export const StudioProductInput = ({
       </Card>
 
       {/* Webhook indicator */}
-      {webhookEnabled && productInputWebhookUrl && (
+      {useN8nBackend && n8nWebhookUrl && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground px-2">
           <Webhook className="w-3 h-3 text-green-500" />
-          <span>Webhook enabled: {productInputWebhookUrl.substring(0, 50)}...</span>
+          <span>Webhook enabled: {n8nWebhookUrl.substring(0, 50)}...</span>
         </div>
       )}
 
