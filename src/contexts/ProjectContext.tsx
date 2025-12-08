@@ -60,9 +60,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Load latest project on mount
+  // Load latest project on mount - use empty deps to avoid infinite loops
   useEffect(() => {
-    loadLatestProject();
+    const init = async () => {
+      try {
+        await loadLatestProject();
+      } catch (error) {
+        console.error('Error initializing project context:', error);
+      }
+    };
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadLatestProject = useCallback(async () => {
