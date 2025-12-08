@@ -55,7 +55,7 @@ export function useSmartDefaults(projectId?: string): UseSmartDefaultsReturn {
         .from('user_settings')
         .select('default_language, default_voice, pricing_tier, preferences')
         .eq('user_id', session.user.id)
-        .single();
+        .maybeSingle();
 
       // Load learnings
       const { data: learnings } = await supabase
@@ -74,38 +74,43 @@ export function useSmartDefaults(projectId?: string): UseSmartDefaultsReturn {
         
         const prefs = settings.preferences as Record<string, any> | null;
         if (prefs) {
-          newDefaults.preferredMarket = prefs.default_market || 'us';
+          newDefaults.preferredMarket = prefs.default_market || prefs.studio_target_market || 'us';
           newDefaults.autoOptimizeCost = prefs.optimize_cost !== false;
           newDefaults.variationsPerProject = prefs.default_variations || 10;
         }
       }
 
-      // Apply learnings
-      for (const learning of learnings || []) {
-        const insight = learning.insight as Record<string, any> | null;
-        if (!insight) continue;
-        
-        switch (learning.learning_type) {
-          case 'engine_preference':
-            if (learning.confidence_score > 0.6) {
-              newDefaults.preferredEngine = insight.preferred_engine || null;
-            }
-            break;
-          case 'pacing_preference':
-            if (learning.confidence_score > 0.5) {
-              newDefaults.preferredPacing = insight.pacing || 'medium';
-            }
-            break;
-          case 'hook_preference':
-            if (learning.confidence_score > 0.5) {
-              newDefaults.preferredHookStyle = insight.hook_style || 'question';
-            }
-            break;
-          case 'duration_preference':
-            if (learning.confidence_score > 0.5) {
-              newDefaults.averageSceneDuration = insight.duration || 5;
-            }
-            break;
+      // Apply learnings - safely handle potential null/undefined
+      if (learnings && Array.isArray(learnings)) {
+        for (const learning of learnings) {
+          // Safely cast insight - it could be any valid JSON
+          const insight = learning.insight as Record<string, any> | null;
+          if (!insight || typeof insight !== 'object') continue;
+          
+          const confidenceScore = learning.confidence_score ?? 0;
+          
+          switch (learning.learning_type) {
+            case 'engine_preference':
+              if (confidenceScore > 0.6 && insight.preferred_engine) {
+                newDefaults.preferredEngine = String(insight.preferred_engine);
+              }
+              break;
+            case 'pacing_preference':
+              if (confidenceScore > 0.5 && insight.pacing) {
+                newDefaults.preferredPacing = String(insight.pacing);
+              }
+              break;
+            case 'hook_preference':
+              if (confidenceScore > 0.5 && insight.hook_style) {
+                newDefaults.preferredHookStyle = String(insight.hook_style);
+              }
+              break;
+            case 'duration_preference':
+              if (confidenceScore > 0.5 && typeof insight.duration === 'number') {
+                newDefaults.averageSceneDuration = insight.duration;
+              }
+              break;
+          }
         }
       }
 

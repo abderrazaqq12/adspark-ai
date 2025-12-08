@@ -3,7 +3,6 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -15,13 +14,14 @@ import {
   RefreshCw,
   Download,
   Trash2,
-  Plus
+  AlertCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
 interface StudioImageGenerationProps {
   onNext: () => void;
+  projectId?: string | null;
 }
 
 interface GeneratedImage {
@@ -30,6 +30,7 @@ interface GeneratedImage {
   type: string;
   prompt: string;
   status: 'generating' | 'completed' | 'failed';
+  error?: string;
 }
 
 const imageTypes = [
@@ -41,7 +42,7 @@ const imageTypes = [
   { id: 'thumbnail', name: 'Thumbnails', description: 'Eye-catching video thumbnails' },
 ];
 
-export const StudioImageGeneration = ({ onNext }: StudioImageGenerationProps) => {
+export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: StudioImageGenerationProps) => {
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
   const [imageEngine, setImageEngine] = useState('nano-banana');
@@ -51,12 +52,21 @@ export const StudioImageGeneration = ({ onNext }: StudioImageGenerationProps) =>
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [productInfo, setProductInfo] = useState({ name: '', description: '' });
   const [customPrompt, setCustomPrompt] = useState('');
+  const [projectId, setProjectId] = useState<string | null>(propProjectId || null);
+  const [isLoadingProject, setIsLoadingProject] = useState(false);
 
   useEffect(() => {
     loadProductInfo();
   }, []);
 
+  useEffect(() => {
+    if (propProjectId) {
+      setProjectId(propProjectId);
+    }
+  }, [propProjectId]);
+
   const loadProductInfo = async () => {
+    setIsLoadingProject(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -74,8 +84,44 @@ export const StudioImageGeneration = ({ onNext }: StudioImageGenerationProps) =>
           description: prefs.studio_description || ''
         });
       }
+
+      // Load project if not provided via props
+      if (!propProjectId) {
+        const { data: projects } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (projects && projects.length > 0) {
+          setProjectId(projects[0].id);
+        }
+      }
+
+      // Load existing generated images for this project
+      if (projectId || propProjectId) {
+        const pid = projectId || propProjectId;
+        const { data: existingImages } = await supabase
+          .from('generated_images')
+          .select('*')
+          .eq('project_id', pid)
+          .order('created_at', { ascending: false });
+
+        if (existingImages && existingImages.length > 0) {
+          setImages(existingImages.map(img => ({
+            id: img.id,
+            url: img.image_url || '',
+            type: img.image_type,
+            prompt: img.prompt || '',
+            status: img.status === 'completed' ? 'completed' : img.status === 'failed' ? 'failed' : 'generating',
+          })));
+        }
+      }
     } catch (error) {
       console.error('Error loading product info:', error);
+    } finally {
+      setIsLoadingProject(false);
     }
   };
 
@@ -95,16 +141,22 @@ export const StudioImageGeneration = ({ onNext }: StudioImageGenerationProps) =>
       return;
     }
 
+    if (!productInfo.name) {
+      toast({
+        title: "Product Name Required",
+        description: "Please enter product info in Step 1 first",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGenerating(true);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      // Generate images for each selected type
       const newImages: GeneratedImage[] = [];
-      const count = Math.ceil(parseInt(imageCount) / selectedTypes.length);
-
       const totalImages = parseInt(imageCount);
       const imagesPerType = Math.max(1, Math.ceil(totalImages / selectedTypes.length));
 
@@ -114,37 +166,71 @@ export const StudioImageGeneration = ({ onNext }: StudioImageGenerationProps) =>
           const basePrompt = customPrompt 
             ? `${customPrompt}. Style: ${typeInfo?.description}` 
             : `${typeInfo?.description} for ${productInfo.name}. ${productInfo.description}`;
+
+          const tempId = `img-${Date.now()}-${i}-${type}`;
           
-          // Call AI image generation
-          const response = await supabase.functions.invoke('ai-image-generator', {
-            body: {
-              prompt: basePrompt,
-              imageType: type,
-              resolution,
-              engine: imageEngine,
-              productName: productInfo.name,
-              productDescription: productInfo.description,
-            }
-          });
-
-          const imageUrl = response.data?.imageUrl || response.data?.images?.[0]?.url || response.data?.url;
-
+          // Add placeholder while generating
           newImages.push({
-            id: `img-${Date.now()}-${i}-${type}`,
-            url: imageUrl || '',
+            id: tempId,
+            url: '',
             type,
             prompt: basePrompt,
-            status: response.error || !imageUrl ? 'failed' : 'completed',
+            status: 'generating',
           });
         }
       }
 
-      setImages(newImages);
+      // Show generating state
+      setImages(prev => [...newImages, ...prev]);
+
+      // Generate images one by one
+      for (let idx = 0; idx < newImages.length; idx++) {
+        const img = newImages[idx];
+        try {
+          const response = await supabase.functions.invoke('ai-image-generator', {
+            body: {
+              prompt: img.prompt,
+              imageType: img.type,
+              resolution,
+              engine: imageEngine,
+              productName: productInfo.name,
+              productDescription: productInfo.description,
+              projectId: projectId,
+            }
+          });
+
+          const imageUrl = response.data?.imageUrl || response.data?.images?.[0]?.url || response.data?.url || '';
+
+          if (response.error || !imageUrl) {
+            setImages(prev => prev.map(p => 
+              p.id === img.id 
+                ? { ...p, status: 'failed' as const, error: response.error?.message || 'Failed to generate' }
+                : p
+            ));
+          } else {
+            setImages(prev => prev.map(p => 
+              p.id === img.id 
+                ? { ...p, url: imageUrl, status: 'completed' as const }
+                : p
+            ));
+          }
+        } catch (genError: any) {
+          console.error(`Error generating image ${idx}:`, genError);
+          setImages(prev => prev.map(p => 
+            p.id === img.id 
+              ? { ...p, status: 'failed' as const, error: genError.message }
+              : p
+          ));
+        }
+      }
+
+      const successCount = newImages.length;
       toast({
-        title: "Images Generated",
-        description: `${newImages.length} images created successfully`,
+        title: "Image Generation Complete",
+        description: `Generated ${successCount} images`,
       });
     } catch (error: any) {
+      console.error('Error in image generation:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to generate images",
@@ -174,20 +260,61 @@ export const StudioImageGeneration = ({ onNext }: StudioImageGenerationProps) =>
           imageType: image.type,
           resolution,
           engine: imageEngine,
+          productName: productInfo.name,
+          productDescription: productInfo.description,
+          projectId: projectId,
         }
       });
 
+      const imageUrl = response.data?.imageUrl || response.data?.images?.[0]?.url || '';
+
       setImages(prev => prev.map(img => 
         img.id === id 
-          ? { ...img, url: response.data?.imageUrl || img.url, status: 'completed' as const } 
+          ? { ...img, url: imageUrl || img.url, status: imageUrl ? 'completed' as const : 'failed' as const } 
           : img
       ));
+
+      if (imageUrl) {
+        toast({ title: "Image regenerated successfully" });
+      }
     } catch (error) {
       setImages(prev => prev.map(img => 
         img.id === id ? { ...img, status: 'failed' as const } : img
       ));
+      toast({
+        title: "Error",
+        description: "Failed to regenerate image",
+        variant: "destructive",
+      });
     }
   };
+
+  const downloadImage = async (url: string, type: string) => {
+    try {
+      // For base64 images, create a download link directly
+      if (url.startsWith('data:')) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${type}-${Date.now()}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        window.open(url, '_blank');
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      window.open(url, '_blank');
+    }
+  };
+
+  if (isLoadingProject) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -198,6 +325,19 @@ export const StudioImageGeneration = ({ onNext }: StudioImageGenerationProps) =>
         </div>
         <Badge variant="outline" className="text-primary border-primary">Step 3</Badge>
       </div>
+
+      {/* Product Info Display */}
+      {productInfo.name && (
+        <Card className="p-4 bg-primary/5 border-primary/30">
+          <div className="flex items-center gap-3">
+            <Sparkles className="w-5 h-5 text-primary" />
+            <div>
+              <p className="font-medium text-foreground">{productInfo.name}</p>
+              <p className="text-sm text-muted-foreground line-clamp-1">{productInfo.description || 'No description'}</p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Generation Settings */}
       <Card className="p-6 bg-card border-border">
@@ -254,7 +394,7 @@ export const StudioImageGeneration = ({ onNext }: StudioImageGenerationProps) =>
               ) : (
                 <Sparkles className="w-4 h-4" />
               )}
-              Generate
+              {images.length > 0 ? 'Generate More' : 'Generate'}
             </Button>
           </div>
         </div>
@@ -301,7 +441,7 @@ export const StudioImageGeneration = ({ onNext }: StudioImageGenerationProps) =>
       <Card className="p-6 bg-card border-border">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold">Generated Images</h3>
-          <Badge variant="secondary">{images.length} images</Badge>
+          <Badge variant="secondary">{images.filter(i => i.status === 'completed').length} / {images.length} images</Badge>
         </div>
 
         {images.length === 0 ? (
@@ -316,43 +456,62 @@ export const StudioImageGeneration = ({ onNext }: StudioImageGenerationProps) =>
               <div key={image.id} className="relative group rounded-lg overflow-hidden border border-border">
                 <div className="aspect-square bg-muted">
                   {image.status === 'generating' ? (
-                    <div className="w-full h-full flex items-center justify-center">
+                    <div className="w-full h-full flex flex-col items-center justify-center gap-2">
                       <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                      <span className="text-xs text-muted-foreground">Generating...</span>
                     </div>
-                  ) : (
+                  ) : image.status === 'failed' ? (
+                    <div className="w-full h-full flex flex-col items-center justify-center gap-2 p-4">
+                      <AlertCircle className="w-6 h-6 text-destructive" />
+                      <span className="text-xs text-destructive text-center">{image.error || 'Generation failed'}</span>
+                      <Button variant="outline" size="sm" onClick={() => regenerateImage(image.id)}>
+                        <RefreshCw className="w-3 h-3 mr-1" />
+                        Retry
+                      </Button>
+                    </div>
+                  ) : image.url ? (
                     <img 
                       src={image.url} 
                       alt={image.type}
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="%23333" width="100" height="100"/><text fill="%23999" x="50%" y="50%" text-anchor="middle" dy=".3em" font-size="12">Error</text></svg>';
+                      }}
                     />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ImageIcon className="w-8 h-8 text-muted-foreground" />
+                    </div>
                   )}
                 </div>
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                  <Button 
-                    variant="secondary" 
-                    size="icon" 
-                    className="h-8 w-8"
-                    onClick={() => regenerateImage(image.id)}
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                  </Button>
-                  <Button 
-                    variant="secondary" 
-                    size="icon" 
-                    className="h-8 w-8"
-                    onClick={() => window.open(image.url, '_blank')}
-                  >
-                    <Download className="w-4 h-4" />
-                  </Button>
-                  <Button 
-                    variant="destructive" 
-                    size="icon" 
-                    className="h-8 w-8"
-                    onClick={() => removeImage(image.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
+                {image.status === 'completed' && image.url && (
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <Button 
+                      variant="secondary" 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={() => regenerateImage(image.id)}
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </Button>
+                    <Button 
+                      variant="secondary" 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={() => downloadImage(image.url, image.type)}
+                    >
+                      <Download className="w-4 h-4" />
+                    </Button>
+                    <Button 
+                      variant="destructive" 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={() => removeImage(image.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
                 <div className="p-2 bg-muted/50">
                   <Badge variant="secondary" className="text-xs capitalize">{image.type}</Badge>
                 </div>
