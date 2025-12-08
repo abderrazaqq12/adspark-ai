@@ -8,6 +8,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import CreateVideo from "./pages/CreateVideo";
 import Projects from "./pages/Projects";
+import Gallery from "./pages/Gallery";
 import SceneBuilder from "./pages/SceneBuilder";
 import Engines from "./pages/Engines";
 import Settings from "./pages/Settings";
@@ -37,6 +38,7 @@ const App = () => (
                   <Route path="/quick-generate" element={<CreateVideo />} />
                   <Route path="/agency" element={<AgencyMode />} />
                   <Route path="/projects" element={<Projects />} />
+                  <Route path="/gallery" element={<Gallery />} />
                   <Route path="/videos" element={<Videos />} />
                   <Route path="/scene-builder" element={<SceneBuilder />} />
                   <Route path="/engines" element={<Engines />} />
