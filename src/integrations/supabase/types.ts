@@ -172,6 +172,45 @@ export type Database = {
           },
         ]
       }
+      ai_learnings: {
+        Row: {
+          confidence_score: number | null
+          context: Json
+          created_at: string
+          id: string
+          insight: Json
+          last_used_at: string | null
+          learning_type: string
+          updated_at: string
+          usage_count: number | null
+          user_id: string | null
+        }
+        Insert: {
+          confidence_score?: number | null
+          context?: Json
+          created_at?: string
+          id?: string
+          insight?: Json
+          last_used_at?: string | null
+          learning_type: string
+          updated_at?: string
+          usage_count?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          confidence_score?: number | null
+          context?: Json
+          created_at?: string
+          id?: string
+          insight?: Json
+          last_used_at?: string | null
+          learning_type?: string
+          updated_at?: string
+          usage_count?: number | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       analytics_events: {
         Row: {
           created_at: string | null
@@ -378,6 +417,56 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      cost_transactions: {
+        Row: {
+          cost_usd: number
+          created_at: string
+          duration_sec: number | null
+          engine_name: string
+          id: string
+          metadata: Json | null
+          operation_type: string
+          pipeline_stage: string
+          project_id: string | null
+          tokens_used: number | null
+          user_id: string | null
+        }
+        Insert: {
+          cost_usd?: number
+          created_at?: string
+          duration_sec?: number | null
+          engine_name: string
+          id?: string
+          metadata?: Json | null
+          operation_type: string
+          pipeline_stage: string
+          project_id?: string | null
+          tokens_used?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          cost_usd?: number
+          created_at?: string
+          duration_sec?: number | null
+          engine_name?: string
+          id?: string
+          metadata?: Json | null
+          operation_type?: string
+          pipeline_stage?: string
+          project_id?: string | null
+          tokens_used?: number | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cost_transactions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       engine_usage_analytics: {
         Row: {
@@ -767,6 +856,74 @@ export type Database = {
             columns: ["scene_id"]
             isOneToOne: false
             referencedRelation: "scenes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pipeline_jobs: {
+        Row: {
+          actual_cost: number | null
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          estimated_cost: number | null
+          id: string
+          input_data: Json | null
+          n8n_execution_id: string | null
+          output_data: Json | null
+          progress: number | null
+          project_id: string | null
+          stage_name: string
+          stage_number: number
+          started_at: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          actual_cost?: number | null
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          estimated_cost?: number | null
+          id?: string
+          input_data?: Json | null
+          n8n_execution_id?: string | null
+          output_data?: Json | null
+          progress?: number | null
+          project_id?: string | null
+          stage_name: string
+          stage_number: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          actual_cost?: number | null
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          estimated_cost?: number | null
+          id?: string
+          input_data?: Json | null
+          n8n_execution_id?: string | null
+          output_data?: Json | null
+          progress?: number | null
+          project_id?: string | null
+          stage_name?: string
+          stage_number?: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_jobs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -1240,6 +1397,78 @@ export type Database = {
           },
           {
             foreignKeyName: "video_outputs_script_id_fkey"
+            columns: ["script_id"]
+            isOneToOne: false
+            referencedRelation: "scripts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      video_variations: {
+        Row: {
+          cost_usd: number | null
+          created_at: string
+          duration_sec: number | null
+          id: string
+          metadata: Json | null
+          project_id: string | null
+          quality_score: number | null
+          scenes_config: Json | null
+          script_id: string | null
+          status: string | null
+          thumbnail_url: string | null
+          updated_at: string
+          user_id: string | null
+          variation_config: Json
+          variation_number: number
+          video_url: string | null
+        }
+        Insert: {
+          cost_usd?: number | null
+          created_at?: string
+          duration_sec?: number | null
+          id?: string
+          metadata?: Json | null
+          project_id?: string | null
+          quality_score?: number | null
+          scenes_config?: Json | null
+          script_id?: string | null
+          status?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          user_id?: string | null
+          variation_config?: Json
+          variation_number: number
+          video_url?: string | null
+        }
+        Update: {
+          cost_usd?: number | null
+          created_at?: string
+          duration_sec?: number | null
+          id?: string
+          metadata?: Json | null
+          project_id?: string | null
+          quality_score?: number | null
+          scenes_config?: Json | null
+          script_id?: string | null
+          status?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          user_id?: string | null
+          variation_config?: Json
+          variation_number?: number
+          video_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_variations_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "video_variations_script_id_fkey"
             columns: ["script_id"]
             isOneToOne: false
             referencedRelation: "scripts"
