@@ -68,3 +68,9 @@ verify_jwt = true
 
 [functions.ai-content-factory]
 verify_jwt = true
+
+[functions.ai-brain]
+verify_jwt = true
+
+[functions.pipeline-stage]
+verify_jwt = true
