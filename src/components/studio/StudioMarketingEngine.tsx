@@ -17,7 +17,8 @@ import {
   CheckCircle2,
   Target,
   Heart,
-  Zap
+  Zap,
+  Webhook
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -52,7 +53,9 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   const [landingContent, setLandingContent] = useState<string>('');
   const [scriptsCount, setScriptsCount] = useState('10');
   const [productInfo, setProductInfo] = useState({ name: '', description: '', url: '' });
-
+  const [webhookResponse, setWebhookResponse] = useState<any>(null);
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
+  const [useN8nBackend, setUseN8nBackend] = useState(false);
   useEffect(() => {
     loadProductInfo();
   }, []);
@@ -101,26 +104,33 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
 
       const { data: settings } = await supabase
         .from('user_settings')
-        .select('preferences')
+        .select('preferences, use_n8n_backend')
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (settings?.preferences) {
+      if (settings) {
+        // Load Backend Mode settings
+        setUseN8nBackend(settings.use_n8n_backend || false);
+        
         const prefs = settings.preferences as Record<string, any>;
-        setProductInfo({
-          name: prefs.studio_product_name || '',
-          description: prefs.studio_description || '',
-          url: prefs.studio_product_url || ''
-        });
-        // Load saved content
-        if (prefs.studio_marketing_angles) {
-          setGeneratedAngles(prefs.studio_marketing_angles);
-        }
-        if (prefs.studio_scripts) {
-          setScripts(prefs.studio_scripts);
-        }
-        if (prefs.studio_landing_content) {
-          setLandingContent(prefs.studio_landing_content);
+        if (prefs) {
+          setProductInfo({
+            name: prefs.studio_product_name || '',
+            description: prefs.studio_description || '',
+            url: prefs.studio_product_url || ''
+          });
+          // Load webhook URL from Backend Mode
+          setN8nWebhookUrl(prefs.n8n_webhook_url || '');
+          // Load saved content
+          if (prefs.studio_marketing_angles) {
+            setGeneratedAngles(prefs.studio_marketing_angles);
+          }
+          if (prefs.studio_scripts) {
+            setScripts(prefs.studio_scripts);
+          }
+          if (prefs.studio_landing_content) {
+            setLandingContent(prefs.studio_landing_content);
+          }
         }
       }
     } catch (error) {
@@ -130,6 +140,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
 
   const generateMarketingAngles = async () => {
     setIsGenerating(true);
+    setWebhookResponse(null);
     
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -141,10 +152,14 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         product_description: productInfo.description,
       });
 
-      // Call n8n webhook for Product Content generation
-      const N8N_WEBHOOK_URL = 'https://n8n.srv854030.hstgr.cloud/webhook/flowscale-ai-Product_content';
+      // Use Backend Mode webhook URL if enabled, otherwise use default
+      const webhookUrl = useN8nBackend && n8nWebhookUrl 
+        ? n8nWebhookUrl 
+        : 'https://n8n.srv854030.hstgr.cloud/webhook/flowscale-ai-Product_content';
       
-      const response = await fetch(N8N_WEBHOOK_URL, {
+      console.log('Calling Product Content webhook:', webhookUrl);
+      
+      const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -166,6 +181,9 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       }
 
       const data = await response.json();
+      
+      // Store raw webhook response for preview
+      setWebhookResponse(data);
 
       // Use webhook response or fallback to default structure
       const angles: GeneratedAngles = data?.problemsSolved ? data : {
@@ -353,6 +371,14 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         <Badge variant="outline" className="text-primary border-primary">Step 2</Badge>
       </div>
 
+      {/* Webhook indicator */}
+      {useN8nBackend && n8nWebhookUrl && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground px-2">
+          <Webhook className="w-3 h-3 text-green-500" />
+          <span>Webhook enabled: {n8nWebhookUrl.substring(0, 50)}...</span>
+        </div>
+      )}
+
       {/* Product Info Summary */}
       <Card className="p-4 bg-primary/5 border-primary/30">
         <div className="flex items-center gap-3">
@@ -363,6 +389,19 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
           </div>
         </div>
       </Card>
+
+      {/* Webhook Response Preview */}
+      {webhookResponse && (
+        <Card className="p-4 bg-card/50 border-border">
+          <div className="flex items-center gap-2 mb-3">
+            <Webhook className="w-4 h-4 text-primary" />
+            <h4 className="font-medium text-sm text-foreground">Webhook Response</h4>
+          </div>
+          <pre className="text-xs bg-background p-3 rounded-md overflow-auto max-h-48 text-muted-foreground">
+            {JSON.stringify(webhookResponse, null, 2)}
+          </pre>
+        </Card>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-3 bg-muted">
