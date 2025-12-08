@@ -1,4 +1,4 @@
-import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Building2, Database, Clapperboard } from "lucide-react";
+import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Building2, Database, Clapperboard, Images } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -29,9 +29,10 @@ const quickAccessItems = [
   { title: "Studio", url: "/create", icon: Clapperboard },
 ];
 
-// Library items - Projects only, other assets accessible within projects
+// Library items - Projects and Gallery
 const libraryItems = [
   { title: "My Projects", url: "/projects", icon: FolderOpen },
+  { title: "Asset Gallery", url: "/gallery", icon: Images },
   { title: "Templates", url: "/templates", icon: LayoutTemplate },
 ];
 

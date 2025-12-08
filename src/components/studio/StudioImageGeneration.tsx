@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { ImageGenerationProgress } from '@/components/ImageGenerationProgress';
 
 interface StudioImageGenerationProps {
   onNext: () => void;
@@ -54,6 +55,8 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
   const [customPrompt, setCustomPrompt] = useState('');
   const [projectId, setProjectId] = useState<string | null>(propProjectId || null);
   const [isLoadingProject, setIsLoadingProject] = useState(false);
+  const [generationStartTime, setGenerationStartTime] = useState<number | undefined>();
+  const generatingCountRef = useRef({ completed: 0, failed: 0, total: 0 });
 
   useEffect(() => {
     loadProductInfo();
@@ -151,6 +154,8 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
     }
 
     setIsGenerating(true);
+    setGenerationStartTime(Date.now());
+    generatingCountRef.current = { completed: 0, failed: 0, total: 0 };
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -180,6 +185,9 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
         }
       }
 
+      // Update total for progress tracking
+      generatingCountRef.current.total = newImages.length;
+
       // Show generating state
       setImages(prev => [...newImages, ...prev]);
 
@@ -202,12 +210,14 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
           const imageUrl = response.data?.imageUrl || response.data?.images?.[0]?.url || response.data?.url || '';
 
           if (response.error || !imageUrl) {
+            generatingCountRef.current.failed++;
             setImages(prev => prev.map(p => 
               p.id === img.id 
                 ? { ...p, status: 'failed' as const, error: response.error?.message || 'Failed to generate' }
                 : p
             ));
           } else {
+            generatingCountRef.current.completed++;
             setImages(prev => prev.map(p => 
               p.id === img.id 
                 ? { ...p, url: imageUrl, status: 'completed' as const }
@@ -216,6 +226,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
           }
         } catch (genError: any) {
           console.error(`Error generating image ${idx}:`, genError);
+          generatingCountRef.current.failed++;
           setImages(prev => prev.map(p => 
             p.id === img.id 
               ? { ...p, status: 'failed' as const, error: genError.message }
@@ -224,10 +235,10 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
         }
       }
 
-      const successCount = newImages.length;
+      const successCount = generatingCountRef.current.completed;
       toast({
         title: "Image Generation Complete",
-        description: `Generated ${successCount} images`,
+        description: `Generated ${successCount} of ${newImages.length} images`,
       });
     } catch (error: any) {
       console.error('Error in image generation:', error);
@@ -238,6 +249,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
       });
     } finally {
       setIsGenerating(false);
+      setGenerationStartTime(undefined);
     }
   };
 
@@ -436,6 +448,17 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
           ))}
         </div>
       </Card>
+
+      {/* Progress Tracker */}
+      {(isGenerating || images.some(i => i.status === 'generating')) && (
+        <ImageGenerationProgress
+          totalImages={images.filter(i => i.status === 'generating').length + images.filter(i => i.status === 'completed' || i.status === 'failed').length}
+          completedImages={images.filter(i => i.status === 'completed').length}
+          failedImages={images.filter(i => i.status === 'failed').length}
+          isGenerating={isGenerating}
+          startTime={generationStartTime}
+        />
+      )}
 
       {/* Generated Images */}
       <Card className="p-6 bg-card border-border">
