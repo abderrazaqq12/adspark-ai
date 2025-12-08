@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { ProjectProvider } from "./contexts/ProjectContext";
 import Dashboard from "./pages/Dashboard";
 import CreateVideo from "./pages/CreateVideo";
 import Projects from "./pages/Projects";
@@ -31,23 +32,25 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/*" element={
             <ProtectedRoute>
-              <Layout>
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/create" element={<CreateVideo />} />
-                  <Route path="/quick-generate" element={<CreateVideo />} />
-                  <Route path="/agency" element={<AgencyMode />} />
-                  <Route path="/projects" element={<Projects />} />
-                  <Route path="/gallery" element={<Gallery />} />
-                  <Route path="/videos" element={<Videos />} />
-                  <Route path="/scene-builder" element={<SceneBuilder />} />
-                  <Route path="/engines" element={<Engines />} />
-                  <Route path="/settings" element={<Settings />} />
-                  <Route path="/analytics" element={<Analytics />} />
-                  <Route path="/templates" element={<Templates />} />
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </Layout>
+              <ProjectProvider>
+                <Layout>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/create" element={<CreateVideo />} />
+                    <Route path="/quick-generate" element={<CreateVideo />} />
+                    <Route path="/agency" element={<AgencyMode />} />
+                    <Route path="/projects" element={<Projects />} />
+                    <Route path="/gallery" element={<Gallery />} />
+                    <Route path="/videos" element={<Videos />} />
+                    <Route path="/scene-builder" element={<SceneBuilder />} />
+                    <Route path="/engines" element={<Engines />} />
+                    <Route path="/settings" element={<Settings />} />
+                    <Route path="/analytics" element={<Analytics />} />
+                    <Route path="/templates" element={<Templates />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </Layout>
+              </ProjectProvider>
             </ProtectedRoute>
           } />
         </Routes>

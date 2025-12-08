@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Upload, Link2, FileText, ArrowRight, Loader2, Sheet, Database, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,15 +58,25 @@ export const StudioProductInput = ({
     loadSavedData();
   }, []);
 
-  // Notify parent of changes
+  // Use ref to track previous values and prevent infinite loops
+  const prevProductInfoRef = useRef<string>('');
+  
+  // Notify parent of changes - using useCallback and ref comparison to prevent infinite loops
   useEffect(() => {
     if (onProductInfoChange) {
-      onProductInfoChange({
+      const newInfo = {
         name: productName,
         description: description,
         imageUrl: mediaLinks.split('\n')[0] || '',
         link: productUrl,
-      });
+      };
+      const newInfoString = JSON.stringify(newInfo);
+      
+      // Only call if values actually changed
+      if (prevProductInfoRef.current !== newInfoString) {
+        prevProductInfoRef.current = newInfoString;
+        onProductInfoChange(newInfo);
+      }
     }
   }, [productName, description, mediaLinks, productUrl, onProductInfoChange]);
 

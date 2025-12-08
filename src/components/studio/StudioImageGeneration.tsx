@@ -62,11 +62,41 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
     loadProductInfo();
   }, []);
 
+  // Reload images when projectId changes
   useEffect(() => {
     if (propProjectId) {
       setProjectId(propProjectId);
+      // Reload images for the new project
+      loadExistingImages(propProjectId);
     }
   }, [propProjectId]);
+
+  const loadExistingImages = async (pid: string) => {
+    try {
+      const { data: existingImages, error: imgError } = await supabase
+        .from('generated_images')
+        .select('*')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: false });
+
+      if (imgError) {
+        console.error('Error loading existing images:', imgError);
+        return;
+      }
+
+      if (existingImages && existingImages.length > 0) {
+        setImages(existingImages.map(img => ({
+          id: img.id,
+          url: img.image_url || '',
+          type: img.image_type,
+          prompt: img.prompt || '',
+          status: img.status === 'completed' ? 'completed' : img.status === 'failed' ? 'failed' : 'generating',
+        })));
+      }
+    } catch (error) {
+      console.error('Error loading images:', error);
+    }
+  };
 
   const loadProductInfo = async () => {
     setIsLoadingProject(true);
@@ -103,15 +133,17 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
       }
 
       // Load existing generated images for this project
-      if (projectId || propProjectId) {
-        const pid = projectId || propProjectId;
-        const { data: existingImages } = await supabase
+      const currentProjectId = projectId || propProjectId;
+      if (currentProjectId) {
+        const { data: existingImages, error: imgError } = await supabase
           .from('generated_images')
           .select('*')
-          .eq('project_id', pid)
+          .eq('project_id', currentProjectId)
           .order('created_at', { ascending: false });
 
-        if (existingImages && existingImages.length > 0) {
+        if (imgError) {
+          console.error('Error loading existing images:', imgError);
+        } else if (existingImages && existingImages.length > 0) {
           setImages(existingImages.map(img => ({
             id: img.id,
             url: img.image_url || '',
