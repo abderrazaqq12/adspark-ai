@@ -383,7 +383,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
                 ) : (
                   <Sparkles className="w-4 h-4" />
                 )}
-                Generate Angles
+                {generatedAngles ? 'Regenerate' : 'Generate Angles'}
               </Button>
             </div>
 
@@ -549,7 +549,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
                   ) : (
                     <Sparkles className="w-4 h-4" />
                   )}
-                  Generate
+                  {landingContent ? 'Regenerate' : 'Generate'}
                 </Button>
                 {landingContent && (
                   <Button variant="outline" onClick={() => copyToClipboard(landingContent)} className="gap-2">

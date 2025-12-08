@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { 
@@ -44,11 +45,12 @@ export const StudioImageGeneration = ({ onNext }: StudioImageGenerationProps) =>
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
   const [imageEngine, setImageEngine] = useState('nano-banana');
-  const [imageCount, setImageCount] = useState('6');
+  const [imageCount, setImageCount] = useState('3');
   const [resolution, setResolution] = useState('1024x1024');
   const [selectedTypes, setSelectedTypes] = useState<string[]>(['product', 'lifestyle', 'thumbnail']);
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [productInfo, setProductInfo] = useState({ name: '', description: '' });
+  const [customPrompt, setCustomPrompt] = useState('');
 
   useEffect(() => {
     loadProductInfo();
@@ -103,26 +105,36 @@ export const StudioImageGeneration = ({ onNext }: StudioImageGenerationProps) =>
       const newImages: GeneratedImage[] = [];
       const count = Math.ceil(parseInt(imageCount) / selectedTypes.length);
 
+      const totalImages = parseInt(imageCount);
+      const imagesPerType = Math.max(1, Math.ceil(totalImages / selectedTypes.length));
+
       for (const type of selectedTypes) {
-        for (let i = 0; i < count; i++) {
+        for (let i = 0; i < imagesPerType && newImages.length < totalImages; i++) {
           const typeInfo = imageTypes.find(t => t.id === type);
+          const basePrompt = customPrompt 
+            ? `${customPrompt}. Style: ${typeInfo?.description}` 
+            : `${typeInfo?.description} for ${productInfo.name}. ${productInfo.description}`;
           
           // Call AI image generation
           const response = await supabase.functions.invoke('ai-image-generator', {
             body: {
-              prompt: `${typeInfo?.description} for ${productInfo.name}. ${productInfo.description}`,
+              prompt: basePrompt,
               imageType: type,
               resolution,
               engine: imageEngine,
+              productName: productInfo.name,
+              productDescription: productInfo.description,
             }
           });
 
+          const imageUrl = response.data?.imageUrl || response.data?.images?.[0]?.url || response.data?.url;
+
           newImages.push({
-            id: `img-${Date.now()}-${i}`,
-            url: response.data?.imageUrl || '/placeholder.svg',
+            id: `img-${Date.now()}-${i}-${type}`,
+            url: imageUrl || '',
             type,
-            prompt: typeInfo?.description || '',
-            status: response.error ? 'failed' : 'completed',
+            prompt: basePrompt,
+            status: response.error || !imageUrl ? 'failed' : 'completed',
           });
         }
       }
@@ -207,16 +219,15 @@ export const StudioImageGeneration = ({ onNext }: StudioImageGenerationProps) =>
           </div>
 
           <div className="space-y-2">
-            <Label>Number of Images</Label>
+            <Label>Number of Images (1-10)</Label>
             <Select value={imageCount} onValueChange={setImageCount}>
               <SelectTrigger className="bg-background">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="3">3 images</SelectItem>
-                <SelectItem value="6">6 images</SelectItem>
-                <SelectItem value="9">9 images</SelectItem>
-                <SelectItem value="12">12 images</SelectItem>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                  <SelectItem key={num} value={num.toString()}>{num} image{num > 1 ? 's' : ''}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -246,6 +257,17 @@ export const StudioImageGeneration = ({ onNext }: StudioImageGenerationProps) =>
               Generate
             </Button>
           </div>
+        </div>
+
+        {/* Custom Prompt */}
+        <div className="mt-4 space-y-2">
+          <Label>Custom Prompt (optional)</Label>
+          <Textarea
+            value={customPrompt}
+            onChange={(e) => setCustomPrompt(e.target.value)}
+            placeholder="Add specific instructions for image generation, e.g., 'Show product being used by a woman in a modern kitchen with natural lighting'"
+            className="min-h-[80px] bg-background"
+          />
         </div>
       </Card>
 

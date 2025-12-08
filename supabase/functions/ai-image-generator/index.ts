@@ -11,14 +11,18 @@ type Market = 'sa' | 'ae' | 'kw' | 'ma' | 'eu' | 'us' | 'latam';
 type Audience = 'men' | 'women' | 'both' | 'kids' | 'elderly' | 'athletes' | 'beauty' | 'tech' | 'pets' | 'health' | 'parents';
 
 interface ImageGenerationRequest {
-  projectId: string;
+  projectId?: string;
   productName: string;
   productDescription?: string;
-  imageTypes: ImageType[];
+  imageTypes?: ImageType[];
+  imageType?: string; // Single image type for simpler calls
+  prompt?: string; // Direct prompt
   market?: Market;
   audience?: Audience;
   referenceImageUrl?: string;
   customPrompt?: string;
+  resolution?: string;
+  engine?: string;
 }
 
 // Market-specific visual modifiers
@@ -98,45 +102,74 @@ serve(async (req) => {
 
     const { 
       projectId, 
-      productName, 
+      productName = 'Product',
       productDescription = '',
-      imageTypes,
+      imageTypes: rawImageTypes,
+      imageType,
+      prompt: directPrompt,
       market = 'us',
       audience = 'both',
       referenceImageUrl,
-      customPrompt
+      customPrompt,
+      resolution,
+      engine
     }: ImageGenerationRequest = await req.json();
 
-    if (!projectId || !productName || !imageTypes || imageTypes.length === 0) {
-      throw new Error('projectId, productName, and imageTypes are required');
+    // Handle both single imageType and array imageTypes
+    let imageTypes: ImageType[] = [];
+    if (rawImageTypes && rawImageTypes.length > 0) {
+      imageTypes = rawImageTypes;
+    } else if (imageType) {
+      // Map simple types to our internal types
+      const typeMap: Record<string, ImageType> = {
+        'product': 'amazon_style',
+        'lifestyle': 'lifestyle',
+        'before-after': 'before_after',
+        'mockup': 'packaging',
+        'ugc': 'lifestyle',
+        'thumbnail': 'thumbnail',
+      };
+      const mappedType = typeMap[imageType] || 'amazon_style';
+      imageTypes = [mappedType as ImageType];
+    } else {
+      // Default to amazon style if no type specified
+      imageTypes = ['amazon_style'];
     }
 
-    console.log(`Generating ${imageTypes.length} images for project ${projectId}`);
+    console.log(`Generating ${imageTypes.length} images with types:`, imageTypes);
 
-    const generatedImages: { type: ImageType; url: string; id: string }[] = [];
-    const errors: { type: ImageType; error: string }[] = [];
+    const generatedImages: { type: string; url: string; id?: string }[] = [];
+    const errors: { type: string; error: string }[] = [];
 
     // Generate each image type
     for (const imageType of imageTypes) {
       try {
-        // Build the prompt
-        let basePrompt = IMAGE_TYPE_PROMPTS[imageType](productName, productDescription);
+        // Build the prompt - use direct prompt if provided, otherwise build from template
+        let basePrompt: string;
+        
+        if (directPrompt) {
+          basePrompt = directPrompt;
+        } else if (customPrompt) {
+          basePrompt = customPrompt;
+        } else {
+          const templateFunc = IMAGE_TYPE_PROMPTS[imageType];
+          if (templateFunc) {
+            basePrompt = templateFunc(productName, productDescription);
+          } else {
+            basePrompt = `Professional product photo of ${productName}. ${productDescription}. High quality, studio lighting, 8k resolution.`;
+          }
+        }
         
         // Add market-specific modifiers
         const marketMod = MARKET_MODIFIERS[market];
-        if (marketMod) {
+        if (marketMod && !directPrompt) {
           basePrompt += `. ${marketMod}`;
         }
         
         // Add audience-specific modifiers
         const audienceMod = AUDIENCE_MODIFIERS[audience];
-        if (audienceMod) {
+        if (audienceMod && !directPrompt) {
           basePrompt += `. ${audienceMod}`;
-        }
-
-        // Add custom prompt if provided
-        if (customPrompt) {
-          basePrompt += `. ${customPrompt}`;
         }
 
         // Add cultural considerations for specific markets
@@ -193,36 +226,40 @@ serve(async (req) => {
           continue;
         }
 
-        // Save to database
-        const { data: imageRecord, error: insertError } = await supabase
-          .from('generated_images')
-          .insert({
-            project_id: projectId,
-            user_id: user.id,
-            image_type: imageType,
-            prompt: basePrompt,
-            engine_name: 'nano_banana',
-            image_url: imageData, // Base64 data URL
-            status: 'completed',
-            metadata: {
-              market,
-              audience,
-              generated_at: new Date().toISOString()
-            }
-          })
-          .select()
-          .single();
+        // Save to database if projectId is provided
+        let recordId: string | undefined;
+        if (projectId) {
+          const { data: imageRecord, error: insertError } = await supabase
+            .from('generated_images')
+            .insert({
+              project_id: projectId,
+              user_id: user.id,
+              image_type: imageType,
+              prompt: basePrompt,
+              engine_name: engine || 'nano_banana',
+              image_url: imageData,
+              status: 'completed',
+              metadata: {
+                market,
+                audience,
+                resolution,
+                generated_at: new Date().toISOString()
+              }
+            })
+            .select()
+            .single();
 
-        if (insertError) {
-          console.error(`Failed to save ${imageType}:`, insertError);
-          errors.push({ type: imageType, error: 'Failed to save image' });
-          continue;
+          if (insertError) {
+            console.error(`Failed to save ${imageType}:`, insertError);
+          } else {
+            recordId = imageRecord?.id;
+          }
         }
 
         generatedImages.push({
           type: imageType,
           url: imageData,
-          id: imageRecord.id
+          id: recordId
         });
 
         console.log(`Successfully generated ${imageType}`);
@@ -237,34 +274,41 @@ serve(async (req) => {
       }
     }
 
-    // Log analytics
-    await supabase.from('analytics_events').insert({
-      user_id: user.id,
-      project_id: projectId,
-      event_type: 'image_generation',
-      event_data: {
-        total_requested: imageTypes.length,
-        total_generated: generatedImages.length,
-        total_failed: errors.length,
-        image_types: imageTypes,
-        market,
-        audience
-      }
-    });
+    // Log analytics if projectId provided
+    if (projectId) {
+      await supabase.from('analytics_events').insert({
+        user_id: user.id,
+        project_id: projectId,
+        event_type: 'image_generation',
+        event_data: {
+          total_requested: imageTypes.length,
+          total_generated: generatedImages.length,
+          total_failed: errors.length,
+          image_types: imageTypes,
+          market,
+          audience
+        }
+      });
 
-    // Track costs
-    await supabase.from('ai_costs').insert({
-      user_id: user.id,
-      project_id: projectId,
-      engine_name: 'nano_banana',
-      operation_type: 'image',
-      cost_usd: generatedImages.length * 0.02 // Estimated cost per image
-    });
+      // Track costs
+      await supabase.from('ai_costs').insert({
+        user_id: user.id,
+        project_id: projectId,
+        engine_name: engine || 'nano_banana',
+        operation_type: 'image',
+        cost_usd: generatedImages.length * 0.02
+      });
+    }
 
     console.log(`Image generation complete: ${generatedImages.length} success, ${errors.length} errors`);
 
+    // For single image requests, also return imageUrl at top level for compatibility
+    const singleImageUrl = generatedImages.length > 0 ? generatedImages[0].url : undefined;
+
     return new Response(JSON.stringify({
       success: true,
+      imageUrl: singleImageUrl, // Backwards compatibility
+      images: generatedImages,
       generated: generatedImages,
       errors: errors.length > 0 ? errors : undefined,
       summary: {
