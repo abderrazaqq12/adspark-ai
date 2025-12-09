@@ -30,7 +30,8 @@ import {
   RefreshCw,
   Lightbulb,
   Image,
-  Layout
+  Layout,
+  Trash2
 } from "lucide-react";
 import { StudioProductInput } from "@/components/studio/StudioProductInput";
 import { StudioMarketingEngine } from "@/components/studio/StudioMarketingEngine";
@@ -712,8 +713,31 @@ export default function CreateVideo() {
       {/* Vertical Pipeline Sidebar */}
       <div className="w-64 shrink-0 border-r border-border bg-gradient-card p-4">
         <div className="mb-6">
-          <h2 className="text-lg font-semibold text-foreground">Pipeline</h2>
-          <p className="text-xs text-muted-foreground">Production stages</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Pipeline</h2>
+              <p className="text-xs text-muted-foreground">Production stages</p>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+              onClick={() => {
+                // Reset all UI state (dashboard only, not database)
+                setProductInfo({ name: "", description: "", imageUrl: "", link: "" });
+                setScriptSlots([{ id: 1, text: "", audioFile: null, audioUrl: null, generatedAudioUrl: null, isGenerating: false }]);
+                setScenes([]);
+                setUploadedVideos([]);
+                setCurrentStage(0);
+                setExpandedStage(0);
+                setSelectedTemplates([]);
+                toast.success("Pipeline reset - dashboard cleared");
+              }}
+              title="Clear pipeline data"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
           {/* Progress Indicator */}
           <div className="mt-3 space-y-1">
             <div className="flex items-center justify-between text-xs">
@@ -771,13 +795,7 @@ export default function CreateVideo() {
 
       {/* Main Content */}
       <div className="flex-1 p-8 space-y-8 overflow-auto">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-4xl font-bold text-foreground mb-2">Create AI Video Ad</h1>
-            <p className="text-muted-foreground">
-              Multi-step production pipeline for professional video ads
-            </p>
-          </div>
+        <div className="flex items-end justify-end">
           <PipelineStatusIndicator 
             pipelineStatus={{
               product_info: currentStage > 0 ? 'completed' : expandedStage === 0 ? 'in_progress' : 'pending',
