@@ -357,19 +357,15 @@ export const StudioProductInput = ({
         <h3 className="font-semibold mb-3 text-foreground">Audience Targeting</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Target Market</Label>
+            <Label className="text-xs text-muted-foreground">Target Country</Label>
             <Select value={targetMarket} onValueChange={setTargetMarket}>
               <SelectTrigger className="bg-background border-border h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="sa">🇸🇦 Saudi...</SelectItem>
-                <SelectItem value="ae">🇦🇪 UAE</SelectItem>
-                <SelectItem value="kw">🇰🇼 Kuwait</SelectItem>
-                <SelectItem value="ma">🇲🇦 Morocco</SelectItem>
-                <SelectItem value="us">🇺🇸 USA</SelectItem>
-                <SelectItem value="eu">🇪🇺 Europe</SelectItem>
-                <SelectItem value="latam">🌎 LatAm</SelectItem>
+                <SelectItem value="gcc">🌙 GCC</SelectItem>
+                <SelectItem value="europe">🇪🇺 Europe</SelectItem>
+                <SelectItem value="latam">🌎 LATAM</SelectItem>
               </SelectContent>
             </Select>
           </div>
