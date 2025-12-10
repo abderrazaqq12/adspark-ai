@@ -251,32 +251,30 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
           body: {
             productName: productInfo.name,
             productDescription: productInfo.description,
-            contentTypes: ['marketing_angles'],
-            language: audienceTargeting.language,
-            prompt: anglesPrompt,
-            audienceTargeting: {
-              targetMarket: audienceTargeting.targetMarket,
-              language: audienceTargeting.language,
-              audienceAge: audienceTargeting.audienceAge,
-              audienceGender: audienceTargeting.audienceGender,
-            },
+            contentTypes: ['angles'],
+            language: audienceTargeting.language.split('-')[0] || 'ar',
+            market: audienceTargeting.targetMarket || 'sa',
+            audience: audienceTargeting.audienceGender === 'both' ? 'both' : audienceTargeting.audienceGender,
+            customPrompt: anglesPrompt,
+            projectId: 'studio-session',
           }
         });
 
         if (error) throw error;
 
+        const anglesData = data?.content?.angles;
         const angles: GeneratedAngles = {
-          problemsSolved: data?.marketing_angles?.problems || [
+          problemsSolved: anglesData?.angles?.slice(0, 3).map((a: any) => a.keyMessage) || [
             'المشاكل الجلدية المزعجة مثل حب الشباب والبقع الداكنة',
             'قلة الثقة بالنفس بسبب مظهر البشرة',
             'صعوبة إيجاد منتج آمن وفعال',
           ],
-          customerValue: data?.marketing_angles?.value || [
+          customerValue: anglesData?.angles?.slice(3, 6).map((a: any) => a.keyMessage) || [
             'بشرة نضرة ومشرقة خلال أسابيع قليلة',
             'ثقة عالية بالنفس والمظهر',
             'مكونات طبيعية آمنة 100%',
           ],
-          marketingAngles: data?.marketing_angles?.angles || [
+          marketingAngles: anglesData?.angles?.slice(6, 10).map((a: any) => `${a.name}: ${a.headline}`) || [
             'المشكلة → الحل: من بشرة مرهقة إلى إشراقة طبيعية',
             'الدليل الاجتماعي: آلاف العملاء الراضين',
             'الندرة والإلحاح: عرض محدود لفترة قصيرة',
@@ -289,6 +287,52 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         toast({
           title: "تم إنشاء الزوايا التسويقية",
           description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل (via AI Operator)",
+        });
+      }
+      // Priority 3: Auto mode - use Lovable AI directly via edge function
+      else {
+        console.log('Calling AI Content Factory (Auto mode - Lovable AI)');
+        
+        const { data, error } = await supabase.functions.invoke('ai-content-factory', {
+          body: {
+            productName: productInfo.name,
+            productDescription: productInfo.description,
+            contentTypes: ['angles'],
+            language: audienceTargeting.language.split('-')[0] || 'ar',
+            market: audienceTargeting.targetMarket || 'sa',
+            audience: audienceTargeting.audienceGender === 'both' ? 'both' : audienceTargeting.audienceGender,
+            customPrompt: anglesPrompt,
+            projectId: 'studio-session',
+          }
+        });
+
+        if (error) throw error;
+
+        const anglesData = data?.content?.angles;
+        const angles: GeneratedAngles = {
+          problemsSolved: anglesData?.angles?.slice(0, 3).map((a: any) => a.keyMessage) || [
+            'المشاكل الجلدية المزعجة مثل حب الشباب والبقع الداكنة',
+            'قلة الثقة بالنفس بسبب مظهر البشرة',
+            'صعوبة إيجاد منتج آمن وفعال',
+          ],
+          customerValue: anglesData?.angles?.slice(3, 6).map((a: any) => a.keyMessage) || [
+            'بشرة نضرة ومشرقة خلال أسابيع قليلة',
+            'ثقة عالية بالنفس والمظهر',
+            'مكونات طبيعية آمنة 100%',
+          ],
+          marketingAngles: anglesData?.angles?.slice(6, 10).map((a: any) => `${a.name}: ${a.headline}`) || [
+            'المشكلة → الحل: من بشرة مرهقة إلى إشراقة طبيعية',
+            'الدليل الاجتماعي: آلاف العملاء الراضين',
+            'الندرة والإلحاح: عرض محدود لفترة قصيرة',
+          ],
+        };
+
+        setGeneratedAngles(angles);
+        saveContent({ angles });
+        
+        toast({
+          title: "تم إنشاء الزوايا التسويقية",
+          description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل",
         });
       }
     } catch (error: any) {
@@ -374,39 +418,84 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       else if (aiOperatorEnabled) {
         console.log('Calling Script Generation (AI Operator mode)');
         
-        const response = await supabase.functions.invoke('generate-script-from-product', {
+        const { data, error } = await supabase.functions.invoke('ai-content-factory', {
           body: {
             productName: productInfo.name,
             productDescription: productInfo.description,
-            language: audienceTargeting.language,
-            tone: tones[0],
-            model: getModelName(aiAgent),
-            prompt: scriptsPrompt,
-            audienceTargeting: {
-              targetMarket: audienceTargeting.targetMarket,
-              language: audienceTargeting.language,
-              audienceAge: audienceTargeting.audienceAge,
-              audienceGender: audienceTargeting.audienceGender,
-            },
+            contentTypes: ['scripts'],
+            language: audienceTargeting.language.split('-')[0] || 'ar',
+            market: audienceTargeting.targetMarket || 'sa',
+            audience: audienceTargeting.audienceGender === 'both' ? 'both' : audienceTargeting.audienceGender,
+            customPrompt: scriptsPrompt,
+            scriptsCount: count,
+            projectId: 'studio-session',
           }
         });
 
-        if (response.error) {
-          console.error('Script generation error:', response.error);
-        }
+        if (error) throw error;
 
-        const generatedScripts: GeneratedScript[] = tones.slice(0, count).map((tone, i) => ({
-          id: `script-${i}`,
-          tone,
-          content: response.data?.script || `سكريبت ${tone} لمنتج ${productInfo.name}...`,
-          wordCount: response.data?.wordCount || Math.floor(Math.random() * 100) + 50,
-        }));
+        const scriptsData = data?.content?.scripts?.scripts || [];
+        const generatedScripts: GeneratedScript[] = scriptsData.length > 0 
+          ? scriptsData.map((s: any, i: number) => ({
+              id: `script-${i}`,
+              tone: s.style || tones[i] || 'engaging',
+              content: s.script || '',
+              wordCount: s.script?.split(' ').length || 50,
+            }))
+          : tones.slice(0, count).map((tone, i) => ({
+              id: `script-${i}`,
+              tone,
+              content: `سكريبت ${tone} لمنتج ${productInfo.name}...`,
+              wordCount: 50,
+            }));
 
         setScripts(generatedScripts);
         saveContent({ scripts: generatedScripts });
         toast({
           title: "تم إنشاء السكريبتات",
           description: `تم إنشاء ${generatedScripts.length} نسخة من السكريبت (via AI Operator)`,
+        });
+      }
+      // Priority 3: Auto mode - use Lovable AI directly
+      else {
+        console.log('Calling Script Generation (Auto mode - Lovable AI)');
+        
+        const { data, error } = await supabase.functions.invoke('ai-content-factory', {
+          body: {
+            productName: productInfo.name,
+            productDescription: productInfo.description,
+            contentTypes: ['scripts'],
+            language: audienceTargeting.language.split('-')[0] || 'ar',
+            market: audienceTargeting.targetMarket || 'sa',
+            audience: audienceTargeting.audienceGender === 'both' ? 'both' : audienceTargeting.audienceGender,
+            customPrompt: scriptsPrompt,
+            scriptsCount: count,
+            projectId: 'studio-session',
+          }
+        });
+
+        if (error) throw error;
+
+        const scriptsData = data?.content?.scripts?.scripts || [];
+        const generatedScripts: GeneratedScript[] = scriptsData.length > 0 
+          ? scriptsData.map((s: any, i: number) => ({
+              id: `script-${i}`,
+              tone: s.style || tones[i] || 'engaging',
+              content: s.script || '',
+              wordCount: s.script?.split(' ').length || 50,
+            }))
+          : tones.slice(0, count).map((tone, i) => ({
+              id: `script-${i}`,
+              tone,
+              content: `سكريبت ${tone} لمنتج ${productInfo.name}...`,
+              wordCount: 50,
+            }));
+
+        setScripts(generatedScripts);
+        saveContent({ scripts: generatedScripts });
+        toast({
+          title: "تم إنشاء السكريبتات",
+          description: `تم إنشاء ${generatedScripts.length} نسخة من السكريبت`,
         });
       }
     } catch (error: any) {
@@ -424,14 +513,131 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
     setIsGenerating(true);
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
       // Get the landing page content prompt from Settings
       const landingPrompt = getPrompt('landing_page_content', {
         product_name: productInfo.name,
         product_description: productInfo.description,
       });
 
-      // Generate landing page content using the Arabic prompt
-      const content = `# ${productInfo.name}
+      // Priority 1: n8n Backend Mode
+      if (useN8nBackend) {
+        if (!n8nWebhookUrl) {
+          throw new Error('n8n Backend Mode is enabled but no webhook URL is configured for Product Content stage.');
+        }
+        
+        console.log('Calling Landing Content webhook (n8n mode):', n8nWebhookUrl);
+        const response = await fetch(n8nWebhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'generate_landing_content',
+            productName: productInfo.name,
+            productDescription: productInfo.description,
+            prompt: landingPrompt,
+            audienceTargeting,
+            model: getModelName(aiAgent),
+            userId: session.user.id,
+            timestamp: new Date().toISOString(),
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Webhook error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const content = data?.content || data?.landingContent || generateDefaultLandingContent();
+        setLandingContent(content);
+        saveContent({ landingContent: content });
+        toast({
+          title: "تم إنشاء محتوى صفحة الهبوط",
+          description: "تم إنشاء جميع أقسام صفحة الهبوط بنجاح (via n8n)",
+        });
+      }
+      // Priority 2: AI Operator Mode or Auto Mode - use edge function with Lovable AI
+      else {
+        console.log('Calling Landing Content (Lovable AI mode)');
+        
+        const { data, error } = await supabase.functions.invoke('ai-content-factory', {
+          body: {
+            productName: productInfo.name,
+            productDescription: productInfo.description,
+            contentTypes: ['landing_page'],
+            language: audienceTargeting.language.split('-')[0] || 'ar',
+            market: audienceTargeting.targetMarket || 'sa',
+            audience: audienceTargeting.audienceGender === 'both' ? 'both' : audienceTargeting.audienceGender,
+            customPrompt: landingPrompt,
+            projectId: 'studio-session',
+          }
+        });
+
+        if (error) throw error;
+
+        const landingData = data?.content?.landing_page;
+        let content = '';
+        
+        if (landingData) {
+          // Format the landing page data into readable content
+          content = `# ${productInfo.name}
+
+## العنوان الرئيسي
+**${landingData.hero?.headline || `غيّر حياتك اليوم مع ${productInfo.name}`}**
+${landingData.hero?.subheadline || 'انضم إلى آلاف العملاء الراضين'}
+
+${landingData.hero?.trustBadges ? `${landingData.hero.trustBadges.map((b: string) => `✅ ${b}`).join('\n')}` : ''}
+
+## المشكلة
+${landingData.problem?.headline || ''}
+${landingData.problem?.points?.map((p: string) => `- ${p}`).join('\n') || ''}
+
+## الحل
+${landingData.solution?.headline || ''}
+${landingData.solution?.description || ''}
+
+## المميزات الرئيسية
+${landingData.features?.map((f: any) => `✅ **${f.title}**: ${f.description}`).join('\n') || ''}
+
+## آراء العملاء
+${landingData.testimonials?.map((t: any) => `⭐⭐⭐⭐⭐ "${t.quote}" - ${t.name}`).join('\n') || ''}
+
+## الأسئلة الشائعة
+${landingData.faq?.map((f: any) => `**س: ${f.question}**\nج: ${f.answer}`).join('\n\n') || ''}
+
+## ضمان الرضا
+${landingData.guarantee?.headline || ''}
+${landingData.guarantee?.description || ''}
+
+## ${landingData.finalCta?.headline || 'اطلب الآن'}
+[${landingData.finalCta?.ctaText || 'اطلب الآن - دفع عند الاستلام'}]
+${landingData.finalCta?.urgencyText || ''}`;
+        } else {
+          content = generateDefaultLandingContent();
+        }
+
+        setLandingContent(content);
+        saveContent({ landingContent: content });
+        toast({
+          title: "تم إنشاء محتوى صفحة الهبوط",
+          description: "تم إنشاء جميع أقسام صفحة الهبوط بنجاح",
+        });
+      }
+    } catch (error: any) {
+      console.error('Landing content generation error:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to generate landing content",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const generateDefaultLandingContent = () => {
+    return `# ${productInfo.name}
 
 ## العنوان الرئيسي
 **غيّر حياتك اليوم مع ${productInfo.name}**
@@ -477,22 +683,6 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
 🛡️ **ضمان استرداد كامل خلال 30 يوم**
 غير راضٍ؟ استرد أموالك كاملة - بدون أي أسئلة!
 نقف خلف منتجنا 100%`;
-
-      setLandingContent(content);
-      saveContent({ landingContent: content });
-      toast({
-        title: "تم إنشاء محتوى صفحة الهبوط",
-        description: "تم إنشاء جميع أقسام صفحة الهبوط بنجاح",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to generate landing content",
-        variant: "destructive",
-      });
-    } finally {
-      setIsGenerating(false);
-    }
   };
 
   const copyToClipboard = (text: string) => {
