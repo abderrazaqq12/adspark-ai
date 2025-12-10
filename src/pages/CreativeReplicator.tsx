@@ -52,6 +52,7 @@ export interface VariationConfig {
   engineTier: string;
   useN8nWebhook: boolean;
   randomizeEngines: boolean;
+  useAIOperator: boolean;
 }
 
 export interface GeneratedVideo {
@@ -63,6 +64,7 @@ export interface GeneratedVideo {
   engine: string;
   ratio: string;
   duration: number;
+  status: "processing" | "completed" | "failed";
 }
 
 const CreativeReplicator = () => {
@@ -79,6 +81,7 @@ const CreativeReplicator = () => {
     engineTier: "low",
     useN8nWebhook: false,
     randomizeEngines: false,
+    useAIOperator: false,
   });
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
@@ -191,6 +194,7 @@ const CreativeReplicator = () => {
           engine: variationConfig.engineTier,
           ratio: variationConfig.ratios[i % variationConfig.ratios.length],
           duration: Math.floor(Math.random() * 10) + 15,
+          status: (Math.random() > 0.2 ? "completed" : "processing") as "completed" | "processing",
         }));
 
       setGeneratedVideos(results);
