@@ -42,6 +42,7 @@ const ageGroups = [
 const genders = [
   { value: "male", label: "Male" },
   { value: "female", label: "Female" },
+  { value: "both", label: "Both" },
   { value: "all", label: "All Genders" },
 ];
 
