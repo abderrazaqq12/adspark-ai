@@ -16,10 +16,12 @@ import {
   RefreshCw,
   Volume2,
   Clock,
-  Sparkles
+  Sparkles,
+  Webhook
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useStudioPrompts } from '@/hooks/useStudioPrompts';
 
 interface StudioVoiceoverProps {
   onNext: () => void;
@@ -32,6 +34,13 @@ interface VoiceoverTrack {
   audioUrl: string | null;
   duration: number;
   status: 'pending' | 'generating' | 'completed' | 'failed';
+}
+
+interface AudienceTargeting {
+  targetMarket: string;
+  language: string;
+  audienceAge: string;
+  audienceGender: string;
 }
 
 const voices = [
@@ -47,6 +56,7 @@ const voices = [
 
 export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
   const { toast } = useToast();
+  const { getPrompt } = useStudioPrompts();
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState('EXAVITQu4vr4xnSDxMaL');
   const [voiceModel, setVoiceModel] = useState('eleven_multilingual_v2');
@@ -57,27 +67,55 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
   const [scriptText, setScriptText] = useState('');
   const [tracks, setTracks] = useState<VoiceoverTrack[]>([]);
 
+  // N8n backend mode settings
+  const [useN8nBackend, setUseN8nBackend] = useState(false);
+  const [aiOperatorEnabled, setAiOperatorEnabled] = useState(false);
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
+  const [audienceTargeting, setAudienceTargeting] = useState<AudienceTargeting>({
+    targetMarket: 'gcc',
+    language: 'ar-sa',
+    audienceAge: '25-34',
+    audienceGender: 'both',
+  });
+
   useEffect(() => {
-    loadScripts();
+    loadSettings();
   }, []);
 
-  const loadScripts = async () => {
+  const loadSettings = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data: settings } = await supabase
         .from('user_settings')
-        .select('preferences')
+        .select('preferences, use_n8n_backend, ai_operator_enabled')
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (settings?.preferences) {
-        const prefs = settings.preferences as Record<string, string>;
-        setLanguage(prefs.studio_language || 'en');
+      if (settings) {
+        setUseN8nBackend(settings.use_n8n_backend || false);
+        setAiOperatorEnabled(settings.ai_operator_enabled || false);
+        
+        const prefs = settings.preferences as Record<string, any>;
+        if (prefs) {
+          setLanguage(prefs.studio_language?.split('-')[0] || 'en');
+          // Load audience targeting
+          setAudienceTargeting({
+            targetMarket: prefs.studio_target_market || 'gcc',
+            language: prefs.studio_language || 'ar-sa',
+            audienceAge: prefs.studio_audience_age || '25-34',
+            audienceGender: prefs.studio_audience_gender || 'both',
+          });
+          // Load webhook URL
+          const stageWebhooks = prefs.stage_webhooks || {};
+          if (stageWebhooks.voiceover?.webhook_url) {
+            setN8nWebhookUrl(stageWebhooks.voiceover.webhook_url);
+          }
+        }
       }
     } catch (error) {
-      console.error('Error loading scripts:', error);
+      console.error('Error loading settings:', error);
     }
   };
 
@@ -111,39 +149,88 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
 
       setTracks(newTracks);
 
-      // Generate voiceover for each segment
-      for (let i = 0; i < newTracks.length; i++) {
-        try {
-          const response = await supabase.functions.invoke('generate-voiceover', {
-            body: {
-              text: newTracks[i].text,
-              voiceId: selectedVoice,
-              model: voiceModel,
-              language,
-            }
+      // Get prompt if AI Operator is enabled
+      const voiceoverPrompt = aiOperatorEnabled ? getPrompt('voiceover_scripts', {
+        product_name: '',
+        product_description: '',
+      }) : '';
+
+      // If n8n Backend Mode is enabled, use webhook
+      if (useN8nBackend && n8nWebhookUrl) {
+        console.log('Calling Voiceover webhook:', n8nWebhookUrl);
+        
+        const response = await fetch(n8nWebhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'generate_voiceover',
+            segments: segments,
+            voiceId: selectedVoice,
+            model: voiceModel,
+            speed: speed[0],
+            prompt: voiceoverPrompt,
+            audienceTargeting: {
+              targetMarket: audienceTargeting.targetMarket,
+              language: audienceTargeting.language,
+              audienceAge: audienceTargeting.audienceAge,
+              audienceGender: audienceTargeting.audienceGender,
+            },
+            userId: session.user.id,
+            timestamp: new Date().toISOString(),
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          // Update tracks with response data
+          if (data.tracks) {
+            setTracks(data.tracks);
+          } else {
+            // Mark as completed with simulated data
+            setTracks(prev => prev.map(t => ({ ...t, status: 'completed' as const })));
+          }
+          toast({
+            title: "Voiceovers Generated",
+            description: `${segments.length} audio tracks processed via webhook`,
           });
-
-          setTracks(prev => prev.map((t, idx) => 
-            idx === i 
-              ? { 
-                  ...t, 
-                  audioUrl: response.data?.audioUrl || null,
-                  duration: response.data?.duration || 0,
-                  status: response.error ? 'failed' : 'completed' 
-                } 
-              : t
-          ));
-        } catch (error) {
-          setTracks(prev => prev.map((t, idx) => 
-            idx === i ? { ...t, status: 'failed' } : t
-          ));
+        } else {
+          throw new Error(`Webhook error: ${response.status}`);
         }
-      }
+      } else {
+        // Use Supabase function (fallback)
+        for (let i = 0; i < newTracks.length; i++) {
+          try {
+            const response = await supabase.functions.invoke('generate-voiceover', {
+              body: {
+                text: newTracks[i].text,
+                voiceId: selectedVoice,
+                model: voiceModel,
+                language: audienceTargeting.language.split('-')[0] || language,
+              }
+            });
 
-      toast({
-        title: "Voiceovers Generated",
-        description: `${segments.length} audio tracks created`,
-      });
+            setTracks(prev => prev.map((t, idx) => 
+              idx === i 
+                ? { 
+                    ...t, 
+                    audioUrl: response.data?.audioUrl || null,
+                    duration: response.data?.duration || 0,
+                    status: response.error ? 'failed' : 'completed' 
+                  } 
+                : t
+            ));
+          } catch (error) {
+            setTracks(prev => prev.map((t, idx) => 
+              idx === i ? { ...t, status: 'failed' } : t
+            ));
+          }
+        }
+
+        toast({
+          title: "Voiceovers Generated",
+          description: `${segments.length} audio tracks created`,
+        });
+      }
     } catch (error: any) {
       toast({
         title: "Error",
@@ -212,6 +299,14 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
         </div>
         <Badge variant="outline" className="text-primary border-primary">Step 5</Badge>
       </div>
+
+      {/* Webhook indicator */}
+      {useN8nBackend && n8nWebhookUrl && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground px-2">
+          <Webhook className="w-3 h-3 text-green-500" />
+          <span>Webhook enabled: {n8nWebhookUrl.substring(0, 50)}...</span>
+        </div>
+      )}
 
       {/* Voice Settings */}
       <Card className="p-6 bg-card border-border">

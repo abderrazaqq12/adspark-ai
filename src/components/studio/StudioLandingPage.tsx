@@ -14,7 +14,8 @@ import {
   ExternalLink,
   FileCode,
   RefreshCw,
-  CheckCircle2
+  CheckCircle2,
+  Webhook
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -23,6 +24,13 @@ import { useAIAgent, getModelName } from '@/hooks/useAIAgent';
 
 interface StudioLandingPageProps {
   onNext: () => void;
+}
+
+interface AudienceTargeting {
+  targetMarket: string;
+  language: string;
+  audienceAge: string;
+  audienceGender: string;
 }
 
 export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
@@ -37,6 +45,17 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
   const [generatedContent, setGeneratedContent] = useState('');
   const [generatedCode, setGeneratedCode] = useState('');
 
+  // N8n backend mode settings
+  const [useN8nBackend, setUseN8nBackend] = useState(false);
+  const [aiOperatorEnabled, setAiOperatorEnabled] = useState(false);
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
+  const [audienceTargeting, setAudienceTargeting] = useState<AudienceTargeting>({
+    targetMarket: 'gcc',
+    language: 'ar-sa',
+    audienceAge: '25-34',
+    audienceGender: 'both',
+  });
+
   useEffect(() => {
     loadProductInfo();
   }, []);
@@ -48,19 +67,36 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
 
       const { data: settings } = await supabase
         .from('user_settings')
-        .select('preferences')
+        .select('preferences, use_n8n_backend, ai_operator_enabled')
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (settings?.preferences) {
-        const prefs = settings.preferences as Record<string, string>;
-        setProductInfo({
-          name: prefs.studio_product_name || '',
-          description: prefs.studio_description || '',
-          url: prefs.studio_product_url || '',
-          url2: prefs.studio_product_url_2 || ''
-        });
-        setMarketingContent(prefs.studio_marketing_content || '');
+      if (settings) {
+        setUseN8nBackend(settings.use_n8n_backend || false);
+        setAiOperatorEnabled(settings.ai_operator_enabled || false);
+
+        const prefs = settings.preferences as Record<string, any>;
+        if (prefs) {
+          setProductInfo({
+            name: prefs.studio_product_name || '',
+            description: prefs.studio_description || '',
+            url: prefs.studio_product_url || '',
+            url2: prefs.studio_product_url_2 || ''
+          });
+          setMarketingContent(prefs.studio_marketing_content || '');
+          // Load audience targeting
+          setAudienceTargeting({
+            targetMarket: prefs.studio_target_market || 'gcc',
+            language: prefs.studio_language || 'ar-sa',
+            audienceAge: prefs.studio_audience_age || '25-34',
+            audienceGender: prefs.studio_audience_gender || 'both',
+          });
+          // Load webhook URL
+          const stageWebhooks = prefs.stage_webhooks || {};
+          if (stageWebhooks.landing_page?.webhook_url) {
+            setN8nWebhookUrl(stageWebhooks.landing_page.webhook_url);
+          }
+        }
       }
     } catch (error) {
       console.error('Error loading product info:', error);
@@ -75,35 +111,74 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      // Get the landing page prompt from settings
-      const landingPrompt = getPrompt('landing_page_content', {
+      // Get the landing page prompt from settings (when AI Operator is enabled)
+      const landingPrompt = aiOperatorEnabled ? getPrompt('landing_page_content', {
         product_name: productInfo.name,
         product_description: productInfo.description,
         product_url: productInfo.url,
         product_url_2: productInfo.url2,
         marketing_content: marketingContent
-      });
+      }) : '';
 
-      // Use the AI assistant edge function for content generation
-      const response = await supabase.functions.invoke('ai-assistant', {
-        body: {
-          message: landingPrompt,
-          model: getModelName(aiAgent),
+      // If n8n Backend Mode is enabled, use webhook
+      if (useN8nBackend && n8nWebhookUrl) {
+        console.log('Calling Landing Page webhook:', n8nWebhookUrl);
+        
+        const response = await fetch(n8nWebhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'generate_landing_page',
+            productName: productInfo.name,
+            productDescription: productInfo.description,
+            productUrl: productInfo.url,
+            prompt: landingPrompt,
+            model: getModelName(aiAgent),
+            audienceTargeting: {
+              targetMarket: audienceTargeting.targetMarket,
+              language: audienceTargeting.language,
+              audienceAge: audienceTargeting.audienceAge,
+              audienceGender: audienceTargeting.audienceGender,
+            },
+            userId: session.user.id,
+            timestamp: new Date().toISOString(),
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const content = data?.content || data?.html || '';
+          setGeneratedContent(content);
+          setViewMode('content');
+          toast({
+            title: "تم إنشاء صفحة الهبوط",
+            description: "تم إنشاء محتوى صفحة الهبوط بنجاح via webhook",
+          });
+        } else {
+          throw new Error(`Webhook error: ${response.status}`);
         }
-      });
+      } else {
+        // Use the AI assistant edge function for content generation
+        const response = await supabase.functions.invoke('ai-assistant', {
+          body: {
+            message: landingPrompt || `Generate landing page content for ${productInfo.name}: ${productInfo.description}`,
+            model: getModelName(aiAgent),
+          }
+        });
 
-      if (response.error) {
-        throw new Error(response.error.message || 'Failed to generate landing page');
+        if (response.error) {
+          throw new Error(response.error.message || 'Failed to generate landing page');
+        }
+
+        const content = response.data?.response || response.data?.content || response.data?.text || '';
+        setGeneratedContent(content);
+        setViewMode('content');
+
+        toast({
+          title: "تم إنشاء صفحة الهبوط",
+          description: "تم إنشاء محتوى صفحة الهبوط بنجاح",
+        });
       }
-
-      const content = response.data?.response || response.data?.content || response.data?.text || '';
-      setGeneratedContent(content);
-      setViewMode('content');
-
-      toast({
-        title: "تم إنشاء صفحة الهبوط",
-        description: "تم إنشاء محتوى صفحة الهبوط بنجاح",
-      });
     } catch (error: any) {
       console.error('Landing page generation error:', error);
       toast({
@@ -205,6 +280,14 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
         </div>
         <Badge variant="outline" className="text-primary border-primary px-3 py-1">Step 4</Badge>
       </div>
+
+      {/* Webhook indicator */}
+      {useN8nBackend && n8nWebhookUrl && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground px-2">
+          <Webhook className="w-3 h-3 text-green-500" />
+          <span>Webhook enabled: {n8nWebhookUrl.substring(0, 50)}...</span>
+        </div>
+      )}
 
       {/* Google AI Studio Integration Card */}
       <Card className="p-5 bg-slate-900/50 border-primary/30 backdrop-blur-sm">

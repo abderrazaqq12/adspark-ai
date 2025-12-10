@@ -4,7 +4,6 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { 
@@ -12,17 +11,18 @@ import {
   Loader2, 
   Video, 
   Sparkles,
-  Play,
   Upload,
   Plus,
   Trash2,
   GripVertical,
   RefreshCw,
   Clock,
-  Film
+  Film,
+  Webhook
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useStudioPrompts } from '@/hooks/useStudioPrompts';
 
 interface StudioVideoCreationProps {
   onNext: () => void;
@@ -39,6 +39,13 @@ interface Scene {
   engine: string;
 }
 
+interface AudienceTargeting {
+  targetMarket: string;
+  language: string;
+  audienceAge: string;
+  audienceGender: string;
+}
+
 const videoEngines = [
   { id: 'runway', name: 'Runway Gen-3', tier: 'premium' },
   { id: 'pika', name: 'Pika 2.1', tier: 'standard' },
@@ -51,6 +58,7 @@ const videoEngines = [
 
 export const StudioVideoCreation = ({ onNext }: StudioVideoCreationProps) => {
   const { toast } = useToast();
+  const { getPrompt } = useStudioPrompts();
   const [isGenerating, setIsGenerating] = useState(false);
   const [aspectRatio, setAspectRatio] = useState('9:16');
   const [maxDuration, setMaxDuration] = useState('30');
@@ -58,7 +66,54 @@ export const StudioVideoCreation = ({ onNext }: StudioVideoCreationProps) => {
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [defaultEngine, setDefaultEngine] = useState('nano-banana');
 
+  // N8n backend mode settings
+  const [useN8nBackend, setUseN8nBackend] = useState(false);
+  const [aiOperatorEnabled, setAiOperatorEnabled] = useState(false);
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
+  const [audienceTargeting, setAudienceTargeting] = useState<AudienceTargeting>({
+    targetMarket: 'gcc',
+    language: 'ar-sa',
+    audienceAge: '25-34',
+    audienceGender: 'both',
+  });
+
   useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: settings } = await supabase
+        .from('user_settings')
+        .select('preferences, use_n8n_backend, ai_operator_enabled')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (settings) {
+        setUseN8nBackend(settings.use_n8n_backend || false);
+        setAiOperatorEnabled(settings.ai_operator_enabled || false);
+        
+        const prefs = settings.preferences as Record<string, any>;
+        if (prefs) {
+          setAudienceTargeting({
+            targetMarket: prefs.studio_target_market || 'gcc',
+            language: prefs.studio_language || 'ar-sa',
+            audienceAge: prefs.studio_audience_age || '25-34',
+            audienceGender: prefs.studio_audience_gender || 'both',
+          });
+          const stageWebhooks = prefs.stage_webhooks || {};
+          if (stageWebhooks.video_creation?.webhook_url) {
+            setN8nWebhookUrl(stageWebhooks.video_creation.webhook_url);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+
     // Initialize with sample scenes
     setScenes([
       { id: '1', index: 1, text: 'Hook scene', visualPrompt: 'Eye-catching product reveal', videoUrl: null, duration: 3, status: 'pending', engine: 'nano-banana' },
@@ -67,7 +122,7 @@ export const StudioVideoCreation = ({ onNext }: StudioVideoCreationProps) => {
       { id: '4', index: 4, text: 'Benefits scene', visualPrompt: 'Happy customer using product', videoUrl: null, duration: 7, status: 'pending', engine: 'nano-banana' },
       { id: '5', index: 5, text: 'CTA scene', visualPrompt: 'Call to action with urgency', videoUrl: null, duration: 4, status: 'pending', engine: 'nano-banana' },
     ]);
-  }, []);
+  };
 
   const addScene = () => {
     const newScene: Scene = {
@@ -188,6 +243,14 @@ export const StudioVideoCreation = ({ onNext }: StudioVideoCreationProps) => {
         </div>
         <Badge variant="outline" className="text-primary border-primary">Step 6</Badge>
       </div>
+
+      {/* Webhook indicator */}
+      {useN8nBackend && n8nWebhookUrl && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground px-2">
+          <Webhook className="w-3 h-3 text-green-500" />
+          <span>Webhook enabled: {n8nWebhookUrl.substring(0, 50)}...</span>
+        </div>
+      )}
 
       {/* Video Settings */}
       <Card className="p-6 bg-card border-border">

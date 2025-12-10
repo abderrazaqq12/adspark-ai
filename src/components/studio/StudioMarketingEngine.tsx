@@ -25,6 +25,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useStudioPrompts } from '@/hooks/useStudioPrompts';
 import { useAIAgent, getModelName } from '@/hooks/useAIAgent';
 
+interface AudienceTargeting {
+  targetMarket: string;
+  language: string;
+  audienceAge: string;
+  audienceGender: string;
+}
+
 interface StudioMarketingEngineProps {
   onNext: () => void;
 }
@@ -56,6 +63,14 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   const [webhookResponse, setWebhookResponse] = useState<any>(null);
   const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
   const [useN8nBackend, setUseN8nBackend] = useState(false);
+  const [aiOperatorEnabled, setAiOperatorEnabled] = useState(false);
+  const [audienceTargeting, setAudienceTargeting] = useState<AudienceTargeting>({
+    targetMarket: 'gcc',
+    language: 'ar-sa',
+    audienceAge: '25-34',
+    audienceGender: 'both',
+  });
+
   useEffect(() => {
     loadProductInfo();
   }, []);
@@ -111,6 +126,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       if (settings) {
         // Load Backend Mode settings
         setUseN8nBackend(settings.use_n8n_backend || false);
+        setAiOperatorEnabled((settings as any).ai_operator_enabled || false);
         
         const prefs = settings.preferences as Record<string, any>;
         if (prefs) {
@@ -118,6 +134,13 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
             name: prefs.studio_product_name || '',
             description: prefs.studio_description || '',
             url: prefs.studio_product_url || ''
+          });
+          // Load audience targeting
+          setAudienceTargeting({
+            targetMarket: prefs.studio_target_market || 'gcc',
+            language: prefs.studio_language || 'ar-sa',
+            audienceAge: prefs.studio_audience_age || '25-34',
+            audienceGender: prefs.studio_audience_gender || 'both',
           });
           // Load webhook URL from per-stage webhooks
           const stageWebhooks = prefs.stage_webhooks || {};
@@ -150,14 +173,13 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      // Get the prompt from Settings with variable replacement
-      const anglesPrompt = getPrompt('product_content', {
+      // Get the prompt from Settings with variable replacement (when AI Operator is enabled)
+      const anglesPrompt = aiOperatorEnabled ? getPrompt('product_content', {
         product_name: productInfo.name,
         product_description: productInfo.description,
-      });
+      }) : '';
 
       // When n8n Backend Mode is enabled, use per-stage webhook
-      // Otherwise fall back to default webhook (only if n8n is enabled)
       if (useN8nBackend && n8nWebhookUrl) {
         console.log('Calling Product Content webhook (n8n mode):', n8nWebhookUrl);
         
@@ -173,6 +195,13 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
             productUrl: productInfo.url,
             prompt: anglesPrompt,
             model: getModelName(aiAgent),
+            // Include audience targeting in webhook payload
+            audienceTargeting: {
+              targetMarket: audienceTargeting.targetMarket,
+              language: audienceTargeting.language,
+              audienceAge: audienceTargeting.audienceAge,
+              audienceGender: audienceTargeting.audienceGender,
+            },
             userId: session.user.id,
             timestamp: new Date().toISOString(),
           }),
@@ -271,6 +300,12 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       const tones = ['engaging', 'professional', 'urgent', 'emotional', 'casual', 'humorous', 'luxurious', 'educational', 'storytelling', 'direct'];
       const count = parseInt(scriptsCount);
       
+      // Get prompts if AI Operator is enabled
+      const scriptsPrompt = aiOperatorEnabled ? getPrompt('voiceover_scripts', {
+        product_name: productInfo.name,
+        product_description: productInfo.description,
+      }) : '';
+
       // If n8n Backend Mode is enabled, use webhook instead of Supabase function
       if (useN8nBackend && n8nWebhookUrl) {
         console.log('Calling Scripts webhook:', n8nWebhookUrl);
@@ -282,9 +317,16 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
             productName: productInfo.name,
             productDescription: productInfo.description,
             productUrl: productInfo.url,
+            prompt: scriptsPrompt,
             tones: tones.slice(0, count),
             count,
-            language: 'ar',
+            // Include audience targeting in webhook payload
+            audienceTargeting: {
+              targetMarket: audienceTargeting.targetMarket,
+              language: audienceTargeting.language,
+              audienceAge: audienceTargeting.audienceAge,
+              audienceGender: audienceTargeting.audienceGender,
+            },
             model: getModelName(aiAgent),
             userId: session.user.id,
             timestamp: new Date().toISOString(),
