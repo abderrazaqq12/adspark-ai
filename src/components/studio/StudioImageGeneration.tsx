@@ -268,31 +268,36 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
               throw new Error('n8n Backend Mode is enabled but no webhook URL configured for Image Generation. Configure in Settings.');
             }
             
-            console.log('Calling Image Generation webhook (n8n mode):', n8nWebhookUrl);
-            const webhookResponse = await fetch(n8nWebhookUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'generate_image',
-                prompt: img.prompt,
-                imageType: img.type,
-                resolution,
-                engine: imageEngine,
-                productName: productInfo.name,
-                productDescription: productInfo.description,
-                projectId: projectId,
-                userId: session.user.id,
-                timestamp: new Date().toISOString(),
-              }),
+            console.log('Calling Image Generation webhook via proxy (n8n mode):', n8nWebhookUrl);
+            
+            // Use edge function proxy to avoid CORS issues
+            const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('n8n-proxy', {
+              body: {
+                webhookUrl: n8nWebhookUrl,
+                payload: {
+                  action: 'generate_image',
+                  prompt: img.prompt,
+                  imageType: img.type,
+                  resolution,
+                  engine: imageEngine,
+                  productName: productInfo.name,
+                  productDescription: productInfo.description,
+                  projectId: projectId,
+                }
+              }
             });
 
-            if (!webhookResponse.ok) {
-              throw new Error(`Webhook error: ${webhookResponse.status}`);
+            if (proxyError) {
+              throw new Error(proxyError.message || 'Webhook proxy error');
             }
 
-            const webhookData = await webhookResponse.json();
+            if (!proxyResponse?.success) {
+              throw new Error(proxyResponse?.error || 'Webhook call failed');
+            }
+
+            const webhookData = proxyResponse.data;
             imageUrl = webhookData?.imageUrl || webhookData?.url || webhookData?.images?.[0]?.url || '';
-          } 
+          }
           // Priority 2: Use Supabase function when AI Operator is enabled
           else if (aiOperatorEnabled) {
             console.log('Calling Image Generation (AI Operator mode)');
