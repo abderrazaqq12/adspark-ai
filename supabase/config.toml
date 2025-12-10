@@ -83,3 +83,12 @@ verify_jwt = true
 
 [functions.ai-content-preset]
 verify_jwt = true
+
+[functions.creative-replicator-analyze]
+verify_jwt = true
+
+[functions.ffmpeg-creative-engine]
+verify_jwt = true
+
+[functions.creative-replicator-n8n]
+verify_jwt = true

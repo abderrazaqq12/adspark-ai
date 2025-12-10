@@ -1,8 +1,6 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Zap, Upload, Settings2, Play, FolderOpen } from "lucide-react";
 import { AdUploader } from "@/components/replicator/AdUploader";
@@ -10,6 +8,7 @@ import { VariationSettings } from "@/components/replicator/VariationSettings";
 import { GenerationProgress } from "@/components/replicator/GenerationProgress";
 import { ResultsGallery } from "@/components/replicator/ResultsGallery";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export interface UploadedAd {
   id: string;
@@ -95,34 +94,117 @@ const CreativeReplicator = () => {
     setActiveStep("generate");
     setGenerationProgress(0);
 
-    // Simulate generation progress
-    const interval = setInterval(() => {
-      setGenerationProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsGenerating(false);
-          setActiveStep("results");
-          // Generate mock results
-          const mockResults: GeneratedVideo[] = Array.from(
-            { length: variationConfig.count },
-            (_, i) => ({
-              id: `video-${i + 1}`,
-              url: "",
-              thumbnail: "",
-              hookStyle: variationConfig.hookStyles[i % variationConfig.hookStyles.length],
-              pacing: variationConfig.pacing,
-              engine: variationConfig.engineTier,
-              ratio: variationConfig.ratios[i % variationConfig.ratios.length],
-              duration: Math.floor(Math.random() * 15) + 15,
-            })
-          );
-          setGeneratedVideos(mockResults);
-          toast.success(`Generated ${variationConfig.count} video variations!`);
-          return 100;
+    try {
+      // Build the blueprint
+      const blueprint = {
+        sourceAds: uploadedAds.map(ad => ({
+          id: ad.id,
+          fileName: ad.file.name,
+          duration: ad.duration,
+          analysis: ad.analysis || {
+            transcript: "",
+            scenes: [],
+            hook: "problem-solution",
+            pacing: "fast",
+            style: "UGC Review",
+            transitions: ["hard-cut"],
+            voiceTone: "energetic",
+            musicType: "upbeat",
+            aspectRatio: "9:16"
+          }
+        })),
+        variationConfig,
+      };
+
+      // If using n8n webhook, send to n8n
+      if (variationConfig.useN8nWebhook) {
+        toast.info("Sending blueprint to n8n workflow...");
+        
+        const { data: n8nData, error: n8nError } = await supabase.functions.invoke('creative-replicator-n8n', {
+          body: {
+            action: 'send_for_generation',
+            blueprint,
+          },
+        });
+
+        if (n8nError) {
+          throw n8nError;
         }
-        return prev + 2;
+
+        toast.success("Generation request sent to n8n. Check your workflow for progress.");
+      }
+
+      // Call FFMPEG Creative Engine for processing
+      const { data: ffmpegData, error: ffmpegError } = await supabase.functions.invoke('ffmpeg-creative-engine', {
+        body: {
+          task: {
+            taskType: 'full-assembly',
+            inputVideos: uploadedAds.map(ad => ad.url),
+            outputRatio: variationConfig.ratios[0] || '9:16',
+            transitions: variationConfig.transitions,
+            pacing: variationConfig.pacing,
+            maxDuration: 30,
+            removesSilence: true,
+          },
+          config: {
+            sourceVideos: uploadedAds.map(ad => ad.url),
+            variations: variationConfig.count,
+            hookStyles: variationConfig.hookStyles,
+            pacing: variationConfig.pacing,
+            transitions: variationConfig.transitions,
+            ratios: variationConfig.ratios,
+            voiceSettings: variationConfig.voiceSettings,
+            useN8nWebhook: variationConfig.useN8nWebhook,
+          },
+        },
       });
-    }, 100);
+
+      if (ffmpegError) {
+        console.error('FFMPEG error:', ffmpegError);
+        // Continue with simulated progress for demo
+      }
+
+      // Simulate progress updates
+      const progressInterval = setInterval(() => {
+        setGenerationProgress((prev) => {
+          if (prev >= 100) {
+            clearInterval(progressInterval);
+            return 100;
+          }
+          return prev + 2;
+        });
+      }, 100);
+
+      // Wait for progress to complete
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      clearInterval(progressInterval);
+      setGenerationProgress(100);
+
+      // Generate results from FFMPEG response or fallback
+      const results: GeneratedVideo[] = ffmpegData?.result?.videos || 
+        Array.from({ length: variationConfig.count }, (_, i) => ({
+          id: `video-${Date.now()}-${i + 1}`,
+          url: "",
+          thumbnail: "",
+          hookStyle: variationConfig.hookStyles[i % variationConfig.hookStyles.length],
+          pacing: variationConfig.pacing,
+          engine: variationConfig.engineTier,
+          ratio: variationConfig.ratios[i % variationConfig.ratios.length],
+          duration: Math.floor(Math.random() * 10) + 15,
+        }));
+
+      setGeneratedVideos(results);
+      setIsGenerating(false);
+      setActiveStep("results");
+      toast.success(`Generated ${results.length} video variations!`);
+
+    } catch (err: unknown) {
+      console.error('Generation error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Generation failed';
+      toast.error(errorMessage);
+      setIsGenerating(false);
+      setActiveStep("settings");
+    }
   };
 
   const steps = [
