@@ -18,6 +18,7 @@ interface VariationSettingsProps {
 }
 
 const HOOK_STYLES = [
+  { id: "ai-auto", label: "AI Auto Hook", emoji: "🤖", isAI: true },
   { id: "question", label: "Question Hook", emoji: "❓" },
   { id: "shock", label: "Shock Hook", emoji: "😱" },
   { id: "emotional", label: "Emotional Hook", emoji: "💔" },
@@ -35,6 +36,7 @@ const PACING_OPTIONS = [
 ];
 
 const TRANSITION_OPTIONS = [
+  { id: "ai-auto", label: "🤖 AI Auto", isAI: true },
   { id: "hard-cut", label: "Hard Cut" },
   { id: "zoom", label: "Zoom" },
   { id: "slide", label: "Slide" },
@@ -78,6 +80,8 @@ const ENGINE_TIERS = [
     description: "Free video models only",
     engines: ["Free Models"],
     color: "text-green-500",
+    costPerVideo: "$0.00",
+    estimatedTotal: (count: number) => "$0.00",
   },
   {
     id: "low",
@@ -85,6 +89,8 @@ const ENGINE_TIERS = [
     description: "Budget-friendly options",
     engines: ["Wan 2.5", "Kling 2.5 Pro", "Ovi", "MiniMax"],
     color: "text-blue-500",
+    costPerVideo: "$0.05-0.15",
+    estimatedTotal: (count: number) => `$${(count * 0.1).toFixed(2)}`,
   },
   {
     id: "medium",
@@ -92,6 +98,8 @@ const ENGINE_TIERS = [
     description: "Balanced quality/cost",
     engines: ["Veo 3", "Runway Gen-3", "Luma"],
     color: "text-orange-500",
+    costPerVideo: "$0.25-0.50",
+    estimatedTotal: (count: number) => `$${(count * 0.375).toFixed(2)}`,
   },
   {
     id: "premium",
@@ -99,6 +107,8 @@ const ENGINE_TIERS = [
     description: "Highest quality",
     engines: ["Sora 2", "Sora 2 Pro", "OmniHuman"],
     color: "text-purple-500",
+    costPerVideo: "$1.00-2.50",
+    estimatedTotal: (count: number) => `$${(count * 1.75).toFixed(2)}`,
   },
 ];
 
@@ -195,7 +205,14 @@ export const VariationSettings = ({
           {/* Hook Styles */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Hook Styles</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                Hook Styles
+                {config.hookStyles.includes("ai-auto") && (
+                  <Badge variant="secondary" className="bg-purple-500/20 text-purple-400 text-xs">
+                    🤖 AI Decides
+                  </Badge>
+                )}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
@@ -205,7 +222,9 @@ export const VariationSettings = ({
                     onClick={() => toggleHookStyle(hook.id)}
                     className={`px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-all ${
                       config.hookStyles.includes(hook.id)
-                        ? "bg-primary text-primary-foreground"
+                        ? hook.id === "ai-auto" 
+                          ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+                          : "bg-primary text-primary-foreground"
                         : "bg-accent hover:bg-accent/80 text-foreground"
                     }`}
                   >
@@ -247,7 +266,14 @@ export const VariationSettings = ({
           {/* Transitions */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Transitions</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                Transitions
+                {config.transitions.includes("ai-auto") && (
+                  <Badge variant="secondary" className="bg-purple-500/20 text-purple-400 text-xs">
+                    🤖 AI Decides
+                  </Badge>
+                )}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
@@ -257,7 +283,9 @@ export const VariationSettings = ({
                     onClick={() => toggleTransition(transition.id)}
                     className={`px-3 py-2 rounded-lg text-sm transition-all ${
                       config.transitions.includes(transition.id)
-                        ? "bg-primary text-primary-foreground"
+                        ? transition.id === "ai-auto"
+                          ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+                          : "bg-primary text-primary-foreground"
                         : "bg-accent hover:bg-accent/80 text-foreground"
                     }`}
                   >
@@ -403,7 +431,17 @@ export const VariationSettings = ({
                   >
                     <RadioGroupItem value={tier.id} id={`tier-${tier.id}`} className="mt-1" />
                     <Label htmlFor={`tier-${tier.id}`} className="flex-1 cursor-pointer">
-                      <div className={`font-bold ${tier.color}`}>{tier.label}</div>
+                      <div className="flex items-center justify-between">
+                        <div className={`font-bold ${tier.color}`}>{tier.label}</div>
+                        <div className="text-right">
+                          <div className="text-xs text-muted-foreground">{tier.costPerVideo}/video</div>
+                          {config.engineTier === tier.id && (
+                            <div className="text-sm font-semibold text-primary">
+                              Est. Total: {tier.estimatedTotal(config.count)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                       <div className="text-xs text-muted-foreground">{tier.description}</div>
                       <div className="flex flex-wrap gap-1 mt-2">
                         {tier.engines.map((engine) => (
@@ -416,6 +454,18 @@ export const VariationSettings = ({
                   </div>
                 ))}
               </RadioGroup>
+              
+              {/* Selected Tier Cost Summary */}
+              {config.engineTier && (
+                <div className="p-3 rounded-lg bg-accent/50 border border-border">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Estimated Cost for {config.count} videos:</span>
+                    <span className="text-lg font-bold text-primary">
+                      {ENGINE_TIERS.find(t => t.id === config.engineTier)?.estimatedTotal(config.count)}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* n8n Webhook Toggle */}
               <div className="flex items-center justify-between pt-4 border-t">
