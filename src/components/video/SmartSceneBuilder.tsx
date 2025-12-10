@@ -535,6 +535,74 @@ export function SmartSceneBuilder({
         </div>
       </Card>
 
+      {/* Product Images Preview */}
+      {productImages && productImages.length > 0 && (
+        <Card className="p-4 bg-card border-border">
+          <div className="flex items-center justify-between mb-3">
+            <Label className="text-sm font-medium flex items-center gap-2">
+              <ImageIcon className="w-4 h-4 text-primary" />
+              Product Images ({productImages.length})
+            </Label>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                // Auto-assign product images to scenes
+                const updatedScenes = scenes.map((scene, idx) => ({
+                  ...scene,
+                  productImageUrl: productImages[idx % productImages.length] || scene.productImageUrl
+                }));
+                onScenesChange(updatedScenes);
+                toast.success('Product images assigned to scenes');
+              }}
+              className="text-xs gap-1"
+            >
+              <Sparkles className="w-3 h-3" />
+              Auto-Assign to Scenes
+            </Button>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {productImages.map((imgUrl, idx) => (
+              <div 
+                key={idx} 
+                className="relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border border-border bg-muted group cursor-pointer hover:border-primary transition-colors"
+                onClick={() => {
+                  // Find first scene without product image and assign
+                  const targetScene = scenes.find(s => !s.productImageUrl);
+                  if (targetScene) {
+                    updateScene(targetScene.id, { productImageUrl: imgUrl });
+                    toast.success(`Image assigned to Scene ${targetScene.index + 1}`);
+                  } else {
+                    toast.info('All scenes already have product images');
+                  }
+                }}
+              >
+                <img 
+                  src={imgUrl} 
+                  alt={`Product ${idx + 1}`} 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '/placeholder.svg';
+                  }}
+                />
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <Plus className="w-4 h-4 text-white" />
+                </div>
+                <Badge 
+                  variant="secondary" 
+                  className="absolute bottom-0.5 right-0.5 text-[8px] px-1 py-0"
+                >
+                  {idx + 1}
+                </Badge>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Click an image to assign it to the next available scene, or use Auto-Assign
+          </p>
+        </Card>
+      )}
+
       {/* Local Assets */}
       <LocalAssetUploader
         assets={localAssets}
@@ -771,13 +839,59 @@ export function SmartSceneBuilder({
                             </div>
                           </div>
                           <div className="space-y-1">
-                            <Label className="text-xs">Product Image URL</Label>
-                            <Input
-                              value={scene.productImageUrl || ''}
-                              onChange={(e) => updateScene(scene.id, { productImageUrl: e.target.value })}
-                              placeholder="https://..."
-                              className="h-8 text-xs bg-background"
-                            />
+                            <Label className="text-xs">Product Image</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                value={scene.productImageUrl || ''}
+                                onChange={(e) => updateScene(scene.id, { productImageUrl: e.target.value })}
+                                placeholder="https://..."
+                                className="h-8 text-xs bg-background flex-1"
+                              />
+                              {scene.productImageUrl && (
+                                <div className="w-8 h-8 rounded border border-border overflow-hidden flex-shrink-0">
+                                  <img 
+                                    src={scene.productImageUrl} 
+                                    alt="Preview" 
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).src = '/placeholder.svg';
+                                    }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                            {/* Quick select from product images */}
+                            {productImages && productImages.length > 0 && (
+                              <div className="flex gap-1 mt-1">
+                                {productImages.slice(0, 4).map((imgUrl, i) => (
+                                  <button
+                                    key={i}
+                                    type="button"
+                                    onClick={() => updateScene(scene.id, { productImageUrl: imgUrl })}
+                                    className={`w-6 h-6 rounded border overflow-hidden transition-all ${
+                                      scene.productImageUrl === imgUrl 
+                                        ? 'border-primary ring-1 ring-primary' 
+                                        : 'border-border hover:border-primary/50'
+                                    }`}
+                                  >
+                                    <img 
+                                      src={imgUrl} 
+                                      alt={`Option ${i + 1}`} 
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </button>
+                                ))}
+                                {scene.productImageUrl && (
+                                  <button
+                                    type="button"
+                                    onClick={() => updateScene(scene.id, { productImageUrl: undefined })}
+                                    className="w-6 h-6 rounded border border-border hover:border-destructive flex items-center justify-center text-muted-foreground hover:text-destructive"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
