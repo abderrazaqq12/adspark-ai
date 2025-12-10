@@ -267,22 +267,49 @@ export default function CreateVideo() {
   const { costs, projectCost, estimatedTotal, recordCost } = useRealTimeCost(projectId || undefined);
 
   // Clear functions for each stage
-  const clearStageData = (stageId: number) => {
+  // Clear functions for each stage - clears from UI state and user_settings
+  const clearStageData = async (stageId: number) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    const clearFromSettings = async (keys: string[]) => {
+      if (!user) return;
+      try {
+        const { data: settings } = await supabase
+          .from('user_settings')
+          .select('preferences')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        if (settings?.preferences) {
+          const prefs = { ...(settings.preferences as Record<string, unknown>) };
+          keys.forEach(key => { delete prefs[key]; });
+          
+          await supabase
+            .from('user_settings')
+            .update({ preferences: prefs as any })
+            .eq('user_id', user.id);
+        }
+      } catch (error) {
+        console.error('Error clearing settings:', error);
+      }
+    };
+
     switch (stageId) {
       case 0:
         setProductInfo({ name: "", description: "", imageUrl: "", link: "" });
+        await clearFromSettings(['studio_product_name', 'studio_product_url', 'studio_description', 'studio_media_links', 'studio_target_market', 'studio_language', 'studio_audience_age', 'studio_audience_gender']);
         toast.success("Product input cleared");
         break;
       case 1:
-        // Product content is stored in the StudioMarketingEngine component, reset by remounting
+        await clearFromSettings(['studio_marketing_angles', 'studio_scripts', 'studio_landing_content']);
         toast.success("Product content cleared");
         break;
       case 2:
-        // Image generation is stored in the StudioImageGeneration component, reset by remounting
+        // Image generation clears generated_images in DB if needed
         toast.success("Image generation cleared");
         break;
       case 3:
-        // Landing page content is stored in the StudioLandingPage component, reset by remounting
+        await clearFromSettings(['studio_landing_content']);
         toast.success("Landing page cleared");
         break;
       case 4:
@@ -298,7 +325,6 @@ export default function CreateVideo() {
         toast.success("Video generation cleared");
         break;
       case 7:
-        // Assembly settings
         setVideosToGenerate(10);
         setTransitionStyle('mixed');
         setRandomizeOrder(true);
@@ -312,7 +338,10 @@ export default function CreateVideo() {
     }
   };
 
-  const clearAllPipelineData = () => {
+  const clearAllPipelineData = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    // Clear UI state
     setProductInfo({ name: "", description: "", imageUrl: "", link: "" });
     setScriptSlots([{ id: 1, text: "", audioFile: null, audioUrl: null, generatedAudioUrl: null, isGenerating: false }]);
     setScenes([]);
@@ -320,6 +349,36 @@ export default function CreateVideo() {
     setCurrentStage(0);
     setExpandedStage(0);
     setSelectedTemplates([]);
+    
+    // Clear user_settings preferences related to studio
+    if (user) {
+      try {
+        const { data: settings } = await supabase
+          .from('user_settings')
+          .select('preferences')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        if (settings?.preferences) {
+          const prefs = { ...(settings.preferences as Record<string, unknown>) };
+          const keysToRemove = [
+            'studio_product_name', 'studio_product_url', 'studio_description', 
+            'studio_media_links', 'studio_target_market', 'studio_language',
+            'studio_audience_age', 'studio_audience_gender', 'studio_marketing_angles',
+            'studio_scripts', 'studio_landing_content'
+          ];
+          keysToRemove.forEach(key => { delete prefs[key]; });
+          
+          await supabase
+            .from('user_settings')
+            .update({ preferences: prefs as any })
+            .eq('user_id', user.id);
+        }
+      } catch (error) {
+        console.error('Error clearing settings:', error);
+      }
+    }
+    
     setShowClearPipelineDialog(false);
     toast.success("Pipeline reset - all data cleared");
   };
