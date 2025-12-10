@@ -6,17 +6,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-type ImageType = 'amazon_style' | 'before_after' | 'lifestyle' | 'packaging' | 'thumbnail' | 'hero';
+type ImageType = 'product' | 'lifestyle' | 'before-after' | 'mockup' | 'ugc' | 'thumbnail' | 'amazon_style' | 'before_after' | 'packaging' | 'hero';
 type Market = 'sa' | 'ae' | 'kw' | 'ma' | 'eu' | 'us' | 'latam';
-type Audience = 'men' | 'women' | 'both' | 'kids' | 'elderly' | 'athletes' | 'beauty' | 'tech' | 'pets' | 'health' | 'parents';
+type Audience = string;
 
 interface ImageGenerationRequest {
   projectId?: string;
   productName: string;
   productDescription?: string;
   imageTypes?: ImageType[];
-  imageType?: string; // Single image type for simpler calls
-  prompt?: string; // Direct prompt
+  imageType?: string;
+  prompt?: string;
   market?: Market;
   audience?: Audience;
   referenceImageUrl?: string;
@@ -36,40 +36,54 @@ const MARKET_MODIFIERS: Record<Market, string> = {
   latam: 'vibrant colorful Latin American style, dynamic energy'
 };
 
-// Audience-specific visual modifiers
-const AUDIENCE_MODIFIERS: Record<Audience, string> = {
-  men: 'male-focused imagery, masculine aesthetic',
-  women: 'female-focused imagery, feminine aesthetic',
-  both: 'gender-neutral appeal',
-  kids: 'child-friendly, colorful, playful',
-  elderly: 'mature audience, elegant, trustworthy',
-  athletes: 'athletic person, fitness setting, energetic mood',
-  beauty: 'beauty setting, soft lighting, skincare aesthetic',
+// Audience-specific visual modifiers for targeted imagery
+const AUDIENCE_MODIFIERS: Record<string, string> = {
+  men_18_25: 'young man aged 18-25, modern trendy style, energetic youthful aesthetic',
+  men_25_35: 'adult man aged 25-35, professional confident look, contemporary style',
+  men_35_45: 'mature man aged 35-45, sophisticated established aesthetic',
+  men_45_plus: 'distinguished man over 45, classic elegant refined style',
+  women_18_25: 'young woman aged 18-25, modern trendy style, vibrant youthful aesthetic',
+  women_25_35: 'adult woman aged 25-35, confident professional look, contemporary style',
+  women_35_45: 'mature woman aged 35-45, elegant sophisticated aesthetic',
+  women_45_plus: 'refined woman over 45, classic timeless elegant style',
+  both: 'gender-neutral appeal, inclusive imagery',
+  kids: 'child-friendly, colorful, playful, safe imagery',
+  elderly: 'mature audience, elegant, trustworthy, respectful',
+  athletes: 'athletic person, fitness setting, energetic dynamic mood',
+  beauty: 'beauty setting, soft glowing lighting, skincare aesthetic',
   tech: 'modern tech setting, sleek gadgets, professional lighting',
-  pets: 'pet-friendly, warm, family atmosphere',
-  health: 'healthy lifestyle, wellness, natural',
-  parents: 'family-oriented, nurturing, practical'
+  pets: 'pet-friendly, warm, family atmosphere, adorable',
+  health: 'healthy lifestyle, wellness, natural, wholesome',
+  parents: 'family-oriented, nurturing, practical, trustworthy',
+  men: 'male-focused imagery, masculine aesthetic',
+  women: 'female-focused imagery, feminine aesthetic'
 };
 
-// Image type prompt templates
-const IMAGE_TYPE_PROMPTS: Record<ImageType, (product: string, desc: string) => string> = {
-  amazon_style: (product, desc) => 
-    `Professional Amazon-style product photo of ${product}. ${desc}. Clean white background, studio lighting, high resolution product shot, multiple angles visible, professional e-commerce photography, 8k quality`,
-  
-  before_after: (product, desc) => 
-    `Before and after comparison image for ${product}. ${desc}. Split image showing transformation, left side shows problem, right side shows solution with product, dramatic improvement visible, professional advertising style`,
-  
-  lifestyle: (product, desc) => 
-    `Lifestyle product photography of ${product} in use. ${desc}. Real-world setting, person using the product naturally, warm inviting atmosphere, professional advertising photography, aspirational imagery`,
-  
-  packaging: (product, desc) => 
-    `Premium product packaging mockup for ${product}. ${desc}. Elegant box design, professional branding, studio lighting, luxury presentation, high-end packaging photography`,
-  
-  thumbnail: (product, desc) => 
-    `Eye-catching video thumbnail for ${product}. ${desc}. Bold text overlay area, vibrant colors, attention-grabbing composition, social media optimized, 9:16 aspect ratio friendly`,
-  
-  hero: (product, desc) => 
-    `Hero banner image for ${product} landing page. ${desc}. Wide format, dramatic lighting, product prominently featured, space for text overlay, premium advertising photography, 16:9 aspect ratio`
+// Image type prompt templates with detailed professional prompts
+const getImagePrompt = (imageType: string, product: string, desc: string, audienceMod: string): string => {
+  const prompts: Record<string, string> = {
+    product: `Create an image of ${product} ${desc ? `(${desc})` : ''} centered on a clean white or light-neutral studio background, highlighting its shape, color, and material with soft balanced shadows and crisp lighting. ${audienceMod ? `Target audience: ${audienceMod}.` : ''} Ensure the product remains untouched and presented elegantly, captured with a realistic camera feel, and preserve this lighting style and overall tone for consistency across all images.`,
+    
+    lifestyle: `Create an image of ${product} ${desc ? `(${desc})` : ''} placed naturally within a realistic everyday environment such as a bedroom, bathroom, vanity, living room, office desk, or gym. ${audienceMod ? `Show ${audienceMod} person using or near the product.` : 'Show the product in use or within reach of a person.'} Without altering the product's appearance. Use natural soft lighting, maintain realism and subtle detail, captured with an authentic lifestyle-camera feel, and keep environmental style and mood consistent across all images.`,
+    
+    mockup: `Create an image of ${product} with its packaging on a white or neutral background, clearly showcasing packaging details, textures, and design without modification. ${audienceMod ? `Target audience: ${audienceMod}.` : ''} Optionally display the product open if appropriate, revealing contents while keeping the layout minimal and clean. Use soft shadows for depth, maintain high clarity, captured in a realistic product-photography style, and preserve this lighting and visual tone for consistency.`,
+    
+    'before-after': `Create an image of ${product} ${desc ? `(${desc})` : ''} in a clean transformation-style layout: left side showing a relevant "before" condition, center featuring the product, and right side showing a subtle visual improvement or result, without adding any text. ${audienceMod ? `Show transformation relevant to ${audienceMod}.` : ''} Keep the background neutral and realistic, ensure the transformation remains natural and product-appropriate, captured with soft balanced lighting, and preserve this visual mood and clarity across all images.`,
+    
+    ugc: `Create an image of ${product} ${desc ? `(${desc})` : ''} presented as a hero-style visual with a dramatic or elegant background that harmonizes with the product's colors. ${audienceMod ? `Feature ${audienceMod} person holding the product naturally like user-generated content.` : 'Optionally include a hand holding the product.'} Use strong directional lighting to highlight contours and materials, ensuring the product remains unchanged. Capture the scene with a premium, polished aesthetic, and maintain consistent lighting style and atmosphere across all images.`,
+    
+    thumbnail: `Create an image of ${product} ${desc ? `(${desc})` : ''} in a top-down flat-lay composition on a fabric or surface that complements the product's visual theme. ${audienceMod ? `Style for ${audienceMod} appeal.` : ''} Arrange minimal, category-appropriate props around it—such as items related to skincare, lifestyle, wellness, tech, or accessories—while keeping the layout clean and well-balanced. Use soft natural lighting, preserve realism, and maintain consistent tones and styling across all image variations.`,
+
+    amazon_style: `Create an image of ${product} ${desc ? `(${desc})` : ''} centered on a clean white or light-neutral studio background, highlighting its shape, color, and material with soft balanced shadows and crisp lighting. ${audienceMod ? `Target audience: ${audienceMod}.` : ''} Ensure the product remains untouched and presented elegantly, captured with a realistic camera feel, and preserve this lighting style and overall tone for consistency across all images.`,
+    
+    before_after: `Create an image of ${product} ${desc ? `(${desc})` : ''} in a clean transformation-style layout: left side showing a relevant "before" condition, center featuring the product, and right side showing a subtle visual improvement or result, without adding any text. ${audienceMod ? `Show transformation relevant to ${audienceMod}.` : ''} Keep the background neutral and realistic, ensure the transformation remains natural and product-appropriate, captured with soft balanced lighting, and preserve this visual mood and clarity across all images.`,
+    
+    packaging: `Create an image of ${product} with its packaging on a white or neutral background, clearly showcasing packaging details, textures, and design without modification. ${audienceMod ? `Target audience: ${audienceMod}.` : ''} Optionally display the product open if appropriate, revealing contents while keeping the layout minimal and clean. Use soft shadows for depth, maintain high clarity, captured in a realistic product-photography style, and preserve this lighting and visual tone for consistency.`,
+    
+    hero: `Create an image of ${product} ${desc ? `(${desc})` : ''} presented as a hero-style visual with a dramatic or elegant background that harmonizes with the product's colors. Use strong directional lighting to highlight contours and materials. ${audienceMod ? `Feature ${audienceMod} person holding the product.` : 'Optionally include a hand holding the product.'} Ensure the product remains unchanged. Capture the scene with a premium, polished aesthetic, and maintain consistent lighting style and atmosphere across all images.`
+  };
+
+  return prompts[imageType] || `Professional product photo of ${product}. ${desc}. ${audienceMod ? `Target: ${audienceMod}.` : ''} High quality, studio lighting, 8k resolution.`;
 };
 
 serve(async (req) => {
@@ -216,6 +230,9 @@ serve(async (req) => {
     // Generate each image type
     for (const imageType of imageTypes) {
       try {
+        // Get audience modifier for prompt template
+        const audienceMod = AUDIENCE_MODIFIERS[audience] || '';
+        
         // Build the prompt - use direct prompt if provided, otherwise build from template
         let basePrompt: string;
         
@@ -224,24 +241,13 @@ serve(async (req) => {
         } else if (customPrompt) {
           basePrompt = customPrompt;
         } else {
-          const templateFunc = IMAGE_TYPE_PROMPTS[imageType];
-          if (templateFunc) {
-            basePrompt = templateFunc(productName, productDescription);
-          } else {
-            basePrompt = `Professional product photo of ${productName}. ${productDescription}. High quality, studio lighting, 8k resolution.`;
-          }
+          basePrompt = getImagePrompt(imageType, productName, productDescription || '', audienceMod);
         }
         
         // Add market-specific modifiers
         const marketMod = MARKET_MODIFIERS[market];
         if (marketMod && !directPrompt) {
           basePrompt += `. ${marketMod}`;
-        }
-        
-        // Add audience-specific modifiers
-        const audienceMod = AUDIENCE_MODIFIERS[audience];
-        if (audienceMod && !directPrompt) {
-          basePrompt += `. ${audienceMod}`;
         }
 
         // Add cultural considerations for specific markets

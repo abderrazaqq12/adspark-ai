@@ -40,12 +40,28 @@ interface GeneratedImage {
 }
 
 const imageTypes = [
-  { id: 'product', name: 'Product Shots', description: 'Clean product images on white background' },
-  { id: 'lifestyle', name: 'Lifestyle', description: 'Product in real-life context' },
-  { id: 'before-after', name: 'Before/After', description: 'Transformation comparison images' },
-  { id: 'mockup', name: 'Mockups', description: 'Product packaging and display mockups' },
-  { id: 'ugc', name: 'UGC Style', description: 'User-generated content style images' },
-  { id: 'thumbnail', name: 'Thumbnails', description: 'Eye-catching video thumbnails' },
+  { id: 'product', name: 'Studio Shot', description: 'Clean product on white/neutral background with crisp lighting' },
+  { id: 'lifestyle', name: 'Lifestyle', description: 'Product in realistic everyday environment (bedroom, bathroom, office)' },
+  { id: 'mockup', name: 'Packaging', description: 'Product packaging details and textures on neutral background' },
+  { id: 'ugc', name: 'Hero Shot', description: 'Dramatic hero visual with elegant background and strong lighting' },
+  { id: 'thumbnail', name: 'Flat Lay', description: 'Top-down composition with complementary props' },
+  { id: 'before-after', name: 'Before/After', description: 'Transformation layout showing before, product, and result' },
+];
+
+const audienceOptions = [
+  { id: 'men_18_25', name: 'Men 18-25', description: 'Young men, trendy modern style' },
+  { id: 'men_25_35', name: 'Men 25-35', description: 'Adult men, professional confident' },
+  { id: 'men_35_45', name: 'Men 35-45', description: 'Mature men, sophisticated' },
+  { id: 'men_45_plus', name: 'Men 45+', description: 'Distinguished men, classic elegant' },
+  { id: 'women_18_25', name: 'Women 18-25', description: 'Young women, vibrant trendy' },
+  { id: 'women_25_35', name: 'Women 25-35', description: 'Adult women, confident professional' },
+  { id: 'women_35_45', name: 'Women 35-45', description: 'Mature women, elegant sophisticated' },
+  { id: 'women_45_plus', name: 'Women 45+', description: 'Refined women, classic timeless' },
+  { id: 'both', name: 'Gender Neutral', description: 'Inclusive imagery for all' },
+  { id: 'athletes', name: 'Athletes', description: 'Fitness focused, energetic' },
+  { id: 'beauty', name: 'Beauty Enthusiasts', description: 'Skincare/beauty aesthetic' },
+  { id: 'health', name: 'Health Conscious', description: 'Wellness, natural lifestyle' },
+  { id: 'parents', name: 'Parents', description: 'Family-oriented, nurturing' },
 ];
 
 export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: StudioImageGenerationProps) => {
@@ -56,6 +72,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
   const [imageCount, setImageCount] = useState('3');
   const [resolution, setResolution] = useState('1024x1024');
   const [selectedTypes, setSelectedTypes] = useState<string[]>(['product', 'lifestyle', 'thumbnail']);
+  const [selectedAudience, setSelectedAudience] = useState<string>('both');
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [productInfo, setProductInfo] = useState({ name: '', description: '' });
   const [customPrompt, setCustomPrompt] = useState('');
@@ -629,6 +646,28 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
               </Button>
             </div>
           )}
+        </div>
+      </Card>
+
+      {/* Target Audience */}
+      <Card className="p-6 bg-card border-border">
+        <h3 className="font-semibold mb-4">Target Audience</h3>
+        <p className="text-xs text-muted-foreground mb-3">Select target audience to make images relative to your customers</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {audienceOptions.map((audience) => (
+            <div 
+              key={audience.id}
+              onClick={() => setSelectedAudience(audience.id)}
+              className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                selectedAudience === audience.id 
+                  ? 'border-primary bg-primary/10' 
+                  : 'border-border hover:border-primary/50'
+              }`}
+            >
+              <p className="font-medium text-foreground text-xs">{audience.name}</p>
+              <p className="text-[10px] text-muted-foreground">{audience.description}</p>
+            </div>
+          ))}
         </div>
       </Card>
 
