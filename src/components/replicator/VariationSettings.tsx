@@ -1,3 +1,4 @@
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Zap, Sparkles, Mic, Film, Users, Globe, Shuffle, Bot } from "lucide-react";
+import { ArrowLeft, Zap, Sparkles, Mic, Film, Users, Globe, Shuffle, Bot, Brain, BarChart3, Lightbulb } from "lucide-react";
 import type { VariationConfig } from "@/pages/CreativeReplicator";
 import { AIAdIntelligencePanel } from "./AIAdIntelligencePanel";
 
@@ -61,10 +62,13 @@ const VOICE_LANGUAGES = [
 ];
 
 const VOICE_TONES = [
+  { id: "ai-auto", label: "🤖 AI Auto Tone", isAI: true },
   { id: "energetic", label: "Energetic" },
   { id: "emotional", label: "Emotional" },
   { id: "neutral", label: "Neutral" },
   { id: "professional", label: "Professional" },
+  { id: "friendly", label: "Friendly" },
+  { id: "authoritative", label: "Authoritative" },
 ];
 
 const RATIO_OPTIONS = [
@@ -113,12 +117,82 @@ const ENGINE_TIERS = [
   },
 ];
 
+// AI recommendations based on market & product
+const getAIRecommendations = (market: string, productCategory: string, platform: string) => {
+  const recommendations: { videoTypes: string[]; hookStyles: string[]; tone: string; pacing: string } = {
+    videoTypes: [],
+    hookStyles: [],
+    tone: 'energetic',
+    pacing: 'fast'
+  };
+  
+  // Market-based recommendations
+  if (market === 'saudi' || market === 'uae') {
+    recommendations.videoTypes = ['ugc-review', 'testimonial', 'before-after'];
+    recommendations.hookStyles = ['emotional', 'story', 'problem-solution'];
+    recommendations.tone = 'emotional';
+    recommendations.pacing = 'medium';
+  } else if (market === 'usa') {
+    recommendations.videoTypes = ['ugc-review', 'lifestyle', 'problem-solution'];
+    recommendations.hookStyles = ['question', 'shock', 'humor'];
+    recommendations.tone = 'energetic';
+    recommendations.pacing = 'fast';
+  } else if (market === 'latam') {
+    recommendations.videoTypes = ['ugc-review', 'unboxing', 'day-in-life'];
+    recommendations.hookStyles = ['shock', 'emotional', 'humor'];
+    recommendations.tone = 'energetic';
+    recommendations.pacing = 'fast';
+  } else if (market === 'europe') {
+    recommendations.videoTypes = ['educational', 'testimonial', 'lifestyle'];
+    recommendations.hookStyles = ['statistic', 'question', 'story'];
+    recommendations.tone = 'professional';
+    recommendations.pacing = 'medium';
+  } else {
+    recommendations.videoTypes = ['ugc-review', 'problem-solution', 'lifestyle'];
+    recommendations.hookStyles = ['question', 'problem-solution', 'story'];
+    recommendations.tone = 'neutral';
+    recommendations.pacing = 'medium';
+  }
+  
+  // Product category adjustments
+  if (productCategory === 'beauty' || productCategory === 'health') {
+    recommendations.videoTypes = ['before-after', 'testimonial', ...recommendations.videoTypes.slice(0, 1)];
+    recommendations.hookStyles = ['emotional', 'problem-solution', ...recommendations.hookStyles.slice(0, 1)];
+  } else if (productCategory === 'tech') {
+    recommendations.videoTypes = ['unboxing', 'educational', ...recommendations.videoTypes.slice(0, 1)];
+    recommendations.hookStyles = ['statistic', 'shock', ...recommendations.hookStyles.slice(0, 1)];
+  } else if (productCategory === 'fashion') {
+    recommendations.videoTypes = ['lifestyle', 'day-in-life', ...recommendations.videoTypes.slice(0, 1)];
+    recommendations.hookStyles = ['story', 'emotional', ...recommendations.hookStyles.slice(0, 1)];
+  }
+  
+  // Platform adjustments
+  if (platform === 'tiktok' || platform === 'instagram-reels') {
+    recommendations.pacing = 'fast';
+  } else if (platform === 'youtube-shorts') {
+    recommendations.pacing = 'medium';
+  }
+  
+  return recommendations;
+};
+
 export const VariationSettings = ({
   config,
   setConfig,
   onBack,
   onGenerate,
 }: VariationSettingsProps) => {
+  const [showCostChart, setShowCostChart] = useState(false);
+  
+  // Generate AI recommendations
+  const aiRecommendations = useMemo(() => {
+    return getAIRecommendations(
+      config.adIntelligence?.market || 'global',
+      config.adIntelligence?.productCategory || 'general',
+      config.adIntelligence?.platform || 'tiktok'
+    );
+  }, [config.adIntelligence?.market, config.adIntelligence?.productCategory, config.adIntelligence?.platform]);
+
   const toggleHookStyle = (id: string) => {
     setConfig((prev) => ({
       ...prev,
@@ -329,12 +403,67 @@ export const VariationSettings = ({
             </CardContent>
           </Card>
 
+          {/* AI Recommendations Preview */}
+          <Card className="border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-blue-500/5">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Lightbulb className="w-4 h-4 text-yellow-500" />
+                AI Recommendations
+                <Badge variant="secondary" className="bg-purple-500/20 text-purple-400 text-xs">
+                  Based on Settings
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Recommended Video Types</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {aiRecommendations.videoTypes.slice(0, 3).map((type) => (
+                      <Badge key={type} variant="outline" className="bg-purple-500/10 text-purple-400 border-purple-500/30">
+                        {type.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Recommended Hook Styles</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {aiRecommendations.hookStyles.slice(0, 3).map((hook) => (
+                      <Badge key={hook} variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/30">
+                        {hook.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2 rounded bg-accent/30">
+                    <span className="text-muted-foreground">Tone: </span>
+                    <span className="font-medium text-green-400">{aiRecommendations.tone}</span>
+                  </div>
+                  <div className="p-2 rounded bg-accent/30">
+                    <span className="text-muted-foreground">Pacing: </span>
+                    <span className="font-medium text-orange-400">{aiRecommendations.pacing}</span>
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground italic">
+                💡 These are AI suggestions based on your market ({config.adIntelligence?.market || 'global'}) and category ({config.adIntelligence?.productCategory || 'general'})
+              </p>
+            </CardContent>
+          </Card>
+
           {/* Voice Settings */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Mic className="w-4 h-4 text-primary" />
                 Voice Settings
+                {config.voiceSettings.tone === 'ai-auto' && (
+                  <Badge variant="secondary" className="bg-purple-500/20 text-purple-400 text-xs">
+                    🤖 AI Decides
+                  </Badge>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -378,11 +507,18 @@ export const VariationSettings = ({
                   <SelectContent>
                     {VOICE_TONES.map((tone) => (
                       <SelectItem key={tone.id} value={tone.id}>
-                        {tone.label}
+                        <span className={tone.isAI ? "text-purple-400 font-medium" : ""}>
+                          {tone.label}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {config.voiceSettings.tone === 'ai-auto' && (
+                  <p className="text-xs text-muted-foreground">
+                    AI will select: <span className="text-green-400 font-medium">{aiRecommendations.tone}</span> based on your market
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -418,9 +554,60 @@ export const VariationSettings = ({
           {/* AI Engine Selection */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">AI Engine Tier</CardTitle>
+              <CardTitle className="text-base flex items-center justify-between">
+                <span>AI Engine Tier</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowCostChart(!showCostChart)}
+                  className="text-xs"
+                >
+                  <BarChart3 className="w-3 h-3 mr-1" />
+                  {showCostChart ? 'Hide' : 'Compare'} Costs
+                </Button>
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Cost Comparison Chart */}
+              {showCostChart && (
+                <div className="p-4 rounded-lg bg-accent/30 border border-border space-y-3">
+                  <div className="text-sm font-medium flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-primary" />
+                    Cost Comparison for {config.count} Videos
+                  </div>
+                  <div className="space-y-2">
+                    {ENGINE_TIERS.map((tier) => {
+                      const cost = parseFloat(tier.estimatedTotal(config.count).replace('$', ''));
+                      const maxCost = parseFloat(ENGINE_TIERS[3].estimatedTotal(config.count).replace('$', ''));
+                      const percentage = maxCost > 0 ? (cost / maxCost) * 100 : 0;
+                      
+                      return (
+                        <div key={tier.id} className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className={tier.color}>{tier.label}</span>
+                            <span className="font-medium">{tier.estimatedTotal(config.count)}</span>
+                          </div>
+                          <div className="h-2 bg-accent rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                tier.id === 'free' ? 'bg-green-500' :
+                                tier.id === 'low' ? 'bg-blue-500' :
+                                tier.id === 'medium' ? 'bg-orange-500' :
+                                'bg-purple-500'
+                              }`}
+                              style={{ width: `${Math.max(percentage, 2)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="text-xs text-muted-foreground text-center pt-2 border-t border-border/50">
+                    💡 Free tier has no cost, Premium offers highest quality
+                  </div>
+                </div>
+              )}
+
               <RadioGroup
                 value={config.engineTier}
                 onValueChange={(value) => setConfig((prev) => ({ ...prev, engineTier: value }))}
