@@ -100,6 +100,19 @@ serve(async (req) => {
       throw new Error('Invalid authorization');
     }
 
+    // Check if n8n backend mode is enabled
+    const { data: userSettings } = await supabase
+      .from('user_settings')
+      .select('use_n8n_backend, ai_operator_enabled, preferences')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    const useN8nBackend = userSettings?.use_n8n_backend || false;
+    const prefs = userSettings?.preferences as any;
+    const stageWebhooks = prefs?.stage_webhooks || {};
+    const imageGenWebhook = stageWebhooks['image_generation'];
+
+    const requestBody = await req.json();
     const { 
       projectId, 
       productName = 'Product',
@@ -113,7 +126,66 @@ serve(async (req) => {
       customPrompt,
       resolution,
       engine
-    }: ImageGenerationRequest = await req.json();
+    }: ImageGenerationRequest = requestBody;
+
+    // Route to n8n webhook if enabled and configured
+    if (useN8nBackend && imageGenWebhook?.enabled && imageGenWebhook?.webhook_url) {
+      console.log('[ai-image-generator] Routing to n8n webhook');
+      
+      try {
+        const webhookPayload = {
+          action: 'generate_images',
+          project_id: projectId,
+          user_id: user.id,
+          product_name: productName,
+          product_description: productDescription,
+          image_types: rawImageTypes || [imageType || 'product'],
+          engine: engine || 'nanobanana',
+          market,
+          audience,
+          reference_image_url: referenceImageUrl,
+          custom_prompt: customPrompt,
+          resolution,
+          timestamp: new Date().toISOString()
+        };
+
+        const n8nApiKey = prefs?.n8n_api_key;
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        if (n8nApiKey) {
+          headers['Authorization'] = `Bearer ${n8nApiKey}`;
+        }
+
+        const response = await fetch(imageGenWebhook.webhook_url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(webhookPayload),
+        });
+
+        // Log the webhook call
+        if (projectId) {
+          await supabase.from('analytics_events').insert({
+            user_id: user.id,
+            project_id: projectId,
+            event_type: 'image_generation_n8n',
+            event_data: { webhook_status: response.status }
+          });
+        }
+
+        return new Response(JSON.stringify({
+          success: true,
+          method: 'n8n_webhook',
+          message: 'Image generation request sent to n8n webhook',
+          webhook_status: response.status
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (webhookError: any) {
+        console.error('[ai-image-generator] n8n webhook error:', webhookError);
+        // Fall through to internal generation
+      }
+    }
 
     // Handle both single imageType and array imageTypes
     let imageTypes: ImageType[] = [];

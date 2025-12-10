@@ -19,7 +19,10 @@ import {
   Play,
   Pause,
   Settings2,
-  AlertTriangle
+  AlertTriangle,
+  Key,
+  Image,
+  Webhook
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -36,6 +39,17 @@ interface OperatorJob {
   output_data: any;
 }
 
+interface APIKeyStatus {
+  active_providers: string[];
+  count: number;
+}
+
+interface OperatorStatus {
+  operator_enabled: boolean;
+  n8n_backend_enabled: boolean;
+  api_keys: APIKeyStatus;
+}
+
 interface AIOperatorDashboardProps {
   projectId?: string | null;
   enabled?: boolean;
@@ -48,6 +62,7 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
   const [isRunning, setIsRunning] = useState(false);
   const [activeTab, setActiveTab] = useState<"operator" | "autopilot">("operator");
   const [autopilotJobId, setAutopilotJobId] = useState<string | null>(null);
+  const [operatorStatus, setOperatorStatus] = useState<OperatorStatus | null>(null);
   const [stats, setStats] = useState({
     total: 0,
     completed: 0,
@@ -57,9 +72,31 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
 
   useEffect(() => {
     loadJobs();
+    loadOperatorStatus();
     const unsubscribe = subscribeToJobs();
     return () => unsubscribe?.();
   }, [projectId]);
+
+  const loadOperatorStatus = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-operator', {
+        body: { action: 'check_api_keys' }
+      });
+      
+      if (!error && data) {
+        setOperatorStatus({
+          operator_enabled: data.settings?.ai_operator_enabled || false,
+          n8n_backend_enabled: data.settings?.n8n_backend_enabled || false,
+          api_keys: {
+            active_providers: data.api_keys?.active_providers || [],
+            count: data.api_keys?.active_providers?.length || 0
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error loading operator status:', error);
+    }
+  };
 
   const loadJobs = async () => {
     try {
@@ -147,6 +184,9 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
       case 'quality_check': return <Eye className="w-4 h-4" />;
       case 'optimize_cost': return <TrendingDown className="w-4 h-4" />;
       case 'generate_variations': return <Sparkles className="w-4 h-4" />;
+      case 'generate_images': 
+      case 'generate_images_n8n': return <Image className="w-4 h-4" />;
+      case 'auto_regenerate': return <RefreshCw className="w-4 h-4" />;
       default: return <Bot className="w-4 h-4" />;
     }
   };
@@ -252,6 +292,23 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
                     {stats.failed} failed
                   </Badge>
                 )}
+                {operatorStatus && (
+                  <>
+                    <Badge 
+                      variant="outline" 
+                      className={`${operatorStatus.api_keys.count > 0 ? 'border-emerald-500/30 text-emerald-500' : 'border-amber-500/30 text-amber-500'}`}
+                    >
+                      <Key className="w-3 h-3 mr-1" />
+                      {operatorStatus.api_keys.count} API keys
+                    </Badge>
+                    {operatorStatus.n8n_backend_enabled && (
+                      <Badge variant="outline" className="border-orange-500/30 text-orange-500">
+                        <Webhook className="w-3 h-3 mr-1" />
+                        n8n
+                      </Badge>
+                    )}
+                  </>
+                )}
               </div>
             </div>
 
@@ -265,6 +322,16 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
               >
                 {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4 mr-2" />}
                 Scan Pipeline
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => runOperator('generate_images')}
+                disabled={isRunning || !projectId}
+                className="border-border"
+              >
+                <Image className="w-4 h-4 mr-2" />
+                Generate Images
               </Button>
               <Button
                 variant="outline"
@@ -285,6 +352,16 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
               >
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Retry Failed
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => runOperator('check_api_keys')}
+                disabled={isRunning}
+                className="border-border"
+              >
+                <Key className="w-4 h-4 mr-2" />
+                Check Keys
               </Button>
               <Button
                 variant="outline"
