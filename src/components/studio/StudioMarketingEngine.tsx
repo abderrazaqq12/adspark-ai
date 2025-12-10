@@ -18,7 +18,8 @@ import {
   Target,
   Heart,
   Zap,
-  Webhook
+  Webhook,
+  AlertTriangle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,6 +27,7 @@ import { useStudioPrompts } from '@/hooks/useStudioPrompts';
 import { useAIAgent, getModelName } from '@/hooks/useAIAgent';
 import { useBackendMode } from '@/hooks/useBackendMode';
 import { BackendModeSelector } from '@/components/BackendModeSelector';
+import { parseEdgeFunctionError, formatErrorForToast, createDetailedErrorLog } from '@/lib/edgeFunctionErrors';
 
 interface AudienceTargeting {
   targetMarket: string;
@@ -344,10 +346,21 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         });
       }
     } catch (error: any) {
-      console.error('Generation error:', error);
+      const context = {
+        stage: 'marketing_angles',
+        backendMode: getActiveBackend(),
+        productName: productInfo.name,
+        market: audienceTargeting.targetMarket,
+        language: audienceTargeting.language,
+      };
+      console.error('Generation error:', createDetailedErrorLog(error, context));
+      
+      const parsedError = parseEdgeFunctionError(error);
+      const toastContent = formatErrorForToast(parsedError);
+      
       toast({
-        title: "Error",
-        description: error.message || "Failed to generate marketing angles",
+        title: toastContent.title,
+        description: toastContent.description,
         variant: "destructive",
       });
     } finally {
@@ -512,9 +525,22 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         });
       }
     } catch (error: any) {
+      const context = {
+        stage: 'scripts',
+        backendMode: getActiveBackend(),
+        productName: productInfo.name,
+        market: audienceTargeting.targetMarket,
+        language: audienceTargeting.language,
+        scriptsCount,
+      };
+      console.error('Scripts generation error:', createDetailedErrorLog(error, context));
+      
+      const parsedError = parseEdgeFunctionError(error);
+      const toastContent = formatErrorForToast(parsedError);
+      
       toast({
-        title: "Error",
-        description: error.message || "Failed to generate scripts",
+        title: toastContent.title,
+        description: toastContent.description,
         variant: "destructive",
       });
     } finally {
@@ -643,10 +669,21 @@ ${landingData.finalCta?.urgencyText || ''}`;
         });
       }
     } catch (error: any) {
-      console.error('Landing content generation error:', error);
+      const context = {
+        stage: 'landing_content',
+        backendMode: getActiveBackend(),
+        productName: productInfo.name,
+        market: audienceTargeting.targetMarket,
+        language: audienceTargeting.language,
+      };
+      console.error('Landing content error:', createDetailedErrorLog(error, context));
+      
+      const parsedError = parseEdgeFunctionError(error);
+      const toastContent = formatErrorForToast(parsedError);
+      
       toast({
-        title: "Error",
-        description: error.message || "Failed to generate landing content",
+        title: toastContent.title,
+        description: toastContent.description,
         variant: "destructive",
       });
     } finally {

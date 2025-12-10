@@ -25,6 +25,7 @@ import { ImageGenerationProgress } from '@/components/ImageGenerationProgress';
 import { useBackendMode } from '@/hooks/useBackendMode';
 import { BackendModeSelector } from '@/components/BackendModeSelector';
 import { useProject } from '@/contexts/ProjectContext';
+import { parseEdgeFunctionError, formatErrorForToast, createDetailedErrorLog } from '@/lib/edgeFunctionErrors';
 
 interface StudioImageGenerationProps {
   onNext: () => void;
@@ -417,10 +418,22 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
         description: `Generated ${successCount} of ${newImages.length} images`,
       });
     } catch (error: any) {
-      console.error('Error in image generation:', error);
+      const context = {
+        stage: 'image_generation',
+        backendMode: useN8nBackend ? 'n8n' : 'auto',
+        productName: productInfo.name,
+        engine: imageEngine,
+        imageCount,
+        selectedTypes,
+      };
+      console.error('Image generation error:', createDetailedErrorLog(error, context));
+      
+      const parsedError = parseEdgeFunctionError(error);
+      const toastContent = formatErrorForToast(parsedError);
+      
       toast({
-        title: "Error",
-        description: error.message || "Failed to generate images",
+        title: toastContent.title,
+        description: toastContent.description,
         variant: "destructive",
       });
     } finally {
@@ -471,13 +484,17 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
       if (imageUrl) {
         toast({ title: "Image regenerated successfully" });
       }
-    } catch (error) {
+    } catch (error: any) {
       setImages(prev => prev.map(img => 
-        img.id === id ? { ...img, status: 'failed' as const } : img
+        img.id === id ? { ...img, status: 'failed' as const, error: error.message } : img
       ));
+      
+      const parsedError = parseEdgeFunctionError(error);
+      const toastContent = formatErrorForToast(parsedError);
+      
       toast({
-        title: "Error",
-        description: "Failed to regenerate image",
+        title: toastContent.title,
+        description: toastContent.description,
         variant: "destructive",
       });
     }
