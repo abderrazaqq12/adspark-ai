@@ -134,11 +134,17 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
             description: prefs.studio_description || ''
           });
           
-          // Load webhook URL from per-stage webhooks
+          // Load webhook URL - prefer per-stage, fallback to global
           const stageWebhooks = prefs.stage_webhooks || {};
           const imageGenWebhook = stageWebhooks.image_generation;
+          const globalWebhookUrl = prefs.n8n_global_webhook_url || prefs.global_webhook_url || '';
+          
           if (imageGenWebhook?.webhook_url) {
             setN8nWebhookUrl(imageGenWebhook.webhook_url);
+          } else if (globalWebhookUrl) {
+            // Fallback to global webhook if per-stage is not configured
+            setN8nWebhookUrl(globalWebhookUrl);
+            console.log('Using global webhook URL as fallback for image generation:', globalWebhookUrl);
           }
         }
       }
