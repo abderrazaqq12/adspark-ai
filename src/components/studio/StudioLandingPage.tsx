@@ -91,10 +91,16 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
             audienceAge: prefs.studio_audience_age || '25-34',
             audienceGender: prefs.studio_audience_gender || 'both',
           });
-          // Load webhook URL
+          // Load webhook URL - prefer per-stage, fallback to global
           const stageWebhooks = prefs.stage_webhooks || {};
+          const globalWebhookUrl = prefs.n8n_global_webhook_url || prefs.global_webhook_url || '';
+          
           if (stageWebhooks.landing_page?.webhook_url) {
             setN8nWebhookUrl(stageWebhooks.landing_page.webhook_url);
+          } else if (globalWebhookUrl) {
+            // Fallback to global webhook if per-stage is not configured
+            setN8nWebhookUrl(globalWebhookUrl);
+            console.log('Using global webhook URL as fallback for landing page:', globalWebhookUrl);
           }
         }
       }

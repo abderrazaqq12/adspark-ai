@@ -141,11 +141,17 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
             audienceAge: prefs.studio_audience_age || '25-34',
             audienceGender: prefs.studio_audience_gender || 'both',
           });
-          // Load webhook URL from per-stage webhooks
+          // Load webhook URL - prefer per-stage, fallback to global
           const stageWebhooks = prefs.stage_webhooks || {};
           const productContentWebhook = stageWebhooks.product_content;
+          const globalWebhookUrl = prefs.n8n_global_webhook_url || prefs.global_webhook_url || '';
+          
           if (productContentWebhook?.webhook_url) {
             setN8nWebhookUrl(productContentWebhook.webhook_url);
+          } else if (globalWebhookUrl) {
+            // Fallback to global webhook if per-stage is not configured
+            setN8nWebhookUrl(globalWebhookUrl);
+            console.log('Using global webhook URL as fallback:', globalWebhookUrl);
           }
           // Load saved content
           if (prefs.studio_marketing_angles) {
