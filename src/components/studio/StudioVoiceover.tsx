@@ -22,6 +22,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useStudioPrompts } from '@/hooks/useStudioPrompts';
+import { AudienceTargeting } from './AudienceTargeting';
 
 interface StudioVoiceoverProps {
   onNext: () => void;
@@ -307,6 +308,21 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
           <span>Webhook enabled: {n8nWebhookUrl.substring(0, 50)}...</span>
         </div>
       )}
+
+      {/* Audience Targeting */}
+      <AudienceTargeting
+        targetMarket={audienceTargeting.targetMarket}
+        setTargetMarket={(value) => setAudienceTargeting(prev => ({ ...prev, targetMarket: value }))}
+        language={audienceTargeting.language}
+        setLanguage={(value) => {
+          setAudienceTargeting(prev => ({ ...prev, language: value }));
+          setLanguage(value.split('-')[0]);
+        }}
+        audienceAge={audienceTargeting.audienceAge}
+        setAudienceAge={(value) => setAudienceTargeting(prev => ({ ...prev, audienceAge: value }))}
+        audienceGender={audienceTargeting.audienceGender}
+        setAudienceGender={(value) => setAudienceTargeting(prev => ({ ...prev, audienceGender: value }))}
+      />
 
       {/* Voice Settings */}
       <Card className="p-6 bg-card border-border">

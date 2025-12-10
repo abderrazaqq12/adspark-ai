@@ -1,9 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
@@ -16,11 +15,11 @@ import {
   FolderOpen,
   Share2,
   Clock,
-  Film,
   ExternalLink
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { AudienceTargeting } from './AudienceTargeting';
 
 interface ExportFormat {
   id: string;
@@ -59,6 +58,39 @@ export const StudioExport = () => {
   const [includeMusic, setIncludeMusic] = useState(true);
   const [includeWatermark, setIncludeWatermark] = useState(false);
   const [exportedVideos, setExportedVideos] = useState<ExportedVideo[]>([]);
+  
+  // Audience targeting state
+  const [targetMarket, setTargetMarket] = useState('gcc');
+  const [language, setLanguage] = useState('ar');
+  const [audienceAge, setAudienceAge] = useState('25-34');
+  const [audienceGender, setAudienceGender] = useState('all');
+
+  // Load settings on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: settings } = await supabase
+          .from('user_settings')
+          .select('preferences')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (settings?.preferences) {
+          const prefs = settings.preferences as Record<string, any>;
+          setTargetMarket(prefs.studio_target_market || prefs.default_market || 'gcc');
+          setLanguage(prefs.studio_language?.split('-')[0] || prefs.default_language || 'ar');
+          setAudienceAge(prefs.studio_audience_age || '25-34');
+          setAudienceGender(prefs.studio_audience_gender || 'all');
+        }
+      } catch (error) {
+        console.error('Error loading settings:', error);
+      }
+    };
+    loadSettings();
+  }, []);
 
   const toggleFormat = (id: string) => {
     setSelectedFormats(prev => 
@@ -134,6 +166,19 @@ export const StudioExport = () => {
         </div>
         <Badge variant="outline" className="text-primary border-primary">Step 7</Badge>
       </div>
+
+      {/* Audience Targeting */}
+      <AudienceTargeting
+        targetMarket={targetMarket}
+        setTargetMarket={setTargetMarket}
+        language={language}
+        setLanguage={setLanguage}
+        audienceAge={audienceAge}
+        setAudienceAge={setAudienceAge}
+        audienceGender={audienceGender}
+        setAudienceGender={setAudienceGender}
+        compact
+      />
 
       {/* Export Settings */}
       <Card className="p-6 bg-card border-border">
