@@ -47,6 +47,8 @@ const MARKETS = [
 
 // Video types
 const VIDEO_TYPES = [
+  { id: "ai-auto", label: "🤖 AI Auto (Recommended)", isAI: true },
+  { id: "ai-mix", label: "🎲 AI Mix (Multiple Types)", isAI: true },
   { id: "ugc-review", label: "UGC Review" },
   { id: "problem-solution", label: "Problem/Solution" },
   { id: "testimonial", label: "Testimonial" },
@@ -309,7 +311,7 @@ export const AIAdIntelligencePanel = ({
               <div className="space-y-2">
                 <Label>Video Type</Label>
                 <Select
-                  value={config.adIntelligence?.videoType || 'ugc-review'}
+                  value={config.adIntelligence?.videoType || 'ai-auto'}
                   onValueChange={(value) => updateAdIntelligence('videoType', value)}
                 >
                   <SelectTrigger>
@@ -318,7 +320,9 @@ export const AIAdIntelligencePanel = ({
                   <SelectContent>
                     {VIDEO_TYPES.map((type) => (
                       <SelectItem key={type.id} value={type.id}>
-                        {type.label}
+                        <span className={type.isAI ? "text-purple-400 font-medium" : ""}>
+                          {type.label}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>

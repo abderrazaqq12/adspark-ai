@@ -105,7 +105,7 @@ const CreativeReplicator = () => {
       enabled: true,
       language: "en",
       market: "global",
-      videoType: "ugc-review",
+      videoType: "ai-auto",
       platform: "tiktok",
       productCategory: "general",
       conversionGoal: "cod",
