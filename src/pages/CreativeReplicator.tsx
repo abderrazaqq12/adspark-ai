@@ -7,6 +7,8 @@ import { AdUploader } from "@/components/replicator/AdUploader";
 import { VariationSettings } from "@/components/replicator/VariationSettings";
 import { GenerationProgress } from "@/components/replicator/GenerationProgress";
 import { ResultsGallery } from "@/components/replicator/ResultsGallery";
+import { BackendModeSelector } from "@/components/BackendModeSelector";
+import { useBackendMode } from "@/hooks/useBackendMode";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -117,6 +119,9 @@ const CreativeReplicator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
+  
+  // Backend mode hook for consistent experience
+  const { mode: backendMode, n8nEnabled, aiOperatorEnabled } = useBackendMode();
 
   // Real-time subscription for video status updates
   useEffect(() => {
@@ -333,14 +338,17 @@ const CreativeReplicator = () => {
               </p>
             </div>
           </div>
-          <Button
-            onClick={handleStartGeneration}
-            disabled={isGenerating || uploadedAds.length === 0}
-            className="bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600"
-          >
-            <Zap className="w-4 h-4 mr-2" />
-            Generate All Variations
-          </Button>
+          <div className="flex items-center gap-3">
+            <BackendModeSelector compact />
+            <Button
+              onClick={handleStartGeneration}
+              disabled={isGenerating || uploadedAds.length === 0}
+              className="bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600"
+            >
+              <Zap className="w-4 h-4 mr-2" />
+              Generate All Variations
+            </Button>
+          </div>
         </div>
 
         {/* Step Indicators */}
