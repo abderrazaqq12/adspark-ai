@@ -58,6 +58,7 @@ import { AIBrainRecommendations } from "@/components/AIBrainRecommendations";
 import { PipelineJobsTracker } from "@/components/PipelineJobsTracker";
 import { SmartDefaultsBanner } from "@/components/SmartDefaultsBanner";
 import { useSmartDefaults } from "@/hooks/useSmartDefaults";
+import AIToolsSelector from "@/components/AIToolsSelector";
 import { useRealTimeCost } from "@/hooks/useRealTimeCost";
 
 // ElevenLabs voices - expanded list with categories
@@ -1670,13 +1671,23 @@ export default function CreateVideo() {
 
           {/* Stage 6: Video Generation */}
           {expandedStage === 6 && scriptId && (
-            <VideoGenerationStage 
-              scriptId={scriptId}
-              onComplete={() => {
-                setExpandedStage(7);
-                setCurrentStage(7);
-              }}
-            />
+            <div className="space-y-4">
+              {/* AI Tools Selector */}
+              <AIToolsSelector 
+                onToolSelect={(tool) => {
+                  toast.info(`Selected tool: ${tool.name}`);
+                }}
+                mode="select"
+              />
+              
+              <VideoGenerationStage 
+                scriptId={scriptId}
+                onComplete={() => {
+                  setExpandedStage(7);
+                  setCurrentStage(7);
+                }}
+              />
+            </div>
           )}
 
           {/* Stage 6 Fallback - Upload when no scriptId */}

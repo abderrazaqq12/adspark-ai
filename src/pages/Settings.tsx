@@ -2193,20 +2193,16 @@ export default function Settings() {
                 <div className="space-y-2">
                   <Label className="text-foreground">Default Market</Label>
                   <Select 
-                    value={(settings as any)?.default_market || "saudi"} 
+                    value={(settings as any)?.default_market || "GCC"} 
                     onValueChange={(v) => setSettings(s => s ? { ...s, default_market: v } as any : null)}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="saudi">Saudi Arabia</SelectItem>
-                      <SelectItem value="uae">UAE</SelectItem>
-                      <SelectItem value="kuwait">Kuwait</SelectItem>
-                      <SelectItem value="morocco">Morocco</SelectItem>
-                      <SelectItem value="europe">Europe</SelectItem>
-                      <SelectItem value="usa">USA</SelectItem>
-                      <SelectItem value="latam">Latin America</SelectItem>
+                      <SelectItem value="GCC">GCC</SelectItem>
+                      <SelectItem value="EUROPE">Europe</SelectItem>
+                      <SelectItem value="LATAM">LATAM</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

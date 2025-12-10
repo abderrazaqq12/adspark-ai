@@ -1,4 +1,4 @@
-import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Building2, Database, Clapperboard, Images } from "lucide-react";
+import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Building2, Database, Clapperboard, Images, Wand2 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,8 +36,9 @@ const libraryItems = [
   { title: "Templates", url: "/templates", icon: LayoutTemplate },
 ];
 
-// Tools items - removed A/B Testing, added Data section
+// Tools items - added AI Tools
 const toolsItems = [
+  { title: "AI Tools", url: "/ai-tools", icon: Wand2 },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "AI Engines", url: "/engines", icon: Cpu },
   { title: "Data", url: "/settings?tab=data", icon: Database },

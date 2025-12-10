@@ -19,6 +19,7 @@ import Templates from "./pages/Templates";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import AgencyMode from "./pages/AgencyMode";
+import AITools from "./pages/AITools";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +48,7 @@ const App = () => (
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/analytics" element={<Analytics />} />
                     <Route path="/templates" element={<Templates />} />
+                    <Route path="/ai-tools" element={<AITools />} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Layout>
