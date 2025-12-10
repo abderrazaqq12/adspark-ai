@@ -1,15 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { 
   BarChart3, 
   TrendingUp, 
   DollarSign, 
   Video, 
-  Clock, 
   Loader2,
   Zap,
   Activity,
@@ -18,7 +19,13 @@ import {
   Target,
   ArrowUpRight,
   ArrowDownRight,
-  Sparkles
+  Sparkles,
+  FileText,
+  Music,
+  Image,
+  Film,
+  CalendarIcon,
+  RefreshCw
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -39,6 +46,38 @@ import {
   AreaChart,
   Legend
 } from "recharts";
+import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import { DateRange } from "react-day-picker";
+
+// Content type categories mapped to pipeline stages
+const CONTENT_TYPES = {
+  text: ['product_content', 'script_generation', 'landing_page', 'marketing_content'],
+  audio: ['voiceover', 'audio_generation', 'voice_synthesis'],
+  image: ['image_generation', 'thumbnail', 'product_image'],
+  video: ['video_generation', 'scene_generation', 'assembly', 'export']
+};
+
+const CONTENT_TYPE_ICONS = {
+  text: FileText,
+  audio: Music,
+  image: Image,
+  video: Film
+};
+
+const CONTENT_TYPE_COLORS = {
+  text: 'hsl(200, 80%, 50%)',
+  audio: 'hsl(280, 70%, 60%)',
+  image: 'hsl(30, 100%, 60%)',
+  video: 'hsl(var(--primary))'
+};
+
+interface ContentTypeStats {
+  type: 'text' | 'audio' | 'image' | 'video';
+  count: number;
+  cost: number;
+  avgCost: number;
+  successRate: number;
+}
 
 interface AnalyticsData {
   totalVideos: number;
@@ -46,10 +85,13 @@ interface AnalyticsData {
   totalScenes: number;
   avgGenerationTime: number;
   engineUsage: { name: string; count: number; cost: number; successRate: number }[];
-  dailyCosts: { date: string; cost: number; videos: number }[];
+  dailyCosts: { date: string; cost: number; videos: number; text: number; audio: number; image: number; video: number }[];
   aiLearnings: AILearning[];
   costTrends: CostTrend[];
   enginePerformance: EnginePerformance[];
+  contentTypeStats: ContentTypeStats[];
+  totalCost: number;
+  totalGenerations: number;
 }
 
 interface AILearning {
@@ -90,6 +132,9 @@ const ENGINE_COSTS: Record<string, number> = {
   "D-ID": 0.45,
   "ElevenLabs": 0.05,
   "PlayHT": 0.03,
+  "Gemini": 0.01,
+  "ChatGPT": 0.02,
+  "Lovable AI": 0.005,
 };
 
 const COLORS = [
@@ -102,10 +147,31 @@ const COLORS = [
   'hsl(320, 70%, 55%)'
 ];
 
+const DATE_PRESETS = [
+  { label: 'Today', days: 1 },
+  { label: 'Last 7 days', days: 7 },
+  { label: 'Last 30 days', days: 30 },
+  { label: 'Last 90 days', days: 90 },
+  { label: 'Last 6 months', days: 180 },
+  { label: 'Last year', days: 365 },
+];
+
+function getContentType(stage: string): 'text' | 'audio' | 'image' | 'video' | null {
+  for (const [type, stages] of Object.entries(CONTENT_TYPES)) {
+    if (stages.some(s => stage.toLowerCase().includes(s.toLowerCase()))) {
+      return type as 'text' | 'audio' | 'image' | 'video';
+    }
+  }
+  return null;
+}
+
 export default function Analytics() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState("30d");
+  const [dateRange, setDateRange] = useState<DateRange>({
+    from: subDays(new Date(), 30),
+    to: new Date()
+  });
   const [analytics, setAnalytics] = useState<AnalyticsData>({
     totalVideos: 0,
     totalProjects: 0,
@@ -116,18 +182,31 @@ export default function Analytics() {
     aiLearnings: [],
     costTrends: [],
     enginePerformance: [],
+    contentTypeStats: [],
+    totalCost: 0,
+    totalGenerations: 0,
   });
 
   useEffect(() => {
-    if (user) fetchAnalytics();
+    if (user && dateRange.from && dateRange.to) fetchAnalytics();
   }, [user, dateRange]);
 
   const fetchAnalytics = async () => {
+    if (!dateRange.from || !dateRange.to) return;
+    
     setLoading(true);
     try {
-      const daysAgo = parseInt(dateRange.replace('d', ''));
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - daysAgo);
+      const startDate = startOfDay(dateRange.from);
+      const endDate = endOfDay(dateRange.to);
+
+      // Fetch cost transactions (primary source of truth)
+      const { data: costTransactions } = await supabase
+        .from("cost_transactions")
+        .select("*")
+        .eq("user_id", user?.id)
+        .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString())
+        .order("created_at", { ascending: false });
 
       // Fetch projects
       const { count: projectCount } = await supabase
@@ -139,13 +218,46 @@ export default function Analytics() {
       const { data: videos, count: videoCount } = await supabase
         .from("video_outputs")
         .select("id, created_at, duration_sec, metadata")
-        .gte("created_at", startDate.toISOString());
+        .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString());
 
       // Fetch scenes with engine info
       const { data: scenes } = await supabase
         .from("scenes")
         .select("id, engine_name, status, created_at, updated_at, quality_score")
-        .gte("created_at", startDate.toISOString());
+        .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString());
+
+      // Fetch generated images
+      const { data: images } = await supabase
+        .from("generated_images")
+        .select("id, engine_name, status, created_at")
+        .eq("user_id", user?.id)
+        .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString());
+
+      // Fetch marketing content (text)
+      const { data: marketingContent } = await supabase
+        .from("marketing_content")
+        .select("id, content_type, created_at")
+        .eq("user_id", user?.id)
+        .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString());
+
+      // Fetch landing pages (text)
+      const { data: landingPages } = await supabase
+        .from("landing_pages")
+        .select("id, created_at")
+        .eq("user_id", user?.id)
+        .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString());
+
+      // Fetch scripts (text)
+      const { data: scripts } = await supabase
+        .from("scripts")
+        .select("id, created_at")
+        .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString());
 
       // Fetch AI learnings
       const { data: learnings } = await supabase
@@ -155,30 +267,74 @@ export default function Analytics() {
         .order("created_at", { ascending: false })
         .limit(50);
 
-      // Fetch cost transactions
-      const { data: costTransactions } = await supabase
-        .from("cost_transactions")
-        .select("*")
-        .eq("user_id", user?.id)
-        .gte("created_at", startDate.toISOString())
-        .order("created_at", { ascending: false });
+      // Calculate content type stats from cost_transactions
+      const contentStats: Record<string, { count: number; cost: number; success: number; failed: number }> = {
+        text: { count: 0, cost: 0, success: 0, failed: 0 },
+        audio: { count: 0, cost: 0, success: 0, failed: 0 },
+        image: { count: 0, cost: 0, success: 0, failed: 0 },
+        video: { count: 0, cost: 0, success: 0, failed: 0 },
+      };
+
+      let totalCost = 0;
+      let totalGenerations = 0;
+
+      costTransactions?.forEach(tx => {
+        totalCost += tx.cost_usd || 0;
+        totalGenerations++;
+        
+        const contentType = getContentType(tx.pipeline_stage || tx.operation_type || '');
+        if (contentType) {
+          contentStats[contentType].count++;
+          contentStats[contentType].cost += tx.cost_usd || 0;
+          contentStats[contentType].success++; // Assume success if in cost_transactions
+        }
+      });
+
+      // Add counts from actual tables if no cost transactions
+      if (!costTransactions?.length) {
+        contentStats.text.count = (marketingContent?.length || 0) + (landingPages?.length || 0) + (scripts?.length || 0);
+        contentStats.image.count = images?.length || 0;
+        contentStats.video.count = (scenes?.length || 0) + (videos?.length || 0);
+      }
+
+      const contentTypeStats: ContentTypeStats[] = Object.entries(contentStats).map(([type, data]) => ({
+        type: type as 'text' | 'audio' | 'image' | 'video',
+        count: data.count,
+        cost: data.cost,
+        avgCost: data.count > 0 ? data.cost / data.count : 0,
+        successRate: data.count > 0 ? Math.round((data.success / data.count) * 100) : 0,
+      }));
 
       // Calculate engine usage and costs
       const engineUsageMap: Record<string, { count: number; cost: number; success: number; failed: number; qualitySum: number }> = {};
-      scenes?.forEach(scene => {
-        const engine = scene.engine_name || "Unknown";
+      
+      costTransactions?.forEach(tx => {
+        const engine = tx.engine_name || "Unknown";
         if (!engineUsageMap[engine]) {
           engineUsageMap[engine] = { count: 0, cost: 0, success: 0, failed: 0, qualitySum: 0 };
         }
         engineUsageMap[engine].count++;
-        engineUsageMap[engine].cost += ENGINE_COSTS[engine] || 0.20;
-        if (scene.status === 'completed') {
-          engineUsageMap[engine].success++;
-          engineUsageMap[engine].qualitySum += scene.quality_score || 75;
-        } else if (scene.status === 'failed') {
-          engineUsageMap[engine].failed++;
-        }
+        engineUsageMap[engine].cost += tx.cost_usd || 0;
+        engineUsageMap[engine].success++;
       });
+
+      // Fallback to scenes if no cost transactions
+      if (!costTransactions?.length) {
+        scenes?.forEach(scene => {
+          const engine = scene.engine_name || "Unknown";
+          if (!engineUsageMap[engine]) {
+            engineUsageMap[engine] = { count: 0, cost: 0, success: 0, failed: 0, qualitySum: 0 };
+          }
+          engineUsageMap[engine].count++;
+          engineUsageMap[engine].cost += ENGINE_COSTS[engine] || 0.20;
+          if (scene.status === 'completed') {
+            engineUsageMap[engine].success++;
+            engineUsageMap[engine].qualitySum += scene.quality_score || 75;
+          } else if (scene.status === 'failed') {
+            engineUsageMap[engine].failed++;
+          }
+        });
+      }
 
       const engineUsage = Object.entries(engineUsageMap).map(([name, data]) => ({
         name,
@@ -193,32 +349,30 @@ export default function Analytics() {
         totalJobs: data.count,
         successRate: data.count > 0 ? Math.round((data.success / data.count) * 100) : 0,
         avgDuration: 45 + Math.random() * 30,
-        avgCost: ENGINE_COSTS[engine] || 0.20,
-        qualityScore: data.success > 0 ? Math.round(data.qualitySum / data.success) : 0,
+        avgCost: data.count > 0 ? data.cost / data.count : ENGINE_COSTS[engine] || 0.20,
+        qualityScore: data.success > 0 ? Math.round(data.qualitySum / data.success) : 75,
         trend: Math.random() > 0.5 ? 'up' : Math.random() > 0.5 ? 'down' : 'stable',
       }));
 
-      // Calculate daily costs
-      const dailyCostsMap: Record<string, { cost: number; videos: number }> = {};
-      for (let i = 0; i < daysAgo; i++) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-        dailyCostsMap[dateStr] = { cost: 0, videos: 0 };
+      // Calculate daily costs with content type breakdown
+      const dayCount = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      const dailyCostsMap: Record<string, { cost: number; videos: number; text: number; audio: number; image: number; video: number }> = {};
+      
+      for (let i = 0; i < dayCount; i++) {
+        const date = new Date(startDate);
+        date.setDate(date.getDate() + i);
+        const dateStr = format(date, 'yyyy-MM-dd');
+        dailyCostsMap[dateStr] = { cost: 0, videos: 0, text: 0, audio: 0, image: 0, video: 0 };
       }
 
       costTransactions?.forEach(tx => {
         const dateStr = tx.created_at?.split('T')[0];
         if (dateStr && dailyCostsMap[dateStr]) {
           dailyCostsMap[dateStr].cost += tx.cost_usd || 0;
-        }
-      });
-
-      // Fallback to scene-based cost calculation
-      scenes?.forEach(scene => {
-        const dateStr = scene.created_at?.split('T')[0];
-        if (dateStr && dailyCostsMap[dateStr] && !costTransactions?.length) {
-          dailyCostsMap[dateStr].cost += ENGINE_COSTS[scene.engine_name || "Unknown"] || 0.20;
+          const contentType = getContentType(tx.pipeline_stage || tx.operation_type || '');
+          if (contentType) {
+            dailyCostsMap[dateStr][contentType]++;
+          }
         }
       });
 
@@ -266,6 +420,9 @@ export default function Analytics() {
         })),
         costTrends,
         enginePerformance,
+        contentTypeStats,
+        totalCost,
+        totalGenerations,
       });
     } catch (error) {
       console.error("Error fetching analytics:", error);
@@ -274,11 +431,21 @@ export default function Analytics() {
     }
   };
 
-  const totalCost = analytics.engineUsage.reduce((sum, e) => sum + e.cost, 0);
-  const todayCost = analytics.dailyCosts[analytics.dailyCosts.length - 1]?.cost || 0;
+  const handleDatePreset = (days: number) => {
+    setDateRange({
+      from: subDays(new Date(), days),
+      to: new Date()
+    });
+  };
+
   const avgSuccessRate = analytics.enginePerformance.length > 0 
     ? Math.round(analytics.enginePerformance.reduce((sum, e) => sum + e.successRate, 0) / analytics.enginePerformance.length)
     : 0;
+
+  const dateRangeLabel = useMemo(() => {
+    if (!dateRange.from || !dateRange.to) return 'Select dates';
+    return `${format(dateRange.from, 'MMM d, yyyy')} - ${format(dateRange.to, 'MMM d, yyyy')}`;
+  }, [dateRange]);
 
   if (loading) {
     return (
@@ -290,36 +457,111 @@ export default function Analytics() {
 
   return (
     <div className="container mx-auto p-8 space-y-8 animate-in fade-in duration-500">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-4xl font-bold text-foreground mb-2">Analytics & Insights</h1>
           <p className="text-muted-foreground">
-            AI learning patterns, cost trends, and engine performance over time
+            Track all generations, costs, and performance across text, audio, images, and videos
           </p>
         </div>
-        <Select value={dateRange} onValueChange={setDateRange}>
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="7d">Last 7 days</SelectItem>
-            <SelectItem value="30d">Last 30 days</SelectItem>
-            <SelectItem value="90d">Last 90 days</SelectItem>
-          </SelectContent>
-        </Select>
+        
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Date Presets */}
+          <div className="flex gap-1 flex-wrap">
+            {DATE_PRESETS.slice(0, 4).map(preset => (
+              <Button
+                key={preset.days}
+                variant="outline"
+                size="sm"
+                onClick={() => handleDatePreset(preset.days)}
+                className="text-xs"
+              >
+                {preset.label}
+              </Button>
+            ))}
+          </div>
+
+          {/* Custom Date Range Picker */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <CalendarIcon className="w-4 h-4" />
+                <span className="hidden sm:inline">{dateRangeLabel}</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="range"
+                selected={dateRange}
+                onSelect={(range) => range && setDateRange(range)}
+                numberOfMonths={2}
+                defaultMonth={dateRange.from}
+              />
+              <div className="p-3 border-t border-border">
+                <div className="flex flex-wrap gap-1">
+                  {DATE_PRESETS.map(preset => (
+                    <Button
+                      key={preset.days}
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDatePreset(preset.days)}
+                      className="text-xs"
+                    >
+                      {preset.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          <Button variant="ghost" size="icon" onClick={fetchAnalytics}>
+            <RefreshCw className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Content Type Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {analytics.contentTypeStats.map(stat => {
+          const Icon = CONTENT_TYPE_ICONS[stat.type];
+          return (
+            <Card key={stat.type} className="bg-gradient-card border-border shadow-card">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <Icon className="w-4 h-4" style={{ color: CONTENT_TYPE_COLORS[stat.type] }} />
+                  {stat.type.charAt(0).toUpperCase() + stat.type.slice(1)} Content
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-foreground">{stat.count}</div>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-xs text-muted-foreground">
+                    ${stat.cost.toFixed(2)} total
+                  </span>
+                  {stat.avgCost > 0 && (
+                    <span className="text-xs text-primary">
+                      ${stat.avgCost.toFixed(3)}/each
+                    </span>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Main Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="bg-gradient-card border-border shadow-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Video className="w-4 h-4" />
-              Total Videos
+              <Zap className="w-4 h-4" />
+              Total Generations
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-foreground">{analytics.totalVideos}</div>
+            <div className="text-3xl font-bold text-foreground">{analytics.totalGenerations}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {analytics.totalProjects} projects
             </p>
@@ -329,14 +571,14 @@ export default function Analytics() {
         <Card className="bg-gradient-card border-border shadow-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Zap className="w-4 h-4" />
-              Scenes Generated
+              <Video className="w-4 h-4" />
+              Videos Created
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-foreground">{analytics.totalScenes}</div>
+            <div className="text-3xl font-bold text-foreground">{analytics.totalVideos}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Avg {analytics.avgGenerationTime}s per scene
+              {analytics.totalScenes} scenes
             </p>
           </CardContent>
         </Card>
@@ -349,9 +591,9 @@ export default function Analytics() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-foreground">${totalCost.toFixed(2)}</div>
+            <div className="text-3xl font-bold text-foreground">${analytics.totalCost.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              ${(totalCost / Math.max(analytics.totalScenes, 1)).toFixed(3)} per scene
+              ${(analytics.totalCost / Math.max(analytics.totalGenerations, 1)).toFixed(3)} avg
             </p>
           </CardContent>
         </Card>
@@ -387,11 +629,11 @@ export default function Analytics() {
         </Card>
       </div>
 
-      <Tabs defaultValue="ai-learning" className="space-y-6">
-        <TabsList className="bg-muted/50">
-          <TabsTrigger value="ai-learning" className="flex items-center gap-2">
-            <Brain className="w-4 h-4" />
-            AI Learning
+      <Tabs defaultValue="content-types" className="space-y-6">
+        <TabsList className="bg-muted/50 flex-wrap h-auto">
+          <TabsTrigger value="content-types" className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4" />
+            Content Types
           </TabsTrigger>
           <TabsTrigger value="costs" className="flex items-center gap-2">
             <DollarSign className="w-4 h-4" />
@@ -401,163 +643,181 @@ export default function Analytics() {
             <Zap className="w-4 h-4" />
             Engine Performance
           </TabsTrigger>
+          <TabsTrigger value="ai-learning" className="flex items-center gap-2">
+            <Brain className="w-4 h-4" />
+            AI Learning
+          </TabsTrigger>
           <TabsTrigger value="trends" className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4" />
             Usage Trends
           </TabsTrigger>
         </TabsList>
 
-        {/* AI Learning Tab */}
-        <TabsContent value="ai-learning" className="space-y-6">
+        {/* Content Types Tab */}
+        <TabsContent value="content-types" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="bg-gradient-card border-border shadow-card">
               <CardHeader>
-                <CardTitle className="text-foreground flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-primary" />
-                  Learning Patterns
-                </CardTitle>
-                <CardDescription>How the AI is improving based on your usage</CardDescription>
+                <CardTitle className="text-foreground">Generation by Content Type</CardTitle>
+                <CardDescription>Breakdown of all content generated</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {analytics.aiLearnings.length > 0 ? (
-                  analytics.aiLearnings.slice(0, 6).map((learning, idx) => (
-                    <div key={learning.id || idx} className="p-3 rounded-lg bg-muted/30 border border-border">
-                      <div className="flex items-center justify-between mb-2">
-                        <Badge variant="secondary" className="capitalize">
-                          {learning.learning_type.replace(/_/g, ' ')}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          Used {learning.usage_count}x
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Progress value={learning.confidence_score * 100} className="h-2 flex-1" />
-                        <span className="text-xs font-medium text-primary">
-                          {Math.round(learning.confidence_score * 100)}%
-                        </span>
-                      </div>
-                      {learning.insight?.description && (
-                        <p className="text-xs text-muted-foreground mt-2">
-                          {String(learning.insight.description)}
-                        </p>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Brain className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>AI is still learning from your usage</p>
-                    <p className="text-xs mt-2">Generate more videos to see patterns</p>
-                  </div>
-                )}
+              <CardContent>
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RechartsPie>
+                      <Pie
+                        data={analytics.contentTypeStats.filter(s => s.count > 0)}
+                        dataKey="count"
+                        nameKey="type"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        label={({ type, percent }) => `${type} (${(percent * 100).toFixed(0)}%)`}
+                        labelLine={{ stroke: 'hsl(var(--muted-foreground))' }}
+                      >
+                        {analytics.contentTypeStats.map((stat) => (
+                          <Cell key={stat.type} fill={CONTENT_TYPE_COLORS[stat.type]} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        formatter={(value: number, name: string) => [value, name.charAt(0).toUpperCase() + name.slice(1)]}
+                        contentStyle={{ 
+                          backgroundColor: 'hsl(var(--card))', 
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px'
+                        }}
+                      />
+                    </RechartsPie>
+                  </ResponsiveContainer>
+                </div>
               </CardContent>
             </Card>
 
             <Card className="bg-gradient-card border-border shadow-card">
               <CardHeader>
-                <CardTitle className="text-foreground flex items-center gap-2">
-                  <Lightbulb className="w-5 h-5 text-primary" />
-                  Smart Insights
-                </CardTitle>
-                <CardDescription>AI-generated recommendations</CardDescription>
+                <CardTitle className="text-foreground">Cost by Content Type</CardTitle>
+                <CardDescription>How much each content type costs</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Engine preference insight */}
-                {analytics.engineUsage.length > 0 && (
-                  <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
-                    <div className="flex items-start gap-3">
-                      <Zap className="w-5 h-5 text-primary mt-0.5" />
-                      <div>
-                        <p className="font-medium text-foreground">Preferred Engine</p>
-                        <p className="text-sm text-muted-foreground">
-                          You use <span className="text-primary font-medium">{analytics.engineUsage[0]?.name}</span> most often 
-                          ({analytics.engineUsage[0]?.count} scenes, {analytics.engineUsage[0]?.successRate}% success)
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Cost optimization insight */}
-                <div className="p-4 rounded-lg bg-muted/30 border border-border">
-                  <div className="flex items-start gap-3">
-                    <DollarSign className="w-5 h-5 text-emerald-500 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-foreground">Cost Efficiency</p>
-                      <p className="text-sm text-muted-foreground">
-                        Average cost per scene: <span className="text-emerald-400 font-medium">
-                          ${(totalCost / Math.max(analytics.totalScenes, 1)).toFixed(3)}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Quality insight */}
-                <div className="p-4 rounded-lg bg-muted/30 border border-border">
-                  <div className="flex items-start gap-3">
-                    <Target className="w-5 h-5 text-primary mt-0.5" />
-                    <div>
-                      <p className="font-medium text-foreground">Quality Trend</p>
-                      <p className="text-sm text-muted-foreground">
-                        Overall success rate is <span className="text-primary font-medium">{avgSuccessRate}%</span>. 
-                        {avgSuccessRate >= 90 ? ' Excellent performance!' : avgSuccessRate >= 75 ? ' Good results.' : ' Consider optimizing engine selection.'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Usage pattern insight */}
-                <div className="p-4 rounded-lg bg-muted/30 border border-border">
-                  <div className="flex items-start gap-3">
-                    <Activity className="w-5 h-5 text-primary mt-0.5" />
-                    <div>
-                      <p className="font-medium text-foreground">Generation Pattern</p>
-                      <p className="text-sm text-muted-foreground">
-                        {analytics.totalScenes > 50 
-                          ? 'High volume user - consider batch processing for efficiency'
-                          : 'Moderate usage - AI is learning your preferences'}
-                      </p>
-                    </div>
-                  </div>
+              <CardContent>
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analytics.contentTypeStats} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis type="number" stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `$${v.toFixed(2)}`} />
+                      <YAxis 
+                        dataKey="type" 
+                        type="category" 
+                        width={60}
+                        stroke="hsl(var(--muted-foreground))"
+                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                        tickFormatter={(v) => v.charAt(0).toUpperCase() + v.slice(1)}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: 'hsl(var(--card))', 
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px'
+                        }}
+                        formatter={(value: number) => [`$${value.toFixed(2)}`, 'Cost']}
+                      />
+                      <Bar dataKey="cost" radius={[0, 4, 4, 0]}>
+                        {analytics.contentTypeStats.map((stat) => (
+                          <Cell key={stat.type} fill={CONTENT_TYPE_COLORS[stat.type]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Learning Over Time Chart */}
+          {/* Daily Content Type Breakdown */}
           <Card className="bg-gradient-card border-border shadow-card">
             <CardHeader>
-              <CardTitle className="text-foreground">AI Confidence Over Time</CardTitle>
-              <CardDescription>How confident the AI is in its recommendations</CardDescription>
+              <CardTitle className="text-foreground">Daily Content Generation</CardTitle>
+              <CardDescription>Content types generated over time</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[250px]">
+              <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={analytics.aiLearnings.slice(0, 20).reverse().map((l, idx) => ({
-                    index: idx + 1,
-                    confidence: Math.round(l.confidence_score * 100),
-                    usageCount: l.usage_count,
-                  }))}>
+                  <AreaChart data={analytics.dailyCosts}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="index" stroke="hsl(var(--muted-foreground))" />
-                    <YAxis stroke="hsl(var(--muted-foreground))" domain={[0, 100]} />
+                    <XAxis 
+                      dataKey="date" 
+                      stroke="hsl(var(--muted-foreground))"
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                      tickFormatter={(v) => format(new Date(v), 'MMM d')}
+                    />
+                    <YAxis stroke="hsl(var(--muted-foreground))" />
                     <Tooltip 
                       contentStyle={{ 
                         backgroundColor: 'hsl(var(--card))', 
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px'
                       }}
+                      labelFormatter={(v) => format(new Date(v), 'MMM d, yyyy')}
                     />
-                    <Area 
-                      type="monotone" 
-                      dataKey="confidence" 
-                      stroke="hsl(var(--primary))" 
-                      fill="hsl(var(--primary) / 0.2)"
-                      strokeWidth={2}
-                    />
+                    <Legend />
+                    <Area type="monotone" dataKey="text" name="Text" stackId="1" stroke={CONTENT_TYPE_COLORS.text} fill={CONTENT_TYPE_COLORS.text} fillOpacity={0.6} />
+                    <Area type="monotone" dataKey="audio" name="Audio" stackId="1" stroke={CONTENT_TYPE_COLORS.audio} fill={CONTENT_TYPE_COLORS.audio} fillOpacity={0.6} />
+                    <Area type="monotone" dataKey="image" name="Image" stackId="1" stroke={CONTENT_TYPE_COLORS.image} fill={CONTENT_TYPE_COLORS.image} fillOpacity={0.6} />
+                    <Area type="monotone" dataKey="video" name="Video" stackId="1" stroke={CONTENT_TYPE_COLORS.video} fill={CONTENT_TYPE_COLORS.video} fillOpacity={0.6} />
                   </AreaChart>
                 </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Detailed Content Type Table */}
+          <Card className="bg-gradient-card border-border shadow-card">
+            <CardHeader>
+              <CardTitle className="text-foreground">Content Type Details</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-3 px-4 text-muted-foreground font-medium">Type</th>
+                      <th className="text-right py-3 px-4 text-muted-foreground font-medium">Count</th>
+                      <th className="text-right py-3 px-4 text-muted-foreground font-medium">Total Cost</th>
+                      <th className="text-right py-3 px-4 text-muted-foreground font-medium">Avg Cost</th>
+                      <th className="text-right py-3 px-4 text-muted-foreground font-medium">% of Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analytics.contentTypeStats.map(stat => {
+                      const Icon = CONTENT_TYPE_ICONS[stat.type];
+                      const percentage = analytics.totalGenerations > 0 
+                        ? Math.round((stat.count / analytics.totalGenerations) * 100) 
+                        : 0;
+                      return (
+                        <tr key={stat.type} className="border-b border-border/50 hover:bg-muted/30">
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-3 h-3 rounded-full"
+                                style={{ backgroundColor: CONTENT_TYPE_COLORS[stat.type] }}
+                              />
+                              <Icon className="w-4 h-4" style={{ color: CONTENT_TYPE_COLORS[stat.type] }} />
+                              <span className="font-medium text-foreground capitalize">{stat.type}</span>
+                            </div>
+                          </td>
+                          <td className="text-right py-3 px-4 text-foreground">{stat.count}</td>
+                          <td className="text-right py-3 px-4 text-foreground">${stat.cost.toFixed(2)}</td>
+                          <td className="text-right py-3 px-4 text-muted-foreground">${stat.avgCost.toFixed(4)}</td>
+                          <td className="text-right py-3 px-4">
+                            <div className="flex items-center justify-end gap-2">
+                              <Progress value={percentage} className="w-16 h-2" />
+                              <span className="text-xs text-muted-foreground w-10 text-right">{percentage}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
@@ -579,6 +839,7 @@ export default function Analytics() {
                       dataKey="date" 
                       stroke="hsl(var(--muted-foreground))"
                       tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                      tickFormatter={(v) => format(new Date(v), 'MMM d')}
                     />
                     <YAxis 
                       stroke="hsl(var(--muted-foreground))"
@@ -592,6 +853,7 @@ export default function Analytics() {
                         borderRadius: '8px'
                       }}
                       formatter={(value: number) => [`$${value.toFixed(2)}`, 'Cost']}
+                      labelFormatter={(v) => format(new Date(v), 'MMM d, yyyy')}
                     />
                     <Area 
                       type="monotone" 
@@ -612,7 +874,7 @@ export default function Analytics() {
                 <CardTitle className="text-foreground">Cost by Engine</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-[400px] overflow-y-auto">
                   {analytics.engineUsage.map((engine, idx) => (
                     <div key={engine.name} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                       <div className="flex items-center gap-3">
@@ -623,11 +885,14 @@ export default function Analytics() {
                         <span className="text-foreground">{engine.name}</span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <Badge variant="secondary">{engine.count} scenes</Badge>
+                        <Badge variant="secondary">{engine.count} uses</Badge>
                         <span className="text-primary font-medium">${engine.cost.toFixed(2)}</span>
                       </div>
                     </div>
                   ))}
+                  {analytics.engineUsage.length === 0 && (
+                    <p className="text-center text-muted-foreground py-8">No engine usage data yet</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -637,11 +902,11 @@ export default function Analytics() {
                 <CardTitle className="text-foreground">Engine Pricing Reference</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                <div className="space-y-2 max-h-[400px] overflow-y-auto">
                   {Object.entries(ENGINE_COSTS).map(([engine, cost]) => (
                     <div key={engine} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                       <span className="text-muted-foreground">{engine}</span>
-                      <span className="text-foreground font-mono">${cost.toFixed(2)}/scene</span>
+                      <span className="text-foreground font-mono">${cost.toFixed(3)}/use</span>
                     </div>
                   ))}
                 </div>
@@ -729,7 +994,6 @@ export default function Analytics() {
                       <th className="text-left py-3 px-4 text-muted-foreground font-medium">Engine</th>
                       <th className="text-right py-3 px-4 text-muted-foreground font-medium">Jobs</th>
                       <th className="text-right py-3 px-4 text-muted-foreground font-medium">Success</th>
-                      <th className="text-right py-3 px-4 text-muted-foreground font-medium">Avg Duration</th>
                       <th className="text-right py-3 px-4 text-muted-foreground font-medium">Avg Cost</th>
                       <th className="text-right py-3 px-4 text-muted-foreground font-medium">Quality</th>
                       <th className="text-right py-3 px-4 text-muted-foreground font-medium">Trend</th>
@@ -753,8 +1017,7 @@ export default function Analytics() {
                             {engine.successRate}%
                           </Badge>
                         </td>
-                        <td className="text-right py-3 px-4 text-muted-foreground">{engine.avgDuration.toFixed(1)}s</td>
-                        <td className="text-right py-3 px-4 text-foreground">${engine.avgCost.toFixed(2)}</td>
+                        <td className="text-right py-3 px-4 text-foreground">${engine.avgCost.toFixed(3)}</td>
                         <td className="text-right py-3 px-4">
                           <div className="flex items-center justify-end gap-2">
                             <Progress value={engine.qualityScore} className="w-16 h-2" />
@@ -772,8 +1035,168 @@ export default function Analytics() {
                         </td>
                       </tr>
                     ))}
+                    {analytics.enginePerformance.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                          No engine performance data yet
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* AI Learning Tab */}
+        <TabsContent value="ai-learning" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="bg-gradient-card border-border shadow-card">
+              <CardHeader>
+                <CardTitle className="text-foreground flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                  Learning Patterns
+                </CardTitle>
+                <CardDescription>How the AI is improving based on your usage</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {analytics.aiLearnings.length > 0 ? (
+                  analytics.aiLearnings.slice(0, 6).map((learning, idx) => (
+                    <div key={learning.id || idx} className="p-3 rounded-lg bg-muted/30 border border-border">
+                      <div className="flex items-center justify-between mb-2">
+                        <Badge variant="secondary" className="capitalize">
+                          {learning.learning_type.replace(/_/g, ' ')}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          Used {learning.usage_count}x
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Progress value={learning.confidence_score * 100} className="h-2 flex-1" />
+                        <span className="text-xs font-medium text-primary">
+                          {Math.round(learning.confidence_score * 100)}%
+                        </span>
+                      </div>
+                      {learning.insight?.description && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {String(learning.insight.description)}
+                        </p>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Brain className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>AI is still learning from your usage</p>
+                    <p className="text-xs mt-2">Generate more content to see patterns</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-card border-border shadow-card">
+              <CardHeader>
+                <CardTitle className="text-foreground flex items-center gap-2">
+                  <Lightbulb className="w-5 h-5 text-primary" />
+                  Smart Insights
+                </CardTitle>
+                <CardDescription>AI-generated recommendations</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {analytics.engineUsage.length > 0 && (
+                  <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                    <div className="flex items-start gap-3">
+                      <Zap className="w-5 h-5 text-primary mt-0.5" />
+                      <div>
+                        <p className="font-medium text-foreground">Preferred Engine</p>
+                        <p className="text-sm text-muted-foreground">
+                          You use <span className="text-primary font-medium">{analytics.engineUsage[0]?.name}</span> most often 
+                          ({analytics.engineUsage[0]?.count} uses, {analytics.engineUsage[0]?.successRate}% success)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-4 rounded-lg bg-muted/30 border border-border">
+                  <div className="flex items-start gap-3">
+                    <DollarSign className="w-5 h-5 text-emerald-500 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-foreground">Cost Efficiency</p>
+                      <p className="text-sm text-muted-foreground">
+                        Average cost per generation: <span className="text-emerald-400 font-medium">
+                          ${(analytics.totalCost / Math.max(analytics.totalGenerations, 1)).toFixed(4)}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-lg bg-muted/30 border border-border">
+                  <div className="flex items-start gap-3">
+                    <Target className="w-5 h-5 text-primary mt-0.5" />
+                    <div>
+                      <p className="font-medium text-foreground">Quality Trend</p>
+                      <p className="text-sm text-muted-foreground">
+                        Overall success rate is <span className="text-primary font-medium">{avgSuccessRate}%</span>. 
+                        {avgSuccessRate >= 90 ? ' Excellent performance!' : avgSuccessRate >= 75 ? ' Good results.' : ' Consider optimizing engine selection.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-lg bg-muted/30 border border-border">
+                  <div className="flex items-start gap-3">
+                    <Activity className="w-5 h-5 text-primary mt-0.5" />
+                    <div>
+                      <p className="font-medium text-foreground">Generation Pattern</p>
+                      <p className="text-sm text-muted-foreground">
+                        {analytics.totalGenerations > 100 
+                          ? 'High volume user - consider batch processing for efficiency'
+                          : analytics.totalGenerations > 20
+                          ? 'Active user - AI is learning your preferences'
+                          : 'Getting started - generate more to unlock insights'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="bg-gradient-card border-border shadow-card">
+            <CardHeader>
+              <CardTitle className="text-foreground">AI Confidence Over Time</CardTitle>
+              <CardDescription>How confident the AI is in its recommendations</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[250px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={analytics.aiLearnings.slice(0, 20).reverse().map((l, idx) => ({
+                    index: idx + 1,
+                    confidence: Math.round(l.confidence_score * 100),
+                    usageCount: l.usage_count,
+                  }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="index" stroke="hsl(var(--muted-foreground))" />
+                    <YAxis stroke="hsl(var(--muted-foreground))" domain={[0, 100]} />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="confidence" 
+                      stroke="hsl(var(--primary))" 
+                      fill="hsl(var(--primary) / 0.2)"
+                      strokeWidth={2}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
@@ -783,8 +1206,8 @@ export default function Analytics() {
         <TabsContent value="trends">
           <Card className="bg-gradient-card border-border shadow-card">
             <CardHeader>
-              <CardTitle className="text-foreground">Video Generation Trends</CardTitle>
-              <CardDescription>Videos created and costs over time</CardDescription>
+              <CardTitle className="text-foreground">Generation Trends</CardTitle>
+              <CardDescription>Content created and costs over time</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[350px]">
@@ -795,6 +1218,7 @@ export default function Analytics() {
                       dataKey="date" 
                       stroke="hsl(var(--muted-foreground))"
                       tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                      tickFormatter={(v) => format(new Date(v), 'MMM d')}
                     />
                     <YAxis 
                       yAxisId="left"
@@ -814,6 +1238,7 @@ export default function Analytics() {
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px'
                       }}
+                      labelFormatter={(v) => format(new Date(v), 'MMM d, yyyy')}
                     />
                     <Legend />
                     <Bar yAxisId="left" dataKey="videos" name="Videos" fill="hsl(280, 70%, 60%)" radius={[4, 4, 0, 0]} />
