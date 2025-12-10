@@ -22,6 +22,8 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { ImageGenerationProgress } from '@/components/ImageGenerationProgress';
+import { useBackendMode } from '@/hooks/useBackendMode';
+import { BackendModeSelector } from '@/components/BackendModeSelector';
 
 interface StudioImageGenerationProps {
   onNext: () => void;
@@ -48,6 +50,7 @@ const imageTypes = [
 
 export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: StudioImageGenerationProps) => {
   const { toast } = useToast();
+  const { mode: backendMode, n8nEnabled: useN8nBackend, aiOperatorEnabled, getActiveBackend } = useBackendMode();
   const [isGenerating, setIsGenerating] = useState(false);
   const [imageEngine, setImageEngine] = useState('nano-banana');
   const [imageCount, setImageCount] = useState('3');
@@ -63,8 +66,6 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
   
   // n8n Backend Mode settings
   const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
-  const [useN8nBackend, setUseN8nBackend] = useState(false);
-  const [aiOperatorEnabled, setAiOperatorEnabled] = useState(false);
   
   // Reference images for generation
   const [referenceImageUrl, setReferenceImageUrl] = useState('');
@@ -124,9 +125,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
         .maybeSingle();
 
       if (settings) {
-        // Load n8n Backend Mode settings
-        setUseN8nBackend(settings.use_n8n_backend || false);
-        setAiOperatorEnabled((settings as any).ai_operator_enabled || false);
+        // Backend mode is now managed by useBackendMode hook
         
         const prefs = settings.preferences as Record<string, any>;
         if (prefs) {
@@ -193,15 +192,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
   };
 
   const generateImages = async () => {
-    // Check if at least one mode is enabled
-    if (!useN8nBackend && !aiOperatorEnabled) {
-      toast({
-        title: "Mode Required",
-        description: "Please enable either 'n8n Backend Mode' or 'AI Operator Agent' in Settings to generate images.",
-        variant: "destructive",
-      });
-      return;
-    }
+    // Backend mode is now managed by useBackendMode hook - 'auto' mode uses Lovable AI
 
     if (selectedTypes.length === 0) {
       toast({
@@ -453,6 +444,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
           <p className="text-muted-foreground text-sm mt-1">Generate product images, mockups, and thumbnails</p>
         </div>
         <div className="flex items-center gap-2">
+          <BackendModeSelector compact />
           {useN8nBackend && n8nWebhookUrl && (
             <div className="flex items-center gap-1 text-xs text-green-500">
               <Webhook className="w-3 h-3" />

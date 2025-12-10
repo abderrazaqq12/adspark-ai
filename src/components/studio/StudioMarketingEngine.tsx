@@ -24,6 +24,8 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useStudioPrompts } from '@/hooks/useStudioPrompts';
 import { useAIAgent, getModelName } from '@/hooks/useAIAgent';
+import { useBackendMode } from '@/hooks/useBackendMode';
+import { BackendModeSelector } from '@/components/BackendModeSelector';
 
 interface AudienceTargeting {
   targetMarket: string;
@@ -53,6 +55,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   const { toast } = useToast();
   const { getPrompt, loading: promptsLoading } = useStudioPrompts();
   const { aiAgent, loading: aiAgentLoading } = useAIAgent();
+  const { mode: backendMode, n8nEnabled: useN8nBackend, aiOperatorEnabled, getActiveBackend } = useBackendMode();
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeTab, setActiveTab] = useState('angles');
   const [generatedAngles, setGeneratedAngles] = useState<GeneratedAngles | null>(null);
@@ -62,8 +65,6 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   const [productInfo, setProductInfo] = useState({ name: '', description: '', url: '' });
   const [webhookResponse, setWebhookResponse] = useState<any>(null);
   const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
-  const [useN8nBackend, setUseN8nBackend] = useState(false);
-  const [aiOperatorEnabled, setAiOperatorEnabled] = useState(false);
   const [audienceTargeting, setAudienceTargeting] = useState<AudienceTargeting>({
     targetMarket: 'gcc',
     language: 'ar-sa',
@@ -124,9 +125,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         .maybeSingle();
 
       if (settings) {
-        // Load Backend Mode settings
-        setUseN8nBackend(settings.use_n8n_backend || false);
-        setAiOperatorEnabled((settings as any).ai_operator_enabled || false);
+        // Backend mode is now managed by useBackendMode hook
         
         const prefs = settings.preferences as Record<string, any>;
         if (prefs) {
@@ -166,16 +165,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   };
 
   const generateMarketingAngles = async () => {
-    // Check if at least one mode is enabled
-    if (!useN8nBackend && !aiOperatorEnabled) {
-      toast({
-        title: "Mode Required",
-        description: "Please enable either 'n8n Backend Mode' or 'AI Operator Agent' in Settings to generate content.",
-        variant: "destructive",
-      });
-      return;
-    }
-
+    // Backend mode is now managed by useBackendMode hook - 'auto' mode uses Lovable AI
     setIsGenerating(true);
     setWebhookResponse(null);
     
@@ -314,16 +304,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   };
 
   const generateScripts = async () => {
-    // Check if at least one mode is enabled
-    if (!useN8nBackend && !aiOperatorEnabled) {
-      toast({
-        title: "Mode Required",
-        description: "Please enable either 'n8n Backend Mode' or 'AI Operator Agent' in Settings to generate content.",
-        variant: "destructive",
-      });
-      return;
-    }
-
+    // Backend mode is now managed by useBackendMode hook - 'auto' mode uses Lovable AI
     setIsGenerating(true);
     
     try {
@@ -526,7 +507,10 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
           <h2 className="text-2xl font-bold text-foreground">Product Content</h2>
           <p className="text-muted-foreground text-sm mt-1">Generate marketing angles, scripts & landing page content</p>
         </div>
-        <Badge variant="outline" className="text-primary border-primary">Step 2</Badge>
+        <div className="flex items-center gap-3">
+          <BackendModeSelector compact />
+          <Badge variant="outline" className="text-primary border-primary">Step 2</Badge>
+        </div>
       </div>
 
       {/* Webhook indicator */}
