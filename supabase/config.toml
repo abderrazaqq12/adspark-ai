@@ -74,3 +74,12 @@ verify_jwt = true
 
 [functions.pipeline-stage]
 verify_jwt = true
+
+[functions.ai-tools]
+verify_jwt = true
+
+[functions.ai-talking-actor]
+verify_jwt = true
+
+[functions.ai-content-preset]
+verify_jwt = true
