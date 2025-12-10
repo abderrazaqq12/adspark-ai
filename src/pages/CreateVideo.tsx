@@ -63,6 +63,8 @@ import { useRealTimeCost } from "@/hooks/useRealTimeCost";
 import { UnifiedSceneBuilder, UnifiedScene } from "@/components/video/UnifiedSceneBuilder";
 import { AutoAdFactory } from "@/components/video/AutoAdFactory";
 import { SmartSceneBuilder } from "@/components/video/SmartSceneBuilder";
+import { BackendModeSelector, BackendModeIndicator } from "@/components/BackendModeSelector";
+import { useBackendMode } from "@/hooks/useBackendMode";
 
 // ElevenLabs voices - expanded list with categories
 const ELEVENLABS_VOICES = [
@@ -268,8 +270,9 @@ export default function CreateVideo() {
 
   // Backend mode state for webhook indicators
   const [webhookConfig, setWebhookConfig] = useState<Record<string, { enabled: boolean; webhook_url: string }>>({});
-  const [useN8nBackend, setUseN8nBackend] = useState(false);
-  const [aiOperatorEnabled, setAiOperatorEnabled] = useState(false);
+  
+  // Backend mode hook - replaces individual state for n8n and AI operator
+  const { mode: backendMode, setMode: setBackendMode, n8nEnabled: useN8nBackend, aiOperatorEnabled, isLoading: isBackendModeLoading } = useBackendMode();
 
   // Smart defaults and cost tracking hooks
   const { defaults, recordChoice, getDefaultForContext, suggestEngine } = useSmartDefaults(projectId || undefined);
@@ -407,13 +410,11 @@ export default function CreateVideo() {
 
       const { data: settings } = await supabase
         .from('user_settings')
-        .select('use_n8n_backend, ai_operator_enabled, preferences')
+        .select('preferences')
         .eq('user_id', user.id)
         .maybeSingle();
 
       if (settings) {
-        setUseN8nBackend(settings.use_n8n_backend || false);
-        setAiOperatorEnabled(settings.ai_operator_enabled || false);
         const prefs = settings.preferences as Record<string, any>;
         if (prefs?.stage_webhooks) {
           setWebhookConfig(prefs.stage_webhooks);
@@ -901,6 +902,12 @@ export default function CreateVideo() {
               </AlertDialogContent>
             </AlertDialog>
           </div>
+          
+          {/* Backend Mode Selector */}
+          <div className="mt-4 mb-2">
+            <BackendModeSelector compact className="w-full justify-between" />
+          </div>
+          
           {/* Progress Indicator */}
           <div className="mt-3 space-y-1">
             <div className="flex items-center justify-between text-xs">
@@ -980,7 +987,8 @@ export default function CreateVideo() {
 
       {/* Main Content */}
       <div className="flex-1 p-8 space-y-8 overflow-auto">
-        <div className="flex items-end justify-end">
+        <div className="flex items-center justify-between">
+          <BackendModeSelector showCard className="w-auto" />
           <PipelineStatusIndicator 
             pipelineStatus={{
               product_info: currentStage > 0 ? 'completed' : expandedStage === 0 ? 'in_progress' : 'pending',
