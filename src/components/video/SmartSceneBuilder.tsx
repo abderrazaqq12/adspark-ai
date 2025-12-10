@@ -137,6 +137,62 @@ export function SmartSceneBuilder({
   // Local assets
   const [localAssets, setLocalAssets] = useState<LocalAsset[]>([]);
 
+  // Drag and drop state
+  const [draggedSceneId, setDraggedSceneId] = useState<string | null>(null);
+  const [dragOverSceneId, setDragOverSceneId] = useState<string | null>(null);
+
+  // Handle drag start
+  const handleDragStart = (e: React.DragEvent, sceneId: string) => {
+    setDraggedSceneId(sceneId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', sceneId);
+  };
+
+  // Handle drag over
+  const handleDragOver = (e: React.DragEvent, sceneId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedSceneId !== sceneId) {
+      setDragOverSceneId(sceneId);
+    }
+  };
+
+  // Handle drag leave
+  const handleDragLeave = () => {
+    setDragOverSceneId(null);
+  };
+
+  // Handle drop - reorder scenes
+  const handleDrop = (e: React.DragEvent, targetSceneId: string) => {
+    e.preventDefault();
+    setDragOverSceneId(null);
+    
+    if (!draggedSceneId || draggedSceneId === targetSceneId) {
+      setDraggedSceneId(null);
+      return;
+    }
+
+    const draggedIndex = scenes.findIndex(s => s.id === draggedSceneId);
+    const targetIndex = scenes.findIndex(s => s.id === targetSceneId);
+
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    const newScenes = [...scenes];
+    const [draggedScene] = newScenes.splice(draggedIndex, 1);
+    newScenes.splice(targetIndex, 0, draggedScene);
+
+    // Re-index all scenes
+    onScenesChange(newScenes.map((s, i) => ({ ...s, index: i })));
+    setDraggedSceneId(null);
+    toast.success('Scene reordered');
+  };
+
+  // Handle drag end
+  const handleDragEnd = () => {
+    setDraggedSceneId(null);
+    setDragOverSceneId(null);
+  };
+
   // Load settings on mount
   useEffect(() => {
     loadSettings();
@@ -456,6 +512,102 @@ export function SmartSceneBuilder({
         </Card>
       </div>
 
+      {/* Visual Timeline Preview */}
+      {scenes.length > 0 && (
+        <Card className="p-4 bg-card border-border">
+          <div className="flex items-center justify-between mb-3">
+            <Label className="text-sm font-medium flex items-center gap-2">
+              <Film className="w-4 h-4 text-primary" />
+              Timeline Preview
+            </Label>
+            <span className="text-xs text-muted-foreground">
+              Total: {totalDuration}s
+            </span>
+          </div>
+          <div className="relative">
+            {/* Timeline bar */}
+            <div className="flex gap-1 overflow-x-auto pb-2">
+              {scenes.map((scene, idx) => {
+                const widthPercent = Math.max(8, (scene.duration / Math.max(totalDuration, 1)) * 100);
+                return (
+                  <div
+                    key={scene.id}
+                    className={`relative flex-shrink-0 rounded-lg border-2 transition-all cursor-pointer group ${
+                      scene.status === 'completed' ? 'border-green-500 bg-green-500/10' :
+                      scene.status === 'generating' ? 'border-primary bg-primary/10 animate-pulse' :
+                      scene.status === 'failed' ? 'border-destructive bg-destructive/10' :
+                      dragOverSceneId === scene.id ? 'border-primary border-dashed bg-primary/20' :
+                      'border-border bg-muted/50 hover:border-primary/50'
+                    }`}
+                    style={{ width: `${Math.max(80, widthPercent * 3)}px`, minWidth: '80px' }}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, scene.id)}
+                    onDragOver={(e) => handleDragOver(e, scene.id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, scene.id)}
+                    onDragEnd={handleDragEnd}
+                    onClick={() => setExpandedSceneId(expandedSceneId === scene.id ? null : scene.id)}
+                  >
+                    {/* Thumbnail */}
+                    <div className="h-14 rounded-t overflow-hidden bg-muted">
+                      {scene.videoUrl ? (
+                        <video src={scene.videoUrl} className="w-full h-full object-cover" muted />
+                      ) : scene.productImageUrl ? (
+                        <img src={scene.productImageUrl} alt="" className="w-full h-full object-cover" />
+                      ) : scene.status === 'generating' ? (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                        </div>
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Video className="w-4 h-4 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Info bar */}
+                    <div className="p-1.5 space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-medium">Scene {idx + 1}</span>
+                        <span className="text-[10px] text-muted-foreground">{scene.duration}s</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {scene.status === 'completed' && <CheckCircle2 className="w-2.5 h-2.5 text-green-500" />}
+                        {scene.status === 'failed' && <AlertCircle className="w-2.5 h-2.5 text-destructive" />}
+                        <span className="text-[9px] text-muted-foreground truncate">{scene.engine}</span>
+                      </div>
+                    </div>
+
+                    {/* Drag indicator */}
+                    {draggedSceneId === scene.id && (
+                      <div className="absolute inset-0 bg-primary/20 rounded-lg flex items-center justify-center">
+                        <GripVertical className="w-4 h-4 text-primary" />
+                      </div>
+                    )}
+
+                    {/* Hover overlay */}
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                      <Play className="w-5 h-5 text-white" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            
+            {/* Duration markers */}
+            <div className="flex justify-between text-[9px] text-muted-foreground mt-1 px-1">
+              <span>0s</span>
+              <span>{Math.round(totalDuration / 2)}s</span>
+              <span>{totalDuration}s</span>
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-2 flex items-center gap-1">
+            <GripVertical className="w-3 h-3" />
+            Drag scenes to reorder • Click to expand
+          </p>
+        </Card>
+      )}
+
       {/* Simplified Controls */}
       <Card className="p-4 bg-card border-border space-y-4">
         {/* Video Type Selection */}
@@ -692,7 +844,15 @@ export function SmartSceneBuilder({
               return (
                 <div 
                   key={scene.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, scene.id)}
+                  onDragOver={(e) => handleDragOver(e, scene.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, scene.id)}
+                  onDragEnd={handleDragEnd}
                   className={`rounded-lg border transition-all ${
+                    draggedSceneId === scene.id ? 'opacity-50 scale-95' :
+                    dragOverSceneId === scene.id ? 'border-primary border-dashed bg-primary/10' :
                     scene.status === 'completed' ? 'border-green-500/30 bg-green-500/5' :
                     scene.status === 'generating' ? 'border-primary/30 bg-primary/5' :
                     scene.status === 'failed' ? 'border-destructive/30 bg-destructive/5' :
@@ -701,7 +861,7 @@ export function SmartSceneBuilder({
                 >
                   {/* Scene Header */}
                   <div className="flex items-center gap-3 p-3">
-                    <GripVertical className="w-4 h-4 text-muted-foreground cursor-move" />
+                    <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
                     
                     <div className="flex items-center gap-1">
                       <Button 
