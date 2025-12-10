@@ -64,9 +64,10 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
   const [speed, setSpeed] = useState([1.0]);
   const [language, setLanguage] = useState('en');
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [audioElements, setAudioElements] = useState<Record<string, HTMLAudioElement>>({});
   
   const [scriptText, setScriptText] = useState('');
-  const [tracks, setTracks] = useState<VoiceoverTrack[]>([]);
+  const [tracks, setTracks] = useState<VoiceoverTrack[]>();
 
   // N8n backend mode settings
   const [useN8nBackend, setUseN8nBackend] = useState(false);
@@ -244,15 +245,47 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
   };
 
   const playTrack = (id: string) => {
-    const track = tracks.find(t => t.id === id);
+    const track = tracks?.find(t => t.id === id);
     if (!track?.audioUrl) return;
+
+    // Stop any currently playing audio
+    if (playingId && audioElements[playingId]) {
+      audioElements[playingId].pause();
+      audioElements[playingId].currentTime = 0;
+    }
 
     if (playingId === id) {
       setPlayingId(null);
     } else {
+      // Create or reuse audio element
+      let audio = audioElements[id];
+      if (!audio) {
+        audio = new Audio(track.audioUrl);
+        audio.onended = () => setPlayingId(null);
+        audio.onerror = () => {
+          setPlayingId(null);
+          toast({
+            title: "Playback Error",
+            description: "Failed to play audio track",
+            variant: "destructive",
+          });
+        };
+        setAudioElements(prev => ({ ...prev, [id]: audio }));
+      }
+      audio.play();
       setPlayingId(id);
     }
   };
+
+  // Stop audio when component unmounts
+  useEffect(() => {
+    return () => {
+      Object.values(audioElements).forEach(audio => {
+        audio.pause();
+        audio.currentTime = 0;
+      });
+    };
+  }, [audioElements]);
 
   const regenerateTrack = async (id: string) => {
     const track = tracks.find(t => t.id === id);
@@ -393,14 +426,6 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
       <Card className="p-6 bg-card border-border">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold">Script Text</h3>
-          <Button onClick={generateVoiceover} disabled={isGenerating} className="gap-2">
-            {isGenerating ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Sparkles className="w-4 h-4" />
-            )}
-            Generate Voiceover
-          </Button>
         </div>
         <Textarea
           value={scriptText}
@@ -411,6 +436,68 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
         <p className="text-xs text-muted-foreground mt-2">
           Tip: Use blank lines to separate script into multiple audio segments
         </p>
+
+        {/* Audio Preview for Generated Tracks */}
+        {tracks && tracks.length > 0 && (
+          <div className="mt-4 p-4 rounded-lg bg-muted/50 border border-border">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-medium flex items-center gap-2">
+                <Volume2 className="w-4 h-4 text-primary" />
+                Generated Audio Tracks
+              </h4>
+              <Badge variant="secondary">{tracks.filter(t => t.status === 'completed').length}/{tracks.length}</Badge>
+            </div>
+            <div className="space-y-2">
+              {tracks.map((track, index) => (
+                <div 
+                  key={track.id} 
+                  className={`flex items-center gap-3 p-2 rounded-lg transition-all ${
+                    playingId === track.id ? 'bg-primary/10 border border-primary/30' : 'bg-background/50'
+                  }`}
+                >
+                  <span className="text-xs text-muted-foreground w-6">{index + 1}.</span>
+                  <p className="flex-1 text-sm truncate">{track.text.slice(0, 50)}...</p>
+                  {track.duration > 0 && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {track.duration}s
+                    </span>
+                  )}
+                  {track.status === 'generating' ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                  ) : track.status === 'completed' && track.audioUrl ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => playTrack(track.id)}
+                    >
+                      {playingId === track.id ? (
+                        <Pause className="w-4 h-4 text-primary" />
+                      ) : (
+                        <Play className="w-4 h-4" />
+                      )}
+                    </Button>
+                  ) : track.status === 'failed' ? (
+                    <Badge variant="destructive" className="text-[10px]">Failed</Badge>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Generate Button */}
+        <div className="mt-4">
+          <Button onClick={generateVoiceover} disabled={isGenerating} className="w-full gap-2">
+            {isGenerating ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Sparkles className="w-4 h-4" />
+            )}
+            Generate Voiceover
+          </Button>
+        </div>
       </Card>
 
       {/* Generated Tracks */}
