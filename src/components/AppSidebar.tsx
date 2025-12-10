@@ -1,4 +1,4 @@
-import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Building2, Database, Clapperboard, Images, Wand2 } from "lucide-react";
+import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Building2, Database, Clapperboard, Images, Wand2, SlidersHorizontal } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,9 +18,10 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-// Main workflows - simplified to Agency Mode only
+// Main workflows - Agency Mode + Creative Replicator
 const workflowItems = [
   { title: "Agency Mode", url: "/agency", icon: Building2, description: "Batch generation" },
+  { title: "Creative Replicator", url: "/creative-replicator", icon: SlidersHorizontal, description: "Replicate winning ads" },
 ];
 
 // Quick access items - Dashboard and Studio
