@@ -299,6 +299,9 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
           // Priority 2: Use Supabase function when AI Operator is enabled
           else if (aiOperatorEnabled) {
             console.log('Calling Image Generation (AI Operator mode)');
+            // Determine which reference image to use (uploaded takes priority)
+            const effectiveReferenceUrl = uploadedReferenceImage || referenceImageUrl || undefined;
+            
             const response = await supabase.functions.invoke('ai-image-generator', {
               body: {
                 prompt: img.prompt,
@@ -308,6 +311,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
                 productName: productInfo.name,
                 productDescription: productInfo.description,
                 projectId: projectId,
+                referenceImageUrl: effectiveReferenceUrl,
               }
             });
 
@@ -375,6 +379,9 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
     ));
 
     try {
+      // Determine which reference image to use (uploaded takes priority)
+      const effectiveReferenceUrl = uploadedReferenceImage || referenceImageUrl || undefined;
+      
       const response = await supabase.functions.invoke('ai-image-generator', {
         body: {
           prompt: image.prompt,
@@ -384,6 +391,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
           productName: productInfo.name,
           productDescription: productInfo.description,
           projectId: projectId,
+          referenceImageUrl: effectiveReferenceUrl,
         }
       });
 

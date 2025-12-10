@@ -62,6 +62,7 @@ import AIToolsSelector from "@/components/AIToolsSelector";
 import { useRealTimeCost } from "@/hooks/useRealTimeCost";
 import { UnifiedSceneBuilder, UnifiedScene } from "@/components/video/UnifiedSceneBuilder";
 import { AutoAdFactory } from "@/components/video/AutoAdFactory";
+import { SmartSceneBuilder } from "@/components/video/SmartSceneBuilder";
 
 // ElevenLabs voices - expanded list with categories
 const ELEVENLABS_VOICES = [
@@ -1537,20 +1538,34 @@ export default function CreateVideo() {
               />
 
               {projectId ? (
-                <UnifiedSceneBuilder
+                <SmartSceneBuilder
                   projectId={projectId}
                   scriptId={scriptId || undefined}
-                  scenes={unifiedScenes.length > 0 ? unifiedScenes : scenes.map((s, i) => ({
+                  scenes={unifiedScenes.length > 0 ? unifiedScenes.map(s => ({
+                    id: s.id,
+                    index: s.index,
+                    text: s.text,
+                    visualPrompt: s.visualPrompt,
+                    duration: s.duration,
+                    status: s.status as 'pending' | 'generating' | 'completed' | 'failed',
+                    engine: s.engine || 'auto',
+                    videoUrl: s.videoUrl,
+                    thumbnailUrl: s.thumbnailUrl,
+                  })) : scenes.map((s, i) => ({
                     id: s.id || `scene-${i}`,
                     index: i,
                     text: s.description || s.text || '',
                     visualPrompt: s.visualPrompt || s.visual_prompt || '',
                     duration: s.duration || s.duration_sec || 5,
                     status: 'pending' as const,
-                    engine: 'nano-banana',
+                    engine: 'auto',
                   }))}
                   onScenesChange={(newScenes) => {
-                    setUnifiedScenes(newScenes);
+                    setUnifiedScenes(newScenes.map(s => ({
+                      ...s,
+                      engine: s.engine || 'auto',
+                      status: s.status as 'pending' | 'generating' | 'completed' | 'failed',
+                    })));
                     // Also update legacy scenes for compatibility
                     setScenes(newScenes.map((s) => ({
                       id: s.id,
@@ -1566,6 +1581,7 @@ export default function CreateVideo() {
                   }}
                   videosToGenerate={videosToGenerate}
                   onVideosToGenerateChange={setVideosToGenerate}
+                  productImages={productInfo.imageUrl ? [productInfo.imageUrl] : []}
                 />
               ) : (
                 <Card className="bg-gradient-card border-border shadow-card p-8 text-center">
