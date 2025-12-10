@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -86,6 +86,49 @@ const CreativeReplicator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
+
+  // Real-time subscription for video status updates
+  useEffect(() => {
+    if (generatedVideos.length === 0) return;
+
+    const channel = supabase
+      .channel('video-variations-status')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'video_variations',
+        },
+        (payload) => {
+          const updatedVideo = payload.new;
+          setGeneratedVideos((prev) =>
+            prev.map((video) =>
+              video.id === updatedVideo.id
+                ? {
+                    ...video,
+                    status: updatedVideo.status === 'completed' ? 'completed' : 
+                            updatedVideo.status === 'failed' ? 'failed' : 'processing',
+                    url: updatedVideo.video_url || video.url,
+                    thumbnail: updatedVideo.thumbnail_url || video.thumbnail,
+                  }
+                : video
+            )
+          );
+
+          if (updatedVideo.status === 'completed') {
+            toast.success(`Video ${updatedVideo.variation_number} completed!`);
+          } else if (updatedVideo.status === 'failed') {
+            toast.error(`Video ${updatedVideo.variation_number} failed`);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [generatedVideos.length]);
 
   const handleStartGeneration = async () => {
     if (uploadedAds.length === 0) {
