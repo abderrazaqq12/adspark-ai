@@ -60,6 +60,8 @@ import { SmartDefaultsBanner } from "@/components/SmartDefaultsBanner";
 import { useSmartDefaults } from "@/hooks/useSmartDefaults";
 import AIToolsSelector from "@/components/AIToolsSelector";
 import { useRealTimeCost } from "@/hooks/useRealTimeCost";
+import { UnifiedSceneBuilder, UnifiedScene } from "@/components/video/UnifiedSceneBuilder";
+import { AutoAdFactory } from "@/components/video/AutoAdFactory";
 
 // ElevenLabs voices - expanded list with categories
 const ELEVENLABS_VOICES = [
@@ -163,17 +165,16 @@ interface ElevenLabsVoice {
   preview_url?: string;
 }
 
-// Production pipeline stages - includes Studio steps before video creation
+// Production pipeline stages - Merged Scene Builder + Video Generation, Auto-Ad Factory for Assembly
 const pipelineStages = [
   { id: 0, key: 'studio-product', name: "Product Input", icon: Package, description: "Product details & targeting", required: true },
   { id: 1, key: 'studio-content', name: "Product Content", icon: Lightbulb, description: "Angles, scripts & content", required: false },
   { id: 2, key: 'studio-images', name: "Image Generation", icon: Image, description: "Product images & mockups", required: false },
   { id: 3, key: 'studio-landing', name: "Landing Page", icon: Layout, description: "Sales page content", required: false },
   { id: 4, key: 'scripts', name: "Video Script Text & Audio", icon: Mic, description: "Voice-over scripts and audio", required: true },
-  { id: 5, key: 'scenes', name: "Scene Builder", icon: Wand2, description: "AI breaks down script into visual scenes", required: true },
-  { id: 6, key: 'video-gen', name: "Video Generation", icon: Video, description: "AI creates video for each scene", required: true },
-  { id: 7, key: 'assembly', name: "Assembly & Edit", icon: Palette, description: "Combine, sync, add branding", required: true },
-  { id: 8, key: 'export', name: "Export", icon: Globe, description: "Multi-format export", required: true },
+  { id: 5, key: 'unified-scene-video', name: "Scene Builder & Video Generation", icon: Wand2, description: "Build scenes, select engines, generate videos", required: true },
+  { id: 6, key: 'auto-ad-factory', name: "Auto-Ad Factory", icon: Palette, description: "Mass-produce <30s ads with one click", required: true },
+  { id: 7, key: 'export', name: "Export", icon: Globe, description: "Multi-format export", required: true },
 ];
 
 interface ScriptSlot {
@@ -222,6 +223,7 @@ export default function CreateVideo() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [scenes, setScenes] = useState<any[]>([]);
+  const [unifiedScenes, setUnifiedScenes] = useState<UnifiedScene[]>([]);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [scriptId, setScriptId] = useState<string | null>(null);
   const [selectedFormats, setSelectedFormats] = useState<string[]>(["9:16", "16:9", "1:1"]);
@@ -983,9 +985,9 @@ export default function CreateVideo() {
               product_info: currentStage > 0 ? 'completed' : expandedStage === 0 ? 'in_progress' : 'pending',
               scripts: currentStage > 4 ? 'completed' : expandedStage === 4 ? 'in_progress' : 'pending',
               scenes: currentStage > 5 ? 'completed' : expandedStage === 5 ? 'in_progress' : 'pending',
-              video_generation: currentStage > 6 ? 'completed' : expandedStage === 6 ? 'in_progress' : 'pending',
-              assembly: currentStage > 7 ? 'completed' : expandedStage === 7 ? 'in_progress' : 'pending',
-              export: currentStage > 8 ? 'completed' : expandedStage === 8 ? 'in_progress' : 'pending',
+              video_generation: currentStage > 5 ? 'completed' : expandedStage === 5 ? 'in_progress' : 'pending',
+              assembly: currentStage > 6 ? 'completed' : expandedStage === 6 ? 'in_progress' : 'pending',
+              export: currentStage > 7 ? 'completed' : expandedStage === 7 ? 'in_progress' : 'pending',
             }}
             currentStage={expandedStage}
             onStageClick={(stageId, index) => setExpandedStage(index)}
@@ -1491,187 +1493,88 @@ export default function CreateVideo() {
             </Card>
           )}
 
-          {/* Stage 5: Scene Builder */}
+          {/* Stage 5: Unified Scene Builder & Video Generation */}
           {expandedStage === 5 && (
-            <Card className="bg-gradient-card border-border shadow-card">
-              <CardHeader>
-                <CardTitle className="text-foreground flex items-center gap-2">
-                  <Wand2 className="w-5 h-5 text-primary" />
-                  Scene Builder
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Configure video type and review AI-generated scenes
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Video Type, Language & Marketing Hooks - Moved here from Step 1 */}
-                <div className="p-4 rounded-lg bg-muted/30 border border-border space-y-4">
-                  <h4 className="text-sm font-medium text-foreground">Video Configuration</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-foreground">Video Type</Label>
-                      <Select defaultValue="ugc_review">
-                        <SelectTrigger className="bg-muted/50">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[300px]">
-                          {["UGC & Social Proof", "Product & Educational", "Creative & Engagement"].map(category => (
-                            <div key={category}>
-                              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50">{category}</div>
-                              {videoTypes.filter(t => t.category === category).map((type) => (
-                                <SelectItem key={type.id} value={type.id}>
-                                  {type.name}
-                                </SelectItem>
-                              ))}
-                            </div>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-foreground">Video Language</Label>
-                      <Select defaultValue="en">
-                        <SelectTrigger className="bg-muted/50">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ar">Arabic (العربية)</SelectItem>
-                          <SelectItem value="en">English</SelectItem>
-                          <SelectItem value="es">Spanish (Español)</SelectItem>
-                          <SelectItem value="fr">French (Français)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+            <div className="space-y-6">
+              {/* One-Click Create All Button */}
+              <Card className="p-4 bg-gradient-card border-border shadow-card">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-primary" />
+                      One-Click Video Production
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Build scenes, generate videos, and auto-assemble {videosToGenerate}+ ads under 30s
+                    </p>
                   </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-foreground">Marketing Hooks</Label>
-                    <div className="flex gap-2 mb-2">
-                      <Button variant="outline" size="sm" className="bg-gradient-primary text-primary-foreground">
-                        Automatic (AI Generated)
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        Manual
-                      </Button>
-                    </div>
-                    <div className="p-3 bg-primary/10 rounded-lg border border-primary/20">
-                      <p className="text-sm text-primary">
-                        AI will automatically generate attention-grabbing hooks based on your script and product
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Cost Calculator */}
-                <CostCalculatorPreview
-                  scenesCount={scenes.length || 5}
-                  avgDuration={5}
-                  videoCount={videosToGenerate}
-                  onFreeOnlyChange={setFreeEnginesOnly}
-                />
-
-                {/* Scenes organized by script */}
-                {scenes.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <Sparkles className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>Enter a script and click "Analyze & Build Scenes" in Video Script Text & Audio</p>
-                    <p className="text-xs mt-2">AI will auto-route each scene to the best {freeEnginesOnly ? 'free ' : ''}model</p>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {/* Scenes grouped by script */}
-                    {scriptSlots.filter(s => s.text.trim()).map((script, scriptIndex) => {
-                      // Calculate which scenes belong to this script
-                      const scenesPerScript = Math.ceil(scenes.length / scriptSlots.filter(s => s.text.trim()).length);
-                      const startIdx = scriptIndex * scenesPerScript;
-                      const endIdx = Math.min(startIdx + scenesPerScript, scenes.length);
-                      const scriptScenes = scenes.slice(startIdx, endIdx);
-
-                      if (scriptScenes.length === 0) return null;
-
-                      return (
-                        <div key={script.id} className="space-y-3">
-                          <div className="flex items-center gap-2 pb-2 border-b border-border">
-                            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">
-                              Script {scriptIndex + 1}
-                            </Badge>
-                            <span className="text-xs text-muted-foreground">
-                              {scriptScenes.length} scenes • ~{scriptScenes.reduce((acc, s) => acc + (s.duration || 5), 0)}s
-                            </span>
-                          </div>
-                          
-                          <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
-                            {scriptScenes.map((scene, idx) => {
-                              const globalIndex = startIdx + idx;
-                              const routing = sceneRouting.find(r => 
-                                scene.title?.toLowerCase().includes(r.sceneType.replace('_', ' ')) ||
-                                scene.description?.toLowerCase().includes(r.sceneType.replace('_', ' '))
-                              ) || sceneRouting[5];
-                              
-                              // Select free model if freeEnginesOnly
-                              const selectedModel = freeEnginesOnly ? 'NanoBanana' : routing.recommendedModel;
-                              
-                              return (
-                                <div
-                                  key={globalIndex}
-                                  className="p-4 rounded-lg bg-muted/30 border border-border hover:border-primary/50 transition-colors"
-                                >
-                                  <div className="flex items-start gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold flex-shrink-0">
-                                      {globalIndex + 1}
-                                    </div>
-                                    <div className="flex-1 space-y-2">
-                                      <div className="flex items-center justify-between">
-                                        <h4 className="font-semibold text-foreground">{scene.title}</h4>
-                                        <div className="flex items-center gap-2">
-                                          <Badge className={`border-0 text-xs ${freeEnginesOnly ? 'bg-green-500/20 text-green-400' : 'bg-primary/20 text-primary'}`}>
-                                            {selectedModel}
-                                          </Badge>
-                                          <span className="text-xs text-muted-foreground">
-                                            {scene.duration}s
-                                          </span>
-                                        </div>
-                                      </div>
-                                      <p className="text-sm text-muted-foreground">{scene.description}</p>
-                                      {scene.visualPrompt && (
-                                        <div className="mt-2 p-2 rounded bg-muted/50 border border-border">
-                                          <p className="text-xs text-muted-foreground">
-                                            <span className="text-primary font-medium">Visual: </span>
-                                            {scene.visualPrompt}
-                                          </p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {scenes.length > 0 && (
                   <Button
-                    onClick={() => {
+                    size="lg"
+                    onClick={async () => {
+                      if (unifiedScenes.length === 0 && scenes.length === 0) {
+                        toast.error("Add scenes first or analyze a script");
+                        return;
+                      }
+                      toast.info("Starting automated video production...");
+                      // This will flow through: scenes → video generation → assembly
                       setExpandedStage(6);
                       setCurrentStage(6);
                     }}
-                    className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow"
+                    className="bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow gap-2"
                   >
-                    <ChevronRight className="w-4 h-4 mr-2" />
-                    Next: Generate Videos
+                    <Sparkles className="w-5 h-5" />
+                    ⚡ Create All Videos
                   </Button>
-                )}
-              </CardContent>
-            </Card>
-          )}
+                </div>
+              </Card>
 
-          {/* Stage 6: Video Generation */}
-          {expandedStage === 6 && scriptId && (
-            <div className="space-y-4">
+              {/* Cost Calculator */}
+              <CostCalculatorPreview
+                scenesCount={unifiedScenes.length || scenes.length || 5}
+                avgDuration={5}
+                videoCount={videosToGenerate}
+                onFreeOnlyChange={setFreeEnginesOnly}
+              />
+
+              {projectId ? (
+                <UnifiedSceneBuilder
+                  projectId={projectId}
+                  scriptId={scriptId || undefined}
+                  scenes={unifiedScenes.length > 0 ? unifiedScenes : scenes.map((s, i) => ({
+                    id: s.id || `scene-${i}`,
+                    index: i,
+                    text: s.description || s.text || '',
+                    visualPrompt: s.visualPrompt || s.visual_prompt || '',
+                    duration: s.duration || s.duration_sec || 5,
+                    status: 'pending' as const,
+                    engine: 'nano-banana',
+                  }))}
+                  onScenesChange={(newScenes) => {
+                    setUnifiedScenes(newScenes);
+                    // Also update legacy scenes for compatibility
+                    setScenes(newScenes.map((s) => ({
+                      id: s.id,
+                      title: `Scene ${s.index + 1}`,
+                      description: s.text,
+                      visualPrompt: s.visualPrompt,
+                      duration: s.duration,
+                    })));
+                  }}
+                  onProceedToAssembly={() => {
+                    setExpandedStage(6);
+                    setCurrentStage(6);
+                  }}
+                  videosToGenerate={videosToGenerate}
+                  onVideosToGenerateChange={setVideosToGenerate}
+                />
+              ) : (
+                <Card className="bg-gradient-card border-border shadow-card p-8 text-center">
+                  <Wand2 className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                  <p className="text-muted-foreground">Save your project first to use the Scene Builder</p>
+                  <p className="text-xs text-muted-foreground mt-2">Complete earlier steps and save your project</p>
+                </Card>
+              )}
+
               {/* AI Tools Selector */}
               <AIToolsSelector 
                 onToolSelect={(tool) => {
@@ -1679,292 +1582,68 @@ export default function CreateVideo() {
                 }}
                 mode="select"
               />
-              
-              <VideoGenerationStage 
-                scriptId={scriptId}
-                onComplete={() => {
-                  setExpandedStage(7);
-                  setCurrentStage(7);
-                }}
-              />
             </div>
           )}
 
-          {/* Stage 6 Fallback - Upload when no scriptId */}
-          {expandedStage === 6 && !scriptId && (
-            <Card className="bg-gradient-card border-border shadow-card">
-              <CardHeader>
-                <CardTitle className="text-foreground flex items-center gap-2">
-                  <Video className="w-5 h-5 text-primary" />
-                  Video Generation
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Generate video for each scene using AI engines or upload your own
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Custom Video Upload Section */}
-                <div className="p-4 rounded-lg bg-muted/30 border border-border space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
-                      <Upload className="w-4 h-4 text-primary" />
-                      Upload Your Own Videos
-                    </h4>
-                    <Badge variant="outline" className="text-xs">
-                      {uploadedVideos.length} uploaded
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Already have video content? Upload videos to use as scenes or B-roll footage.
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        accept="video/*"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => {
-                          const files = Array.from(e.target.files || []);
-                          if (files.length > 0) {
-                            const newVideos = files.map(file => ({
-                              id: generateVideoId(),
-                              file,
-                              url: URL.createObjectURL(file),
-                              thumbnail: null,
-                              type: 'scene' as const,
-                              duration: null,
-                            }));
-                            setUploadedVideos(prev => [...prev, ...newVideos]);
-                            toast.success(`${files.length} scene video(s) added`);
-                          }
-                        }}
-                      />
-                      <div className="p-4 rounded-lg border-2 border-dashed border-border hover:border-primary/50 transition-colors text-center">
-                        <Video className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-                        <p className="text-sm font-medium text-foreground">Scene Videos</p>
-                        <p className="text-xs text-muted-foreground">Main scene content</p>
-                      </div>
-                    </label>
-                    <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        accept="video/*"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => {
-                          const files = Array.from(e.target.files || []);
-                          if (files.length > 0) {
-                            const newVideos = files.map(file => ({
-                              id: generateVideoId(),
-                              file,
-                              url: URL.createObjectURL(file),
-                              thumbnail: null,
-                              type: 'broll' as const,
-                              duration: null,
-                            }));
-                            setUploadedVideos(prev => [...prev, ...newVideos]);
-                            toast.success(`${files.length} B-roll video(s) added`);
-                          }
-                        }}
-                      />
-                      <div className="p-4 rounded-lg border-2 border-dashed border-border hover:border-primary/50 transition-colors text-center">
-                        <FileText className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-                        <p className="text-sm font-medium text-foreground">B-Roll Footage</p>
-                        <p className="text-xs text-muted-foreground">Supplementary clips</p>
-                      </div>
-                    </label>
-                  </div>
-
-                  {/* Video Thumbnails Preview */}
-                  {uploadedVideos.length > 0 && (
-                    <div className="space-y-3 pt-2 border-t border-border">
-                      <VideoUploadPreview
-                        videos={uploadedVideos}
-                        onRemove={(id) => {
-                          const video = uploadedVideos.find(v => v.id === id);
-                          if (video) URL.revokeObjectURL(video.url);
-                          setUploadedVideos(prev => prev.filter(v => v.id !== id));
-                        }}
-                        type="scene"
-                      />
-                      <VideoUploadPreview
-                        videos={uploadedVideos}
-                        onRemove={(id) => {
-                          const video = uploadedVideos.find(v => v.id === id);
-                          if (video) URL.revokeObjectURL(video.url);
-                          setUploadedVideos(prev => prev.filter(v => v.id !== id));
-                        }}
-                        type="broll"
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {scriptId ? (
-                  <BatchGeneration 
-                    scriptId={scriptId} 
-                    scenesCount={scenes.length}
-                    onComplete={() => toast.success("All videos generated!")}
-                  />
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Video className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>Save your project first to start video generation</p>
-                    <p className="text-xs mt-2">Complete earlier steps and save your project</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Stage 7: Assembly & Edit */}
-          {expandedStage === 7 && (
-            <Card className="bg-gradient-card border-border shadow-card">
-              <CardHeader>
-                <CardTitle className="text-foreground flex items-center gap-2">
-                  <Palette className="w-5 h-5 text-primary" />
-                  Assembly & Edit
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Combine scenes, sync audio, and generate multiple final videos
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Batch Assembly Options */}
-                <div className="p-4 rounded-lg bg-muted/30 border border-border space-y-4">
-                  <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-primary" />
-                    Batch Video Assembly
-                  </h4>
-                  <p className="text-xs text-muted-foreground">
-                    Generate multiple final videos with different combinations of scenes and transitions
-                  </p>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-xs">Videos to Generate</Label>
-                      <Select value={String(videosToGenerate)} onValueChange={(v) => setVideosToGenerate(Number(v))}>
-                        <SelectTrigger className="bg-muted/50 h-9">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="5">5 videos</SelectItem>
-                          <SelectItem value="10">10 videos</SelectItem>
-                          <SelectItem value="25">25 videos</SelectItem>
-                          <SelectItem value="50">50 videos</SelectItem>
-                          <SelectItem value="100">100 videos</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs">Transition Style</Label>
-                      <Select value={transitionStyle} onValueChange={setTransitionStyle}>
-                        <SelectTrigger className="bg-muted/50 h-9">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="cut">Cut (No transition)</SelectItem>
-                          <SelectItem value="fade">Fade</SelectItem>
-                          <SelectItem value="slide">Slide</SelectItem>
-                          <SelectItem value="zoom">Zoom</SelectItem>
-                          <SelectItem value="mixed">Mixed (Random)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/20">
-                    <div>
-                      <p className="text-sm font-medium text-foreground">Randomize Scene Order</p>
-                      <p className="text-xs text-muted-foreground">Create unique variations by shuffling scenes</p>
-                    </div>
-                    <Checkbox checked={randomizeOrder} onCheckedChange={(checked) => setRandomizeOrder(!!checked)} />
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/20 border border-border">
-                    <div>
-                      <p className="text-sm font-medium text-foreground">Auto-add Music</p>
-                      <p className="text-xs text-muted-foreground">AI selects background music per video</p>
-                    </div>
-                    <Checkbox checked={autoAddMusic} onCheckedChange={(checked) => setAutoAddMusic(!!checked)} />
-                  </div>
-                </div>
-
-                {/* Quick Stats */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="p-3 rounded-lg bg-muted/20 border border-border text-center">
-                    <p className="text-2xl font-bold text-primary">{scenes.length}</p>
-                    <p className="text-xs text-muted-foreground">Scenes</p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-muted/20 border border-border text-center">
-                    <p className="text-2xl font-bold text-primary">{Math.round(scenes.reduce((acc, s) => acc + (s.duration || 3), 0))}s</p>
-                    <p className="text-xs text-muted-foreground">Duration</p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-muted/20 border border-border text-center">
-                    <p className="text-2xl font-bold text-primary">{videosToGenerate}</p>
-                    <p className="text-xs text-muted-foreground">Videos</p>
-                  </div>
-                </div>
-
-                {/* Video Variety Engine - Generate 20-100 variations */}
-                {projectId && (
-                  <VideoVarietyEngine
-                    projectId={projectId}
-                    scriptId={scriptId || undefined}
-                    scenesCount={scenes.length || 1}
-                    onComplete={(variations) => {
-                      toast.success(`Generated ${variations.length} video variations!`);
-                    }}
-                  />
-                )}
-
-                {/* Batch Assembly Component */}
-                {scriptId ? (
-                  <BatchAssembly
-                    scriptId={scriptId}
-                    scenesCount={scenes.length}
-                    videosToGenerate={videosToGenerate}
-                    transitionStyle={transitionStyle}
-                    randomizeOrder={randomizeOrder}
-                    autoAddMusic={autoAddMusic}
-                    onComplete={() => {
-                      toast.success("All videos assembled!");
-                      setExpandedStage(8);
-                      setCurrentStage(8);
-                    }}
-                  />
-                ) : (
-                  <div className="text-center py-4 text-muted-foreground">
-                    <p className="text-sm">Save your project first to start assembly</p>
-                  </div>
-                )}
-
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  onClick={() => {
-                    if (scenes.length === 0) {
-                      toast.error("No scenes available. Generate scenes first in Scene Builder.");
-                      return;
-                    }
-                    setShowTimelineEditor(true);
+          {/* Stage 6: Auto-Ad Factory (Assembly) */}
+          {expandedStage === 6 && (
+            <div className="space-y-6">
+              {projectId ? (
+                <AutoAdFactory
+                  projectId={projectId}
+                  scriptId={scriptId || undefined}
+                  scenesCount={unifiedScenes.length || scenes.length}
+                  videosToGenerate={videosToGenerate}
+                  onComplete={(videos) => {
+                    toast.success(`Created ${videos.length} video ads!`);
+                    setExpandedStage(7);
+                    setCurrentStage(7);
                   }}
-                >
-                  <Palette className="w-4 h-4 mr-2" />
-                  Open Timeline Editor
-                </Button>
-              </CardContent>
-            </Card>
+                />
+              ) : (
+                <Card className="bg-gradient-card border-border shadow-card p-8 text-center">
+                  <Palette className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                  <p className="text-muted-foreground">Save your project first to use the Auto-Ad Factory</p>
+                </Card>
+              )}
+
+              {/* Optional Timeline Editor */}
+              <Button 
+                variant="outline" 
+                className="w-full"
+                onClick={() => {
+                  if (scenes.length === 0 && unifiedScenes.length === 0) {
+                    toast.error("No scenes available. Generate scenes first.");
+                    return;
+                  }
+                  setShowTimelineEditor(true);
+                }}
+              >
+                <Palette className="w-4 h-4 mr-2" />
+                Open Timeline Editor (Optional)
+              </Button>
+
+              {/* Proceed to Export */}
+              <Button
+                onClick={() => {
+                  setExpandedStage(7);
+                  setCurrentStage(7);
+                }}
+                className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow"
+              >
+                <ChevronRight className="w-4 h-4 mr-2" />
+                Next: Export Videos
+              </Button>
+            </div>
           )}
 
-          {/* Stage 8: Export */}
-          {expandedStage === 8 && (
+          {/* Stage 7: Export */}
+          {expandedStage === 7 && (
             <StudioExport />
           )}
 
           {/* Save Button - shown when scenes exist */}
-          {scenes.length > 0 && !scriptId && expandedStage <= 6 && (
+          {(scenes.length > 0 || unifiedScenes.length > 0) && !scriptId && expandedStage <= 5 && (
             <Button
               onClick={saveProjectAndScenes}
               disabled={isSaving}
@@ -2017,13 +1696,13 @@ export default function CreateVideo() {
             </DialogTitle>
           </DialogHeader>
           <VideoTimelineEditor 
-            scenes={scenes.map(s => ({
-              id: s.id,
-              index: s.index,
-              text: s.text,
-              scene_type: s.scene_type || null,
+            scenes={(unifiedScenes.length > 0 ? unifiedScenes : scenes).map((s, idx) => ({
+              id: s.id || `scene-${idx}`,
+              index: s.index ?? idx,
+              text: s.text || s.description || '',
+              scene_type: s.scene_type || s.videoType || null,
               visual_prompt: s.visual_prompt || s.visualPrompt || null,
-              engine_name: s.engine_name || null,
+              engine_name: s.engine_name || s.engine || null,
               engine_id: s.engine_id || null,
               status: s.status || 'pending',
               video_url: s.video_url || s.videoUrl || null,
@@ -2032,11 +1711,23 @@ export default function CreateVideo() {
               transition_duration_ms: s.transition_duration_ms || s.transitionDuration || 500,
             }))}
             onScenesUpdate={(updatedScenes) => {
-              setScenes(updatedScenes.map(s => ({
+              // Update both state arrays for compatibility
+              const mappedScenes = updatedScenes.map(s => ({
                 ...s,
                 visual_prompt: s.visual_prompt,
                 transition_type: s.transition_type,
                 transition_duration_ms: s.transition_duration_ms,
+              }));
+              setScenes(mappedScenes);
+              setUnifiedScenes(mappedScenes.map((s, i) => ({
+                id: s.id,
+                index: i,
+                text: s.text,
+                visualPrompt: s.visual_prompt || '',
+                duration: s.duration_sec || 5,
+                status: (s.status || 'pending') as 'pending' | 'generating' | 'completed' | 'failed',
+                engine: s.engine_name || 'nano-banana',
+                videoUrl: s.video_url || undefined,
               })));
               toast.success("Timeline updated!");
             }}
