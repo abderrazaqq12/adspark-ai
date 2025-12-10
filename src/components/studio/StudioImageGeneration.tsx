@@ -48,20 +48,27 @@ const imageTypes = [
   { id: 'before-after', name: 'Before/After', description: 'Transformation layout showing before, product, and result' },
 ];
 
-const audienceOptions = [
-  { id: 'men_18_25', name: 'Men 18-25', description: 'Young men, trendy modern style' },
-  { id: 'men_25_35', name: 'Men 25-35', description: 'Adult men, professional confident' },
-  { id: 'men_35_45', name: 'Men 35-45', description: 'Mature men, sophisticated' },
-  { id: 'men_45_plus', name: 'Men 45+', description: 'Distinguished men, classic elegant' },
-  { id: 'women_18_25', name: 'Women 18-25', description: 'Young women, vibrant trendy' },
-  { id: 'women_25_35', name: 'Women 25-35', description: 'Adult women, confident professional' },
-  { id: 'women_35_45', name: 'Women 35-45', description: 'Mature women, elegant sophisticated' },
-  { id: 'women_45_plus', name: 'Women 45+', description: 'Refined women, classic timeless' },
-  { id: 'both', name: 'Gender Neutral', description: 'Inclusive imagery for all' },
-  { id: 'athletes', name: 'Athletes', description: 'Fitness focused, energetic' },
-  { id: 'beauty', name: 'Beauty Enthusiasts', description: 'Skincare/beauty aesthetic' },
-  { id: 'health', name: 'Health Conscious', description: 'Wellness, natural lifestyle' },
-  { id: 'parents', name: 'Parents', description: 'Family-oriented, nurturing' },
+const marketOptions = [
+  { id: 'sa', name: 'Saudi Arabia' },
+  { id: 'ae', name: 'UAE' },
+  { id: 'kw', name: 'Kuwait' },
+  { id: 'ma', name: 'Morocco' },
+  { id: 'eu', name: 'Europe' },
+  { id: 'us', name: 'United States' },
+  { id: 'latam', name: 'Latin America' },
+];
+
+const genderOptions = [
+  { id: 'men', name: 'Men' },
+  { id: 'women', name: 'Women' },
+  { id: 'both', name: 'Both / Neutral' },
+];
+
+const ageOptions = [
+  { id: '18_25', name: '18-25 years' },
+  { id: '25_35', name: '25-35 years' },
+  { id: '35_45', name: '35-45 years' },
+  { id: '45_plus', name: '45+ years' },
 ];
 
 export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: StudioImageGenerationProps) => {
@@ -72,7 +79,9 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
   const [imageCount, setImageCount] = useState('3');
   const [resolution, setResolution] = useState('1024x1024');
   const [selectedTypes, setSelectedTypes] = useState<string[]>(['product', 'lifestyle', 'thumbnail']);
-  const [selectedAudience, setSelectedAudience] = useState<string>('both');
+  const [selectedMarket, setSelectedMarket] = useState<string>('us');
+  const [selectedGender, setSelectedGender] = useState<string>('both');
+  const [selectedAge, setSelectedAge] = useState<string>('25_35');
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [productInfo, setProductInfo] = useState({ name: '', description: '' });
   const [customPrompt, setCustomPrompt] = useState('');
@@ -300,6 +309,8 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
                   productName: productInfo.name,
                   productDescription: productInfo.description,
                   projectId: projectId,
+                  market: selectedMarket,
+                  audience: selectedGender === 'both' ? 'both' : `${selectedGender}_${selectedAge}`,
                 }
               }
             });
@@ -331,6 +342,8 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
                 productDescription: productInfo.description,
                 projectId: projectId,
                 referenceImageUrl: effectiveReferenceUrl,
+                market: selectedMarket,
+                audience: selectedGender === 'both' ? 'both' : `${selectedGender}_${selectedAge}`,
               }
             });
 
@@ -411,6 +424,8 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
           productDescription: productInfo.description,
           projectId: projectId,
           referenceImageUrl: effectiveReferenceUrl,
+          market: selectedMarket,
+          audience: selectedGender === 'both' ? 'both' : `${selectedGender}_${selectedAge}`,
         }
       });
 
@@ -652,22 +667,52 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
       {/* Target Audience */}
       <Card className="p-6 bg-card border-border">
         <h3 className="font-semibold mb-4">Target Audience</h3>
-        <p className="text-xs text-muted-foreground mb-3">Select target audience to make images relative to your customers</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {audienceOptions.map((audience) => (
-            <div 
-              key={audience.id}
-              onClick={() => setSelectedAudience(audience.id)}
-              className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                selectedAudience === audience.id 
-                  ? 'border-primary bg-primary/10' 
-                  : 'border-border hover:border-primary/50'
-              }`}
-            >
-              <p className="font-medium text-foreground text-xs">{audience.name}</p>
-              <p className="text-[10px] text-muted-foreground">{audience.description}</p>
-            </div>
-          ))}
+        <p className="text-xs text-muted-foreground mb-4">Select market, gender, and age to make images relative to your customers</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Market */}
+          <div className="space-y-2">
+            <Label>Market / Region</Label>
+            <Select value={selectedMarket} onValueChange={setSelectedMarket}>
+              <SelectTrigger className="bg-background">
+                <SelectValue placeholder="Select market" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border z-50">
+                {marketOptions.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>{option.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Gender */}
+          <div className="space-y-2">
+            <Label>Gender</Label>
+            <Select value={selectedGender} onValueChange={setSelectedGender}>
+              <SelectTrigger className="bg-background">
+                <SelectValue placeholder="Select gender" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border z-50">
+                {genderOptions.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>{option.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Age */}
+          <div className="space-y-2">
+            <Label>Age Range</Label>
+            <Select value={selectedAge} onValueChange={setSelectedAge}>
+              <SelectTrigger className="bg-background">
+                <SelectValue placeholder="Select age" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border z-50">
+                {ageOptions.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>{option.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </Card>
 
