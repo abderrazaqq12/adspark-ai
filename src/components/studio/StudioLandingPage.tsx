@@ -104,6 +104,16 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
   };
 
   const generateLandingPage = async () => {
+    // Check if at least one mode is enabled
+    if (!useN8nBackend && !aiOperatorEnabled) {
+      toast({
+        title: "Mode Required",
+        description: "Please enable either 'n8n Backend Mode' or 'AI Operator Agent' in Settings to generate content.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGenerating(true);
     setGenerationType('content');
 
@@ -111,18 +121,22 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      // Get the landing page prompt from settings (when AI Operator is enabled)
-      const landingPrompt = aiOperatorEnabled ? getPrompt('landing_page_content', {
+      // Get the landing page prompt from settings
+      const landingPrompt = getPrompt('landing_page_content', {
         product_name: productInfo.name,
         product_description: productInfo.description,
         product_url: productInfo.url,
         product_url_2: productInfo.url2,
         marketing_content: marketingContent
-      }) : '';
+      });
 
-      // If n8n Backend Mode is enabled, use webhook
-      if (useN8nBackend && n8nWebhookUrl) {
-        console.log('Calling Landing Page webhook:', n8nWebhookUrl);
+      // Priority 1: n8n Backend Mode
+      if (useN8nBackend) {
+        if (!n8nWebhookUrl) {
+          throw new Error('n8n Backend Mode is enabled but no webhook URL is configured for Landing Page stage. Please configure it in Settings.');
+        }
+        
+        console.log('Calling Landing Page webhook (n8n mode):', n8nWebhookUrl);
         
         const response = await fetch(n8nWebhookUrl, {
           method: 'POST',
@@ -152,17 +166,26 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
           setViewMode('content');
           toast({
             title: "تم إنشاء صفحة الهبوط",
-            description: "تم إنشاء محتوى صفحة الهبوط بنجاح via webhook",
+            description: "تم إنشاء محتوى صفحة الهبوط بنجاح (via n8n)",
           });
         } else {
           throw new Error(`Webhook error: ${response.status}`);
         }
-      } else {
-        // Use the AI assistant edge function for content generation
+      } 
+      // Priority 2: AI Operator Agent Mode
+      else if (aiOperatorEnabled) {
+        console.log('Calling Landing Page Generation (AI Operator mode)');
+        
         const response = await supabase.functions.invoke('ai-assistant', {
           body: {
             message: landingPrompt || `Generate landing page content for ${productInfo.name}: ${productInfo.description}`,
             model: getModelName(aiAgent),
+            audienceTargeting: {
+              targetMarket: audienceTargeting.targetMarket,
+              language: audienceTargeting.language,
+              audienceAge: audienceTargeting.audienceAge,
+              audienceGender: audienceTargeting.audienceGender,
+            },
           }
         });
 
@@ -176,7 +199,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
 
         toast({
           title: "تم إنشاء صفحة الهبوط",
-          description: "تم إنشاء محتوى صفحة الهبوط بنجاح",
+          description: "تم إنشاء محتوى صفحة الهبوط بنجاح (via AI Operator)",
         });
       }
     } catch (error: any) {
