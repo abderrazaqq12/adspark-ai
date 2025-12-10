@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -15,7 +16,8 @@ import {
   Download,
   Trash2,
   AlertCircle,
-  Webhook
+  Webhook,
+  Upload
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -63,6 +65,11 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
   const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
   const [useN8nBackend, setUseN8nBackend] = useState(false);
   const [aiOperatorEnabled, setAiOperatorEnabled] = useState(false);
+  
+  // Reference images for generation
+  const [referenceImageUrl, setReferenceImageUrl] = useState('');
+  const [uploadedReferenceImage, setUploadedReferenceImage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadProductInfo();
@@ -530,6 +537,87 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
             placeholder="Add specific instructions for image generation, e.g., 'Show product being used by a woman in a modern kitchen with natural lighting'"
             className="min-h-[80px] bg-background"
           />
+        </div>
+
+        {/* Reference Image (Optional) */}
+        <div className="mt-4 space-y-3 p-4 rounded-lg border border-dashed border-border bg-muted/30">
+          <Label className="flex items-center gap-2">
+            <ImageIcon className="w-4 h-4" />
+            Reference Image (Optional)
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Add a reference image to guide the AI generation style
+          </p>
+          
+          <div className="grid grid-cols-2 gap-3">
+            {/* URL Input */}
+            <div className="space-y-2">
+              <Label className="text-xs">Image URL</Label>
+              <Input
+                value={referenceImageUrl}
+                onChange={(e) => setReferenceImageUrl(e.target.value)}
+                placeholder="https://example.com/image.jpg"
+                className="text-sm bg-background"
+              />
+            </div>
+            
+            {/* File Upload */}
+            <div className="space-y-2">
+              <Label className="text-xs">Or Upload</Label>
+              <input
+                type="file"
+                accept="image/*"
+                ref={fileInputRef}
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                      setUploadedReferenceImage(reader.result as string);
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+              />
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full gap-2"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="w-4 h-4" />
+                {uploadedReferenceImage ? 'Change Image' : 'Upload Image'}
+              </Button>
+            </div>
+          </div>
+
+          {/* Preview */}
+          {(referenceImageUrl || uploadedReferenceImage) && (
+            <div className="flex items-center gap-3 mt-2">
+              <div className="w-16 h-16 rounded-lg overflow-hidden border border-border">
+                <img 
+                  src={uploadedReferenceImage || referenceImageUrl} 
+                  alt="Reference" 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => {
+                  setReferenceImageUrl('');
+                  setUploadedReferenceImage(null);
+                }}
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Remove
+              </Button>
+            </div>
+          )}
         </div>
       </Card>
 
