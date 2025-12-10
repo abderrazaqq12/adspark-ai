@@ -95,3 +95,9 @@ verify_jwt = true
 
 [functions.ai-ad-intelligence]
 verify_jwt = false
+
+[functions.track-cost]
+verify_jwt = false
+
+[functions.n8n-proxy]
+verify_jwt = true
