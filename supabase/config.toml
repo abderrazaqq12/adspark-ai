@@ -92,3 +92,6 @@ verify_jwt = true
 
 [functions.creative-replicator-n8n]
 verify_jwt = true
+
+[functions.ai-ad-intelligence]
+verify_jwt = false

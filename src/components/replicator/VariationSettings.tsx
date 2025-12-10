@@ -9,6 +9,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Zap, Sparkles, Mic, Film, Users, Globe, Shuffle, Bot } from "lucide-react";
 import type { VariationConfig } from "@/pages/CreativeReplicator";
+import { AIAdIntelligencePanel } from "./AIAdIntelligencePanel";
 
 interface VariationSettingsProps {
   config: VariationConfig;
@@ -172,6 +173,11 @@ export const VariationSettings = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left Column */}
         <div className="space-y-6">
+          {/* AI Ad Intelligence Panel */}
+          <AIAdIntelligencePanel
+            config={config}
+            setConfig={setConfig}
+          />
           {/* Number of Variations */}
           <Card>
             <CardHeader className="pb-3">

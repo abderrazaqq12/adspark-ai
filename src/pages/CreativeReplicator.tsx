@@ -53,6 +53,25 @@ export interface VariationConfig {
   useN8nWebhook: boolean;
   randomizeEngines: boolean;
   useAIOperator: boolean;
+  adIntelligence: {
+    enabled: boolean;
+    language: string;
+    market: string;
+    videoType: string;
+    platform: string;
+    productCategory: string;
+    conversionGoal: string;
+    targetAudience: {
+      ageRange?: string;
+      gender?: string;
+      interests?: string[];
+    };
+    productContext: {
+      name?: string;
+      description?: string;
+      benefits?: string[];
+    };
+  };
 }
 
 export interface GeneratedVideo {
@@ -82,6 +101,17 @@ const CreativeReplicator = () => {
     useN8nWebhook: false,
     randomizeEngines: false,
     useAIOperator: false,
+    adIntelligence: {
+      enabled: true,
+      language: "en",
+      market: "global",
+      videoType: "ugc-review",
+      platform: "tiktok",
+      productCategory: "general",
+      conversionGoal: "cod",
+      targetAudience: {},
+      productContext: {}
+    }
   });
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
