@@ -62,6 +62,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
   // n8n Backend Mode settings
   const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
   const [useN8nBackend, setUseN8nBackend] = useState(false);
+  const [aiOperatorEnabled, setAiOperatorEnabled] = useState(false);
 
   useEffect(() => {
     loadProductInfo();
@@ -118,6 +119,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
       if (settings) {
         // Load n8n Backend Mode settings
         setUseN8nBackend(settings.use_n8n_backend || false);
+        setAiOperatorEnabled((settings as any).ai_operator_enabled || false);
         
         const prefs = settings.preferences as Record<string, any>;
         if (prefs) {
@@ -184,6 +186,16 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
   };
 
   const generateImages = async () => {
+    // Check if at least one mode is enabled
+    if (!useN8nBackend && !aiOperatorEnabled) {
+      toast({
+        title: "Mode Required",
+        description: "Please enable either 'n8n Backend Mode' or 'AI Operator Agent' in Settings to generate images.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (selectedTypes.length === 0) {
       toast({
         title: "Select Image Types",
@@ -246,9 +258,13 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
         try {
           let imageUrl = '';
           
-          // Use n8n webhook if Backend Mode is enabled
-          if (useN8nBackend && n8nWebhookUrl) {
-            console.log('Calling Image Generation webhook:', n8nWebhookUrl);
+          // Priority 1: Use n8n webhook if Backend Mode is enabled
+          if (useN8nBackend) {
+            if (!n8nWebhookUrl) {
+              throw new Error('n8n Backend Mode is enabled but no webhook URL configured for Image Generation. Configure in Settings.');
+            }
+            
+            console.log('Calling Image Generation webhook (n8n mode):', n8nWebhookUrl);
             const webhookResponse = await fetch(n8nWebhookUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -272,8 +288,10 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
 
             const webhookData = await webhookResponse.json();
             imageUrl = webhookData?.imageUrl || webhookData?.url || webhookData?.images?.[0]?.url || '';
-          } else {
-            // Use Supabase function
+          } 
+          // Priority 2: Use Supabase function when AI Operator is enabled
+          else if (aiOperatorEnabled) {
+            console.log('Calling Image Generation (AI Operator mode)');
             const response = await supabase.functions.invoke('ai-image-generator', {
               body: {
                 prompt: img.prompt,

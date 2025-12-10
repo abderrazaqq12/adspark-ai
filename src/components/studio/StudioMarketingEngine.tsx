@@ -166,6 +166,16 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   };
 
   const generateMarketingAngles = async () => {
+    // Check if at least one mode is enabled
+    if (!useN8nBackend && !aiOperatorEnabled) {
+      toast({
+        title: "Mode Required",
+        description: "Please enable either 'n8n Backend Mode' or 'AI Operator Agent' in Settings to generate content.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGenerating(true);
     setWebhookResponse(null);
     
@@ -173,14 +183,18 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      // Get the prompt from Settings with variable replacement (when AI Operator is enabled)
-      const anglesPrompt = aiOperatorEnabled ? getPrompt('product_content', {
+      // Get the prompt from Settings with variable replacement
+      const anglesPrompt = getPrompt('product_content', {
         product_name: productInfo.name,
         product_description: productInfo.description,
-      }) : '';
+      });
 
-      // When n8n Backend Mode is enabled, use per-stage webhook
-      if (useN8nBackend && n8nWebhookUrl) {
+      // Priority 1: When n8n Backend Mode is enabled, use per-stage webhook
+      if (useN8nBackend) {
+        if (!n8nWebhookUrl) {
+          throw new Error('n8n Backend Mode is enabled but no webhook URL is configured for Product Content stage. Please configure it in Settings.');
+        }
+        
         console.log('Calling Product Content webhook (n8n mode):', n8nWebhookUrl);
         
         const response = await fetch(n8nWebhookUrl, {
@@ -195,7 +209,6 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
             productUrl: productInfo.url,
             prompt: anglesPrompt,
             model: getModelName(aiAgent),
-            // Include audience targeting in webhook payload
             audienceTargeting: {
               targetMarket: audienceTargeting.targetMarket,
               language: audienceTargeting.language,
@@ -237,16 +250,26 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         
         toast({
           title: "تم إنشاء الزوايا التسويقية",
-          description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل",
+          description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل (via n8n)",
         });
-      } else {
-        // Fallback to Supabase function when n8n is NOT enabled
+      } 
+      // Priority 2: When AI Operator Agent is enabled, use Supabase function
+      else if (aiOperatorEnabled) {
+        console.log('Calling AI Content Factory (AI Operator mode)');
+        
         const { data, error } = await supabase.functions.invoke('ai-content-factory', {
           body: {
             productName: productInfo.name,
             productDescription: productInfo.description,
             contentTypes: ['marketing_angles'],
-            language: 'ar',
+            language: audienceTargeting.language,
+            prompt: anglesPrompt,
+            audienceTargeting: {
+              targetMarket: audienceTargeting.targetMarket,
+              language: audienceTargeting.language,
+              audienceAge: audienceTargeting.audienceAge,
+              audienceGender: audienceTargeting.audienceGender,
+            },
           }
         });
 
@@ -275,7 +298,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         
         toast({
           title: "تم إنشاء الزوايا التسويقية",
-          description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل",
+          description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل (via AI Operator)",
         });
       }
     } catch (error: any) {
@@ -291,6 +314,16 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   };
 
   const generateScripts = async () => {
+    // Check if at least one mode is enabled
+    if (!useN8nBackend && !aiOperatorEnabled) {
+      toast({
+        title: "Mode Required",
+        description: "Please enable either 'n8n Backend Mode' or 'AI Operator Agent' in Settings to generate content.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGenerating(true);
     
     try {
@@ -300,15 +333,19 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       const tones = ['engaging', 'professional', 'urgent', 'emotional', 'casual', 'humorous', 'luxurious', 'educational', 'storytelling', 'direct'];
       const count = parseInt(scriptsCount);
       
-      // Get prompts if AI Operator is enabled
-      const scriptsPrompt = aiOperatorEnabled ? getPrompt('voiceover_scripts', {
+      // Get prompts
+      const scriptsPrompt = getPrompt('voiceover_scripts', {
         product_name: productInfo.name,
         product_description: productInfo.description,
-      }) : '';
+      });
 
-      // If n8n Backend Mode is enabled, use webhook instead of Supabase function
-      if (useN8nBackend && n8nWebhookUrl) {
-        console.log('Calling Scripts webhook:', n8nWebhookUrl);
+      // Priority 1: n8n Backend Mode
+      if (useN8nBackend) {
+        if (!n8nWebhookUrl) {
+          throw new Error('n8n Backend Mode is enabled but no webhook URL is configured for Product Content stage. Please configure it in Settings.');
+        }
+        
+        console.log('Calling Scripts webhook (n8n mode):', n8nWebhookUrl);
         const response = await fetch(n8nWebhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -320,7 +357,6 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
             prompt: scriptsPrompt,
             tones: tones.slice(0, count),
             count,
-            // Include audience targeting in webhook payload
             audienceTargeting: {
               targetMarket: audienceTargeting.targetMarket,
               language: audienceTargeting.language,
@@ -339,7 +375,6 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
 
         const data = await response.json();
         
-        // Use webhook response or fallback
         const generatedScripts: GeneratedScript[] = data?.scripts || tones.slice(0, count).map((tone, i) => ({
           id: `script-${i}`,
           tone,
@@ -351,17 +386,27 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         saveContent({ scripts: generatedScripts });
         toast({
           title: "تم إنشاء السكريبتات",
-          description: `تم إنشاء ${generatedScripts.length} نسخة من السكريبت`,
+          description: `تم إنشاء ${generatedScripts.length} نسخة من السكريبت (via n8n)`,
         });
-      } else {
-        // Use Supabase function (fallback)
+      } 
+      // Priority 2: AI Operator Agent Mode
+      else if (aiOperatorEnabled) {
+        console.log('Calling Script Generation (AI Operator mode)');
+        
         const response = await supabase.functions.invoke('generate-script-from-product', {
           body: {
             productName: productInfo.name,
             productDescription: productInfo.description,
-            language: 'ar',
+            language: audienceTargeting.language,
             tone: tones[0],
             model: getModelName(aiAgent),
+            prompt: scriptsPrompt,
+            audienceTargeting: {
+              targetMarket: audienceTargeting.targetMarket,
+              language: audienceTargeting.language,
+              audienceAge: audienceTargeting.audienceAge,
+              audienceGender: audienceTargeting.audienceGender,
+            },
           }
         });
 
@@ -380,7 +425,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         saveContent({ scripts: generatedScripts });
         toast({
           title: "تم إنشاء السكريبتات",
-          description: `تم إنشاء ${generatedScripts.length} نسخة من السكريبت`,
+          description: `تم إنشاء ${generatedScripts.length} نسخة من السكريبت (via AI Operator)`,
         });
       }
     } catch (error: any) {

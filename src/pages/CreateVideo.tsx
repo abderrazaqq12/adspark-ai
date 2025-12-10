@@ -262,6 +262,11 @@ export default function CreateVideo() {
   // Confirmation dialog state
   const [showClearPipelineDialog, setShowClearPipelineDialog] = useState(false);
 
+  // Backend mode state for webhook indicators
+  const [webhookConfig, setWebhookConfig] = useState<Record<string, { enabled: boolean; webhook_url: string }>>({});
+  const [useN8nBackend, setUseN8nBackend] = useState(false);
+  const [aiOperatorEnabled, setAiOperatorEnabled] = useState(false);
+
   // Smart defaults and cost tracking hooks
   const { defaults, recordChoice, getDefaultForContext, suggestEngine } = useSmartDefaults(projectId || undefined);
   const { costs, projectCost, estimatedTotal, recordCost } = useRealTimeCost(projectId || undefined);
@@ -383,12 +388,37 @@ export default function CreateVideo() {
     toast.success("Pipeline reset - all data cleared");
   };
 
-  // Load existing project, voices, and templates
+  // Load existing project, voices, templates, and webhook config
   useEffect(() => {
     loadLatestProject();
     loadMyVoices();
     loadTemplates();
+    loadWebhookConfig();
   }, []);
+
+  const loadWebhookConfig = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: settings } = await supabase
+        .from('user_settings')
+        .select('use_n8n_backend, ai_operator_enabled, preferences')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (settings) {
+        setUseN8nBackend(settings.use_n8n_backend || false);
+        setAiOperatorEnabled(settings.ai_operator_enabled || false);
+        const prefs = settings.preferences as Record<string, any>;
+        if (prefs?.stage_webhooks) {
+          setWebhookConfig(prefs.stage_webhooks);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading webhook config:', error);
+    }
+  };
 
   const loadLatestProject = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -909,7 +939,15 @@ export default function CreateVideo() {
                     <Circle className="w-5 h-5 opacity-50 shrink-0" />
                   )}
                   <div className="flex flex-col flex-1 min-w-0">
-                    <span className="text-sm font-medium">{stage.name}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-medium">{stage.name}</span>
+                      {useN8nBackend && webhookConfig[stage.key]?.enabled && webhookConfig[stage.key]?.webhook_url && (
+                        <div className="w-2 h-2 rounded-full bg-orange-500" title="Webhook configured" />
+                      )}
+                      {aiOperatorEnabled && !useN8nBackend && (
+                        <div className="w-2 h-2 rounded-full bg-primary" title="AI Operator active" />
+                      )}
+                    </div>
                     <span className={`text-[10px] ${stage.required ? 'text-destructive/80' : 'text-muted-foreground'}`}>
                       {stage.required ? '● Required' : '○ Optional'}
                     </span>
