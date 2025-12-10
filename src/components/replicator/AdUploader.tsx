@@ -2,9 +2,9 @@ import { useState, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Upload, X, Play, Clock, Sparkles, FileVideo, ArrowRight, Loader2 } from "lucide-react";
+import { Upload, X, Clock, Sparkles, ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import type { UploadedAd, AdAnalysis } from "@/pages/CreativeReplicator";
 
 interface AdUploaderProps {
@@ -71,31 +71,57 @@ export const AdUploader = ({ uploadedAds, setUploadedAds, onContinue }: AdUpload
   const analyzeAd = async (ad: UploadedAd) => {
     setAnalyzingId(ad.id);
     
-    // Simulate AI analysis (in production, call edge function)
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    
-    const mockAnalysis: AdAnalysis = {
-      transcript: "This is an amazing product that will change your life...",
-      scenes: [
-        { startTime: 0, endTime: 3, description: "Hook - Problem statement", type: "hook" },
-        { startTime: 3, endTime: 8, description: "Product showcase", type: "showcase" },
-        { startTime: 8, endTime: 12, description: "Benefits explanation", type: "benefits" },
-        { startTime: 12, endTime: 15, description: "Call to action", type: "cta" },
-      ],
-      hook: "problem-solution",
-      pacing: "fast",
-      style: "UGC Review",
-      transitions: ["hard-cut", "zoom"],
-      voiceTone: "energetic",
-      musicType: "upbeat",
-      aspectRatio: "9:16",
-    };
+    try {
+      // Call the edge function for AI analysis
+      const { data, error } = await supabase.functions.invoke('creative-replicator-analyze', {
+        body: {
+          videoUrl: ad.url,
+          fileName: ad.file.name,
+          duration: ad.duration,
+        },
+      });
 
-    setUploadedAds((prev) =>
-      prev.map((a) => (a.id === ad.id ? { ...a, analysis: mockAnalysis } : a))
-    );
-    setAnalyzingId(null);
-    toast.success(`Analyzed ${ad.file.name}`);
+      if (error) {
+        throw error;
+      }
+
+      if (data?.success && data?.analysis) {
+        setUploadedAds((prev) =>
+          prev.map((a) => (a.id === ad.id ? { ...a, analysis: data.analysis } : a))
+        );
+        toast.success(`Analyzed ${ad.file.name}`);
+      } else {
+        throw new Error(data?.error || 'Analysis failed');
+      }
+    } catch (err: unknown) {
+      console.error('Analysis error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Analysis failed';
+      toast.error(errorMessage);
+      
+      // Fallback to default analysis
+      const fallbackAnalysis: AdAnalysis = {
+        transcript: "This is a product showcase video demonstrating key features and benefits.",
+        scenes: [
+          { startTime: 0, endTime: 3, description: "Attention-grabbing hook", type: "hook" },
+          { startTime: 3, endTime: Math.floor(ad.duration * 0.5), description: "Product demonstration", type: "showcase" },
+          { startTime: Math.floor(ad.duration * 0.5), endTime: Math.floor(ad.duration * 0.8), description: "Benefits highlight", type: "benefits" },
+          { startTime: Math.floor(ad.duration * 0.8), endTime: ad.duration, description: "Call to action", type: "cta" }
+        ],
+        hook: "problem-solution",
+        pacing: "fast",
+        style: "UGC Review",
+        transitions: ["hard-cut", "zoom"],
+        voiceTone: "energetic",
+        musicType: "upbeat",
+        aspectRatio: "9:16"
+      };
+      
+      setUploadedAds((prev) =>
+        prev.map((a) => (a.id === ad.id ? { ...a, analysis: fallbackAnalysis } : a))
+      );
+    } finally {
+      setAnalyzingId(null);
+    }
   };
 
   const removeAd = (id: string) => {
