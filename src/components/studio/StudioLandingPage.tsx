@@ -21,6 +21,8 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useStudioPrompts } from '@/hooks/useStudioPrompts';
 import { useAIAgent, getModelName } from '@/hooks/useAIAgent';
+import { useBackendMode } from '@/hooks/useBackendMode';
+import { BackendModeSelector } from '@/components/BackendModeSelector';
 
 interface StudioLandingPageProps {
   onNext: () => void;
@@ -37,6 +39,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
   const { toast } = useToast();
   const { getPrompt, loading: promptsLoading } = useStudioPrompts();
   const { aiAgent, loading: aiAgentLoading } = useAIAgent();
+  const { mode: backendMode, n8nEnabled: useN8nBackend, aiOperatorEnabled, getActiveBackend } = useBackendMode();
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationType, setGenerationType] = useState<'content' | 'code' | null>(null);
   const [viewMode, setViewMode] = useState<'content' | 'preview'>('content');
@@ -46,8 +49,6 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
   const [generatedCode, setGeneratedCode] = useState('');
 
   // N8n backend mode settings
-  const [useN8nBackend, setUseN8nBackend] = useState(false);
-  const [aiOperatorEnabled, setAiOperatorEnabled] = useState(false);
   const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
   const [audienceTargeting, setAudienceTargeting] = useState<AudienceTargeting>({
     targetMarket: 'gcc',
@@ -72,8 +73,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
         .maybeSingle();
 
       if (settings) {
-        setUseN8nBackend(settings.use_n8n_backend || false);
-        setAiOperatorEnabled(settings.ai_operator_enabled || false);
+        // Backend mode is now managed by useBackendMode hook
 
         const prefs = settings.preferences as Record<string, any>;
         if (prefs) {
@@ -104,16 +104,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
   };
 
   const generateLandingPage = async () => {
-    // Check if at least one mode is enabled
-    if (!useN8nBackend && !aiOperatorEnabled) {
-      toast({
-        title: "Mode Required",
-        description: "Please enable either 'n8n Backend Mode' or 'AI Operator Agent' in Settings to generate content.",
-        variant: "destructive",
-      });
-      return;
-    }
-
+    // Backend mode is now managed by useBackendMode hook - 'auto' mode uses Lovable AI
     setIsGenerating(true);
     setGenerationType('content');
 
@@ -301,7 +292,10 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
             Generate Arabic landing page content using Google AI Studio
           </p>
         </div>
-        <Badge variant="outline" className="text-primary border-primary px-3 py-1">Step 4</Badge>
+        <div className="flex items-center gap-3">
+          <BackendModeSelector compact />
+          <Badge variant="outline" className="text-primary border-primary px-3 py-1">Step 4</Badge>
+        </div>
       </div>
 
       {/* Webhook indicator */}
