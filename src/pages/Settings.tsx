@@ -19,6 +19,7 @@ import EngineUsageAnalytics from "@/components/EngineUsageAnalytics";
 import N8nBackendSettings from "@/components/N8nBackendSettings";
 import { StudioDataSettings } from "@/components/studio/StudioDataSettings";
 import StudioPrompts from "@/components/StudioPrompts";
+import DeploymentSettings from "@/components/DeploymentSettings";
 
 
 interface PromptTemplate {
@@ -986,8 +987,9 @@ export default function Settings() {
         </p>
       </div>
 
-      <Tabs defaultValue="api-keys" className="space-y-6">
+      <Tabs defaultValue="deployment" className="space-y-6">
           <TabsList className="bg-muted/50 flex-wrap h-auto p-1">
+          <TabsTrigger value="deployment">Deployment</TabsTrigger>
           <TabsTrigger value="api-keys">API Keys</TabsTrigger>
           <TabsTrigger value="prompts">Prompts</TabsTrigger>
           <TabsTrigger value="data">Data</TabsTrigger>
@@ -996,6 +998,11 @@ export default function Settings() {
           <TabsTrigger value="backend">Backend Mode</TabsTrigger>
           <TabsTrigger value="preferences">Preferences</TabsTrigger>
         </TabsList>
+
+        {/* Deployment Tab */}
+        <TabsContent value="deployment" className="space-y-6">
+          <DeploymentSettings />
+        </TabsContent>
 
         {/* API Keys Tab */}
         <TabsContent value="api-keys" className="space-y-6">
