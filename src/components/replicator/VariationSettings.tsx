@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Zap, Sparkles, Mic, Film, Users, Globe, Shuffle } from "lucide-react";
+import { ArrowLeft, Zap, Sparkles, Mic, Film, Users, Globe, Shuffle, Bot } from "lucide-react";
 import type { VariationConfig } from "@/pages/CreativeReplicator";
 
 interface VariationSettingsProps {
@@ -444,6 +444,23 @@ export const VariationSettings = ({
                   checked={config.randomizeEngines}
                   onCheckedChange={(checked) =>
                     setConfig((prev) => ({ ...prev, randomizeEngines: checked }))
+                  }
+                />
+              </div>
+
+              {/* AI Operator Agent */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="flex items-center gap-2">
+                    <Bot className="w-4 h-4 text-purple-500" />
+                    AI Operator Agent
+                  </Label>
+                  <p className="text-xs text-muted-foreground">Autonomous optimization & retry</p>
+                </div>
+                <Switch
+                  checked={config.useAIOperator}
+                  onCheckedChange={(checked) =>
+                    setConfig((prev) => ({ ...prev, useAIOperator: checked }))
                   }
                 />
               </div>
