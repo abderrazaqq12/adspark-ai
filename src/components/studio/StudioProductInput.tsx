@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Upload, Link2, FileText, ArrowRight, Loader2, Sheet, Database, Image as ImageIcon, Webhook } from 'lucide-react';
+import { Upload, Link2, FileText, ArrowRight, Loader2, Sheet, Database, Image as ImageIcon, Webhook, X, Video, File } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,6 +10,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { toast as sonnerToast } from 'sonner';
 
 interface StudioProductInputProps {
   onNext: () => void;
@@ -44,6 +45,11 @@ export const StudioProductInput = ({
   const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
   const [useN8nBackend, setUseN8nBackend] = useState(false);
   const [webhookResponse, setWebhookResponse] = useState<any>(null);
+  
+  // Media file uploads
+  const [uploadedFiles, setUploadedFiles] = useState<{ name: string; url: string; type: 'image' | 'video' }[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -548,6 +554,134 @@ export const StudioProductInput = ({
               className="bg-background border-border min-h-[60px]"
             />
             <p className="text-xs text-muted-foreground">Enter URLs for product images and videos, one per line</p>
+          </div>
+
+          {/* Media Files Upload */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <Upload className="w-4 h-4 text-muted-foreground" />
+              Media Files (Upload)
+            </Label>
+            <div 
+              className="border-2 border-dashed border-border rounded-lg p-4 hover:border-primary/50 transition-colors cursor-pointer bg-background/50"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const files = e.target.files;
+                  if (!files || files.length === 0) return;
+                  
+                  setIsUploading(true);
+                  try {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (!user) {
+                      sonnerToast.error('Please sign in to upload files');
+                      return;
+                    }
+                    
+                    const newFiles: { name: string; url: string; type: 'image' | 'video' }[] = [];
+                    
+                    for (const file of Array.from(files)) {
+                      const fileExt = file.name.split('.').pop();
+                      const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+                      const isVideo = file.type.startsWith('video/');
+                      const bucket = isVideo ? 'videos' : 'custom-scenes';
+                      
+                      const { data, error } = await supabase.storage
+                        .from(bucket)
+                        .upload(fileName, file);
+                      
+                      if (error) {
+                        console.error('Upload error:', error);
+                        sonnerToast.error(`Failed to upload ${file.name}`);
+                        continue;
+                      }
+                      
+                      const { data: { publicUrl } } = supabase.storage
+                        .from(bucket)
+                        .getPublicUrl(data.path);
+                      
+                      newFiles.push({
+                        name: file.name,
+                        url: publicUrl,
+                        type: isVideo ? 'video' : 'image'
+                      });
+                    }
+                    
+                    setUploadedFiles(prev => [...prev, ...newFiles]);
+                    
+                    // Add uploaded URLs to mediaLinks
+                    const newUrls = newFiles.map(f => f.url).join('\n');
+                    setMediaLinks(prev => prev ? `${prev}\n${newUrls}` : newUrls);
+                    
+                    sonnerToast.success(`${newFiles.length} file(s) uploaded`);
+                  } catch (error) {
+                    console.error('Upload error:', error);
+                    sonnerToast.error('Failed to upload files');
+                  } finally {
+                    setIsUploading(false);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }
+                }}
+              />
+              
+              {isUploading ? (
+                <div className="flex flex-col items-center justify-center py-4">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary mb-2" />
+                  <p className="text-sm text-muted-foreground">Uploading...</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-4">
+                  <Upload className="w-6 h-6 text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">Click to upload images or videos</p>
+                  <p className="text-xs text-muted-foreground mt-1">Supports: JPG, PNG, GIF, MP4, MOV, WebM</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Uploaded Files Preview */}
+            {uploadedFiles.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mt-3">
+                {uploadedFiles.map((file, index) => (
+                  <div key={index} className="relative group rounded-lg overflow-hidden border border-border bg-muted/30">
+                    {file.type === 'image' ? (
+                      <img 
+                        src={file.url} 
+                        alt={file.name}
+                        className="w-full h-20 object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-20 flex items-center justify-center bg-muted">
+                        <Video className="w-6 h-6 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-white hover:text-destructive hover:bg-white/20"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+                          // Remove URL from mediaLinks
+                          setMediaLinks(prev => prev.split('\n').filter(url => url !== file.url).join('\n'));
+                        }}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1.5 py-0.5">
+                      <p className="text-[10px] text-white truncate">{file.name}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </Card>
