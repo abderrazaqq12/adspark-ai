@@ -19,7 +19,7 @@ import EngineUsageAnalytics from "@/components/EngineUsageAnalytics";
 import N8nBackendSettings from "@/components/N8nBackendSettings";
 import { StudioDataSettings } from "@/components/studio/StudioDataSettings";
 import StudioPrompts from "@/components/StudioPrompts";
-import { N8nStageWebhooks } from "@/components/N8nStageWebhooks";
+
 
 interface PromptTemplate {
   id: string;
@@ -2223,7 +2223,6 @@ export default function Settings() {
         {/* Backend Mode Tab */}
         <TabsContent value="backend" className="space-y-6">
           <N8nBackendSettings />
-          <N8nStageWebhooks />
         </TabsContent>
       </Tabs>
     </div>

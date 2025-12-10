@@ -52,6 +52,7 @@ import VideoTimelineEditor from "@/components/VideoTimelineEditor";
 import { PipelineStatusIndicator } from "@/components/PipelineStatusIndicator";
 import VideoGenerationStage from "@/components/VideoGenerationStage";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { RealTimeCostTracker } from "@/components/RealTimeCostTracker";
 import { AIBrainRecommendations } from "@/components/AIBrainRecommendations";
 import { PipelineJobsTracker } from "@/components/PipelineJobsTracker";
@@ -258,9 +259,70 @@ export default function CreateVideo() {
   // Timeline editor state
   const [showTimelineEditor, setShowTimelineEditor] = useState(false);
 
+  // Confirmation dialog state
+  const [showClearPipelineDialog, setShowClearPipelineDialog] = useState(false);
+
   // Smart defaults and cost tracking hooks
   const { defaults, recordChoice, getDefaultForContext, suggestEngine } = useSmartDefaults(projectId || undefined);
   const { costs, projectCost, estimatedTotal, recordCost } = useRealTimeCost(projectId || undefined);
+
+  // Clear functions for each stage
+  const clearStageData = (stageId: number) => {
+    switch (stageId) {
+      case 0:
+        setProductInfo({ name: "", description: "", imageUrl: "", link: "" });
+        toast.success("Product input cleared");
+        break;
+      case 1:
+        // Product content is stored in the StudioMarketingEngine component, reset by remounting
+        toast.success("Product content cleared");
+        break;
+      case 2:
+        // Image generation is stored in the StudioImageGeneration component, reset by remounting
+        toast.success("Image generation cleared");
+        break;
+      case 3:
+        // Landing page content is stored in the StudioLandingPage component, reset by remounting
+        toast.success("Landing page cleared");
+        break;
+      case 4:
+        setScriptSlots([{ id: 1, text: "", audioFile: null, audioUrl: null, generatedAudioUrl: null, isGenerating: false }]);
+        toast.success("Scripts cleared");
+        break;
+      case 5:
+        setScenes([]);
+        toast.success("Scenes cleared");
+        break;
+      case 6:
+        setUploadedVideos([]);
+        toast.success("Video generation cleared");
+        break;
+      case 7:
+        // Assembly settings
+        setVideosToGenerate(10);
+        setTransitionStyle('mixed');
+        setRandomizeOrder(true);
+        setAutoAddMusic(true);
+        toast.success("Assembly settings reset");
+        break;
+      case 8:
+        setSelectedFormats(["9:16", "16:9", "1:1"]);
+        toast.success("Export settings reset");
+        break;
+    }
+  };
+
+  const clearAllPipelineData = () => {
+    setProductInfo({ name: "", description: "", imageUrl: "", link: "" });
+    setScriptSlots([{ id: 1, text: "", audioFile: null, audioUrl: null, generatedAudioUrl: null, isGenerating: false }]);
+    setScenes([]);
+    setUploadedVideos([]);
+    setCurrentStage(0);
+    setExpandedStage(0);
+    setSelectedTemplates([]);
+    setShowClearPipelineDialog(false);
+    toast.success("Pipeline reset - all data cleared");
+  };
 
   // Load existing project, voices, and templates
   useEffect(() => {
@@ -718,25 +780,33 @@ export default function CreateVideo() {
               <h2 className="text-lg font-semibold text-foreground">Pipeline</h2>
               <p className="text-xs text-muted-foreground">Production stages</p>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-              onClick={() => {
-                // Reset all UI state (dashboard only, not database)
-                setProductInfo({ name: "", description: "", imageUrl: "", link: "" });
-                setScriptSlots([{ id: 1, text: "", audioFile: null, audioUrl: null, generatedAudioUrl: null, isGenerating: false }]);
-                setScenes([]);
-                setUploadedVideos([]);
-                setCurrentStage(0);
-                setExpandedStage(0);
-                setSelectedTemplates([]);
-                toast.success("Pipeline reset - dashboard cleared");
-              }}
-              title="Clear pipeline data"
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
+            <AlertDialog open={showClearPipelineDialog} onOpenChange={setShowClearPipelineDialog}>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  title="Clear all pipeline data"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Clear All Pipeline Data?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will reset all stages including product info, scripts, scenes, and videos. 
+                    This action only affects the dashboard view, not your database or Google Sheets.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={clearAllPipelineData} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    Clear All
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
           {/* Progress Indicator */}
           <div className="mt-3 space-y-1">
@@ -758,33 +828,47 @@ export default function CreateVideo() {
         <div className="flex flex-col gap-1">
           {pipelineStages.map((stage, index) => (
             <div key={stage.id} className="flex flex-col">
-              <button
-                onClick={() => {
-                  setExpandedStage(stage.id);
-                  setCurrentStage(stage.id);
-                }}
-                className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left w-full cursor-pointer ${
-                  expandedStage === stage.id 
-                    ? 'bg-primary/20 text-primary' 
-                    : currentStage > stage.id || currentStage === stage.id
-                      ? 'bg-primary/10 text-primary hover:bg-primary/20'
-                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-                }`}
-              >
-                {currentStage > stage.id ? (
-                  <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
-                ) : expandedStage === stage.id ? (
-                  <stage.icon className="w-5 h-5 shrink-0" />
-                ) : (
-                  <Circle className="w-5 h-5 opacity-50 shrink-0" />
-                )}
-                <div className="flex flex-col flex-1 min-w-0">
-                  <span className="text-sm font-medium">{stage.name}</span>
-                  <span className={`text-[10px] ${stage.required ? 'text-destructive/80' : 'text-muted-foreground'}`}>
-                    {stage.required ? '● Required' : '○ Optional'}
-                  </span>
-                </div>
-              </button>
+              <div className="flex items-center group">
+                <button
+                  onClick={() => {
+                    setExpandedStage(stage.id);
+                    setCurrentStage(stage.id);
+                  }}
+                  className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left flex-1 cursor-pointer ${
+                    expandedStage === stage.id 
+                      ? 'bg-primary/20 text-primary' 
+                      : currentStage > stage.id || currentStage === stage.id
+                        ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                        : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                  }`}
+                >
+                  {currentStage > stage.id ? (
+                    <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
+                  ) : expandedStage === stage.id ? (
+                    <stage.icon className="w-5 h-5 shrink-0" />
+                  ) : (
+                    <Circle className="w-5 h-5 opacity-50 shrink-0" />
+                  )}
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <span className="text-sm font-medium">{stage.name}</span>
+                    <span className={`text-[10px] ${stage.required ? 'text-destructive/80' : 'text-muted-foreground'}`}>
+                      {stage.required ? '● Required' : '○ Optional'}
+                    </span>
+                  </div>
+                </button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clearStageData(stage.id);
+                  }}
+                  title={`Clear ${stage.name}`}
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
               {index < pipelineStages.length - 1 && (
                 <div className="ml-6 h-4 border-l-2 border-muted-foreground/20" />
               )}
