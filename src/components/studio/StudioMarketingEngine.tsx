@@ -185,42 +185,44 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         product_description: productInfo.description,
       });
 
-      // Priority 1: When n8n Backend Mode is enabled, use per-stage webhook
+      // Priority 1: When n8n Backend Mode is enabled, use per-stage webhook via proxy
       if (useN8nBackend) {
         if (!n8nWebhookUrl) {
           throw new Error('n8n Backend Mode is enabled but no webhook URL is configured for Product Content stage. Please configure it in Settings.');
         }
         
-        console.log('Calling Product Content webhook (n8n mode):', n8nWebhookUrl);
+        console.log('Calling Product Content webhook via proxy (n8n mode):', n8nWebhookUrl);
         
-        const response = await fetch(n8nWebhookUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'generate_marketing_angles',
-            productName: productInfo.name,
-            productDescription: productInfo.description,
-            productUrl: productInfo.url,
-            prompt: anglesPrompt,
-            model: getModelName(aiAgent),
-            audienceTargeting: {
-              targetMarket: audienceTargeting.targetMarket,
-              language: audienceTargeting.language,
-              audienceAge: audienceTargeting.audienceAge,
-              audienceGender: audienceTargeting.audienceGender,
-            },
-            userId: session.user.id,
-            timestamp: new Date().toISOString(),
-          }),
+        // Use edge function proxy to avoid CORS issues
+        const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('n8n-proxy', {
+          body: {
+            webhookUrl: n8nWebhookUrl,
+            payload: {
+              action: 'generate_marketing_angles',
+              productName: productInfo.name,
+              productDescription: productInfo.description,
+              productUrl: productInfo.url,
+              prompt: anglesPrompt,
+              model: getModelName(aiAgent),
+              audienceTargeting: {
+                targetMarket: audienceTargeting.targetMarket,
+                language: audienceTargeting.language,
+                audienceAge: audienceTargeting.audienceAge,
+                audienceGender: audienceTargeting.audienceGender,
+              },
+            }
+          }
         });
 
-        if (!response.ok) {
-          throw new Error(`Webhook error: ${response.status}`);
+        if (proxyError) {
+          throw new Error(proxyError.message || 'Webhook proxy error');
         }
 
-        const data = await response.json();
+        if (!proxyResponse?.success) {
+          throw new Error(proxyResponse?.error || 'Webhook call failed');
+        }
+
+        const data = proxyResponse.data;
         setWebhookResponse(data);
 
         const angles: GeneratedAngles = data?.problemsSolved ? data : {
@@ -376,35 +378,40 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
           throw new Error('n8n Backend Mode is enabled but no webhook URL is configured for Product Content stage. Please configure it in Settings.');
         }
         
-        console.log('Calling Scripts webhook (n8n mode):', n8nWebhookUrl);
-        const response = await fetch(n8nWebhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'generate_scripts',
-            productName: productInfo.name,
-            productDescription: productInfo.description,
-            productUrl: productInfo.url,
-            prompt: scriptsPrompt,
-            tones: tones.slice(0, count),
-            count,
-            audienceTargeting: {
-              targetMarket: audienceTargeting.targetMarket,
-              language: audienceTargeting.language,
-              audienceAge: audienceTargeting.audienceAge,
-              audienceGender: audienceTargeting.audienceGender,
-            },
-            model: getModelName(aiAgent),
-            userId: session.user.id,
-            timestamp: new Date().toISOString(),
-          }),
+        console.log('Calling Scripts webhook via proxy (n8n mode):', n8nWebhookUrl);
+        
+        // Use edge function proxy to avoid CORS issues
+        const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('n8n-proxy', {
+          body: {
+            webhookUrl: n8nWebhookUrl,
+            payload: {
+              action: 'generate_scripts',
+              productName: productInfo.name,
+              productDescription: productInfo.description,
+              productUrl: productInfo.url,
+              prompt: scriptsPrompt,
+              tones: tones.slice(0, count),
+              count,
+              audienceTargeting: {
+                targetMarket: audienceTargeting.targetMarket,
+                language: audienceTargeting.language,
+                audienceAge: audienceTargeting.audienceAge,
+                audienceGender: audienceTargeting.audienceGender,
+              },
+              model: getModelName(aiAgent),
+            }
+          }
         });
 
-        if (!response.ok) {
-          throw new Error(`Webhook error: ${response.status}`);
+        if (proxyError) {
+          throw new Error(proxyError.message || 'Webhook proxy error');
         }
 
-        const data = await response.json();
+        if (!proxyResponse?.success) {
+          throw new Error(proxyResponse?.error || 'Webhook call failed');
+        }
+
+        const data = proxyResponse.data;
         
         const generatedScripts: GeneratedScript[] = data?.scripts || tones.slice(0, count).map((tone, i) => ({
           id: `script-${i}`,
@@ -419,7 +426,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
           title: "تم إنشاء السكريبتات",
           description: `تم إنشاء ${generatedScripts.length} نسخة من السكريبت (via n8n)`,
         });
-      } 
+      }
       // Priority 2: AI Operator Agent Mode
       else if (aiOperatorEnabled) {
         console.log('Calling Script Generation (AI Operator mode)');
@@ -534,27 +541,32 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
           throw new Error('n8n Backend Mode is enabled but no webhook URL is configured for Product Content stage.');
         }
         
-        console.log('Calling Landing Content webhook (n8n mode):', n8nWebhookUrl);
-        const response = await fetch(n8nWebhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'generate_landing_content',
-            productName: productInfo.name,
-            productDescription: productInfo.description,
-            prompt: landingPrompt,
-            audienceTargeting,
-            model: getModelName(aiAgent),
-            userId: session.user.id,
-            timestamp: new Date().toISOString(),
-          }),
+        console.log('Calling Landing Content webhook via proxy (n8n mode):', n8nWebhookUrl);
+        
+        // Use edge function proxy to avoid CORS issues
+        const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('n8n-proxy', {
+          body: {
+            webhookUrl: n8nWebhookUrl,
+            payload: {
+              action: 'generate_landing_content',
+              productName: productInfo.name,
+              productDescription: productInfo.description,
+              prompt: landingPrompt,
+              audienceTargeting,
+              model: getModelName(aiAgent),
+            }
+          }
         });
 
-        if (!response.ok) {
-          throw new Error(`Webhook error: ${response.status}`);
+        if (proxyError) {
+          throw new Error(proxyError.message || 'Webhook proxy error');
         }
 
-        const data = await response.json();
+        if (!proxyResponse?.success) {
+          throw new Error(proxyResponse?.error || 'Webhook call failed');
+        }
+
+        const data = proxyResponse.data;
         const content = data?.content || data?.landingContent || generateDefaultLandingContent();
         setLandingContent(content);
         saveContent({ landingContent: content });

@@ -133,31 +133,35 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
           throw new Error('n8n Backend Mode is enabled but no webhook URL is configured for Landing Page stage. Please configure it in Settings.');
         }
         
-        console.log('Calling Landing Page webhook (n8n mode):', n8nWebhookUrl);
+        console.log('Calling Landing Page webhook via proxy (n8n mode):', n8nWebhookUrl);
         
-        const response = await fetch(n8nWebhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'generate_landing_page',
-            productName: productInfo.name,
-            productDescription: productInfo.description,
-            productUrl: productInfo.url,
-            prompt: landingPrompt,
-            model: getModelName(aiAgent),
-            audienceTargeting: {
-              targetMarket: audienceTargeting.targetMarket,
-              language: audienceTargeting.language,
-              audienceAge: audienceTargeting.audienceAge,
-              audienceGender: audienceTargeting.audienceGender,
-            },
-            userId: session.user.id,
-            timestamp: new Date().toISOString(),
-          }),
+        // Use edge function proxy to avoid CORS issues
+        const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('n8n-proxy', {
+          body: {
+            webhookUrl: n8nWebhookUrl,
+            payload: {
+              action: 'generate_landing_page',
+              productName: productInfo.name,
+              productDescription: productInfo.description,
+              productUrl: productInfo.url,
+              prompt: landingPrompt,
+              model: getModelName(aiAgent),
+              audienceTargeting: {
+                targetMarket: audienceTargeting.targetMarket,
+                language: audienceTargeting.language,
+                audienceAge: audienceTargeting.audienceAge,
+                audienceGender: audienceTargeting.audienceGender,
+              },
+            }
+          }
         });
 
-        if (response.ok) {
-          const data = await response.json();
+        if (proxyError) {
+          throw new Error(proxyError.message || 'Webhook proxy error');
+        }
+
+        if (proxyResponse?.success) {
+          const data = proxyResponse.data;
           const content = data?.content || data?.html || '';
           setGeneratedContent(content);
           setViewMode('content');
@@ -166,9 +170,9 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
             description: "تم إنشاء محتوى صفحة الهبوط بنجاح (via n8n)",
           });
         } else {
-          throw new Error(`Webhook error: ${response.status}`);
+          throw new Error(proxyResponse?.error || 'Webhook call failed');
         }
-      } 
+      }
       // Priority 2: AI Operator Agent Mode
       else if (aiOperatorEnabled) {
         console.log('Calling Landing Page Generation (AI Operator mode)');
