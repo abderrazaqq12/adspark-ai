@@ -110,32 +110,40 @@ serve(async (req) => {
       throw new Error('Invalid authorization');
     }
 
+    const requestData = await req.json();
+    
     const {
       projectId,
-      productName,
+      productName = '',
       productDescription = '',
       productFeatures = [],
       productPrice = '',
-      contentTypes,
-      language,
-      market,
-      audience,
+      contentTypes = [],
+      language = 'ar' as Language,
+      market = 'sa' as Market,
+      audience = 'both' as Audience,
       customPrompt = '',
       hooksCount = 30,
       scriptsCount = 5,
       offersCount = 10
-    }: ContentFactoryRequest = await req.json();
+    } = requestData;
 
-    if (!projectId || !productName || !contentTypes || contentTypes.length === 0) {
-      throw new Error('projectId, productName, and contentTypes are required');
+    if (!productName || !contentTypes || contentTypes.length === 0) {
+      throw new Error('productName and contentTypes are required');
     }
+
+    // Use a default projectId if not provided
+    const effectiveProjectId = projectId || 'studio-session';
 
     console.log(`Content Factory: Generating ${contentTypes.join(', ')} for ${productName}`);
 
-    const marketProfile = MARKET_PROFILES[market];
-    const langConfig = LANGUAGE_CONFIG[language];
+    const effectiveMarket: Market = market || 'sa';
+    const effectiveLanguage: Language = language || 'ar';
 
-    const results: Record<ContentType, any> = {} as any;
+    const marketProfile = MARKET_PROFILES[effectiveMarket];
+    const langConfig = LANGUAGE_CONFIG[effectiveLanguage];
+
+    const results: Record<string, any> = {};
 
     // Build context for all content generation
     const contextBlock = `
@@ -145,7 +153,7 @@ PRODUCT INFORMATION:
 - Features: ${productFeatures.join(', ')}
 - Price: ${productPrice}
 
-TARGET MARKET: ${market.toUpperCase()}
+TARGET MARKET: ${effectiveMarket.toUpperCase()}
 - Tone: ${marketProfile.tone}
 - CTA Style: ${marketProfile.ctaStyle}
 - Psychology: ${marketProfile.psychology}
@@ -370,7 +378,7 @@ Output format:
             messages: [
               { 
                 role: 'system', 
-                content: `You are an expert e-commerce copywriter and marketing strategist specializing in ${market.toUpperCase()} market. 
+                content: `You are an expert e-commerce copywriter and marketing strategist specializing in ${effectiveMarket.toUpperCase()} market. 
 You create culturally appropriate, high-converting content in ${langConfig.name}.
 Always output valid JSON as specified.` 
               },
@@ -403,8 +411,8 @@ Always output valid JSON as specified.`
           results[contentType] = { raw: contentText };
         }
 
-        // Save to marketing_content table
-        if (contentType === 'hooks' && results[contentType].hooks) {
+        // Save to marketing_content table (only if projectId was provided)
+        if (projectId && contentType === 'hooks' && results[contentType].hooks) {
           for (const hook of results[contentType].hooks) {
             await supabase.from('marketing_content').insert({
               project_id: projectId,
@@ -428,29 +436,31 @@ Always output valid JSON as specified.`
       }
     }
 
-    // Track costs
-    await supabase.from('ai_costs').insert({
-      user_id: user.id,
-      project_id: projectId,
-      engine_name: 'gemini-2.5-flash',
-      operation_type: 'script',
-      cost_usd: contentTypes.length * 0.005
-    });
+    // Track costs (only if projectId was provided)
+    if (projectId) {
+      await supabase.from('ai_costs').insert({
+        user_id: user.id,
+        project_id: projectId,
+        engine_name: 'gemini-2.5-flash',
+        operation_type: 'script',
+        cost_usd: contentTypes.length * 0.005
+      });
 
-    // Log analytics
-    await supabase.from('analytics_events').insert({
-      user_id: user.id,
-      project_id: projectId,
-      event_type: 'content_factory',
-      event_data: {
-        content_types: contentTypes,
-        language,
-        market,
-        audience
-      }
-    });
+      // Log analytics
+      await supabase.from('analytics_events').insert({
+        user_id: user.id,
+        project_id: projectId,
+        event_type: 'content_factory',
+        event_data: {
+          content_types: contentTypes,
+          language,
+          market,
+          audience
+        }
+      });
+    }
 
-    console.log(`Content Factory complete for project ${projectId}`);
+    console.log(`Content Factory complete${projectId ? ` for project ${projectId}` : ''}`);
 
     return new Response(JSON.stringify({
       success: true,
