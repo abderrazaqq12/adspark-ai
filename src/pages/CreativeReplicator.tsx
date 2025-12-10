@@ -88,6 +88,7 @@ export interface GeneratedVideo {
 
 const CreativeReplicator = () => {
   const [activeStep, setActiveStep] = useState<string>("upload");
+  const [projectName, setProjectName] = useState<string>("");
   const [uploadedAds, setUploadedAds] = useState<UploadedAd[]>([]);
   const [variationConfig, setVariationConfig] = useState<VariationConfig>({
     count: 10,
@@ -275,6 +276,31 @@ const CreativeReplicator = () => {
       setActiveStep("results");
       toast.success(`Generated ${results.length} video variations!`);
 
+      // Create Google Drive folder if project name is set
+      if (projectName.trim()) {
+        try {
+          const { data: folderData, error: folderError } = await supabase.functions.invoke('create-google-drive-folder', {
+            body: {
+              folderName: `${projectName.trim()} - ${new Date().toLocaleDateString()}`,
+            },
+          });
+
+          if (folderError) {
+            console.error('Google Drive folder error:', folderError);
+            toast.warning("Results ready! Google Drive folder creation failed - check Settings.");
+          } else if (folderData?.success) {
+            toast.success(`Google Drive folder created: ${folderData.folder_name}`, {
+              action: {
+                label: "Open",
+                onClick: () => window.open(folderData.folder_link, '_blank'),
+              },
+            });
+          }
+        } catch (driveError) {
+          console.error('Google Drive error:', driveError);
+        }
+      }
+
     } catch (err: unknown) {
       console.error('Generation error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Generation failed';
@@ -347,6 +373,8 @@ const CreativeReplicator = () => {
               <AdUploader
                 uploadedAds={uploadedAds}
                 setUploadedAds={setUploadedAds}
+                projectName={projectName}
+                setProjectName={setProjectName}
                 onContinue={() => setActiveStep("settings")}
               />
             )}

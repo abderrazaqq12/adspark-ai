@@ -2,7 +2,9 @@ import { useState, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Upload, X, Clock, Sparkles, ArrowRight, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Upload, X, Clock, Sparkles, ArrowRight, Loader2, FolderOpen } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { UploadedAd, AdAnalysis } from "@/pages/CreativeReplicator";
@@ -10,10 +12,12 @@ import type { UploadedAd, AdAnalysis } from "@/pages/CreativeReplicator";
 interface AdUploaderProps {
   uploadedAds: UploadedAd[];
   setUploadedAds: React.Dispatch<React.SetStateAction<UploadedAd[]>>;
+  projectName: string;
+  setProjectName: React.Dispatch<React.SetStateAction<string>>;
   onContinue: () => void;
 }
 
-export const AdUploader = ({ uploadedAds, setUploadedAds, onContinue }: AdUploaderProps) => {
+export const AdUploader = ({ uploadedAds, setUploadedAds, projectName, setProjectName, onContinue }: AdUploaderProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -142,6 +146,24 @@ export const AdUploader = ({ uploadedAds, setUploadedAds, onContinue }: AdUpload
           </p>
         </div>
         <Badge variant="outline">{uploadedAds.length}/10 ads</Badge>
+      </div>
+
+      {/* Project Name Input */}
+      <div className="p-4 rounded-lg bg-accent/30 border border-border space-y-2">
+        <Label className="flex items-center gap-2 text-sm font-medium">
+          <FolderOpen className="w-4 h-4 text-primary" />
+          Project Name
+          <Badge variant="secondary" className="text-xs">For Google Drive</Badge>
+        </Label>
+        <Input
+          placeholder="e.g., Summer Campaign 2025, Product X Launch..."
+          value={projectName}
+          onChange={(e) => setProjectName(e.target.value)}
+          className="bg-background"
+        />
+        <p className="text-xs text-muted-foreground">
+          A folder with this name will be created in your linked Google Drive when generation completes
+        </p>
       </div>
 
       {/* Upload Zone */}
