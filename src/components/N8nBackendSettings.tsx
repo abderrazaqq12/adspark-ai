@@ -164,6 +164,7 @@ export default function N8nBackendSettings({ userSettings: propSettings, onSetti
   const [webhooks, setWebhooks] = useState<Record<string, StageWebhookConfig>>({});
   const [expandedStages, setExpandedStages] = useState<Record<number, boolean>>({});
   const [testingStage, setTestingStage] = useState<number | null>(null);
+  const [testingAll, setTestingAll] = useState(false);
   const [testResults, setTestResults] = useState<Record<number, { success: boolean; message: string }>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(!propSettings);
@@ -256,6 +257,26 @@ export default function N8nBackendSettings({ userSettings: propSettings, onSetti
     } finally {
       setTestingStage(null);
     }
+  };
+
+  const testAllWebhooks = async () => {
+    setTestingAll(true);
+    setTestResults({});
+
+    const enabledStages = PIPELINE_STAGES.filter(stage => {
+      const config = webhooks[stage.key];
+      return config?.enabled && config?.webhook_url;
+    });
+
+    for (const stage of enabledStages) {
+      await testWebhook(stage.id);
+      // Small delay between tests
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    setTestingAll(false);
+    const successCount = enabledStages.filter(s => testResults[s.id]?.success).length;
+    toast.success(`Tested ${enabledStages.length} webhooks`);
   };
 
   const toggleStage = (stageId: number) => {
@@ -376,14 +397,32 @@ export default function N8nBackendSettings({ userSettings: propSettings, onSetti
       {/* Per-Stage Webhooks */}
       {useN8nBackend && (
         <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-foreground">
-              <Zap className="h-5 w-5 text-primary" />
-              Per-Stage Webhooks
-            </CardTitle>
-            <CardDescription className="text-muted-foreground">
-              Configure a separate webhook URL for each pipeline stage
-            </CardDescription>
+       <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-foreground">
+                  <Zap className="h-5 w-5 text-primary" />
+                  Per-Stage Webhooks
+                </CardTitle>
+                <CardDescription className="text-muted-foreground">
+                  Configure a separate webhook URL for each pipeline stage
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={testAllWebhooks}
+                disabled={testingAll}
+                className="border-border"
+              >
+                {testingAll ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : (
+                  <Play className="h-4 w-4 mr-1" />
+                )}
+                Test All
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
             {PIPELINE_STAGES.map((stage) => {

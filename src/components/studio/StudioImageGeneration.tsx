@@ -14,7 +14,8 @@ import {
   RefreshCw,
   Download,
   Trash2,
-  AlertCircle
+  AlertCircle,
+  Webhook
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -57,6 +58,10 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
   const [isLoadingProject, setIsLoadingProject] = useState(false);
   const [generationStartTime, setGenerationStartTime] = useState<number | undefined>();
   const generatingCountRef = useRef({ completed: 0, failed: 0, total: 0 });
+  
+  // n8n Backend Mode settings
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
+  const [useN8nBackend, setUseN8nBackend] = useState(false);
 
   useEffect(() => {
     loadProductInfo();
@@ -106,16 +111,28 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
 
       const { data: settings } = await supabase
         .from('user_settings')
-        .select('preferences')
+        .select('preferences, use_n8n_backend')
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (settings?.preferences) {
-        const prefs = settings.preferences as Record<string, string>;
-        setProductInfo({
-          name: prefs.studio_product_name || '',
-          description: prefs.studio_description || ''
-        });
+      if (settings) {
+        // Load n8n Backend Mode settings
+        setUseN8nBackend(settings.use_n8n_backend || false);
+        
+        const prefs = settings.preferences as Record<string, any>;
+        if (prefs) {
+          setProductInfo({
+            name: prefs.studio_product_name || '',
+            description: prefs.studio_description || ''
+          });
+          
+          // Load webhook URL from per-stage webhooks
+          const stageWebhooks = prefs.stage_webhooks || {};
+          const imageGenWebhook = stageWebhooks.image_generation;
+          if (imageGenWebhook?.webhook_url) {
+            setN8nWebhookUrl(imageGenWebhook.webhook_url);
+          }
+        }
       }
 
       // Load project if not provided via props
@@ -227,25 +244,60 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
       for (let idx = 0; idx < newImages.length; idx++) {
         const img = newImages[idx];
         try {
-          const response = await supabase.functions.invoke('ai-image-generator', {
-            body: {
-              prompt: img.prompt,
-              imageType: img.type,
-              resolution,
-              engine: imageEngine,
-              productName: productInfo.name,
-              productDescription: productInfo.description,
-              projectId: projectId,
+          let imageUrl = '';
+          
+          // Use n8n webhook if Backend Mode is enabled
+          if (useN8nBackend && n8nWebhookUrl) {
+            console.log('Calling Image Generation webhook:', n8nWebhookUrl);
+            const webhookResponse = await fetch(n8nWebhookUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'generate_image',
+                prompt: img.prompt,
+                imageType: img.type,
+                resolution,
+                engine: imageEngine,
+                productName: productInfo.name,
+                productDescription: productInfo.description,
+                projectId: projectId,
+                userId: session.user.id,
+                timestamp: new Date().toISOString(),
+              }),
+            });
+
+            if (!webhookResponse.ok) {
+              throw new Error(`Webhook error: ${webhookResponse.status}`);
             }
-          });
 
-          const imageUrl = response.data?.imageUrl || response.data?.images?.[0]?.url || response.data?.url || '';
+            const webhookData = await webhookResponse.json();
+            imageUrl = webhookData?.imageUrl || webhookData?.url || webhookData?.images?.[0]?.url || '';
+          } else {
+            // Use Supabase function
+            const response = await supabase.functions.invoke('ai-image-generator', {
+              body: {
+                prompt: img.prompt,
+                imageType: img.type,
+                resolution,
+                engine: imageEngine,
+                productName: productInfo.name,
+                productDescription: productInfo.description,
+                projectId: projectId,
+              }
+            });
 
-          if (response.error || !imageUrl) {
+            imageUrl = response.data?.imageUrl || response.data?.images?.[0]?.url || response.data?.url || '';
+
+            if (response.error) {
+              throw new Error(response.error.message || 'Failed to generate');
+            }
+          }
+
+          if (!imageUrl) {
             generatingCountRef.current.failed++;
             setImages(prev => prev.map(p => 
               p.id === img.id 
-                ? { ...p, status: 'failed' as const, error: response.error?.message || 'Failed to generate' }
+                ? { ...p, status: 'failed' as const, error: 'No image URL returned' }
                 : p
             ));
           } else {
@@ -367,7 +419,15 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
           <h2 className="text-2xl font-bold text-foreground">Image Generation</h2>
           <p className="text-muted-foreground text-sm mt-1">Generate product images, mockups, and thumbnails</p>
         </div>
-        <Badge variant="outline" className="text-primary border-primary">Step 3</Badge>
+        <div className="flex items-center gap-2">
+          {useN8nBackend && n8nWebhookUrl && (
+            <div className="flex items-center gap-1 text-xs text-green-500">
+              <Webhook className="w-3 h-3" />
+              <span>Webhook</span>
+            </div>
+          )}
+          <Badge variant="outline" className="text-primary border-primary">Step 3</Badge>
+        </div>
       </div>
 
       {/* Product Info Display */}

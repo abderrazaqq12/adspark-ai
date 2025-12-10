@@ -156,76 +156,101 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         product_description: productInfo.description,
       });
 
-      // Use Backend Mode webhook URL if enabled, otherwise use default
-      const webhookUrl = useN8nBackend && n8nWebhookUrl 
-        ? n8nWebhookUrl 
-        : 'https://n8n.srv854030.hstgr.cloud/webhook/flowscale-ai-Product_content';
-      
-      console.log('Calling Product Content webhook:', webhookUrl);
-      
-      const response = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'generate_marketing_angles',
-          productName: productInfo.name,
-          productDescription: productInfo.description,
-          productUrl: productInfo.url,
-          prompt: anglesPrompt,
-          model: getModelName(aiAgent),
-          userId: session.user.id,
-          timestamp: new Date().toISOString(),
-        }),
-      });
+      // When n8n Backend Mode is enabled, use per-stage webhook
+      // Otherwise fall back to default webhook (only if n8n is enabled)
+      if (useN8nBackend && n8nWebhookUrl) {
+        console.log('Calling Product Content webhook (n8n mode):', n8nWebhookUrl);
+        
+        const response = await fetch(n8nWebhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'generate_marketing_angles',
+            productName: productInfo.name,
+            productDescription: productInfo.description,
+            productUrl: productInfo.url,
+            prompt: anglesPrompt,
+            model: getModelName(aiAgent),
+            userId: session.user.id,
+            timestamp: new Date().toISOString(),
+          }),
+        });
 
-      if (!response.ok) {
-        throw new Error(`Webhook error: ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`Webhook error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        setWebhookResponse(data);
+
+        const angles: GeneratedAngles = data?.problemsSolved ? data : {
+          problemsSolved: data?.problems_solved || [
+            'المشاكل الجلدية المزعجة مثل حب الشباب والبقع الداكنة',
+            'قلة الثقة بالنفس بسبب مظهر البشرة',
+            'صعوبة إيجاد منتج آمن وفعال',
+          ],
+          customerValue: data?.customer_value || [
+            'بشرة نضرة ومشرقة خلال أسابيع قليلة',
+            'ثقة عالية بالنفس والمظهر',
+            'مكونات طبيعية آمنة 100%',
+          ],
+          marketingAngles: data?.marketing_angles || [
+            'المشكلة → الحل: من بشرة مرهقة إلى إشراقة طبيعية',
+            'الدليل الاجتماعي: آلاف العملاء الراضين',
+            'الندرة والإلحاح: عرض محدود لفترة قصيرة',
+          ],
+        };
+
+        setGeneratedAngles(angles);
+        saveContent({ angles });
+        
+        toast({
+          title: "تم إنشاء الزوايا التسويقية",
+          description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل",
+        });
+      } else {
+        // Fallback to Supabase function when n8n is NOT enabled
+        const { data, error } = await supabase.functions.invoke('ai-content-factory', {
+          body: {
+            productName: productInfo.name,
+            productDescription: productInfo.description,
+            contentTypes: ['marketing_angles'],
+            language: 'ar',
+          }
+        });
+
+        if (error) throw error;
+
+        const angles: GeneratedAngles = {
+          problemsSolved: data?.marketing_angles?.problems || [
+            'المشاكل الجلدية المزعجة مثل حب الشباب والبقع الداكنة',
+            'قلة الثقة بالنفس بسبب مظهر البشرة',
+            'صعوبة إيجاد منتج آمن وفعال',
+          ],
+          customerValue: data?.marketing_angles?.value || [
+            'بشرة نضرة ومشرقة خلال أسابيع قليلة',
+            'ثقة عالية بالنفس والمظهر',
+            'مكونات طبيعية آمنة 100%',
+          ],
+          marketingAngles: data?.marketing_angles?.angles || [
+            'المشكلة → الحل: من بشرة مرهقة إلى إشراقة طبيعية',
+            'الدليل الاجتماعي: آلاف العملاء الراضين',
+            'الندرة والإلحاح: عرض محدود لفترة قصيرة',
+          ],
+        };
+
+        setGeneratedAngles(angles);
+        saveContent({ angles });
+        
+        toast({
+          title: "تم إنشاء الزوايا التسويقية",
+          description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل",
+        });
       }
-
-      const data = await response.json();
-      
-      // Store raw webhook response for preview
-      setWebhookResponse(data);
-
-      // Use webhook response or fallback to default structure
-      const angles: GeneratedAngles = data?.problemsSolved ? data : {
-        problemsSolved: data?.problems_solved || [
-          'المشاكل الجلدية المزعجة مثل حب الشباب والبقع الداكنة',
-          'قلة الثقة بالنفس بسبب مظهر البشرة',
-          'صعوبة إيجاد منتج آمن وفعال',
-          'إهدار المال على منتجات لا تعمل',
-          'الشعور بالإحراج في المناسبات الاجتماعية',
-        ],
-        customerValue: data?.customer_value || [
-          'بشرة نضرة ومشرقة خلال أسابيع قليلة',
-          'ثقة عالية بالنفس والمظهر',
-          'مكونات طبيعية آمنة 100%',
-          'نتائج مثبتة علمياً',
-          'توفير المال مقارنة بالعلاجات التجميلية',
-        ],
-        marketingAngles: data?.marketing_angles || [
-          'المشكلة → الحل: من بشرة مرهقة إلى إشراقة طبيعية',
-          'الدليل الاجتماعي: آلاف العملاء الراضين',
-          'الندرة والإلحاح: عرض محدود لفترة قصيرة',
-          'تفوق المكونات: تركيبة فريدة من خبراء التجميل',
-          'التحول الطموح: اكتشفي أفضل نسخة من جمالك',
-          'قبل وبعد: نتائج حقيقية من عملاء حقيقيين',
-          'القصة العاطفية: رحلة استعادة الثقة',
-          'ضمان النتيجة: استرداد كامل إذا لم تعجبك',
-        ],
-      };
-
-      setGeneratedAngles(angles);
-      saveContent({ angles });
-      
-      toast({
-        title: "تم إنشاء الزوايا التسويقية",
-        description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل",
-      });
     } catch (error: any) {
-      console.error('Webhook error:', error);
+      console.error('Generation error:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to generate marketing angles",
@@ -246,34 +271,76 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       const tones = ['engaging', 'professional', 'urgent', 'emotional', 'casual', 'humorous', 'luxurious', 'educational', 'storytelling', 'direct'];
       const count = parseInt(scriptsCount);
       
-      const response = await supabase.functions.invoke('generate-script-from-product', {
-        body: {
-          productName: productInfo.name,
-          productDescription: productInfo.description,
-          language: 'ar',
-          tone: tones[0],
-          model: getModelName(aiAgent),
+      // If n8n Backend Mode is enabled, use webhook instead of Supabase function
+      if (useN8nBackend && n8nWebhookUrl) {
+        console.log('Calling Scripts webhook:', n8nWebhookUrl);
+        const response = await fetch(n8nWebhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'generate_scripts',
+            productName: productInfo.name,
+            productDescription: productInfo.description,
+            productUrl: productInfo.url,
+            tones: tones.slice(0, count),
+            count,
+            language: 'ar',
+            model: getModelName(aiAgent),
+            userId: session.user.id,
+            timestamp: new Date().toISOString(),
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Webhook error: ${response.status}`);
         }
-      });
 
-      if (response.error) {
-        console.error('Script generation error:', response.error);
+        const data = await response.json();
+        
+        // Use webhook response or fallback
+        const generatedScripts: GeneratedScript[] = data?.scripts || tones.slice(0, count).map((tone, i) => ({
+          id: `script-${i}`,
+          tone,
+          content: `سكريبت ${tone} لمنتج ${productInfo.name}...`,
+          wordCount: Math.floor(Math.random() * 100) + 50,
+        }));
+
+        setScripts(generatedScripts);
+        saveContent({ scripts: generatedScripts });
+        toast({
+          title: "تم إنشاء السكريبتات",
+          description: `تم إنشاء ${generatedScripts.length} نسخة من السكريبت`,
+        });
+      } else {
+        // Use Supabase function (fallback)
+        const response = await supabase.functions.invoke('generate-script-from-product', {
+          body: {
+            productName: productInfo.name,
+            productDescription: productInfo.description,
+            language: 'ar',
+            tone: tones[0],
+            model: getModelName(aiAgent),
+          }
+        });
+
+        if (response.error) {
+          console.error('Script generation error:', response.error);
+        }
+
+        const generatedScripts: GeneratedScript[] = tones.slice(0, count).map((tone, i) => ({
+          id: `script-${i}`,
+          tone,
+          content: response.data?.script || `سكريبت ${tone} لمنتج ${productInfo.name}...`,
+          wordCount: response.data?.wordCount || Math.floor(Math.random() * 100) + 50,
+        }));
+
+        setScripts(generatedScripts);
+        saveContent({ scripts: generatedScripts });
+        toast({
+          title: "تم إنشاء السكريبتات",
+          description: `تم إنشاء ${generatedScripts.length} نسخة من السكريبت`,
+        });
       }
-
-      // Create scripts with different tones
-      const generatedScripts: GeneratedScript[] = tones.slice(0, count).map((tone, i) => ({
-        id: `script-${i}`,
-        tone,
-        content: response.data?.script || `سكريبت ${tone} لمنتج ${productInfo.name}...`,
-        wordCount: response.data?.wordCount || Math.floor(Math.random() * 100) + 50,
-      }));
-
-      setScripts(generatedScripts);
-      saveContent({ scripts: generatedScripts });
-      toast({
-        title: "تم إنشاء السكريبتات",
-        description: `تم إنشاء ${generatedScripts.length} نسخة من السكريبت`,
-      });
     } catch (error: any) {
       toast({
         title: "Error",
