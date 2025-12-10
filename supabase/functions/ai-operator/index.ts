@@ -126,6 +126,13 @@ serve(async (req) => {
       case 'get_status':
         return await getOperatorStatus(supabase, projectId, authenticatedUserId);
       
+      case 'generate_images':
+        const imageReq = await getImageRequest(req);
+        return await generateProjectImages(supabase, projectId, authenticatedUserId, lovableApiKey, imageReq);
+      
+      case 'check_api_keys':
+        return await checkApiKeysStatus(supabase, authenticatedUserId);
+      
       default:
         return new Response(JSON.stringify({ error: 'Unknown action' }), {
           status: 400,
@@ -883,8 +890,20 @@ async function getOperatorStatus(supabase: any, projectId: string, userId: strin
     jobStatusCounts[job.status] = (jobStatusCounts[job.status] || 0) + 1;
   }
 
+  // Check API keys status
+  const { data: apiKeyProviders } = await supabase.rpc('get_my_api_key_providers');
+  const activeProviders = apiKeyProviders?.filter((p: any) => p.is_active).map((p: any) => p.provider) || [];
+
+  // Get user settings for n8n backend mode
+  const { data: userSettings } = await supabase
+    .from('user_settings')
+    .select('use_n8n_backend, ai_operator_enabled, preferences')
+    .eq('user_id', userId)
+    .maybeSingle();
+
   return new Response(JSON.stringify({ 
-    operator_enabled: true,
+    operator_enabled: userSettings?.ai_operator_enabled || false,
+    n8n_backend_enabled: userSettings?.use_n8n_backend || false,
     project_id: projectId,
     scenes: {
       total: scenes?.length || 0,
@@ -897,7 +916,327 @@ async function getOperatorStatus(supabase: any, projectId: string, userId: strin
       by_status: jobStatusCounts,
       recent: jobs?.slice(0, 5)
     },
+    api_keys: {
+      active_providers: activeProviders,
+      count: activeProviders.length
+    },
     last_run: project?.settings?.last_autonomous_run || null
+  }), {
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// ============ IMAGE GENERATION INTEGRATION ============
+
+async function getImageRequest(req: Request): Promise<any> {
+  try {
+    const body = await req.clone().json();
+    return body.imageRequest || {};
+  } catch {
+    return {};
+  }
+}
+
+async function generateProjectImages(
+  supabase: any, 
+  projectId: string, 
+  userId: string, 
+  apiKey: string,
+  imageRequest: any
+) {
+  console.log(`[ai-operator] Generating images for project ${projectId}`);
+
+  // Get user settings to check n8n backend mode
+  const { data: userSettings } = await supabase
+    .from('user_settings')
+    .select('use_n8n_backend, preferences')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  const useN8nBackend = userSettings?.use_n8n_backend || false;
+  const prefs = userSettings?.preferences as any;
+  const stageWebhooks = prefs?.stage_webhooks || {};
+  const imageGenWebhook = stageWebhooks['image_generation'];
+
+  // Get project info
+  const { data: project } = await supabase
+    .from('projects')
+    .select('*')
+    .eq('id', projectId)
+    .single();
+
+  if (!project) {
+    return new Response(JSON.stringify({ error: 'Project not found' }), {
+      status: 404,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // If n8n backend mode is enabled and webhook is configured, use n8n
+  if (useN8nBackend && imageGenWebhook?.enabled && imageGenWebhook?.webhook_url) {
+    console.log(`[ai-operator] Routing image generation to n8n webhook`);
+    
+    try {
+      const webhookPayload = {
+        action: 'generate_images',
+        project_id: projectId,
+        user_id: userId,
+        product_name: project.product_name,
+        image_types: imageRequest.imageTypes || ['product', 'lifestyle'],
+        engine: imageRequest.engine || 'nanobanana',
+        market: project.market || 'us',
+        language: project.language || 'en',
+        timestamp: new Date().toISOString()
+      };
+
+      const n8nApiKey = prefs?.n8n_api_key;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (n8nApiKey) {
+        headers['Authorization'] = `Bearer ${n8nApiKey}`;
+      }
+
+      const response = await fetch(imageGenWebhook.webhook_url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(webhookPayload),
+      });
+
+      // Log the operation
+      await supabase.from('operator_jobs').insert({
+        user_id: userId,
+        project_id: projectId,
+        job_type: 'generate_images_n8n',
+        status: 'completed',
+        input_data: webhookPayload,
+        output_data: { webhook_called: true, status: response.status }
+      });
+
+      return new Response(JSON.stringify({
+        success: true,
+        method: 'n8n_webhook',
+        message: 'Image generation request sent to n8n webhook',
+        webhook_status: response.status
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    } catch (error: any) {
+      console.error('[ai-operator] n8n webhook error:', error);
+      // Fall back to internal generation
+    }
+  }
+
+  // Use internal image generation
+  console.log(`[ai-operator] Using internal image generation`);
+  
+  const imageTypes = imageRequest.imageTypes || ['amazon_style', 'lifestyle'];
+  const generatedImages: any[] = [];
+  const errors: any[] = [];
+
+  for (const imageType of imageTypes) {
+    try {
+      const prompt = buildImagePrompt(project, imageType, imageRequest);
+      
+      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash-image-preview',
+          messages: [{ role: 'user', content: prompt }],
+          modalities: ['image', 'text']
+        }),
+      });
+
+      if (!response.ok) {
+        errors.push({ type: imageType, error: `API error: ${response.status}` });
+        continue;
+      }
+
+      const aiResponse = await response.json();
+      const imageData = aiResponse.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+
+      if (imageData) {
+        // Save to database
+        const { data: imageRecord } = await supabase
+          .from('generated_images')
+          .insert({
+            project_id: projectId,
+            user_id: userId,
+            image_type: imageType,
+            prompt,
+            engine_name: 'nano_banana',
+            image_url: imageData,
+            status: 'completed',
+            metadata: {
+              market: project.market,
+              generated_via: 'ai_operator',
+              generated_at: new Date().toISOString()
+            }
+          })
+          .select()
+          .single();
+
+        generatedImages.push({
+          type: imageType,
+          url: imageData,
+          id: imageRecord?.id
+        });
+      }
+
+      await new Promise(r => setTimeout(r, 500));
+    } catch (error: any) {
+      errors.push({ type: imageType, error: error.message });
+    }
+  }
+
+  // Log operator job
+  await supabase.from('operator_jobs').insert({
+    user_id: userId,
+    project_id: projectId,
+    job_type: 'generate_images',
+    status: 'completed',
+    output_data: { 
+      generated: generatedImages.length,
+      errors: errors.length 
+    }
+  });
+
+  return new Response(JSON.stringify({
+    success: true,
+    method: 'internal',
+    images: generatedImages,
+    errors: errors.length > 0 ? errors : undefined,
+    summary: {
+      requested: imageTypes.length,
+      completed: generatedImages.length,
+      failed: errors.length
+    }
+  }), {
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+function buildImagePrompt(project: any, imageType: string, request: any): string {
+  const productName = project.product_name || 'Product';
+  const productDesc = project.settings?.product_description || '';
+  const market = project.market || 'us';
+
+  const marketMods: Record<string, string> = {
+    sa: 'warm middle-eastern aesthetic, luxurious, culturally appropriate for Saudi Arabia',
+    ae: 'sleek modern premium, Dubai luxury style',
+    us: 'American lifestyle, bold aspirational imagery',
+    eu: 'minimalist European, clean modern sophisticated',
+    latam: 'vibrant colorful Latin American, dynamic energy'
+  };
+
+  const typePrompts: Record<string, string> = {
+    amazon_style: `Professional Amazon-style product photo of ${productName}. ${productDesc}. Clean white background, studio lighting, high resolution, 8k quality`,
+    lifestyle: `Lifestyle product photography of ${productName} in use. ${productDesc}. Real-world setting, warm atmosphere, professional advertising`,
+    before_after: `Before and after comparison for ${productName}. ${productDesc}. Split image showing transformation`,
+    packaging: `Premium product packaging mockup for ${productName}. ${productDesc}. Elegant box design, studio lighting`,
+    thumbnail: `Eye-catching video thumbnail for ${productName}. ${productDesc}. Bold, attention-grabbing`,
+    hero: `Hero banner image for ${productName}. ${productDesc}. Wide format, dramatic lighting, 16:9`
+  };
+
+  let prompt = typePrompts[imageType] || typePrompts.amazon_style;
+  
+  if (marketMods[market]) {
+    prompt += `. ${marketMods[market]}`;
+  }
+
+  if (request.customPrompt) {
+    prompt += `. ${request.customPrompt}`;
+  }
+
+  return prompt;
+}
+
+// ============ API KEY STATUS CHECK ============
+
+async function checkApiKeysStatus(supabase: any, userId: string) {
+  console.log(`[ai-operator] Checking API keys for user ${userId}`);
+
+  // Get all API key providers for the user
+  const { data: apiKeyProviders, error } = await supabase.rpc('get_my_api_key_providers');
+
+  if (error) {
+    return new Response(JSON.stringify({ error: 'Failed to get API keys' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Get user settings
+  const { data: userSettings } = await supabase
+    .from('user_settings')
+    .select('pricing_tier, use_free_tier_only, ai_operator_enabled, use_n8n_backend')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  // Get available engines
+  const { data: engines } = await supabase
+    .from('ai_engines')
+    .select('name, type, cost_tier, api_key_env, status')
+    .eq('status', 'active');
+
+  // Map which engines have configured API keys
+  const activeProviders = (apiKeyProviders || [])
+    .filter((p: any) => p.is_active)
+    .map((p: any) => p.provider.toUpperCase());
+
+  const enginesWithKeys: any[] = [];
+  const enginesWithoutKeys: any[] = [];
+
+  for (const engine of engines || []) {
+    const keyEnv = engine.api_key_env?.toUpperCase();
+    if (!keyEnv || activeProviders.includes(keyEnv)) {
+      enginesWithKeys.push({
+        name: engine.name,
+        type: engine.type,
+        cost_tier: engine.cost_tier,
+        has_key: !!keyEnv
+      });
+    } else {
+      enginesWithoutKeys.push({
+        name: engine.name,
+        type: engine.type,
+        cost_tier: engine.cost_tier,
+        required_key: engine.api_key_env
+      });
+    }
+  }
+
+  // Check if Lovable AI is available (always available)
+  const hasLovableAI = true;
+
+  return new Response(JSON.stringify({
+    success: true,
+    user_id: userId,
+    settings: {
+      pricing_tier: userSettings?.pricing_tier || 'normal',
+      use_free_tier_only: userSettings?.use_free_tier_only || false,
+      ai_operator_enabled: userSettings?.ai_operator_enabled || false,
+      n8n_backend_enabled: userSettings?.use_n8n_backend || false
+    },
+    api_keys: {
+      total_configured: apiKeyProviders?.length || 0,
+      active_providers: activeProviders,
+      providers: apiKeyProviders || []
+    },
+    engines: {
+      available: enginesWithKeys,
+      missing_keys: enginesWithoutKeys,
+      total_available: enginesWithKeys.length,
+      total_missing: enginesWithoutKeys.length
+    },
+    lovable_ai: {
+      available: hasLovableAI,
+      models: ['google/gemini-2.5-flash', 'google/gemini-2.5-flash-image-preview', 'openai/gpt-5-mini']
+    }
   }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
