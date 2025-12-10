@@ -24,6 +24,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { ImageGenerationProgress } from '@/components/ImageGenerationProgress';
 import { useBackendMode } from '@/hooks/useBackendMode';
 import { BackendModeSelector } from '@/components/BackendModeSelector';
+import { useProject } from '@/contexts/ProjectContext';
 
 interface StudioImageGenerationProps {
   onNext: () => void;
@@ -74,14 +75,16 @@ const ageOptions = [
 export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: StudioImageGenerationProps) => {
   const { toast } = useToast();
   const { mode: backendMode, n8nEnabled: useN8nBackend, aiOperatorEnabled, getActiveBackend } = useBackendMode();
+  const { settings, setSettings, saveProject } = useProject();
+  
   const [isGenerating, setIsGenerating] = useState(false);
   const [imageEngine, setImageEngine] = useState('nano-banana');
   const [imageCount, setImageCount] = useState('3');
   const [resolution, setResolution] = useState('1024x1024');
   const [selectedTypes, setSelectedTypes] = useState<string[]>(['product', 'lifestyle', 'thumbnail']);
-  const [selectedMarket, setSelectedMarket] = useState<string>('us');
-  const [selectedGender, setSelectedGender] = useState<string>('both');
-  const [selectedAge, setSelectedAge] = useState<string>('25_35');
+  const [selectedMarket, setSelectedMarket] = useState<string>(settings.market || 'us');
+  const [selectedGender, setSelectedGender] = useState<string>(settings.audienceGender || 'both');
+  const [selectedAge, setSelectedAge] = useState<string>(settings.audienceAge?.replace('-', '_').replace('+', '_plus') || '25_35');
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [productInfo, setProductInfo] = useState({ name: '', description: '' });
   const [customPrompt, setCustomPrompt] = useState('');
@@ -97,6 +100,34 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
   const [referenceImageUrl, setReferenceImageUrl] = useState('');
   const [uploadedReferenceImage, setUploadedReferenceImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync with project context settings on mount
+  useEffect(() => {
+    setSelectedMarket(settings.market || 'us');
+    setSelectedGender(settings.audienceGender || 'both');
+    setSelectedAge(settings.audienceAge?.replace('-', '_').replace('+', '_plus') || '25_35');
+  }, [settings]);
+
+  // Save audience selection to project context when changed
+  const handleMarketChange = (value: string) => {
+    setSelectedMarket(value);
+    setSettings(prev => ({ ...prev, market: value }));
+    saveProject();
+  };
+
+  const handleGenderChange = (value: string) => {
+    setSelectedGender(value);
+    setSettings(prev => ({ ...prev, audienceGender: value }));
+    saveProject();
+  };
+
+  const handleAgeChange = (value: string) => {
+    setSelectedAge(value);
+    // Convert back to settings format (25_35 -> 25-35)
+    const ageForSettings = value.replace('_plus', '+').replace('_', '-');
+    setSettings(prev => ({ ...prev, audienceAge: ageForSettings }));
+    saveProject();
+  };
 
   useEffect(() => {
     loadProductInfo();
@@ -667,12 +698,12 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
       {/* Target Audience */}
       <Card className="p-6 bg-card border-border">
         <h3 className="font-semibold mb-4">Target Audience</h3>
-        <p className="text-xs text-muted-foreground mb-4">Select market, gender, and age to make images relative to your customers</p>
+        <p className="text-xs text-muted-foreground mb-4">Select market, gender, and age to make images relative to your customers (auto-saved)</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Market */}
           <div className="space-y-2">
             <Label>Market / Region</Label>
-            <Select value={selectedMarket} onValueChange={setSelectedMarket}>
+            <Select value={selectedMarket} onValueChange={handleMarketChange}>
               <SelectTrigger className="bg-background">
                 <SelectValue placeholder="Select market" />
               </SelectTrigger>
@@ -687,7 +718,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
           {/* Gender */}
           <div className="space-y-2">
             <Label>Gender</Label>
-            <Select value={selectedGender} onValueChange={setSelectedGender}>
+            <Select value={selectedGender} onValueChange={handleGenderChange}>
               <SelectTrigger className="bg-background">
                 <SelectValue placeholder="Select gender" />
               </SelectTrigger>
@@ -702,7 +733,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
           {/* Age */}
           <div className="space-y-2">
             <Label>Age Range</Label>
-            <Select value={selectedAge} onValueChange={setSelectedAge}>
+            <Select value={selectedAge} onValueChange={handleAgeChange}>
               <SelectTrigger className="bg-background">
                 <SelectValue placeholder="Select age" />
               </SelectTrigger>
