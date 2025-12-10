@@ -137,11 +137,46 @@ serve(async (req) => {
 
     console.log(`Content Factory: Generating ${contentTypes.join(', ')} for ${productName}`);
 
-    const effectiveMarket: Market = market || 'sa';
-    const effectiveLanguage: Language = language || 'ar';
+    // Normalize market value - handle various formats and fallback to 'sa' if invalid
+    const normalizeMarket = (m: string): Market => {
+      const marketMap: Record<string, Market> = {
+        'sa': 'sa', 'saudi': 'sa', 'saudi arabia': 'sa', 'ksa': 'sa',
+        'ae': 'ae', 'uae': 'ae', 'emirates': 'ae', 'dubai': 'ae',
+        'kw': 'kw', 'kuwait': 'kw',
+        'ma': 'ma', 'morocco': 'ma',
+        'eu': 'eu', 'europe': 'eu',
+        'us': 'us', 'usa': 'us', 'america': 'us',
+        'latam': 'latam', 'latin america': 'latam', 'la': 'latam'
+      };
+      const normalized = (m || 'sa').toLowerCase().trim();
+      return marketMap[normalized] || 'sa';
+    };
+
+    // Normalize language value
+    const normalizeLanguage = (l: string): Language => {
+      const langMap: Record<string, Language> = {
+        'ar': 'ar', 'arabic': 'ar', 'ar-sa': 'ar', 'ar-ae': 'ar',
+        'en': 'en', 'english': 'en', 'en-us': 'en', 'en-gb': 'en',
+        'es': 'es', 'spanish': 'es', 'es-mx': 'es', 'es-es': 'es',
+        'fr': 'fr', 'french': 'fr', 'fr-fr': 'fr',
+        'de': 'de', 'german': 'de', 'de-de': 'de',
+        'pt': 'pt', 'portuguese': 'pt', 'pt-br': 'pt'
+      };
+      const normalized = (l || 'ar').toLowerCase().trim();
+      return langMap[normalized] || 'ar';
+    };
+
+    const effectiveMarket: Market = normalizeMarket(market);
+    const effectiveLanguage: Language = normalizeLanguage(language);
 
     const marketProfile = MARKET_PROFILES[effectiveMarket];
     const langConfig = LANGUAGE_CONFIG[effectiveLanguage];
+
+    // Safety check - should never happen after normalization but just in case
+    if (!marketProfile || !langConfig) {
+      console.error('Invalid market or language config:', { market, language, effectiveMarket, effectiveLanguage });
+      throw new Error(`Invalid configuration: market=${market}, language=${language}`);
+    }
 
     const results: Record<string, any> = {};
 
