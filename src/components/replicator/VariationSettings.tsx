@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Zap, Sparkles, Mic, Film, Users, Globe, Shuffle, Bot, Brain, BarChart3, Lightbulb } from "lucide-react";
+import { toast } from "sonner";
 import type { VariationConfig } from "@/pages/CreativeReplicator";
 import { AIAdIntelligencePanel } from "./AIAdIntelligencePanel";
 
@@ -229,6 +230,25 @@ export const VariationSettings = ({
     }));
   };
 
+  // Apply all AI recommendations
+  const applyAllAIRecommendations = () => {
+    setConfig((prev) => ({
+      ...prev,
+      hookStyles: ['ai-auto', ...aiRecommendations.hookStyles.slice(0, 2)],
+      pacing: aiRecommendations.pacing,
+      transitions: ['ai-auto'],
+      voiceSettings: {
+        ...prev.voiceSettings,
+        tone: 'ai-auto',
+      },
+      adIntelligence: {
+        ...prev.adIntelligence,
+        videoType: 'ai-auto',
+      },
+    }));
+    toast.success("Applied all AI recommendations!");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -238,10 +258,20 @@ export const VariationSettings = ({
             Configure how your ad variations will be generated
           </p>
         </div>
-        <Button onClick={onBack} variant="outline">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={applyAllAIRecommendations}
+            variant="outline"
+            className="border-purple-500/50 text-purple-400 hover:bg-purple-500/10"
+          >
+            <Brain className="w-4 h-4 mr-2" />
+            Apply AI Recommendations
+          </Button>
+          <Button onClick={onBack} variant="outline">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
