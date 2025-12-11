@@ -12,6 +12,7 @@ import { ArrowLeft, Zap, Sparkles, Mic, Film, Users, Globe, Shuffle, Bot, Brain,
 import { toast } from "sonner";
 import type { VariationConfig } from "@/pages/CreativeReplicator";
 import { AIAdIntelligencePanel } from "./AIAdIntelligencePanel";
+import { FreeTierCreativePanel } from "./FreeTierCreativePanel";
 
 interface VariationSettingsProps {
   config: VariationConfig;
@@ -273,6 +274,16 @@ export const VariationSettings = ({
           </Button>
         </div>
       </div>
+
+      {/* Free-Tier Creative Engine Panel */}
+      <FreeTierCreativePanel
+        sourceVideoCount={1}
+        requestedVariations={config.count}
+        onConfigChange={(freeTierConfig) => {
+          setConfig((prev) => ({ ...prev, freeTierConfig }));
+        }}
+        onGenerateFree={onGenerate}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left Column */}
