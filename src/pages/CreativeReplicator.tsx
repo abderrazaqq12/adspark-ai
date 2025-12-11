@@ -421,7 +421,7 @@ const CreativeReplicator = () => {
       const completedCount = results.filter(r => r.status === "completed").length;
       toast.success(`Generated ${completedCount} variations! ${results.length - completedCount} processing...`);
 
-      // Create Google Drive folder if project name is set
+      // Create Google Drive folder if project name is set (optional - silently skip if not configured)
       if (projectName.trim()) {
         try {
           const { data: folderData, error: folderError } = await supabase.functions.invoke('create-google-drive-folder', {
@@ -430,18 +430,22 @@ const CreativeReplicator = () => {
             },
           });
 
-          if (folderError) {
-            console.error('Google Drive folder error:', folderError);
-          } else if (folderData?.success) {
+          // Only show success if folder was actually created
+          // Silently skip if Google Drive is not connected (expected behavior)
+          if (folderData?.success) {
             toast.success(`Google Drive folder created: ${folderData.folder_name}`, {
               action: {
                 label: "Open",
                 onClick: () => window.open(folderData.folder_link, '_blank'),
               },
             });
+          } else if (folderData?.error && !folderData.error.includes('not connected')) {
+            // Only log unexpected errors, not "not connected" which is expected
+            console.log('Google Drive not configured, skipping folder creation');
           }
         } catch (driveError) {
-          console.error('Google Drive error:', driveError);
+          // Silently handle - Google Drive integration is optional
+          console.log('Google Drive integration skipped:', driveError);
         }
       }
 
