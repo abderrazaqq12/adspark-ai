@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { 
   Download, RefreshCw, Save, Play, Clock, Filter, Grid, List, 
-  CheckCircle2, Loader2, AlertTriangle, RotateCw, ExternalLink
+  CheckCircle2, Loader2, AlertTriangle, RotateCw, ExternalLink, Info
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,6 +17,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { FailureInspectorModal } from "./FailureInspectorModal";
 
 interface EnhancedResultsGalleryProps {
   videos: GeneratedVideo[];
@@ -25,19 +32,49 @@ interface EnhancedResultsGalleryProps {
   jobId?: string;
 }
 
-const MAX_RETRIES = 5;
+const MAX_RETRIES = 4;
 const POLL_INTERVAL = 3000;
 const URL_VALIDATION_RETRIES = 5;
 const URL_VALIDATION_DELAY = 2000;
+const URL_TIMEOUT_SECONDS = 60;
 
 // Video status type that tracks the true state
 type VideoReadyState = 'pending' | 'processing' | 'validating' | 'ready' | 'failed';
+
+interface PipelineError {
+  stage: string;
+  errorType: 'engine_error' | 'ffmpeg_error' | 'upload_error' | 'url_error' | 'timeout_error' | 'validation_error';
+  message: string;
+  code?: string;
+  details?: string;
+  retryable: boolean;
+  suggestedFix?: string;
+}
 
 interface VideoWithValidation extends GeneratedVideo {
   readyState: VideoReadyState;
   urlValidated: boolean;
   validationAttempts: number;
+  validationStartTime?: number;
+  pipelineError?: PipelineError;
+  metadata?: {
+    retry_count?: number;
+    fallback_mode?: string;
+    engine_used?: string;
+    pipeline_error?: PipelineError;
+    pipeline_status?: Record<string, string>;
+  };
 }
+
+// Human-readable error messages
+const ERROR_MESSAGES: Record<string, string> = {
+  'engine_error': 'Video engine did not return output',
+  'ffmpeg_error': 'FFMPEG export crashed during encoding',
+  'upload_error': 'Upload failed: network timeout',
+  'url_error': 'Invalid or missing public URL',
+  'timeout_error': 'Pipeline exceeded maximum time allowed',
+  'validation_error': 'Input validation failed',
+};
 
 export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId }: EnhancedResultsGalleryProps) => {
   const [selectedVideos, setSelectedVideos] = useState<string[]>([]);
@@ -48,6 +85,8 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
   const [retryingVideos, setRetryingVideos] = useState<Set<string>>(new Set());
   const [isPolling, setIsPolling] = useState(false);
   const [videoValidationState, setVideoValidationState] = useState<Record<string, VideoWithValidation>>({});
+  const [failureModalOpen, setFailureModalOpen] = useState(false);
+  const [selectedFailedVideo, setSelectedFailedVideo] = useState<VideoWithValidation | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -56,12 +95,20 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
     const initialState: Record<string, VideoWithValidation> = {};
     videos.forEach(video => {
       if (!videoValidationState[video.id]) {
+        const hasError = video.status === 'failed' && (video as any).metadata?.pipeline_error;
+        const isProcessing = video.status === 'processing';
+        const isCompleted = video.status === 'completed';
+        
         initialState[video.id] = {
           ...video,
-          readyState: video.status === 'completed' ? 'validating' : 
-                      video.status === 'failed' ? 'failed' : 'processing',
+          readyState: hasError ? 'failed' : 
+                      isCompleted && video.url ? 'validating' :
+                      isProcessing ? 'processing' : 'processing',
           urlValidated: false,
           validationAttempts: 0,
+          validationStartTime: Date.now(),
+          pipelineError: (video as any).metadata?.pipeline_error,
+          metadata: (video as any).metadata,
         };
       }
     });
@@ -71,10 +118,17 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
     }
   }, [videos]);
 
-  // Validate video URL is accessible
+  // Validate video URL is accessible with proper timeout handling
   const validateVideoUrl = useCallback(async (videoId: string, url: string): Promise<boolean> => {
     const currentState = videoValidationState[videoId];
     if (!currentState || currentState.validationAttempts >= URL_VALIDATION_RETRIES) {
+      return false;
+    }
+
+    // Check if we've exceeded the URL timeout
+    const startTime = currentState.validationStartTime || Date.now();
+    if (Date.now() - startTime > URL_TIMEOUT_SECONDS * 1000) {
+      // Don't mark as failed yet - the file might exist but URL not ready
       return false;
     }
 
@@ -94,6 +148,28 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
       return false;
     }
   }, [videoValidationState]);
+
+  // Check if file exists in storage before marking as failed
+  const checkStorageFile = useCallback(async (videoId: string): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase
+        .from('video_variations')
+        .select('video_url, status, metadata')
+        .eq('id', videoId)
+        .single();
+      
+      if (error || !data) return false;
+      
+      // If there's a URL and status is completed, the file likely exists
+      if (data.video_url && data.status === 'completed') {
+        return true;
+      }
+      
+      return false;
+    } catch {
+      return false;
+    }
+  }, []);
 
   // Validate all completed videos
   const validateCompletedVideos = useCallback(async () => {
@@ -369,7 +445,9 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
   const handleRetryVideo = async (video: GeneratedVideo, e: React.MouseEvent) => {
     e.stopPropagation();
     
-    const retryCount = (video as any).retryCount || 0;
+    const currentState = videoValidationState[video.id];
+    const retryCount = currentState?.metadata?.retry_count || 0;
+    
     if (retryCount >= MAX_RETRIES) {
       toast.error("Maximum retries reached for this video");
       return;
@@ -378,6 +456,9 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
     if (retryingVideos.has(video.id)) return;
     
     setRetryingVideos(prev => new Set(prev).add(video.id));
+    
+    // Close failure modal if open
+    setFailureModalOpen(false);
     
     try {
       // Reset validation state
@@ -388,6 +469,8 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
           readyState: 'processing',
           urlValidated: false,
           validationAttempts: 0,
+          validationStartTime: Date.now(),
+          pipelineError: undefined,
         } as VideoWithValidation
       }));
       
@@ -397,9 +480,15 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
           : v
       ));
       
-      toast.info(`Retrying video generation...`);
+      // Determine which attempt this is
+      const attemptNum = retryCount + 1;
+      let mode = 'same engine';
+      if (attemptNum === 3) mode = 'FFMPEG-only mode';
+      if (attemptNum === 4) mode = 'Safe mode';
       
-      const { error } = await supabase.functions.invoke('ffmpeg-creative-engine', {
+      toast.info(`Retrying video generation (attempt ${attemptNum}) using ${mode}...`);
+      
+      const { data, error } = await supabase.functions.invoke('ffmpeg-creative-engine', {
         body: {
           task: {
             taskType: 'retry-single',
@@ -413,17 +502,53 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        throw new Error(error.message || 'Retry request failed');
+      }
+
+      if (data?.pipelineError) {
+        // Store the error for display
+        setVideoValidationState(prev => ({
+          ...prev,
+          [video.id]: {
+            ...prev[video.id],
+            readyState: 'failed',
+            pipelineError: data.pipelineError,
+            metadata: {
+              ...prev[video.id]?.metadata,
+              pipeline_error: data.pipelineError,
+              retry_count: retryCount + 1,
+            },
+          } as VideoWithValidation
+        }));
+        
+        setVideos(prev => prev.map(v => 
+          v.id === video.id ? { ...v, status: "failed" as const } : v
+        ));
+        
+        toast.error(`Retry failed: ${data.pipelineError.message}`);
+      } else {
+        toast.success('Retry started successfully');
+      }
 
     } catch (err) {
       console.error('Retry error:', err);
-      toast.error(`Failed to retry video`);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      
+      toast.error(`Failed to retry video: ${errorMessage}`);
       
       setVideoValidationState(prev => ({
         ...prev,
         [video.id]: {
           ...prev[video.id],
           readyState: 'failed',
+          pipelineError: {
+            stage: 'retry',
+            errorType: 'engine_error',
+            message: errorMessage,
+            retryable: true,
+            suggestedFix: 'Try again or switch to FFMPEG-only mode',
+          },
         } as VideoWithValidation
       }));
       
@@ -436,6 +561,15 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
         next.delete(video.id);
         return next;
       });
+    }
+  };
+
+  const handleOpenFailureInspector = (video: GeneratedVideo, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const validationState = videoValidationState[video.id];
+    if (validationState) {
+      setSelectedFailedVideo(validationState);
+      setFailureModalOpen(true);
     }
   };
 
@@ -718,17 +852,45 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
                       </button>
                     )}
 
-                    {/* Retry Button for Failed */}
+                    {/* Retry Button with Error Info for Failed */}
                     {isFailed && (
-                      <button
-                        className="absolute bottom-2 right-2 z-10"
-                        onClick={(e) => handleRetryVideo(video, e)}
-                      >
-                        <Button size="sm" variant="destructive">
-                          <RotateCw className="w-3 h-3 mr-1" />
-                          Retry
+                      <div className="absolute bottom-2 right-2 z-10 flex gap-1">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                className="bg-background/80"
+                                onClick={(e) => handleOpenFailureInspector(video, e)}
+                              >
+                                <Info className="w-3 h-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p className="text-sm">
+                                {videoValidationState[video.id]?.pipelineError?.message || 
+                                 'Click to view failure details'}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <Button 
+                          size="sm" 
+                          variant="destructive"
+                          onClick={(e) => handleRetryVideo(video, e)}
+                          disabled={retryingVideos.has(video.id)}
+                        >
+                          {retryingVideos.has(video.id) ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <>
+                              <RotateCw className="w-3 h-3 mr-1" />
+                              Retry
+                            </>
+                          )}
                         </Button>
-                      </button>
+                      </div>
                     )}
 
                     {/* Status Badge */}
@@ -909,6 +1071,19 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Failure Inspector Modal */}
+      <FailureInspectorModal
+        open={failureModalOpen}
+        onOpenChange={setFailureModalOpen}
+        video={selectedFailedVideo}
+        onRetry={() => {
+          if (selectedFailedVideo) {
+            handleRetryVideo(selectedFailedVideo, { stopPropagation: () => {} } as any);
+          }
+        }}
+        isRetrying={selectedFailedVideo ? retryingVideos.has(selectedFailedVideo.id) : false}
+      />
     </div>
   );
 };
