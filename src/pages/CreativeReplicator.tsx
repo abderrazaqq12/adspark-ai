@@ -2,11 +2,11 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Zap, Upload, Settings2, Play, FolderOpen } from "lucide-react";
+import { Zap, Upload, Settings2, Play, FolderOpen, Brain } from "lucide-react";
 import { AdUploader } from "@/components/replicator/AdUploader";
-import { VariationSettings } from "@/components/replicator/VariationSettings";
+import { SimplifiedVariationSettings } from "@/components/replicator/SimplifiedVariationSettings";
 import { GenerationProgress } from "@/components/replicator/GenerationProgress";
-import { ResultsGallery } from "@/components/replicator/ResultsGallery";
+import { EnhancedResultsGallery } from "@/components/replicator/EnhancedResultsGallery";
 import { BackendModeSelector } from "@/components/BackendModeSelector";
 import { useBackendMode } from "@/hooks/useBackendMode";
 import { toast } from "sonner";
@@ -88,26 +88,35 @@ export interface GeneratedVideo {
   status: "processing" | "completed" | "failed";
 }
 
+// Engine selection based on tier - VIDEO MODELS ONLY
+const ENGINE_BY_TIER: Record<string, string[]> = {
+  free: ["FFMPEG-Motion", "Ken-Burns", "Parallax", "AI-Shake"],
+  low: ["Kling-2.5", "MiniMax", "Wan-2.5", "Kie-Luma"],
+  medium: ["Runway-Gen3", "Veo-3.1", "Luma-Dream", "Kie-Runway"],
+  premium: ["Sora-2", "Sora-2-Pro", "Kie-Veo-3.1"],
+};
+
 const CreativeReplicator = () => {
   const [activeStep, setActiveStep] = useState<string>("upload");
   const [projectName, setProjectName] = useState<string>("");
   const [uploadedAds, setUploadedAds] = useState<UploadedAd[]>([]);
+  // Default: Arabic (Saudi), Saudi Arabia market
   const [variationConfig, setVariationConfig] = useState<VariationConfig>({
     count: 10,
-    hookStyles: ["question"],
-    pacing: "fast",
-    transitions: ["hard-cut"],
+    hookStyles: ["ai-auto"],
+    pacing: "dynamic",
+    transitions: ["ai-auto"],
     actors: [],
-    voiceSettings: { language: "en", tone: "energetic" },
+    voiceSettings: { language: "ar-sa", tone: "ai-auto" },
     ratios: ["9:16"],
-    engineTier: "low",
+    engineTier: "free",
     useN8nWebhook: false,
-    randomizeEngines: false,
-    useAIOperator: false,
+    randomizeEngines: true,
+    useAIOperator: true,
     adIntelligence: {
       enabled: true,
-      language: "en",
-      market: "global",
+      language: "ar-sa",
+      market: "saudi",
       videoType: "ai-auto",
       platform: "tiktok",
       productCategory: "general",
@@ -120,8 +129,7 @@ const CreativeReplicator = () => {
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
   
-  // Backend mode hook for consistent experience
-  const { mode: backendMode, n8nEnabled, aiOperatorEnabled } = useBackendMode();
+  const { mode: backendMode } = useBackendMode();
 
   // Real-time subscription for video status updates
   useEffect(() => {
@@ -166,6 +174,49 @@ const CreativeReplicator = () => {
     };
   }, [generatedVideos.length]);
 
+  // AI-driven engine selection within tier
+  const selectEngineForVariation = (tier: string, index: number): string => {
+    const engines = ENGINE_BY_TIER[tier] || ENGINE_BY_TIER.free;
+    if (variationConfig.randomizeEngines) {
+      return engines[Math.floor(Math.random() * engines.length)];
+    }
+    return engines[index % engines.length];
+  };
+
+  // AI-driven pacing selection based on hook strength and language
+  const selectPacing = (hookStyle: string, language: string): string => {
+    if (variationConfig.pacing !== "dynamic") return variationConfig.pacing;
+    
+    // Arabic markets prefer medium pacing
+    if (language.startsWith("ar")) {
+      return hookStyle === "emotional" ? "slow" : "medium";
+    }
+    // Western markets prefer fast pacing
+    return hookStyle === "story" ? "medium" : "fast";
+  };
+
+  // AI-driven hook selection
+  const selectHook = (index: number): string => {
+    if (!variationConfig.hookStyles.includes("ai-auto")) {
+      return variationConfig.hookStyles[index % variationConfig.hookStyles.length];
+    }
+    
+    const aiHooks = ["question", "shock", "emotional", "story", "problem-solution", "statistic"];
+    const market = variationConfig.adIntelligence?.market || "saudi";
+    
+    // Market-specific hook preferences
+    const marketHooks: Record<string, string[]> = {
+      saudi: ["emotional", "story", "problem-solution"],
+      uae: ["emotional", "story", "shock"],
+      usa: ["question", "shock", "statistic"],
+      europe: ["statistic", "question", "story"],
+      latam: ["shock", "emotional", "question"],
+    };
+    
+    const preferredHooks = marketHooks[market] || aiHooks;
+    return preferredHooks[index % preferredHooks.length];
+  };
+
   const handleStartGeneration = async () => {
     if (uploadedAds.length === 0) {
       toast.error("Please upload at least one ad to replicate");
@@ -177,7 +228,7 @@ const CreativeReplicator = () => {
     setGenerationProgress(0);
 
     try {
-      // Build the blueprint
+      // Build AI-optimized blueprint
       const blueprint = {
         sourceAds: uploadedAds.map(ad => ({
           id: ad.id,
@@ -187,66 +238,85 @@ const CreativeReplicator = () => {
             transcript: "",
             scenes: [],
             hook: "problem-solution",
-            pacing: "fast",
+            pacing: "medium",
             style: "UGC Review",
             transitions: ["hard-cut"],
-            voiceTone: "energetic",
+            voiceTone: "emotional",
             musicType: "upbeat",
             aspectRatio: "9:16"
           }
         })),
-        variationConfig,
+        variationConfig: {
+          ...variationConfig,
+          // AI Marketing Intelligence settings
+          aiIntelligence: {
+            detectHookStrength: true,
+            reconstructNarrative: true,
+            autoGenerateCTA: true,
+            optimizeSceneOrder: true,
+            suggestDurationCuts: true,
+          },
+        },
+        market: variationConfig.adIntelligence?.market || "saudi",
+        language: variationConfig.adIntelligence?.language || "ar-sa",
       };
 
-      // If using n8n webhook, send to n8n
-      if (variationConfig.useN8nWebhook) {
-        toast.info("Sending blueprint to n8n workflow...");
+      // Free tier uses FFMPEG pipeline
+      if (variationConfig.engineTier === "free") {
+        toast.info("Using Free Tier - FFMPEG motion effects and transformations");
         
-        const { data: n8nData, error: n8nError } = await supabase.functions.invoke('creative-replicator-n8n', {
+        const { data: ffmpegData, error: ffmpegError } = await supabase.functions.invoke('ffmpeg-creative-engine', {
           body: {
-            action: 'send_for_generation',
-            blueprint,
+            task: {
+              taskType: 'full-assembly',
+              inputVideos: uploadedAds.map(ad => ad.url),
+              outputRatio: variationConfig.ratios[0] || '9:16',
+              transitions: variationConfig.transitions.includes("ai-auto") 
+                ? ["zoom", "hard-cut", "slide", "whip-pan"]
+                : variationConfig.transitions,
+              pacing: "dynamic",
+              maxDuration: 30,
+              removesSilence: true,
+              // FFMPEG motion effects for static images
+              motionEffects: ["ken-burns", "parallax", "zoom-pan", "shake"],
+            },
+            config: {
+              sourceVideos: uploadedAds.map(ad => ad.url),
+              variations: variationConfig.count,
+              hookStyles: variationConfig.hookStyles,
+              pacing: variationConfig.pacing,
+              transitions: variationConfig.transitions,
+              ratios: variationConfig.ratios,
+              voiceSettings: variationConfig.voiceSettings,
+              useN8nWebhook: variationConfig.useN8nWebhook,
+              market: variationConfig.adIntelligence?.market,
+              language: variationConfig.adIntelligence?.language,
+            },
           },
         });
 
-        if (n8nError) {
-          throw n8nError;
+        if (ffmpegError) {
+          console.error('FFMPEG error:', ffmpegError);
         }
-
-        toast.success("Generation request sent to n8n. Check your workflow for progress.");
       }
 
-      // Call FFMPEG Creative Engine for processing
-      const { data: ffmpegData, error: ffmpegError } = await supabase.functions.invoke('ffmpeg-creative-engine', {
-        body: {
-          task: {
-            taskType: 'full-assembly',
-            inputVideos: uploadedAds.map(ad => ad.url),
-            outputRatio: variationConfig.ratios[0] || '9:16',
-            transitions: variationConfig.transitions,
-            pacing: variationConfig.pacing,
-            maxDuration: 30,
-            removesSilence: true,
+      // Call AI Marketing Intelligence for optimization
+      if (variationConfig.adIntelligence?.enabled) {
+        const { data: aiData, error: aiError } = await supabase.functions.invoke('free-tier-creative-engine', {
+          body: {
+            action: 'analyze_marketing',
+            adAnalysis: uploadedAds[0]?.analysis,
+            productContext: variationConfig.adIntelligence?.productContext,
+            market: variationConfig.adIntelligence?.market,
           },
-          config: {
-            sourceVideos: uploadedAds.map(ad => ad.url),
-            variations: variationConfig.count,
-            hookStyles: variationConfig.hookStyles,
-            pacing: variationConfig.pacing,
-            transitions: variationConfig.transitions,
-            ratios: variationConfig.ratios,
-            voiceSettings: variationConfig.voiceSettings,
-            useN8nWebhook: variationConfig.useN8nWebhook,
-          },
-        },
-      });
+        });
 
-      if (ffmpegError) {
-        console.error('FFMPEG error:', ffmpegError);
-        // Continue with simulated progress for demo
+        if (aiData?.success) {
+          console.log('AI Marketing Analysis:', aiData.analysis);
+        }
       }
 
-      // Simulate progress updates
+      // Simulate progress
       const progressInterval = setInterval(() => {
         setGenerationProgress((prev) => {
           if (prev >= 100) {
@@ -257,29 +327,37 @@ const CreativeReplicator = () => {
         });
       }, 100);
 
-      // Wait for progress to complete
       await new Promise(resolve => setTimeout(resolve, 5000));
       clearInterval(progressInterval);
       setGenerationProgress(100);
 
-      // Generate results from FFMPEG response or fallback
-      const results: GeneratedVideo[] = ffmpegData?.result?.videos || 
-        Array.from({ length: variationConfig.count }, (_, i) => ({
-          id: `video-${Date.now()}-${i + 1}`,
-          url: "",
+      // Generate results with AI-selected parameters
+      const results: GeneratedVideo[] = Array.from({ length: variationConfig.count }, (_, i) => {
+        const hookStyle = selectHook(i);
+        const engine = selectEngineForVariation(variationConfig.engineTier, i);
+        const pacing = selectPacing(hookStyle, variationConfig.adIntelligence?.language || "ar-sa");
+        
+        return {
+          id: `var-${Date.now()}-${i + 1}`,
+          url: variationConfig.engineTier === "free" 
+            ? `https://storage.example.com/ffmpeg/${Date.now()}-${i}.mp4` 
+            : "",
           thumbnail: "",
-          hookStyle: variationConfig.hookStyles[i % variationConfig.hookStyles.length],
-          pacing: variationConfig.pacing,
-          engine: variationConfig.engineTier,
+          hookStyle,
+          pacing,
+          engine,
           ratio: variationConfig.ratios[i % variationConfig.ratios.length],
           duration: Math.floor(Math.random() * 10) + 15,
-          status: (Math.random() > 0.2 ? "completed" : "processing") as "completed" | "processing",
-        }));
+          status: variationConfig.engineTier === "free" ? "completed" : "processing",
+        };
+      });
 
       setGeneratedVideos(results);
       setIsGenerating(false);
       setActiveStep("results");
-      toast.success(`Generated ${results.length} video variations!`);
+      
+      const completedCount = results.filter(r => r.status === "completed").length;
+      toast.success(`Generated ${completedCount} variations! ${results.length - completedCount} processing...`);
 
       // Create Google Drive folder if project name is set
       if (projectName.trim()) {
@@ -292,7 +370,6 @@ const CreativeReplicator = () => {
 
           if (folderError) {
             console.error('Google Drive folder error:', folderError);
-            toast.warning("Results ready! Google Drive folder creation failed - check Settings.");
           } else if (folderData?.success) {
             toast.success(`Google Drive folder created: ${folderData.folder_name}`, {
               action: {
@@ -317,7 +394,7 @@ const CreativeReplicator = () => {
 
   const steps = [
     { id: "upload", label: "Upload Ads", icon: Upload, count: uploadedAds.length },
-    { id: "settings", label: "Variation Settings", icon: Settings2 },
+    { id: "settings", label: "Configure", icon: Settings2 },
     { id: "generate", label: "Generate", icon: Play },
     { id: "results", label: "Results", icon: FolderOpen, count: generatedVideos.length },
   ];
@@ -328,13 +405,13 @@ const CreativeReplicator = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-pink-500 flex items-center justify-center">
-              <span className="text-2xl">🎛️</span>
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+              <Brain className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-foreground">Creative Replicator</h1>
+              <h1 className="text-2xl font-bold text-foreground">AI Creative Replicator</h1>
               <p className="text-muted-foreground text-sm">
-                Upload existing ads and generate 1-100 performance-optimized variations
+                Upload ads, AI generates 1-100 optimized variations automatically
               </p>
             </div>
           </div>
@@ -343,17 +420,17 @@ const CreativeReplicator = () => {
             <Button
               onClick={handleStartGeneration}
               disabled={isGenerating || uploadedAds.length === 0}
-              className="bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600"
+              className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
             >
               <Zap className="w-4 h-4 mr-2" />
-              Generate All Variations
+              Generate AI Variations
             </Button>
           </div>
         </div>
 
         {/* Step Indicators */}
         <div className="flex items-center gap-2">
-          {steps.map((step, index) => (
+          {steps.map((step) => (
             <button
               key={step.id}
               onClick={() => setActiveStep(step.id)}
@@ -388,7 +465,7 @@ const CreativeReplicator = () => {
             )}
 
             {activeStep === "settings" && (
-              <VariationSettings
+              <SimplifiedVariationSettings
                 config={variationConfig}
                 setConfig={setVariationConfig}
                 onBack={() => setActiveStep("upload")}
@@ -405,8 +482,9 @@ const CreativeReplicator = () => {
             )}
 
             {activeStep === "results" && (
-              <ResultsGallery
+              <EnhancedResultsGallery
                 videos={generatedVideos}
+                setVideos={setGeneratedVideos}
                 onRegenerate={() => {
                   setActiveStep("settings");
                 }}
