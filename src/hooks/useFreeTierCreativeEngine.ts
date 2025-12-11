@@ -77,12 +77,21 @@ export interface SceneAnalysis {
   };
 }
 
+export interface AIOperatorFreeTierRecommendation {
+  useFreeTier: boolean;
+  reason: string;
+  suggestedPipeline: CreativePipeline | null;
+  estimatedQuality: number; // 0-100
+  estimatedSavings: number; // USD saved vs premium
+}
+
 export const useFreeTierCreativeEngine = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<FreeTierResult[]>([]);
   const [marketingAnalysis, setMarketingAnalysis] = useState<AIMarketingAnalysis | null>(null);
   const [sceneAnalysis, setSceneAnalysis] = useState<SceneAnalysis[]>([]);
+  const [aiOperatorRecommendation, setAiOperatorRecommendation] = useState<AIOperatorFreeTierRecommendation | null>(null);
 
   // Get all available free transformations
   const getAvailableTransformations = useCallback(() => FFMPEG_TRANSFORMATIONS, []);
@@ -94,6 +103,91 @@ export const useFreeTierCreativeEngine = () => {
   // Calculate how many variations can be generated for free
   const calculateFreeCapacity = useCallback((sourceCount: number, requestedCount: number) => {
     return calculateFreeVariations(sourceCount, requestedCount);
+  }, []);
+
+  // AI Operator: Get free-tier optimization recommendation
+  const getAIOperatorRecommendation = useCallback(async (
+    requirements: {
+      videoType: string;
+      targetQuality: 'standard' | 'high' | 'premium';
+      hasExistingFootage: boolean;
+      hasProductImages: boolean;
+      needsNewFootage: boolean;
+      targetMarket: string;
+      language: string;
+    }
+  ): Promise<AIOperatorFreeTierRecommendation> => {
+    const canUseFreeTier = !requirements.needsNewFootage || requirements.hasExistingFootage || requirements.hasProductImages;
+    
+    // Estimate quality based on available assets
+    let estimatedQuality = 70;
+    if (requirements.hasExistingFootage) estimatedQuality += 15;
+    if (requirements.hasProductImages) estimatedQuality += 10;
+    if (requirements.targetQuality === 'standard') estimatedQuality += 5;
+
+    const suggestedPipeline = canUseFreeTier 
+      ? FREE_CREATIVE_PIPELINES.find(p => p.id === 'full-remix') || null
+      : null;
+
+    const estimatedSavings = canUseFreeTier ? 1.25 : 0;
+
+    const recommendation: AIOperatorFreeTierRecommendation = {
+      useFreeTier: canUseFreeTier && requirements.targetQuality !== 'premium',
+      reason: canUseFreeTier 
+        ? `Free-tier can achieve ${Math.min(estimatedQuality, 95)}% quality using FFMPEG + synthetic motion. Saves ~$${estimatedSavings.toFixed(2)} per video.`
+        : 'Premium engine recommended for new footage generation.',
+      suggestedPipeline,
+      estimatedQuality: Math.min(estimatedQuality, 95),
+      estimatedSavings
+    };
+
+    setAiOperatorRecommendation(recommendation);
+    return recommendation;
+  }, []);
+
+  // AI Operator: Auto-optimize pipeline for free-tier
+  const autoOptimizeForFreeTier = useCallback(async (
+    sourceAds: string[],
+    targetCount: number,
+    productContext: {
+      name: string;
+      description: string;
+      targetMarket: string;
+      language: string;
+    }
+  ) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('free-tier-creative-engine', {
+        body: {
+          action: 'analyze_for_optimization',
+          sourceAds,
+          productContext
+        }
+      });
+
+      if (error) throw error;
+
+      toast.success(`AI Operator optimized ${targetCount} variations for free-tier processing`);
+
+      return {
+        analysis: data,
+        pipelines: FREE_CREATIVE_PIPELINES.slice(0, Math.min(targetCount, FREE_CREATIVE_PIPELINES.length)),
+        estimatedSavings: targetCount * 1.25
+      };
+    } catch (err: any) {
+      console.error('AI Operator optimization error:', err);
+      toast.error('Optimization failed: ' + err.message);
+      throw err;
+    }
+  }, []);
+
+  // Check if request can be fulfilled with free-tier
+  const canUseFreeTier = useCallback((requirements: {
+    needsNewFootage: boolean;
+    needsTalkingActor: boolean;
+    needsComplexVFX: boolean;
+  }): boolean => {
+    return !requirements.needsNewFootage && !requirements.needsTalkingActor && !requirements.needsComplexVFX;
   }, []);
 
   // AI Marketing Intelligence Analysis (FREE - uses LLM only)
@@ -406,6 +500,12 @@ export const useFreeTierCreativeEngine = () => {
     results,
     marketingAnalysis,
     sceneAnalysis,
+    aiOperatorRecommendation,
+
+    // AI Operator Integration
+    getAIOperatorRecommendation,
+    autoOptimizeForFreeTier,
+    canUseFreeTier,
 
     // Capabilities
     getAvailableTransformations,

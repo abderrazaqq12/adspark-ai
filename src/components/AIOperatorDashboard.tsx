@@ -22,11 +22,14 @@ import {
   AlertTriangle,
   Key,
   Image,
-  Webhook
+  Webhook,
+  DollarSign,
+  Layers
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import AutopilotProgress from "./AutopilotProgress";
+import { useFreeTierCreativeEngine } from "@/hooks/useFreeTierCreativeEngine";
 
 interface OperatorJob {
   id: string;
@@ -63,12 +66,15 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
   const [activeTab, setActiveTab] = useState<"operator" | "autopilot">("operator");
   const [autopilotJobId, setAutopilotJobId] = useState<string | null>(null);
   const [operatorStatus, setOperatorStatus] = useState<OperatorStatus | null>(null);
+  const [freeTierSavings, setFreeTierSavings] = useState(0);
   const [stats, setStats] = useState({
     total: 0,
     completed: 0,
     failed: 0,
     pending: 0
   });
+
+  const { getAIOperatorRecommendation, autoOptimizeForFreeTier, canUseFreeTier } = useFreeTierCreativeEngine();
 
   useEffect(() => {
     loadJobs();
@@ -177,6 +183,54 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
     }
   };
 
+  const runFreeTierOptimization = async () => {
+    setIsRunning(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Get AI Operator recommendation for free-tier
+      const recommendation = await getAIOperatorRecommendation({
+        videoType: 'ugc',
+        targetQuality: 'standard',
+        hasExistingFootage: true,
+        hasProductImages: true,
+        needsNewFootage: false,
+        targetMarket: 'GCC',
+        language: 'ar'
+      });
+
+      if (recommendation.useFreeTier) {
+        toast.success(`Free-tier optimization: ${recommendation.reason}`, {
+          description: `Estimated savings: $${recommendation.estimatedSavings.toFixed(2)} per video`
+        });
+        setFreeTierSavings(prev => prev + recommendation.estimatedSavings);
+      } else {
+        toast.info(recommendation.reason);
+      }
+
+      // Log the optimization job
+      await supabase.from('operator_jobs').insert([{
+        job_type: 'free_tier_optimization',
+        status: 'completed',
+        user_id: user.id,
+        project_id: projectId || undefined,
+        output_data: { 
+          useFreeTier: recommendation.useFreeTier,
+          reason: recommendation.reason,
+          estimatedQuality: recommendation.estimatedQuality,
+          estimatedSavings: recommendation.estimatedSavings
+        }
+      }]);
+
+      loadJobs();
+    } catch (error: any) {
+      toast.error(error.message || 'Free-tier optimization failed');
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
   const getJobTypeIcon = (type: string) => {
     switch (type) {
       case 'retry_scene': return <RefreshCw className="w-4 h-4" />;
@@ -187,6 +241,8 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
       case 'generate_images': 
       case 'generate_images_n8n': return <Image className="w-4 h-4" />;
       case 'auto_regenerate': return <RefreshCw className="w-4 h-4" />;
+      case 'free_tier_optimization': return <DollarSign className="w-4 h-4" />;
+      case 'ffmpeg_transform': return <Layers className="w-4 h-4" />;
       default: return <Bot className="w-4 h-4" />;
     }
   };
@@ -316,11 +372,21 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
               <Button
                 variant="outline"
                 size="sm"
+                onClick={runFreeTierOptimization}
+                disabled={isRunning}
+                className="border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10"
+              >
+                {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4 mr-2" />}
+                Free-Tier Optimize
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => runOperator('monitor_pipeline')}
                 disabled={isRunning}
                 className="border-border"
               >
-                {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4 mr-2" />}
+                <Bot className="w-4 h-4 mr-2" />
                 Scan Pipeline
               </Button>
               <Button
@@ -374,6 +440,12 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
                 Full Auto Run
               </Button>
             </div>
+            {freeTierSavings > 0 && (
+              <Badge className="bg-emerald-500/20 text-emerald-500 border-0">
+                <DollarSign className="w-3 h-3 mr-1" />
+                ${freeTierSavings.toFixed(2)} saved with free-tier
+              </Badge>
+            )}
           </div>
 
           {/* Jobs List */}
