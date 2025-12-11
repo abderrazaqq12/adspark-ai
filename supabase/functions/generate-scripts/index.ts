@@ -22,6 +22,8 @@ serve(async (req) => {
       language = 'ar',
       market = 'gcc',
       customPrompt = null,
+      audienceAge = '25-34',
+      audienceGender = 'all',
     } = await req.json();
 
     if (!productName) {
@@ -51,6 +53,10 @@ serve(async (req) => {
       ? 'Write ENTIRELY in Arabic. Use Gulf/Saudi dialect for authenticity. Include culturally relevant expressions.'
       : `Write in ${language}. Adapt cultural references appropriately.`;
 
+    const audienceDescription = audienceGender === 'all' 
+      ? `${audienceAge} years old (both genders)`
+      : `${audienceGender} audience, ${audienceAge} years old`;
+
     const systemPrompt = `You are an expert video ad scriptwriter specializing in ${scriptTypeName} format.
 
 ${styleGuidance}
@@ -58,17 +64,18 @@ ${styleGuidance}
 ${languageInstructions}
 
 Market context: ${market.toUpperCase()} region
+Target audience: ${audienceDescription}
 Target: Short-form video ads (30-60 seconds, 40-80 words each)
 
 Each script must include:
-1. Strong opening hook (first 3 seconds)
-2. Problem/benefit statement
+1. Strong opening hook (first 3 seconds) - tailored to ${audienceAge} age group
+2. Problem/benefit statement - relevant to ${audienceGender === 'all' ? 'general' : audienceGender} audience
 3. Product presentation
 4. Clear call-to-action
 
 ${customPrompt ? `Additional instructions: ${customPrompt}` : ''}
 
-Output format: Return a JSON array of ${count} unique script strings. Each script should be different in approach while maintaining the ${scriptTypeName} style.`;
+Output format: Return a JSON array of ${count} unique script strings. Each script should be different in approach while maintaining the ${scriptTypeName} style and speaking directly to the ${audienceDescription} target audience.`;
 
     const userPrompt = `Generate ${count} unique ${scriptTypeName} video ad scripts for this product:
 
