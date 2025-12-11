@@ -279,6 +279,35 @@ async function testAIMLAPI(apiKey: string): Promise<TestResult> {
   }
 }
 
+async function testKieAI(apiKey: string): Promise<TestResult> {
+  const start = Date.now();
+  try {
+    const response = await fetch('https://api.kie.ai/api/v1/chat/credit', {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    const latency = Date.now() - start;
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.code === 200) {
+        return { 
+          success: true, 
+          message: `Kie.ai connected. Remaining credits: ${data.data || 'N/A'}`,
+          latency 
+        };
+      }
+      return { success: false, message: data.msg || 'Invalid Kie.ai API key' };
+    }
+    if (response.status === 401) {
+      return { success: false, message: 'Invalid Kie.ai API key' };
+    }
+    return { success: false, message: 'Failed to connect to Kie.ai' };
+  } catch (e) {
+    const error = e as Error;
+    return { success: false, message: `Connection failed: ${error.message}` };
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -358,6 +387,9 @@ serve(async (req) => {
         } else {
           result = { success: false, message: 'Kling AI requires format: access_key:secret_key' };
         }
+        break;
+      case 'KIEAI_API_KEY':
+        result = await testKieAI(apiKey);
         break;
       default:
         // For other APIs, just validate key format
