@@ -496,6 +496,7 @@ const CreativeReplicator = () => {
                     }}
                   />
                 )}
+              </div>
             )}
 
             {activeStep === "results" && (
