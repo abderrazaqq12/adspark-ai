@@ -153,6 +153,7 @@ const API_WEBSITE_URLS: Record<string, string> = {
   APIFRAME_API_KEY: "https://apiframe.pro/settings/api",
   GOOGLE_AI_STUDIO_KEY: "https://aistudio.google.com/apikey",
   VERTEX_AI_KEY: "https://console.cloud.google.com/apis/credentials",
+  KIEAI_API_KEY: "https://docs.kie.ai/",
 };
 
 // Global API providers with multiple models
@@ -265,6 +266,20 @@ const GLOBAL_API_PROVIDERS: GlobalAPIProvider[] = [
       { id: "video-generation", name: "Video Generation", description: "Enterprise video" },
       { id: "speech-to-text-v2", name: "Speech to Text v2", description: "High accuracy" },
       { id: "text-to-speech-v2", name: "Text to Speech v2", description: "Natural voices" },
+    ]
+  },
+  {
+    key: "KIEAI_API_KEY",
+    label: "Kie.ai",
+    description: "Unified API for Veo3, Suno, Runway, Luma, Flux Kontext & more",
+    placeholder: "kie_xxxxxxxxxxxxxxxx",
+    models: [
+      { id: "veo3.1", name: "Veo 3.1", description: "Google's latest video model" },
+      { id: "runway-gen3", name: "Runway Gen-3", description: "High-quality video" },
+      { id: "luma-dream", name: "Luma Dream Machine", description: "Creative video gen" },
+      { id: "suno-v3", name: "Suno v3", description: "AI music generation" },
+      { id: "flux-kontext", name: "Flux Kontext", description: "Context-aware images" },
+      { id: "4o-image", name: "4o Image", description: "OpenAI image generation" },
     ]
   },
 ];
