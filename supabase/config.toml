@@ -104,3 +104,6 @@ verify_jwt = true
 
 [functions.arabic-vocalization]
 verify_jwt = false
+
+[functions.free-tier-creative-engine]
+verify_jwt = true
