@@ -220,12 +220,14 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
         updatedScripts[i].status = 'validating';
         setScripts([...updatedScripts]);
 
-        const { data, error } = await supabase.functions.invoke('ai-quality-check', {
+        // Use dedicated arabic-vocalization function with comprehensive Gulf dialect rules
+        const { data, error } = await supabase.functions.invoke('arabic-vocalization', {
           body: {
             content: updatedScripts[i].originalText,
             contentType: 'script',
             language: language || 'ar',
-            checks: ['grammar', 'logic', 'cta', 'hallucination', 'arabic_vocalization'],
+            checks: ['grammar', 'logic', 'cta', 'hallucination', 'arabic_vocalization', 'vocalization'],
+            includeDialectConversion: language === 'ar', // Only apply Gulf dialect for Arabic
           }
         });
 
@@ -236,6 +238,13 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
           updatedScripts[i].correctedText = data.correctedText || updatedScripts[i].originalText;
           updatedScripts[i].vocalizedText = data.vocalizedText || data.correctedText || updatedScripts[i].originalText;
           updatedScripts[i].validationIssues = data.issues || [];
+          // Store applied rules for display
+          if (data.appliedRules?.length > 0) {
+            updatedScripts[i].validationIssues = [
+              ...updatedScripts[i].validationIssues,
+              `Applied ${data.appliedRules.length} Gulf dialect optimizations`
+            ];
+          }
           updatedScripts[i].status = 'completed';
         }
 
@@ -244,7 +253,7 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
 
       saveScripts(updatedScripts);
       setActiveTab('voiceover');
-      toast.success('Scripts validated and optimized');
+      toast.success('Scripts validated with Gulf dialect optimization');
     } catch (error: any) {
       console.error('Validation error:', error);
       toast.error(error.message || 'Failed to validate scripts');
@@ -485,13 +494,32 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
                   </ul>
                 </div>
                 <div className="p-3 rounded-lg bg-background/50">
-                  <p className="font-medium text-foreground mb-1">2. Arabic Vocalization</p>
+                  <p className="font-medium text-foreground mb-1">2. Gulf Arabic Vocalization</p>
                   <ul className="text-xs text-muted-foreground space-y-1">
-                    <li>• Fix TTS pronunciation</li>
-                    <li>• Add partial diacritics</li>
-                    <li>• Gulf/Saudi dialect clarity</li>
-                    <li>• Voice-optimized output</li>
+                    <li>• ق → گ (Qaf to G sound)</li>
+                    <li>• ك → چ (Kaf softening)</li>
+                    <li>• ج → ي (Jim to Y)</li>
+                    <li>• Gulf expressions (الحين، شنو، ليش)</li>
                   </ul>
+                </div>
+              </div>
+              
+              {/* Additional Gulf dialect features */}
+              <div className="mt-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                <p className="text-xs font-medium text-primary mb-2">Enhanced Gulf Dialect Features:</p>
+                <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+                  <div>
+                    <span className="font-medium">Diacritics:</span>
+                    <p>مُنتَج، جَودة، سِعر</p>
+                  </div>
+                  <div>
+                    <span className="font-medium">E-commerce:</span>
+                    <p>COD → كاش، ٪ → بالمية</p>
+                  </div>
+                  <div>
+                    <span className="font-medium">CTAs:</span>
+                    <p>أطلُب الحين، خُذ</p>
+                  </div>
                 </div>
               </div>
             </div>
