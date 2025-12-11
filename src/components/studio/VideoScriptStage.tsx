@@ -19,7 +19,10 @@ import {
   Volume2,
   Wand2,
   ArrowRight,
-  Copy
+  Copy,
+  Globe,
+  Moon,
+  Users
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -77,6 +80,12 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
   const [scriptCount, setScriptCount] = useState('5');
   const [scriptType, setScriptType] = useState('ugc');
   const [customPrompt, setCustomPrompt] = useState('');
+  
+  // Audience targeting
+  const [targetCountry, setTargetCountry] = useState(market || 'gcc');
+  const [selectedLanguage, setSelectedLanguage] = useState(language || 'ar');
+  const [audienceAge, setAudienceAge] = useState('25-34');
+  const [audienceGender, setAudienceGender] = useState('all');
   
   // Voice settings
   const [selectedVoice, setSelectedVoice] = useState('pFZP5JQG7iQjIQuC4Bku'); // Arabic Lily
@@ -171,9 +180,11 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
           scriptType: scriptType,
           scriptTypeName: scriptTypeInfo?.name || 'UGC Product Ad',
           count,
-          language: language || 'ar',
-          market: market || 'gcc',
+          language: selectedLanguage || 'ar',
+          market: targetCountry || 'gcc',
           customPrompt: customPrompt || null,
+          audienceAge,
+          audienceGender,
         }
       });
 
@@ -415,6 +426,88 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* Audience Targeting Section */}
+            <div className="p-4 rounded-lg bg-muted/30 border border-border">
+              <h4 className="font-medium mb-3 flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" />
+                Audience Targeting
+              </h4>
+              <div className="grid grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Target Country</Label>
+                  <Select value={targetCountry} onValueChange={setTargetCountry}>
+                    <SelectTrigger className="bg-background">
+                      <div className="flex items-center gap-2">
+                        <Moon className="w-4 h-4 text-yellow-400" />
+                        <SelectValue />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent className="bg-background border-border z-50">
+                      <SelectItem value="gcc">GCC</SelectItem>
+                      <SelectItem value="sa">Saudi Arabia</SelectItem>
+                      <SelectItem value="ae">UAE</SelectItem>
+                      <SelectItem value="kw">Kuwait</SelectItem>
+                      <SelectItem value="qa">Qatar</SelectItem>
+                      <SelectItem value="bh">Bahrain</SelectItem>
+                      <SelectItem value="om">Oman</SelectItem>
+                      <SelectItem value="eg">Egypt</SelectItem>
+                      <SelectItem value="eu">Europe</SelectItem>
+                      <SelectItem value="us">USA</SelectItem>
+                      <SelectItem value="latam">LATAM</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Language</Label>
+                  <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+                    <SelectTrigger className="bg-background border-primary/50">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background border-border z-50">
+                      <SelectItem value="ar">Arabic</SelectItem>
+                      <SelectItem value="en">English</SelectItem>
+                      <SelectItem value="fr">French</SelectItem>
+                      <SelectItem value="es">Spanish</SelectItem>
+                      <SelectItem value="de">German</SelectItem>
+                      <SelectItem value="pt">Portuguese</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Audience Age</Label>
+                  <Select value={audienceAge} onValueChange={setAudienceAge}>
+                    <SelectTrigger className="bg-background">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background border-border z-50">
+                      <SelectItem value="18-24">18-24</SelectItem>
+                      <SelectItem value="25-34">25-34</SelectItem>
+                      <SelectItem value="35-44">35-44</SelectItem>
+                      <SelectItem value="45-54">45-54</SelectItem>
+                      <SelectItem value="55+">55+</SelectItem>
+                      <SelectItem value="all">All Ages</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Audience Gender</Label>
+                  <Select value={audienceGender} onValueChange={setAudienceGender}>
+                    <SelectTrigger className="bg-background">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background border-border z-50">
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="male">Male</SelectItem>
+                      <SelectItem value="female">Female</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
