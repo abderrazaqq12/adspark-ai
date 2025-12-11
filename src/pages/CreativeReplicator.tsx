@@ -7,6 +7,7 @@ import { AdUploader } from "@/components/replicator/AdUploader";
 import { SimplifiedVariationSettings } from "@/components/replicator/SimplifiedVariationSettings";
 import { GenerationProgress } from "@/components/replicator/GenerationProgress";
 import { EnhancedResultsGallery } from "@/components/replicator/EnhancedResultsGallery";
+import { ProcessingTimeline } from "@/components/replicator/ProcessingTimeline";
 import { BackendModeSelector } from "@/components/BackendModeSelector";
 import { useBackendMode } from "@/hooks/useBackendMode";
 import { toast } from "sonner";
@@ -128,6 +129,7 @@ const CreativeReplicator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   
   const { mode: backendMode } = useBackendMode();
 
@@ -474,17 +476,33 @@ const CreativeReplicator = () => {
             )}
 
             {activeStep === "generate" && (
-              <GenerationProgress
-                progress={generationProgress}
-                config={variationConfig}
-                uploadedAds={uploadedAds}
-              />
+              <div className="space-y-6">
+                <GenerationProgress
+                  progress={generationProgress}
+                  config={variationConfig}
+                  uploadedAds={uploadedAds}
+                />
+                {currentJobId && (
+                  <ProcessingTimeline
+                    jobId={currentJobId}
+                    totalVideos={variationConfig.count * variationConfig.ratios.length}
+                    onComplete={(urls) => {
+                      setIsGenerating(false);
+                      setActiveStep("results");
+                      toast.success(`Generated ${urls.length} videos!`);
+                    }}
+                    onError={(errors) => {
+                      toast.error(errors[0] || "Generation failed");
+                    }}
+                  />
+                )}
             )}
 
             {activeStep === "results" && (
               <EnhancedResultsGallery
                 videos={generatedVideos}
                 setVideos={setGeneratedVideos}
+                jobId={currentJobId || undefined}
                 onRegenerate={() => {
                   setActiveStep("settings");
                 }}
