@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -23,14 +23,16 @@ export interface PipelineStage {
 
 export interface JobStatus {
   jobId: string;
-  status: "pending" | "processing" | "completed" | "failed";
+  status: "pending" | "processing" | "completed" | "partial" | "failed";
   currentStage: string;
   stages: PipelineStage[];
   totalProgress: number;
   completedVideos: number;
+  validatedVideos: number;
   totalVideos: number;
   errors: string[];
   videoUrls: string[];
+  videoStatuses: Record<string, string>;
 }
 
 interface ProcessingTimelineProps {
@@ -50,9 +52,13 @@ const DEFAULT_STAGES: Omit<PipelineStage, "status">[] = [
   { id: "subtitles", label: "Subtitles / OCR", description: "Burning in captions", icon: Type },
   { id: "export", label: "Export", description: "Rendering final video", icon: Film },
   { id: "upload", label: "Upload to Storage", description: "Saving to cloud", icon: Upload },
-  { id: "url", label: "Generate Public URL", description: "Creating download links", icon: Link },
+  { id: "url", label: "URL Validation", description: "Verifying file accessibility", icon: Link },
   { id: "complete", label: "Mark Complete", description: "Finalizing job", icon: CheckCheck },
 ];
+
+const POLL_INTERVAL = 2000;
+const MAX_URL_VALIDATION_RETRIES = 5;
+const URL_VALIDATION_DELAY = 3000;
 
 export const ProcessingTimeline = ({ 
   jobId, 
@@ -67,26 +73,30 @@ export const ProcessingTimeline = ({
     stages: DEFAULT_STAGES.map(s => ({ ...s, status: "pending" as const })),
     totalProgress: 0,
     completedVideos: 0,
+    validatedVideos: 0,
     totalVideos,
     errors: [],
     videoUrls: [],
+    videoStatuses: {},
   });
   
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const MAX_RETRIES = 5;
-  const POLL_INTERVAL = 2000;
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [urlValidationRetries, setUrlValidationRetries] = useState(0);
+  const [isValidatingUrls, setIsValidatingUrls] = useState(false);
+  const completionHandledRef = useRef(false);
 
   // Start polling on mount
   useEffect(() => {
-    const interval = setInterval(() => {
+    pollJobStatus();
+    
+    pollingIntervalRef.current = setInterval(() => {
       pollJobStatus();
     }, POLL_INTERVAL);
     
-    setPollingInterval(interval);
-    
     return () => {
-      if (interval) clearInterval(interval);
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
     };
   }, [jobId]);
 
@@ -142,6 +152,7 @@ export const ProcessingTimeline = ({
     const currentStage = progress?.currentStage || "deconstruct";
     const completedStages = progress?.completedStages || [];
     const stageErrors = progress?.errors || {};
+    const videoStatuses = progress?.videoStatuses || {};
     
     const updatedStages = DEFAULT_STAGES.map(stage => {
       let status: PipelineStage["status"] = "pending";
@@ -172,24 +183,33 @@ export const ProcessingTimeline = ({
       stages: updatedStages,
       totalProgress,
       completedVideos: progress?.completedVideos || 0,
+      validatedVideos: progress?.validatedVideos || 0,
       totalVideos,
       errors: Object.values(stageErrors) as string[],
       videoUrls: progress?.videoUrls || [],
+      videoStatuses,
     };
 
     setJobStatus(newStatus);
 
-    // Check for completion
-    if (job.status === 'completed' && newStatus.videoUrls.length > 0) {
-      // Validate URLs before marking complete
-      validateAndComplete(newStatus.videoUrls);
-    } else if (job.status === 'failed') {
-      onError(newStatus.errors);
-      if (pollingInterval) clearInterval(pollingInterval);
+    // Handle job completion - ONLY when truly complete with validated URLs
+    if (!completionHandledRef.current) {
+      if ((job.status === 'completed' || job.status === 'partial') && newStatus.videoUrls.length > 0) {
+        // Verify URLs before marking complete
+        verifyAndComplete(newStatus.videoUrls);
+      } else if (job.status === 'failed') {
+        completionHandledRef.current = true;
+        onError(newStatus.errors.length > 0 ? newStatus.errors : ['Pipeline failed']);
+        stopPolling();
+      }
     }
   };
 
-  const validateAndComplete = async (urls: string[]) => {
+  const verifyAndComplete = useCallback(async (urls: string[]) => {
+    if (isValidatingUrls || completionHandledRef.current) return;
+    
+    setIsValidatingUrls(true);
+    
     const validUrls: string[] = [];
     const invalidUrls: string[] = [];
 
@@ -197,29 +217,53 @@ export const ProcessingTimeline = ({
       try {
         const response = await fetch(url, { method: 'HEAD' });
         if (response.ok) {
-          validUrls.push(url);
-        } else {
-          invalidUrls.push(url);
+          const contentType = response.headers.get('content-type');
+          // Accept video content or storage URLs
+          if ((contentType && contentType.includes('video')) || 
+              url.includes('/storage/') ||
+              response.ok) {
+            validUrls.push(url);
+            continue;
+          }
         }
+        invalidUrls.push(url);
       } catch {
         invalidUrls.push(url);
       }
     }
 
-    if (invalidUrls.length > 0 && retryCount < MAX_RETRIES) {
-      // Retry fetching invalid URLs
-      setRetryCount(prev => prev + 1);
-      console.log(`Retrying URL validation, attempt ${retryCount + 1}/${MAX_RETRIES}`);
-      setTimeout(() => validateAndComplete(urls), 3000);
+    // If we have invalid URLs and haven't exceeded retries, try again
+    if (invalidUrls.length > 0 && urlValidationRetries < MAX_URL_VALIDATION_RETRIES) {
+      console.log(`[ProcessingTimeline] URL validation: ${validUrls.length} valid, ${invalidUrls.length} invalid. Retry ${urlValidationRetries + 1}/${MAX_URL_VALIDATION_RETRIES}`);
+      setUrlValidationRetries(prev => prev + 1);
+      setIsValidatingUrls(false);
+      
+      // Wait and retry
+      setTimeout(() => {
+        verifyAndComplete(urls);
+      }, URL_VALIDATION_DELAY);
       return;
     }
 
+    setIsValidatingUrls(false);
+
+    // Complete if we have at least some valid URLs
     if (validUrls.length > 0) {
+      completionHandledRef.current = true;
+      console.log(`[ProcessingTimeline] Generation complete: ${validUrls.length} valid videos`);
       onComplete(validUrls);
-      if (pollingInterval) clearInterval(pollingInterval);
-    } else if (retryCount >= MAX_RETRIES) {
+      stopPolling();
+    } else if (urlValidationRetries >= MAX_URL_VALIDATION_RETRIES) {
+      completionHandledRef.current = true;
       onError(['Failed to validate video URLs after multiple retries']);
-      if (pollingInterval) clearInterval(pollingInterval);
+      stopPolling();
+    }
+  }, [isValidatingUrls, urlValidationRetries, onComplete, onError]);
+
+  const stopPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
     }
   };
 
@@ -228,8 +272,6 @@ export const ProcessingTimeline = ({
   };
 
   const getStageIcon = (stage: PipelineStage) => {
-    const IconComponent = stage.icon;
-    
     switch (stage.status) {
       case "completed":
         return <CheckCircle2 className="w-5 h-5 text-green-500" />;
@@ -243,6 +285,20 @@ export const ProcessingTimeline = ({
   };
 
   const completedStages = jobStatus.stages.filter(s => s.status === "completed").length;
+  
+  // Calculate validated video count for display
+  const validatedVideoCount = jobStatus.validatedVideos || jobStatus.videoUrls.length;
+  const processingVideoCount = Object.values(jobStatus.videoStatuses).filter(
+    s => s === 'processing' || s === 'validating' || s === 'uploading' || s === 'exporting'
+  ).length;
+  const failedVideoCount = Object.values(jobStatus.videoStatuses).filter(s => s === 'failed').length;
+
+  // Determine overall status display
+  const isProcessing = jobStatus.status === 'pending' || jobStatus.status === 'processing' || isValidatingUrls;
+  const isComplete = (jobStatus.status === 'completed' || jobStatus.status === 'partial') && 
+                     validatedVideoCount > 0 && 
+                     !isValidatingUrls;
+  const isFailed = jobStatus.status === 'failed';
 
   return (
     <div className="space-y-6">
@@ -250,19 +306,37 @@ export const ProcessingTimeline = ({
       <div className="flex items-center justify-between">
         <div className="space-y-1">
           <h3 className="text-lg font-semibold flex items-center gap-2">
-            {jobStatus.status === "processing" ? (
+            {isProcessing ? (
               <Loader2 className="w-5 h-5 text-primary animate-spin" />
-            ) : jobStatus.status === "completed" ? (
+            ) : isComplete ? (
               <CheckCircle2 className="w-5 h-5 text-green-500" />
-            ) : jobStatus.status === "failed" ? (
+            ) : isFailed ? (
               <AlertCircle className="w-5 h-5 text-destructive" />
             ) : (
               <Circle className="w-5 h-5 text-muted-foreground" />
             )}
-            Processing Pipeline
+            {isProcessing 
+              ? isValidatingUrls 
+                ? "Validating Video URLs..." 
+                : "Processing Pipeline"
+              : isComplete
+                ? "Generation Complete"
+                : isFailed
+                  ? "Generation Failed"
+                  : "Initializing..."
+            }
           </h3>
           <p className="text-sm text-muted-foreground">
-            {completedStages}/{DEFAULT_STAGES.length} stages • {jobStatus.completedVideos}/{totalVideos} videos
+            {completedStages}/{DEFAULT_STAGES.length} stages • 
+            {validatedVideoCount > 0 && (
+              <span className="text-green-500 ml-1">{validatedVideoCount} validated</span>
+            )}
+            {processingVideoCount > 0 && (
+              <span className="text-orange-500 ml-1">{processingVideoCount} processing</span>
+            )}
+            {failedVideoCount > 0 && (
+              <span className="text-destructive ml-1">{failedVideoCount} failed</span>
+            )}
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={handleManualRefresh}>
@@ -279,9 +353,14 @@ export const ProcessingTimeline = ({
             <span className="text-lg font-bold text-primary">{jobStatus.totalProgress}%</span>
           </div>
           <Progress value={jobStatus.totalProgress} className="h-2" />
-          {retryCount > 0 && (
-            <p className="text-xs text-orange-500 mt-2">
-              URL validation retry {retryCount}/{MAX_RETRIES}...
+          {isValidatingUrls && (
+            <p className="text-xs text-orange-500 mt-2 animate-pulse">
+              Validating URLs... Attempt {urlValidationRetries + 1}/{MAX_URL_VALIDATION_RETRIES}
+            </p>
+          )}
+          {validatedVideoCount > 0 && validatedVideoCount < totalVideos && !isValidatingUrls && (
+            <p className="text-xs text-muted-foreground mt-2">
+              {validatedVideoCount} of {totalVideos} videos ready
             </p>
           )}
         </CardContent>
