@@ -173,7 +173,7 @@ export const StudioDataSettings = () => {
 
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
-              Access Token (Optional)
+              Access Token (Required for auto-folder creation)
             </Label>
             <Input
               type="password"
@@ -182,9 +182,21 @@ export const StudioDataSettings = () => {
               placeholder="ya29.xxxxxxxxxxxxxxxx"
               className="bg-background border-border"
             />
-            <p className="text-xs text-muted-foreground">
-              Optional: Provide an OAuth access token for API-based folder creation.
-            </p>
+            <div className="p-3 rounded-lg bg-muted/50 border border-border mt-2">
+              <p className="text-xs font-medium text-foreground mb-2">How to get an access token:</p>
+              <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+                <li>Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Google Cloud Console</a></li>
+                <li>Create a project (or select existing)</li>
+                <li>Enable the <strong>Google Drive API</strong></li>
+                <li>Create OAuth 2.0 credentials (Web application)</li>
+                <li>Use <a href="https://developers.google.com/oauthplayground" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">OAuth Playground</a> to generate a token</li>
+                <li>Select <code className="bg-muted px-1 rounded">drive.file</code> scope and authorize</li>
+                <li>Copy the access token and paste it here</li>
+              </ol>
+              <p className="text-xs text-amber-500 mt-2">
+                ⚠️ Access tokens expire after 1 hour. For production use, implement refresh token flow.
+              </p>
+            </div>
           </div>
 
           {driveConnected && (
