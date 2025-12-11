@@ -101,3 +101,6 @@ verify_jwt = false
 
 [functions.n8n-proxy]
 verify_jwt = true
+
+[functions.arabic-vocalization]
+verify_jwt = false
