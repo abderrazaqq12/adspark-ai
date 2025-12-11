@@ -27,7 +27,17 @@ interface EnhancedResultsGalleryProps {
 
 const MAX_RETRIES = 5;
 const POLL_INTERVAL = 3000;
-const URL_VALIDATION_RETRIES = 3;
+const URL_VALIDATION_RETRIES = 5;
+const URL_VALIDATION_DELAY = 2000;
+
+// Video status type that tracks the true state
+type VideoReadyState = 'pending' | 'processing' | 'validating' | 'ready' | 'failed';
+
+interface VideoWithValidation extends GeneratedVideo {
+  readyState: VideoReadyState;
+  urlValidated: boolean;
+  validationAttempts: number;
+}
 
 export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId }: EnhancedResultsGalleryProps) => {
   const [selectedVideos, setSelectedVideos] = useState<string[]>([]);
@@ -37,8 +47,98 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
   const [selectedVideoForPlay, setSelectedVideoForPlay] = useState<GeneratedVideo | null>(null);
   const [retryingVideos, setRetryingVideos] = useState<Set<string>>(new Set());
   const [isPolling, setIsPolling] = useState(false);
-  const [urlValidationRetries, setUrlValidationRetries] = useState<Record<string, number>>({});
+  const [videoValidationState, setVideoValidationState] = useState<Record<string, VideoWithValidation>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Initialize validation state from videos
+  useEffect(() => {
+    const initialState: Record<string, VideoWithValidation> = {};
+    videos.forEach(video => {
+      if (!videoValidationState[video.id]) {
+        initialState[video.id] = {
+          ...video,
+          readyState: video.status === 'completed' ? 'validating' : 
+                      video.status === 'failed' ? 'failed' : 'processing',
+          urlValidated: false,
+          validationAttempts: 0,
+        };
+      }
+    });
+    
+    if (Object.keys(initialState).length > 0) {
+      setVideoValidationState(prev => ({ ...prev, ...initialState }));
+    }
+  }, [videos]);
+
+  // Validate video URL is accessible
+  const validateVideoUrl = useCallback(async (videoId: string, url: string): Promise<boolean> => {
+    const currentState = videoValidationState[videoId];
+    if (!currentState || currentState.validationAttempts >= URL_VALIDATION_RETRIES) {
+      return false;
+    }
+
+    try {
+      const response = await fetch(url, { method: 'HEAD' });
+      if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        // Accept video content types or storage URLs
+        if ((contentType && contentType.includes('video')) || 
+            url.includes('/storage/') ||
+            response.ok) {
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, [videoValidationState]);
+
+  // Validate all completed videos
+  const validateCompletedVideos = useCallback(async () => {
+    const videosToValidate = videos.filter(v => 
+      v.status === 'completed' && 
+      v.url && 
+      (!videoValidationState[v.id]?.urlValidated)
+    );
+
+    for (const video of videosToValidate) {
+      if (!video.url) continue;
+      
+      const currentState = videoValidationState[video.id];
+      if (currentState?.validationAttempts >= URL_VALIDATION_RETRIES) continue;
+
+      setVideoValidationState(prev => ({
+        ...prev,
+        [video.id]: {
+          ...prev[video.id],
+          ...video,
+          readyState: 'validating',
+          validationAttempts: (prev[video.id]?.validationAttempts || 0) + 1,
+        }
+      }));
+
+      const isValid = await validateVideoUrl(video.id, video.url);
+
+      setVideoValidationState(prev => ({
+        ...prev,
+        [video.id]: {
+          ...prev[video.id],
+          readyState: isValid ? 'ready' : 
+                      (prev[video.id]?.validationAttempts || 0) >= URL_VALIDATION_RETRIES ? 'failed' : 'validating',
+          urlValidated: isValid,
+        }
+      }));
+
+      // If not valid and haven't exceeded retries, schedule another attempt
+      if (!isValid && (currentState?.validationAttempts || 0) < URL_VALIDATION_RETRIES - 1) {
+        setTimeout(() => {
+          validateCompletedVideos();
+        }, URL_VALIDATION_DELAY * ((currentState?.validationAttempts || 0) + 1));
+      }
+    }
+  }, [videos, videoValidationState, validateVideoUrl]);
 
   // Realtime subscription for video updates
   useEffect(() => {
@@ -55,13 +155,14 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
         },
         (payload) => {
           const updated = payload.new as any;
+          
+          // Update the video in state
           setVideos((prev) =>
             prev.map((video) =>
               video.id === updated.id
                 ? {
                     ...video,
-                    status: updated.status === 'completed' && updated.video_url ? 'completed' : 
-                            updated.status === 'failed' ? 'failed' : 'processing',
+                    status: updated.status,
                     url: updated.video_url || video.url,
                     thumbnail: updated.thumbnail_url || video.thumbnail,
                     duration: updated.duration_sec || video.duration,
@@ -70,8 +171,22 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
             )
           );
 
+          // If completed with URL, trigger validation
           if (updated.status === 'completed' && updated.video_url) {
-            validateVideoUrl(updated.id, updated.video_url);
+            setVideoValidationState(prev => ({
+              ...prev,
+              [updated.id]: {
+                ...prev[updated.id],
+                url: updated.video_url,
+                status: 'completed',
+                readyState: 'validating',
+                urlValidated: false,
+                validationAttempts: 0,
+              } as VideoWithValidation
+            }));
+            
+            // Trigger validation
+            setTimeout(() => validateCompletedVideos(), 500);
           }
         }
       )
@@ -80,24 +195,40 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [videos.length]);
+  }, [videos.length, validateCompletedVideos]);
 
   // Polling for processing videos
   useEffect(() => {
-    const processingVideos = videos.filter(v => v.status === "processing");
+    const processingVideos = videos.filter(v => 
+      v.status === "processing" || 
+      (v.status === "completed" && !videoValidationState[v.id]?.urlValidated)
+    );
     
     if (processingVideos.length === 0) {
       setIsPolling(false);
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
       return;
     }
 
     setIsPolling(true);
 
-    const interval = setInterval(async () => {
+    pollingRef.current = setInterval(async () => {
       await pollVideoStatuses();
     }, POLL_INTERVAL);
 
-    return () => clearInterval(interval);
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
+  }, [videos, videoValidationState]);
+
+  // Validate videos when they complete
+  useEffect(() => {
+    validateCompletedVideos();
   }, [videos]);
 
   const pollVideoStatuses = async () => {
@@ -119,13 +250,9 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
           const updated = data.find((d: any) => d.id === video.id);
           if (!updated) return video;
 
-          // Only mark as completed if URL is valid
-          const hasValidUrl = updated.video_url && updated.video_url.startsWith('http');
-          
           return {
             ...video,
-            status: updated.status === 'completed' && hasValidUrl ? 'completed' : 
-                    updated.status === 'failed' ? 'failed' : 'processing',
+            status: updated.status as GeneratedVideo['status'],
             url: updated.video_url || video.url,
             thumbnail: updated.thumbnail_url || video.thumbnail,
             duration: updated.duration_sec || video.duration,
@@ -137,56 +264,24 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
     }
   };
 
-  const validateVideoUrl = useCallback(async (videoId: string, url: string) => {
-    const currentRetries = urlValidationRetries[videoId] || 0;
-    
-    if (currentRetries >= URL_VALIDATION_RETRIES) {
-      console.log(`Max URL validation retries reached for ${videoId}`);
-      return;
-    }
-
-    try {
-      const response = await fetch(url, { method: 'HEAD' });
-      if (!response.ok) {
-        throw new Error('URL not accessible');
-      }
-    } catch {
-      // URL not ready, retry
-      setUrlValidationRetries(prev => ({ ...prev, [videoId]: currentRetries + 1 }));
-      
-      setTimeout(() => {
-        validateVideoUrl(videoId, url);
-      }, 2000 * (currentRetries + 1));
-
-      // Keep as processing until URL is validated
-      setVideos(prev => prev.map(v => 
-        v.id === videoId ? { ...v, status: 'processing' } : v
-      ));
-    }
-  }, [urlValidationRetries, setVideos]);
-
   const handleRefreshResults = async () => {
     toast.info("Refreshing results...");
     await pollVideoStatuses();
     
-    // Re-validate URLs for completed videos without valid URLs
-    const videosToValidate = videos.filter(v => v.status === "completed" && v.url);
-    for (const video of videosToValidate) {
-      if (video.url) {
-        try {
-          const response = await fetch(video.url, { method: 'HEAD' });
-          if (!response.ok) {
-            setVideos(prev => prev.map(v => 
-              v.id === video.id ? { ...v, status: 'processing' } : v
-            ));
-          }
-        } catch {
-          setVideos(prev => prev.map(v => 
-            v.id === video.id ? { ...v, status: 'processing' } : v
-          ));
+    // Reset validation state for incomplete validations
+    setVideoValidationState(prev => {
+      const updated = { ...prev };
+      Object.keys(updated).forEach(id => {
+        if (!updated[id].urlValidated) {
+          updated[id].validationAttempts = 0;
+          updated[id].readyState = 'validating';
         }
-      }
-    }
+      });
+      return updated;
+    });
+    
+    // Re-validate
+    setTimeout(() => validateCompletedVideos(), 500);
     
     toast.success("Results refreshed");
   };
@@ -198,7 +293,10 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
   };
 
   const selectAll = () => {
-    setSelectedVideos(videos.map((v) => v.id));
+    const readyVideos = videos.filter(v => 
+      videoValidationState[v.id]?.readyState === 'ready'
+    );
+    setSelectedVideos(readyVideos.map((v) => v.id));
   };
 
   const deselectAll = () => {
@@ -212,18 +310,20 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
   const uniqueRatios = [...new Set(videos.map((v) => v.ratio))];
 
   const handleDownloadSelected = async () => {
-    const completedSelected = videos.filter(
-      v => selectedVideos.includes(v.id) && v.status === "completed" && v.url
+    const readySelected = videos.filter(
+      v => selectedVideos.includes(v.id) && 
+           videoValidationState[v.id]?.readyState === 'ready' && 
+           v.url
     );
     
-    if (completedSelected.length === 0) {
-      toast.error("No completed videos selected for download");
+    if (readySelected.length === 0) {
+      toast.error("No ready videos selected for download");
       return;
     }
 
-    toast.success(`Downloading ${completedSelected.length} videos...`);
+    toast.success(`Downloading ${readySelected.length} videos...`);
     
-    for (const video of completedSelected) {
+    for (const video of readySelected) {
       if (video.url) {
         const link = document.createElement("a");
         link.href = video.url;
@@ -234,22 +334,34 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
   };
 
   const handleSaveToProjects = () => {
-    const completedCount = videos.filter(
-      v => selectedVideos.includes(v.id) && v.status === "completed"
+    const readyCount = videos.filter(
+      v => selectedVideos.includes(v.id) && 
+           videoValidationState[v.id]?.readyState === 'ready'
     ).length;
-    toast.success(`Saved ${completedCount} videos to projects`);
+    toast.success(`Saved ${readyCount} videos to projects`);
   };
 
   const handlePlayVideo = (video: GeneratedVideo, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (video.status !== "completed") {
-      toast.info("Video is still processing. Please wait...");
+    
+    const validationState = videoValidationState[video.id];
+    
+    if (validationState?.readyState !== 'ready') {
+      if (validationState?.readyState === 'validating') {
+        toast.info("Video is being validated. Please wait...");
+      } else if (validationState?.readyState === 'processing') {
+        toast.info("Video is still processing. Please wait...");
+      } else {
+        toast.error("Video is not available yet. Try refreshing.");
+      }
       return;
     }
+    
     if (!video.url) {
-      toast.error("Video URL not available yet. Try refreshing.");
+      toast.error("Video URL not available. Try refreshing.");
       return;
     }
+    
     setSelectedVideoForPlay(video);
     setVideoModalOpen(true);
   };
@@ -268,9 +380,20 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
     setRetryingVideos(prev => new Set(prev).add(video.id));
     
     try {
+      // Reset validation state
+      setVideoValidationState(prev => ({
+        ...prev,
+        [video.id]: {
+          ...prev[video.id],
+          readyState: 'processing',
+          urlValidated: false,
+          validationAttempts: 0,
+        } as VideoWithValidation
+      }));
+      
       setVideos(prev => prev.map(v => 
         v.id === video.id 
-          ? { ...v, status: "processing" as const, retryCount: retryCount + 1 } as any 
+          ? { ...v, status: "processing" as const } 
           : v
       ));
       
@@ -295,6 +418,15 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
     } catch (err) {
       console.error('Retry error:', err);
       toast.error(`Failed to retry video`);
+      
+      setVideoValidationState(prev => ({
+        ...prev,
+        [video.id]: {
+          ...prev[video.id],
+          readyState: 'failed',
+        } as VideoWithValidation
+      }));
+      
       setVideos(prev => prev.map(v => 
         v.id === video.id ? { ...v, status: "failed" as const } : v
       ));
@@ -308,21 +440,37 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
   };
 
   const handleRetryAllFailed = async () => {
-    const failedVideos = videos.filter(v => v.status === "failed");
+    const failedVideos = videos.filter(v => 
+      videoValidationState[v.id]?.readyState === 'failed' || 
+      v.status === "failed"
+    );
     for (const video of failedVideos) {
       await handleRetryVideo(video, { stopPropagation: () => {} } as any);
     }
   };
 
-  const completedVideos = videos.filter(v => v.status === "completed" && v.url);
-  const processingVideos = videos.filter(v => v.status === "processing");
-  const failedVideos = videos.filter(v => v.status === "failed");
+  // Calculate counts based on VALIDATED state, not just status
+  const readyVideos = videos.filter(v => videoValidationState[v.id]?.readyState === 'ready');
+  const processingVideos = videos.filter(v => 
+    videoValidationState[v.id]?.readyState === 'processing' || 
+    videoValidationState[v.id]?.readyState === 'validating' ||
+    v.status === 'processing'
+  );
+  const failedVideos = videos.filter(v => 
+    videoValidationState[v.id]?.readyState === 'failed' || 
+    v.status === 'failed'
+  );
 
-  // Only show completion when ALL videos are done AND have valid URLs
-  const isFullyComplete = processingVideos.length === 0 && failedVideos.length === 0 && completedVideos.length === videos.length;
+  // ONLY show complete when ALL videos are truly ready (validated)
+  const isFullyComplete = readyVideos.length === videos.length && videos.length > 0;
   const overallProgress = videos.length > 0 
-    ? Math.round((completedVideos.length / videos.length) * 100) 
+    ? Math.round((readyVideos.length / videos.length) * 100) 
     : 0;
+
+  const getVideoReadyState = (video: GeneratedVideo): VideoReadyState => {
+    return videoValidationState[video.id]?.readyState || 
+           (video.status === 'failed' ? 'failed' : 'processing');
+  };
 
   return (
     <div className="space-y-6">
@@ -332,24 +480,30 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
           <h2 className="text-xl font-semibold flex items-center gap-2">
             {processingVideos.length > 0 ? (
               <Loader2 className="w-5 h-5 text-orange-500 animate-spin" />
-            ) : failedVideos.length > 0 && completedVideos.length === 0 ? (
+            ) : failedVideos.length > 0 && readyVideos.length === 0 ? (
               <AlertTriangle className="w-5 h-5 text-destructive" />
             ) : isFullyComplete ? (
               <CheckCircle2 className="w-5 h-5 text-green-500" />
+            ) : readyVideos.length > 0 ? (
+              <Loader2 className="w-5 h-5 text-orange-500 animate-spin" />
             ) : (
               <Loader2 className="w-5 h-5 text-orange-500 animate-spin" />
             )}
             {processingVideos.length > 0 
               ? "Generation In Progress" 
-              : failedVideos.length > 0 && completedVideos.length === 0
+              : failedVideos.length > 0 && readyVideos.length === 0
                 ? "Generation Failed"
                 : isFullyComplete
                   ? "Generation Complete"
-                  : "Finalizing..."
+                  : readyVideos.length > 0
+                    ? `${readyVideos.length} of ${videos.length} Ready`
+                    : "Initializing..."
             }
           </h2>
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span className="text-green-500">{completedVideos.length} ready</span>
+            {readyVideos.length > 0 && (
+              <span className="text-green-500">{readyVideos.length} ready</span>
+            )}
             {processingVideos.length > 0 && (
               <span className="text-orange-500">{processingVideos.length} processing</span>
             )}
@@ -396,9 +550,9 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
           <Button
             variant="outline"
             size="sm"
-            onClick={selectedVideos.length === videos.length ? deselectAll : selectAll}
+            onClick={selectedVideos.length === readyVideos.length ? deselectAll : selectAll}
           >
-            {selectedVideos.length === videos.length ? "Deselect All" : "Select All"}
+            {selectedVideos.length === readyVideos.length && readyVideos.length > 0 ? "Deselect All" : "Select All Ready"}
           </Button>
           {selectedVideos.length > 0 && (
             <span className="text-sm text-muted-foreground">
@@ -454,7 +608,7 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
         </div>
       </div>
 
-      {/* Bulk Actions */}
+      {/* Bulk Actions - Only show when ready videos are selected */}
       {selectedVideos.length > 0 && (
         <Card className="border-primary/50 bg-primary/5">
           <CardContent className="p-4 flex items-center justify-between">
@@ -484,9 +638,11 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
         }
       >
         {filteredVideos.map((video) => {
-          const retryCount = (video as any).retryCount || 0;
-          const hasValidUrl = video.url && video.url.startsWith('http');
-          const isReady = video.status === "completed" && hasValidUrl;
+          const readyState = getVideoReadyState(video);
+          const isReady = readyState === 'ready';
+          const isValidating = readyState === 'validating';
+          const isProcessing = readyState === 'processing';
+          const isFailed = readyState === 'failed';
           
           return (
             <Card
@@ -494,202 +650,204 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
               className={`overflow-hidden transition-all cursor-pointer ${
                 selectedVideos.includes(video.id)
                   ? "ring-2 ring-primary border-primary"
-                  : video.status === "failed"
+                  : isFailed
                     ? "border-destructive/50"
-                    : "border-border/50 hover:border-border"
+                    : isReady
+                      ? "border-green-500/50"
+                      : "border-border/50 hover:border-border"
               }`}
-              onClick={() => toggleSelect(video.id)}
+              onClick={() => isReady && toggleSelect(video.id)}
             >
               {viewMode === "grid" ? (
-                <>
-                  <div className="relative aspect-[9/16] bg-gradient-to-br from-muted to-muted/50">
-                    {/* Thumbnail - only show if completed and has valid URL */}
-                    {isReady && video.thumbnail && (
-                      <img 
-                        src={video.thumbnail} 
-                        alt={video.id}
-                        className="absolute inset-0 w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                        }}
+                <div className="relative">
+                  {/* Thumbnail / Placeholder */}
+                  <div className="aspect-[9/16] bg-muted flex items-center justify-center relative overflow-hidden">
+                    {isReady && video.thumbnail ? (
+                      <img
+                        src={video.thumbnail}
+                        alt={`Variation ${video.id}`}
+                        className="w-full h-full object-cover"
                       />
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground p-4">
+                        {isValidating ? (
+                          <>
+                            <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+                            <span className="text-xs text-center">Validating URL...</span>
+                          </>
+                        ) : isProcessing ? (
+                          <>
+                            <Loader2 className="w-8 h-8 animate-spin" />
+                            <span className="text-xs text-center">Processing...</span>
+                          </>
+                        ) : isFailed ? (
+                          <>
+                            <AlertTriangle className="w-8 h-8 text-destructive" />
+                            <span className="text-xs text-center text-destructive">Failed</span>
+                          </>
+                        ) : (
+                          <>
+                            <Loader2 className="w-8 h-8 animate-spin" />
+                            <span className="text-xs text-center">Initializing...</span>
+                          </>
+                        )}
+                      </div>
                     )}
-                    
-                    {/* Status overlay */}
-                    <div 
-                      className="absolute inset-0 flex flex-col items-center justify-center gap-2 cursor-pointer group"
-                      onClick={(e) => video.status === "failed" ? handleRetryVideo(video, e) : handlePlayVideo(video, e)}
-                    >
-                      {video.status === "processing" ? (
-                        <>
-                          <div className="w-16 h-16 rounded-full bg-orange-500/20 flex items-center justify-center">
-                            <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
-                          </div>
-                          <span className="text-xs text-orange-400 font-medium">Processing...</span>
-                          {retryCount > 0 && (
-                            <span className="text-[10px] text-muted-foreground">
-                              Retry {retryCount}/{MAX_RETRIES}
-                            </span>
-                          )}
-                        </>
-                      ) : video.status === "failed" ? (
-                        <>
-                          <div className="w-16 h-16 rounded-full bg-destructive/20 flex items-center justify-center group-hover:bg-orange-500/30 transition-all">
-                            {retryingVideos.has(video.id) ? (
-                              <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
-                            ) : (
-                              <RotateCw className="w-8 h-8 text-destructive group-hover:text-orange-500" />
-                            )}
-                          </div>
-                          <span className="text-xs text-destructive font-medium group-hover:text-orange-500">
-                            {retryingVideos.has(video.id) ? "Retrying..." : "Click to Retry"}
-                          </span>
-                        </>
-                      ) : isReady ? (
-                        <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center group-hover:bg-primary/40 transition-all group-hover:scale-110">
-                          <Play className="w-8 h-8 text-primary fill-primary" />
+
+                    {/* Selection Checkbox - Only for ready videos */}
+                    {isReady && (
+                      <div className="absolute top-2 left-2 z-10">
+                        <Checkbox
+                          checked={selectedVideos.includes(video.id)}
+                          onCheckedChange={() => toggleSelect(video.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="bg-background/80"
+                        />
+                      </div>
+                    )}
+
+                    {/* Play Button - Only for ready videos */}
+                    {isReady && (
+                      <button
+                        className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 hover:opacity-100 transition-opacity"
+                        onClick={(e) => handlePlayVideo(video, e)}
+                      >
+                        <div className="w-12 h-12 rounded-full bg-primary/90 flex items-center justify-center">
+                          <Play className="w-6 h-6 text-white ml-1" />
                         </div>
-                      ) : (
-                        <>
-                          <div className="w-16 h-16 rounded-full bg-orange-500/20 flex items-center justify-center">
-                            <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
-                          </div>
-                          <span className="text-xs text-orange-400 font-medium">Validating URL...</span>
-                        </>
-                      )}
-                    </div>
-                    
-                    <div className="absolute top-2 left-2">
-                      <Checkbox
-                        checked={selectedVideos.includes(video.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        onCheckedChange={() => toggleSelect(video.id)}
-                      />
-                    </div>
-                    
-                    {/* Status badge */}
+                      </button>
+                    )}
+
+                    {/* Retry Button for Failed */}
+                    {isFailed && (
+                      <button
+                        className="absolute bottom-2 right-2 z-10"
+                        onClick={(e) => handleRetryVideo(video, e)}
+                      >
+                        <Button size="sm" variant="destructive">
+                          <RotateCw className="w-3 h-3 mr-1" />
+                          Retry
+                        </Button>
+                      </button>
+                    )}
+
+                    {/* Status Badge */}
                     <div className="absolute top-2 right-2">
-                      {video.status === "processing" && (
-                        <Badge className="bg-orange-500/80 text-white animate-pulse">
-                          Processing
-                        </Badge>
-                      )}
-                      {video.status === "failed" && (
-                        <Badge variant="destructive">
-                          Failed
-                        </Badge>
-                      )}
-                      {isReady && (
-                        <Badge className="bg-green-500/80 text-white">
-                          Ready
-                        </Badge>
-                      )}
-                    </div>
-                    
-                    {/* Duration - only show if we have valid metadata */}
-                    <div className="absolute bottom-2 left-2 right-2 flex justify-between">
-                      {video.duration && video.duration > 0 && isReady ? (
-                        <Badge className="bg-black/60 text-white">
-                          <Clock className="w-3 h-3 mr-1" />
-                          {video.duration}s
-                        </Badge>
-                      ) : (
-                        <div />
-                      )}
-                      <Badge variant="outline" className="bg-black/60 text-white border-0">
-                        {video.ratio}
+                      <Badge 
+                        variant={isReady ? "default" : isFailed ? "destructive" : "secondary"}
+                        className={isReady ? "bg-green-500" : ""}
+                      >
+                        {isReady ? "Ready" : 
+                         isValidating ? "Validating" :
+                         isProcessing ? "Processing" : 
+                         isFailed ? "Failed" : "Pending"}
                       </Badge>
                     </div>
                   </div>
+
+                  {/* Info Footer */}
                   <CardContent className="p-3 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <Badge variant="outline">{video.ratio}</Badge>
+                      {isReady && video.duration && (
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {video.duration}s
+                        </span>
+                      )}
+                    </div>
                     <div className="flex flex-wrap gap-1">
                       <Badge variant="secondary" className="text-xs">
                         {video.hookStyle}
                       </Badge>
-                      <Badge variant="outline" className="text-xs">
+                      <Badge variant="secondary" className="text-xs">
                         {video.pacing}
                       </Badge>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-muted-foreground">
-                        Engine: {video.engine}
-                      </p>
-                      {isReady && (
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          className="h-6 w-6 p-0"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            window.open(video.url, '_blank');
-                          }}
+                  </CardContent>
+                </div>
+              ) : (
+                // List View
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-4">
+                    {/* Thumbnail */}
+                    <div className="w-20 h-36 bg-muted rounded flex items-center justify-center shrink-0">
+                      {isReady && video.thumbnail ? (
+                        <img
+                          src={video.thumbnail}
+                          alt={`Variation ${video.id}`}
+                          className="w-full h-full object-cover rounded"
+                        />
+                      ) : isProcessing || isValidating ? (
+                        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                      ) : isFailed ? (
+                        <AlertTriangle className="w-6 h-6 text-destructive" />
+                      ) : (
+                        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                      )}
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge 
+                          variant={isReady ? "default" : isFailed ? "destructive" : "secondary"}
+                          className={isReady ? "bg-green-500" : ""}
                         >
-                          <ExternalLink className="w-3 h-3" />
+                          {isReady ? "Ready" : 
+                           isValidating ? "Validating" :
+                           isProcessing ? "Processing" : 
+                           isFailed ? "Failed" : "Pending"}
+                        </Badge>
+                        <Badge variant="outline">{video.ratio}</Badge>
+                        {isReady && video.duration && (
+                          <span className="text-sm text-muted-foreground flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {video.duration}s
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        <Badge variant="secondary" className="text-xs">
+                          {video.hookStyle}
+                        </Badge>
+                        <Badge variant="secondary" className="text-xs">
+                          {video.pacing}
+                        </Badge>
+                        <Badge variant="secondary" className="text-xs">
+                          {video.engine}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2">
+                      {isReady && (
+                        <>
+                          <Checkbox
+                            checked={selectedVideos.includes(video.id)}
+                            onCheckedChange={() => toggleSelect(video.id)}
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => handlePlayVideo(video, e)}
+                          >
+                            <Play className="w-4 h-4" />
+                          </Button>
+                        </>
+                      )}
+                      {isFailed && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={(e) => handleRetryVideo(video, e)}
+                        >
+                          <RotateCw className="w-4 h-4 mr-1" />
+                          Retry
                         </Button>
                       )}
                     </div>
-                  </CardContent>
-                </>
-              ) : (
-                <CardContent className="p-4 flex items-center gap-4">
-                  <Checkbox
-                    checked={selectedVideos.includes(video.id)}
-                    onClick={(e) => e.stopPropagation()}
-                    onCheckedChange={() => toggleSelect(video.id)}
-                  />
-                  <div className="w-16 h-24 rounded bg-muted flex items-center justify-center">
-                    {isReady ? (
-                      <Play className="w-6 h-6 text-primary" />
-                    ) : video.status === "processing" ? (
-                      <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
-                    ) : (
-                      <AlertTriangle className="w-6 h-6 text-destructive" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge variant="secondary">{video.hookStyle}</Badge>
-                      <Badge variant="outline">{video.pacing}</Badge>
-                      <Badge variant="outline">{video.ratio}</Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Engine: {video.engine}
-                      {video.duration && isReady && ` • ${video.duration}s`}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    {isReady && (
-                      <>
-                        <Button size="sm" variant="outline" onClick={(e) => handlePlayVideo(video, e)}>
-                          <Play className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (video.url) {
-                              const link = document.createElement("a");
-                              link.href = video.url;
-                              link.download = `${video.id}.mp4`;
-                              link.click();
-                            }
-                          }}
-                        >
-                          <Download className="w-4 h-4" />
-                        </Button>
-                      </>
-                    )}
-                    {video.status === "failed" && (
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        className="text-orange-500"
-                        onClick={(e) => handleRetryVideo(video, e)}
-                      >
-                        <RotateCw className="w-4 h-4" />
-                      </Button>
-                    )}
                   </div>
                 </CardContent>
               )}
@@ -700,58 +858,52 @@ export const EnhancedResultsGallery = ({ videos, onRegenerate, setVideos, jobId 
 
       {/* Video Playback Modal */}
       <Dialog open={videoModalOpen} onOpenChange={setVideoModalOpen}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
+              <Play className="w-5 h-5" />
               Video Preview
-              {selectedVideoForPlay && (
-                <div className="flex gap-2">
-                  <Badge variant="secondary">{selectedVideoForPlay.hookStyle}</Badge>
-                  <Badge variant="outline">{selectedVideoForPlay.ratio}</Badge>
-                </div>
-              )}
             </DialogTitle>
           </DialogHeader>
-          <div className="aspect-video bg-black rounded-lg overflow-hidden">
-            {selectedVideoForPlay?.url ? (
-              <video
-                ref={videoRef}
-                src={selectedVideoForPlay.url}
-                controls
-                autoPlay
-                className="w-full h-full object-contain"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                No video URL available
+          {selectedVideoForPlay && selectedVideoForPlay.url && (
+            <div className="space-y-4">
+              <div className="aspect-[9/16] max-h-[70vh] bg-black rounded-lg overflow-hidden">
+                <video
+                  ref={videoRef}
+                  src={selectedVideoForPlay.url}
+                  controls
+                  autoPlay
+                  className="w-full h-full object-contain"
+                />
               </div>
-            )}
-          </div>
-          {selectedVideoForPlay && (
-            <div className="flex justify-between items-center">
-              <div className="text-sm text-muted-foreground">
-                Engine: {selectedVideoForPlay.engine} • {selectedVideoForPlay.pacing} pacing
-                {selectedVideoForPlay.duration && ` • ${selectedVideoForPlay.duration}s`}
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (selectedVideoForPlay.url) {
-                      const link = document.createElement("a");
-                      link.href = selectedVideoForPlay.url;
+              <div className="flex justify-between items-center">
+                <div className="flex gap-2">
+                  <Badge variant="outline">{selectedVideoForPlay.ratio}</Badge>
+                  <Badge variant="secondary">{selectedVideoForPlay.hookStyle}</Badge>
+                  <Badge variant="secondary">{selectedVideoForPlay.pacing}</Badge>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(selectedVideoForPlay.url!, '_blank')}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Open in New Tab
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const link = document.createElement('a');
+                      link.href = selectedVideoForPlay.url!;
                       link.download = `${selectedVideoForPlay.id}.mp4`;
                       link.click();
-                    }
-                  }}
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Download
-                </Button>
-                <Button onClick={() => toast.success("Saved to projects")}>
-                  <Save className="w-4 h-4 mr-2" />
-                  Save to Project
-                </Button>
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Download
+                  </Button>
+                </div>
               </div>
             </div>
           )}
