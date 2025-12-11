@@ -1,10 +1,12 @@
-import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Building2, Database, Clapperboard, Images, Wand2, SlidersHorizontal } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Building2, Database, Clapperboard, Images, Wand2, SlidersHorizontal, FileText } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { CreditsDisplay } from "@/components/CreditsDisplay";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
   SidebarContent,
@@ -33,6 +35,7 @@ const quickAccessItems = [
 // Library items - Projects and Gallery
 const libraryItems = [
   { title: "My Projects", url: "/projects", icon: FolderOpen },
+  { title: "Scripts", url: "/scripts", icon: FileText, showCount: true },
   { title: "Asset Gallery", url: "/gallery", icon: Images },
   { title: "Templates", url: "/templates", icon: LayoutTemplate },
 ];
@@ -49,6 +52,22 @@ const toolsItems = [
 export function AppSidebar() {
   const { open, toggleSidebar } = useSidebar();
   const navigate = useNavigate();
+  const [scriptsCount, setScriptsCount] = useState(0);
+
+  useEffect(() => {
+    loadScriptsCount();
+  }, []);
+
+  const loadScriptsCount = async () => {
+    try {
+      const { count } = await supabase
+        .from('scripts')
+        .select('*', { count: 'exact', head: true });
+      setScriptsCount(count || 0);
+    } catch (error) {
+      console.error('Error loading scripts count:', error);
+    }
+  };
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -152,7 +171,14 @@ export function AppSidebar() {
                       activeClassName="bg-primary/10 text-primary font-medium shadow-sm"
                     >
                       <item.icon className="w-[18px] h-[18px] shrink-0" />
-                      {open && <span className="truncate">{item.title}</span>}
+                      {open && (
+                        <span className="truncate flex-1">{item.title}</span>
+                      )}
+                      {open && (item as any).showCount && scriptsCount > 0 && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">
+                          {scriptsCount}
+                        </Badge>
+                      )}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
