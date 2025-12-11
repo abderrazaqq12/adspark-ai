@@ -791,14 +791,10 @@ ${landingData.finalCta?.urgencyText || ''}`;
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 bg-muted">
+        <TabsList className="grid w-full grid-cols-2 bg-muted">
           <TabsTrigger value="angles" className="gap-2">
             <Target className="w-4 h-4" />
             Marketing Angles
-          </TabsTrigger>
-          <TabsTrigger value="scripts" className="gap-2">
-            <FileText className="w-4 h-4" />
-            Scripts ({scripts.length})
           </TabsTrigger>
           <TabsTrigger value="landing" className="gap-2">
             <Layout className="w-4 h-4" />
@@ -900,72 +896,6 @@ ${landingData.finalCta?.urgencyText || ''}`;
                     ))}
                   </ul>
                 </div>
-              </div>
-            )}
-          </Card>
-        </TabsContent>
-
-        {/* Scripts Generation */}
-        <TabsContent value="scripts" className="mt-4">
-          <Card className="p-6 bg-card border-border">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="font-semibold">Script Generation</h3>
-                <p className="text-sm text-muted-foreground">AI will generate multiple script variations with different tones</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Select value={scriptsCount} onValueChange={setScriptsCount}>
-                  <SelectTrigger className="w-32 bg-background">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="5">5 scripts</SelectItem>
-                    <SelectItem value="10">10 scripts</SelectItem>
-                    <SelectItem value="15">15 scripts</SelectItem>
-                    <SelectItem value="20">20 scripts</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button onClick={generateScripts} disabled={isGenerating} className="gap-2">
-                  {isGenerating ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-4 h-4" />
-                  )}
-                  Generate
-                </Button>
-              </div>
-            </div>
-
-            {scripts.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No scripts generated yet</p>
-                <p className="text-sm">Click "Generate" to create script variations</p>
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                {scripts.map((script, index) => (
-                  <div key={script.id} className="p-4 rounded-lg bg-muted/50 border border-border">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">Script {index + 1}</span>
-                        <Badge variant="secondary" className="capitalize">{script.tone}</Badge>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">{script.wordCount} words</span>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8"
-                          onClick={() => copyToClipboard(script.content)}
-                        >
-                          <Copy className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground line-clamp-3">{script.content}</p>
-                  </div>
-                ))}
               </div>
             )}
           </Card>

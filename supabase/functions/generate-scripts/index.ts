@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,71 +11,77 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
     
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { 
+      productName, 
+      productDescription, 
+      scriptType = 'ugc',
+      scriptTypeName = 'UGC Product Ad',
+      count = 5, 
+      language = 'ar',
+      market = 'gcc',
+      customPrompt = null,
+    } = await req.json();
 
-    // Authenticate the request
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    console.log(`[generate-scripts] Authenticated user: ${user.id}`);
-
-    const { projectId, templateId, variables, count = 10, language = 'en' } = await req.json();
-
-    // Get template
-    let template: any;
-    if (templateId) {
-      const { data } = await supabase
-        .from('prompt_templates')
-        .select('*')
-        .eq('id', templateId)
-        .single();
-      template = data;
-    } else {
-      // Get default template for language
-      const { data } = await supabase
-        .from('prompt_templates')
-        .select('*')
-        .eq('is_default', true)
-        .eq('language', language)
-        .limit(1)
-        .maybeSingle();
-      template = data;
-    }
-
-    if (!template) {
-      return new Response(JSON.stringify({ error: 'No template found' }), {
+    if (!productName) {
+      return new Response(JSON.stringify({ error: 'Product name is required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Replace variables in template
-    let prompt = template.template_text;
-    for (const [key, value] of Object.entries(variables || {})) {
-      prompt = prompt.replace(new RegExp(`{{${key}}}`, 'g'), value as string);
-    }
+    console.log(`[generate-scripts] Generating ${count} ${scriptType} scripts for: ${productName}`);
 
-    // Generate scripts using AI
-    const systemPrompt = `You are an expert video ad scriptwriter. Generate ${count} unique variations of the script based on the template. Each variation should be different in hooks, angles, and phrasing while maintaining the core message. Output as JSON array of strings.`;
+    // Build the system prompt based on script type
+    const scriptTypePrompts: Record<string, string> = {
+      'ugc': 'Write in a casual, authentic user-generated content style. Sound like a real customer sharing their experience.',
+      'problem-solution': 'Structure as: Hook with problem → Agitate the pain → Present the solution → Call to action.',
+      'emotional-hook': 'Lead with strong emotions. Connect with feelings of frustration, desire, hope, or fear. Make it personal.',
+      'storytelling': 'Tell a compelling story with a beginning, middle, and end. Use narrative techniques.',
+      'testimonial': 'Write as if a satisfied customer is sharing their experience. Include specific details and results.',
+      'fast-paced': 'Short punchy sentences. Quick energy. Perfect for TikTok. Multiple hooks. Fast transitions.',
+      'dramatic': 'Cinematic feel. Build tension. Create impact. Use powerful language.',
+      'educational': 'Informative and helpful. Teach something valuable. Build trust through knowledge.',
+    };
+
+    const styleGuidance = scriptTypePrompts[scriptType] || scriptTypePrompts['ugc'];
+    
+    const languageInstructions = language === 'ar' 
+      ? 'Write ENTIRELY in Arabic. Use Gulf/Saudi dialect for authenticity. Include culturally relevant expressions.'
+      : `Write in ${language}. Adapt cultural references appropriately.`;
+
+    const systemPrompt = `You are an expert video ad scriptwriter specializing in ${scriptTypeName} format.
+
+${styleGuidance}
+
+${languageInstructions}
+
+Market context: ${market.toUpperCase()} region
+Target: Short-form video ads (30-60 seconds, 40-80 words each)
+
+Each script must include:
+1. Strong opening hook (first 3 seconds)
+2. Problem/benefit statement
+3. Product presentation
+4. Clear call-to-action
+
+${customPrompt ? `Additional instructions: ${customPrompt}` : ''}
+
+Output format: Return a JSON array of ${count} unique script strings. Each script should be different in approach while maintaining the ${scriptTypeName} style.`;
+
+    const userPrompt = `Generate ${count} unique ${scriptTypeName} video ad scripts for this product:
+
+Product Name: ${productName}
+Product Description: ${productDescription || 'A premium product'}
+
+Create ${count} different script variations. Each should:
+- Be 40-80 words
+- Have a unique hook/angle
+- Follow the ${scriptTypeName} format
+- Be optimized for voice-over delivery
+
+Return ONLY a JSON array of ${count} script strings, no other text.`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -88,7 +93,7 @@ serve(async (req) => {
         model: 'google/gemini-2.5-flash',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Generate ${count} script variations based on this template:\n\n${prompt}\n\nVariables provided: ${JSON.stringify(variables)}\n\nOutput format: JSON array of ${count} script strings. Each script should be 40-80 words suitable for a 30-60 second video ad.` }
+          { role: 'user', content: userPrompt }
         ],
         temperature: 0.9,
       }),
@@ -119,31 +124,16 @@ serve(async (req) => {
       generatedScripts = [content]; // Use raw content as single script
     }
 
-    // Save scripts to database
-    const scriptsToInsert = generatedScripts.slice(0, count).map((text: string, index: number) => ({
-      project_id: projectId,
-      language,
-      raw_text: text.trim(),
-      tone: variables?.brand_tone || 'professional',
-      style: variables?.style || 'ugc',
-      status: 'draft',
-      metadata: { variation: index + 1, template_id: templateId }
-    }));
+    // Ensure we have the requested count
+    generatedScripts = generatedScripts.slice(0, count).map((s: string) => s.trim());
 
-    const { data: insertedScripts, error: insertError } = await supabase
-      .from('scripts')
-      .insert(scriptsToInsert)
-      .select();
-
-    if (insertError) {
-      console.error('Insert error:', insertError);
-      throw insertError;
-    }
+    console.log(`[generate-scripts] Generated ${generatedScripts.length} scripts successfully`);
 
     return new Response(JSON.stringify({ 
       success: true, 
-      scripts: insertedScripts,
-      count: insertedScripts?.length || 0
+      scripts: generatedScripts,
+      count: generatedScripts.length,
+      scriptType,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
