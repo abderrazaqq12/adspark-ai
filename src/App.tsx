@@ -21,7 +21,6 @@ import NotFound from "./pages/NotFound";
 import AgencyMode from "./pages/AgencyMode";
 import AITools from "./pages/AITools";
 import CreativeReplicator from "./pages/CreativeReplicator";
-import Scripts from "./pages/Scripts";
 
 const queryClient = new QueryClient();
 
@@ -44,7 +43,6 @@ const App = () => (
                     <Route path="/agency" element={<AgencyMode />} />
                     <Route path="/creative-replicator" element={<CreativeReplicator />} />
                     <Route path="/projects" element={<Projects />} />
-                    <Route path="/scripts" element={<Scripts />} />
                     <Route path="/gallery" element={<Gallery />} />
                     <Route path="/videos" element={<Videos />} />
                     <Route path="/scene-builder" element={<SceneBuilder />} />
