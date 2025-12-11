@@ -22,7 +22,11 @@ import {
   Copy,
   Globe,
   Moon,
-  Users
+  Users,
+  Trash2,
+  Pencil,
+  Lock,
+  Unlock
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -62,8 +66,24 @@ interface GeneratedScript {
   correctedText: string | null;
   vocalizedText: string | null;
   audioUrl: string | null;
-  status: 'pending' | 'generating' | 'validating' | 'completed' | 'failed';
+  status: 'pending' | 'generating' | 'validating' | 'completed' | 'failed' | 'regenerating';
   validationIssues: string[];
+  isEditing?: boolean;
+  isLocked?: boolean;
+  editedText?: string;
+}
+
+// Store generation parameters for regeneration
+interface GenerationParams {
+  scriptType: string;
+  scriptTypeName: string;
+  language: string;
+  market: string;
+  customPrompt: string;
+  audienceAge: string;
+  audienceGender: string;
+  productName: string;
+  productDescription: string;
 }
 
 interface VideoScriptStageProps {
@@ -96,6 +116,9 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
   const [isGenerating, setIsGenerating] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [activeTab, setActiveTab] = useState('generate');
+  
+  // Store generation params for individual regeneration
+  const [generationParams, setGenerationParams] = useState<GenerationParams | null>(null);
   
   // Audio playback
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -173,6 +196,20 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
       const count = parseInt(scriptCount);
       const scriptTypeInfo = SCRIPT_TYPES.find(t => t.id === scriptType);
 
+      // Save generation params for individual regeneration
+      const params: GenerationParams = {
+        scriptType,
+        scriptTypeName: scriptTypeInfo?.name || 'UGC Product Ad',
+        language: selectedLanguage || 'ar',
+        market: targetCountry || 'gcc',
+        customPrompt: customPrompt || '',
+        audienceAge,
+        audienceGender,
+        productName: productInfo.name,
+        productDescription: productInfo.description,
+      };
+      setGenerationParams(params);
+
       const { data, error } = await supabase.functions.invoke('generate-scripts', {
         body: {
           productName: productInfo.name,
@@ -198,6 +235,8 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
         audioUrl: null,
         status: 'pending' as const,
         validationIssues: [],
+        isEditing: false,
+        isLocked: false,
       }));
 
       setScripts(generatedScripts);
@@ -211,6 +250,133 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  // Delete a single script
+  const deleteScript = (scriptId: string) => {
+    const updatedScripts = scripts.filter(s => s.id !== scriptId);
+    setScripts(updatedScripts);
+    saveScripts(updatedScripts);
+    toast.success('Script removed');
+  };
+
+  // Regenerate a single script using stored params
+  const regenerateScript = async (scriptId: string, index: number) => {
+    if (!generationParams) {
+      toast.error('Generation parameters not found. Please generate new scripts first.');
+      return;
+    }
+
+    // Mark script as regenerating
+    const updatedScripts = scripts.map(s => 
+      s.id === scriptId ? { ...s, status: 'regenerating' as const } : s
+    );
+    setScripts(updatedScripts);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase.functions.invoke('generate-scripts', {
+        body: {
+          productName: generationParams.productName,
+          productDescription: generationParams.productDescription,
+          scriptType: generationParams.scriptType,
+          scriptTypeName: generationParams.scriptTypeName,
+          count: 1,
+          language: generationParams.language,
+          market: generationParams.market,
+          customPrompt: generationParams.customPrompt || null,
+          audienceAge: generationParams.audienceAge,
+          audienceGender: generationParams.audienceGender,
+        }
+      });
+
+      if (error) throw error;
+
+      const newText = data.scripts?.[0] || '';
+      
+      const finalScripts = scripts.map(s => 
+        s.id === scriptId 
+          ? { 
+              ...s, 
+              originalText: newText,
+              correctedText: null,
+              vocalizedText: null,
+              audioUrl: null,
+              status: 'pending' as const,
+              validationIssues: [],
+              isEditing: false,
+              editedText: undefined,
+            } 
+          : s
+      );
+      setScripts(finalScripts);
+      saveScripts(finalScripts);
+      toast.success(`Script ${index + 1} regenerated`);
+    } catch (error: any) {
+      const finalScripts = scripts.map(s => 
+        s.id === scriptId ? { ...s, status: 'pending' as const } : s
+      );
+      setScripts(finalScripts);
+      toast.error(error.message || 'Failed to regenerate script');
+    }
+  };
+
+  // Toggle edit mode for a script
+  const toggleEditScript = (scriptId: string) => {
+    const updatedScripts = scripts.map(s => 
+      s.id === scriptId 
+        ? { 
+            ...s, 
+            isEditing: !s.isEditing,
+            editedText: s.isEditing ? undefined : (s.originalText),
+          } 
+        : s
+    );
+    setScripts(updatedScripts);
+  };
+
+  // Update script text while editing
+  const updateScriptText = (scriptId: string, newText: string) => {
+    const updatedScripts = scripts.map(s => 
+      s.id === scriptId ? { ...s, editedText: newText } : s
+    );
+    setScripts(updatedScripts);
+  };
+
+  // Save edited script
+  const saveEditedScript = (scriptId: string) => {
+    const script = scripts.find(s => s.id === scriptId);
+    if (!script?.editedText) return;
+
+    const updatedScripts = scripts.map(s => 
+      s.id === scriptId 
+        ? { 
+            ...s, 
+            originalText: s.editedText || s.originalText,
+            isEditing: false,
+            editedText: undefined,
+            // Clear validation since text changed
+            correctedText: null,
+            vocalizedText: null,
+            validationIssues: [],
+            status: 'pending' as const,
+          } 
+        : s
+    );
+    setScripts(updatedScripts);
+    saveScripts(updatedScripts);
+    toast.success('Script updated');
+  };
+
+  // Toggle lock state for a script
+  const toggleLockScript = (scriptId: string) => {
+    const updatedScripts = scripts.map(s => 
+      s.id === scriptId ? { ...s, isLocked: !s.isLocked } : s
+    );
+    setScripts(updatedScripts);
+    saveScripts(updatedScripts);
   };
 
   const validateScripts = async () => {
@@ -550,21 +716,138 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
               )}
             </Button>
 
-            {scripts.length > 0 && (
-              <div className="space-y-3 max-h-[300px] overflow-y-auto">
+            {scripts.length > 0 ? (
+              <div className="space-y-3 max-h-[400px] overflow-y-auto">
                 {scripts.map((script, i) => (
-                  <div key={script.id} className="p-3 rounded-lg bg-muted/30 border border-border">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium">Script {i + 1}</span>
-                      <Button variant="ghost" size="sm" onClick={() => copyToClipboard(script.originalText)}>
-                        <Copy className="w-3 h-3" />
-                      </Button>
+                  <div 
+                    key={script.id} 
+                    className={`p-4 rounded-lg border transition-all duration-300 ${
+                      script.status === 'regenerating' 
+                        ? 'bg-primary/10 border-primary/30 animate-pulse' 
+                        : script.isLocked 
+                          ? 'bg-muted/50 border-primary/40' 
+                          : 'bg-muted/30 border-border'
+                    }`}
+                  >
+                    {/* Header with controls */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">Script {i + 1}</span>
+                        {script.isLocked && (
+                          <Badge variant="outline" className="text-xs">
+                            <Lock className="w-3 h-3 mr-1" />
+                            Locked
+                          </Badge>
+                        )}
+                        {script.status === 'regenerating' && (
+                          <Badge variant="secondary" className="text-xs">
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                            Regenerating...
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-1">
+                        {!script.isLocked && (
+                          <>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => toggleEditScript(script.id)}
+                              className="h-8 w-8 p-0"
+                              title={script.isEditing ? "Cancel edit" : "Edit script"}
+                            >
+                              <Pencil className={`w-3.5 h-3.5 ${script.isEditing ? 'text-primary' : ''}`} />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => regenerateScript(script.id, i)}
+                              disabled={script.status === 'regenerating'}
+                              className="h-8 w-8 p-0"
+                              title="Regenerate script"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${script.status === 'regenerating' ? 'animate-spin' : ''}`} />
+                            </Button>
+                          </>
+                        )}
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => toggleLockScript(script.id)}
+                          className="h-8 w-8 p-0"
+                          title={script.isLocked ? "Unlock script" : "Lock script"}
+                        >
+                          {script.isLocked ? (
+                            <Lock className="w-3.5 h-3.5 text-primary" />
+                          ) : (
+                            <Unlock className="w-3.5 h-3.5" />
+                          )}
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => copyToClipboard(script.originalText)}
+                          className="h-8 w-8 p-0"
+                          title="Copy to clipboard"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </Button>
+                        {!script.isLocked && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => deleteScript(script.id)}
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            title="Delete script"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-sm text-muted-foreground line-clamp-3" dir="rtl">
-                      {script.originalText}
-                    </p>
+
+                    {/* Script content - editable or read-only */}
+                    {script.isEditing ? (
+                      <div className="space-y-2">
+                        <Textarea
+                          value={script.editedText || script.originalText}
+                          onChange={(e) => updateScriptText(script.id, e.target.value)}
+                          className="min-h-[100px] text-sm bg-background"
+                          dir="rtl"
+                        />
+                        <div className="flex justify-end gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => toggleEditScript(script.id)}
+                          >
+                            Cancel
+                          </Button>
+                          <Button 
+                            size="sm"
+                            onClick={() => saveEditedScript(script.id)}
+                            className="bg-gradient-primary"
+                          >
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                            Save Changes
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground" dir="rtl">
+                        {script.originalText}
+                      </p>
+                    )}
                   </div>
                 ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">No scripts generated yet</p>
+                <p className="text-xs mt-1">Configure settings above and click "Generate Scripts"</p>
               </div>
             )}
           </TabsContent>
@@ -635,20 +918,94 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
               )}
             </Button>
 
-            {scripts.length > 0 && (
-              <div className="space-y-4 max-h-[400px] overflow-y-auto">
+            {scripts.length > 0 ? (
+              <div className="space-y-4 max-h-[500px] overflow-y-auto">
                 {scripts.map((script, i) => (
-                  <div key={script.id} className="p-4 rounded-lg bg-muted/30 border border-border">
+                  <div 
+                    key={script.id} 
+                    className={`p-4 rounded-lg border transition-all duration-300 ${
+                      script.status === 'validating' 
+                        ? 'bg-primary/10 border-primary/30' 
+                        : script.status === 'regenerating'
+                          ? 'bg-yellow-500/10 border-yellow-500/30 animate-pulse'
+                          : script.isLocked 
+                            ? 'bg-muted/50 border-primary/40' 
+                            : 'bg-muted/30 border-border'
+                    }`}
+                  >
+                    {/* Header with controls */}
                     <div className="flex items-center justify-between mb-3">
-                      <span className="font-medium">Script {i + 1}</span>
-                      <Badge variant={
-                        script.status === 'completed' ? 'default' :
-                        script.status === 'validating' ? 'secondary' :
-                        script.status === 'failed' ? 'destructive' : 'outline'
-                      }>
-                        {script.status === 'validating' && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-                        {script.status}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Script {i + 1}</span>
+                        <Badge variant={
+                          script.status === 'completed' ? 'default' :
+                          script.status === 'validating' ? 'secondary' :
+                          script.status === 'regenerating' ? 'outline' :
+                          script.status === 'failed' ? 'destructive' : 'outline'
+                        }>
+                          {(script.status === 'validating' || script.status === 'regenerating') && (
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          )}
+                          {script.status}
+                        </Badge>
+                        {script.isLocked && (
+                          <Badge variant="outline" className="text-xs">
+                            <Lock className="w-3 h-3 mr-1" />
+                            Locked
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-1">
+                        {!script.isLocked && (
+                          <>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => regenerateScript(script.id, i)}
+                              disabled={script.status === 'regenerating' || script.status === 'validating'}
+                              className="h-8 w-8 p-0"
+                              title="Regenerate script"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${script.status === 'regenerating' ? 'animate-spin' : ''}`} />
+                            </Button>
+                          </>
+                        )}
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => toggleLockScript(script.id)}
+                          className="h-8 w-8 p-0"
+                          title={script.isLocked ? "Unlock script" : "Lock script"}
+                        >
+                          {script.isLocked ? (
+                            <Lock className="w-3.5 h-3.5 text-primary" />
+                          ) : (
+                            <Unlock className="w-3.5 h-3.5" />
+                          )}
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => copyToClipboard(script.vocalizedText || script.correctedText || script.originalText)}
+                          className="h-8 w-8 p-0"
+                          title="Copy to clipboard"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </Button>
+                        {!script.isLocked && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => deleteScript(script.id)}
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            title="Delete script"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
 
                     {script.validationIssues.length > 0 && (
@@ -700,6 +1057,12 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
                   </div>
                 ))}
               </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Wand2 className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">No scripts to validate</p>
+                <p className="text-xs mt-1">Generate scripts first in the "Generate Scripts" tab</p>
+              </div>
             )}
           </TabsContent>
 
@@ -750,80 +1113,140 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
               </div>
             </div>
 
-            <div className="space-y-3 max-h-[400px] overflow-y-auto">
-              {scripts.filter(s => s.correctedText || s.vocalizedText).map((script, i) => (
-                <div key={script.id} className="p-4 rounded-lg bg-muted/30 border border-border">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="font-medium">Script {i + 1}</span>
-                    <div className="flex items-center gap-2">
-                      {script.audioUrl ? (
-                        <>
+            {scripts.filter(s => s.correctedText || s.vocalizedText).length > 0 ? (
+              <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                {scripts.filter(s => s.correctedText || s.vocalizedText).map((script, i) => (
+                  <div 
+                    key={script.id} 
+                    className={`p-4 rounded-lg border transition-all duration-300 ${
+                      script.status === 'generating' 
+                        ? 'bg-primary/10 border-primary/30 animate-pulse' 
+                        : script.isLocked 
+                          ? 'bg-muted/50 border-primary/40' 
+                          : 'bg-muted/30 border-border'
+                    }`}
+                  >
+                    {/* Header with controls */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Script {i + 1}</span>
+                        {script.isLocked && (
+                          <Badge variant="outline" className="text-xs">
+                            <Lock className="w-3 h-3 mr-1" />
+                            Locked
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {script.audioUrl ? (
+                          <>
+                            <Button
+                              variant={playingId === script.id ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => playAudio(script.id)}
+                            >
+                              {playingId === script.id ? (
+                                <>
+                                  <Pause className="w-3 h-3 mr-1" />
+                                  Playing
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="w-3 h-3 mr-1" />
+                                  Play
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => regenerateVoiceover(script.id)}
+                              disabled={script.isLocked}
+                            >
+                              <RefreshCw className="w-3 h-3 mr-1" />
+                              Regenerate
+                            </Button>
+                          </>
+                        ) : (
                           <Button
-                            variant={playingId === script.id ? "default" : "outline"}
+                            variant="outline"
                             size="sm"
-                            onClick={() => playAudio(script.id)}
+                            onClick={() => generateVoiceover(script.id)}
+                            disabled={script.status === 'generating' || script.isLocked}
                           >
-                            {playingId === script.id ? (
+                            {script.status === 'generating' ? (
                               <>
-                                <Pause className="w-3 h-3 mr-1" />
-                                Playing
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                Generating...
                               </>
                             ) : (
                               <>
-                                <Play className="w-3 h-3 mr-1" />
-                                Play
+                                <Sparkles className="w-3 h-3 mr-1" />
+                                Generate Voice
                               </>
                             )}
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => regenerateVoiceover(script.id)}
-                          >
-                            <RefreshCw className="w-3 h-3 mr-1" />
-                            Regenerate
-                          </Button>
-                        </>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => generateVoiceover(script.id)}
-                          disabled={script.status === 'generating'}
+                        )}
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => toggleLockScript(script.id)}
+                          className="h-8 w-8 p-0"
+                          title={script.isLocked ? "Unlock script" : "Lock script"}
                         >
-                          {script.status === 'generating' ? (
-                            <>
-                              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                              Generating...
-                            </>
+                          {script.isLocked ? (
+                            <Lock className="w-3.5 h-3.5 text-primary" />
                           ) : (
-                            <>
-                              <Sparkles className="w-3 h-3 mr-1" />
-                              Generate Voice
-                            </>
+                            <Unlock className="w-3.5 h-3.5" />
                           )}
                         </Button>
-                      )}
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => copyToClipboard(script.vocalizedText || script.correctedText || script.originalText)}
+                          className="h-8 w-8 p-0"
+                          title="Copy to clipboard"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </Button>
+                        {!script.isLocked && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => deleteScript(script.id)}
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            title="Delete script"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
+
+                    <p className="text-sm text-muted-foreground p-2 rounded bg-background/50" dir="rtl">
+                      {script.vocalizedText || script.correctedText || script.originalText}
+                    </p>
+
+                    {script.audioUrl && (
+                      <div className="mt-3 p-2 rounded bg-primary/10 border border-primary/20">
+                        <audio 
+                          controls 
+                          src={script.audioUrl} 
+                          className="w-full h-8"
+                          style={{ minHeight: '32px' }}
+                        />
+                      </div>
+                    )}
                   </div>
-
-                  <p className="text-sm text-muted-foreground p-2 rounded bg-background/50" dir="rtl">
-                    {script.vocalizedText || script.correctedText || script.originalText}
-                  </p>
-
-                  {script.audioUrl && (
-                    <div className="mt-3 p-2 rounded bg-primary/10 border border-primary/20">
-                      <audio 
-                        controls 
-                        src={script.audioUrl} 
-                        className="w-full h-8"
-                        style={{ minHeight: '32px' }}
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Volume2 className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">No validated scripts available</p>
+                <p className="text-xs mt-1">Validate scripts first in the "AI Validation" tab</p>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
 
