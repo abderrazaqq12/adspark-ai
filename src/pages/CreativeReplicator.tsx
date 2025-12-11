@@ -333,26 +333,86 @@ const CreativeReplicator = () => {
       clearInterval(progressInterval);
       setGenerationProgress(100);
 
-      // Generate results with AI-selected parameters
-      const results: GeneratedVideo[] = Array.from({ length: variationConfig.count }, (_, i) => {
+      // Generate results with AI-selected parameters and insert into database
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+
+      const results: GeneratedVideo[] = [];
+      const jobId = `job-${Date.now()}`;
+      setCurrentJobId(jobId);
+
+      for (let i = 0; i < variationConfig.count; i++) {
         const hookStyle = selectHook(i);
         const engine = selectEngineForVariation(variationConfig.engineTier, i);
         const pacing = selectPacing(hookStyle, variationConfig.adIntelligence?.language || "ar-sa");
-        
-        return {
-          id: `var-${Date.now()}-${i + 1}`,
-          url: variationConfig.engineTier === "free" 
-            ? `https://storage.example.com/ffmpeg/${Date.now()}-${i}.mp4` 
-            : "",
-          thumbnail: "",
+        const ratio = variationConfig.ratios[i % variationConfig.ratios.length];
+
+        // Insert into database first so retries can find them
+        const { data: insertedVideo, error: insertError } = await supabase
+          .from('video_variations')
+          .insert({
+            user_id: userId,
+            variation_number: i + 1,
+            variation_config: {
+              hookStyle,
+              pacing,
+              engine,
+              ratio,
+              engineTier: variationConfig.engineTier,
+              market: variationConfig.adIntelligence?.market,
+              language: variationConfig.adIntelligence?.language,
+              sourceAds: uploadedAds.map(ad => ad.id),
+            },
+            status: variationConfig.engineTier === "free" ? "completed" : "processing",
+            metadata: {
+              job_id: jobId,
+              retry_count: 0,
+              engine_used: engine,
+              pipeline_status: {
+                deconstruction: 'success',
+                rewriting: 'pending',
+                voice_generation: 'pending',
+                video_generation: 'pending',
+                ffmpeg: 'pending',
+                export: 'pending',
+                upload: 'pending',
+                url_validation: 'pending',
+              },
+            },
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('Error inserting video variation:', insertError);
+          // Use a temporary ID if insert fails
+          results.push({
+            id: `temp-${Date.now()}-${i + 1}`,
+            url: "",
+            thumbnail: "",
+            hookStyle,
+            pacing,
+            engine,
+            ratio,
+            duration: 0,
+            status: "failed",
+          });
+          continue;
+        }
+
+        results.push({
+          id: insertedVideo.id,
+          url: insertedVideo.video_url || "",
+          thumbnail: insertedVideo.thumbnail_url || "",
           hookStyle,
           pacing,
           engine,
-          ratio: variationConfig.ratios[i % variationConfig.ratios.length],
-          duration: Math.floor(Math.random() * 10) + 15,
-          status: variationConfig.engineTier === "free" ? "completed" : "processing",
-        };
-      });
+          ratio,
+          duration: insertedVideo.duration_sec || Math.floor(Math.random() * 10) + 15,
+          status: insertedVideo.status === 'completed' ? 'completed' : 
+                  insertedVideo.status === 'failed' ? 'failed' : 'processing',
+        });
+      }
 
       setGeneratedVideos(results);
       setIsGenerating(false);
