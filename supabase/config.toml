@@ -107,3 +107,6 @@ verify_jwt = false
 
 [functions.free-tier-creative-engine]
 verify_jwt = true
+
+[functions.creative-replicator-generate]
+verify_jwt = true
