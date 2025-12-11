@@ -39,6 +39,61 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY not configured');
     }
 
+    // Robust JSON parser with fallback handling
+    const safeParseJSON = (content: string, fallback: any = null): any => {
+      if (!content) return fallback;
+      
+      // Clean up common issues
+      let cleaned = content
+        .replace(/```json\n?/g, '')
+        .replace(/\n?```/g, '')
+        .trim();
+      
+      // Try direct parse first
+      try {
+        return JSON.parse(cleaned);
+      } catch (e) {
+        console.log('[free-tier-creative-engine] First parse failed, attempting cleanup');
+      }
+      
+      // Try to extract JSON from text
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+      if (jsonMatch) {
+        try {
+          return JSON.parse(jsonMatch[0]);
+        } catch (e) {
+          console.log('[free-tier-creative-engine] Second parse failed, attempting fixes');
+        }
+      }
+      
+      // Fix common JSON issues
+      try {
+        // Remove trailing commas
+        cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+        // Fix unescaped quotes in strings
+        cleaned = cleaned.replace(/(?<!\\)\\(?!["\\/bfnrtu])/g, '\\\\');
+        // Attempt to fix truncated JSON by closing brackets
+        const openBraces = (cleaned.match(/\{/g) || []).length;
+        const closeBraces = (cleaned.match(/\}/g) || []).length;
+        const openBrackets = (cleaned.match(/\[/g) || []).length;
+        const closeBrackets = (cleaned.match(/\]/g) || []).length;
+        
+        for (let i = 0; i < openBraces - closeBraces; i++) cleaned += '}';
+        for (let i = 0; i < openBrackets - closeBrackets; i++) cleaned += ']';
+        
+        // Try to fix truncated strings by finding unclosed quotes
+        const quoteCount = (cleaned.match(/"/g) || []).length;
+        if (quoteCount % 2 !== 0) {
+          cleaned = cleaned.replace(/("[^"]*?)$/, '$1"');
+        }
+        
+        return JSON.parse(cleaned);
+      } catch (e) {
+        console.error('[free-tier-creative-engine] All parse attempts failed:', e);
+        return fallback;
+      }
+    };
+
     // Helper function to get FFMPEG command for motion effects
     const getFFmpegMotionCommand = (effect: string): string => {
       const commands: Record<string, string> = {
@@ -121,7 +176,26 @@ Return ONLY valid JSON.`;
 
         const aiData = await aiResponse.json();
         const content = aiData.choices?.[0]?.message?.content;
-        result = { analysis: JSON.parse(content.replace(/```json\n?|\n?```/g, '').trim()) };
+        const fallbackAnalysis = {
+          hookStrength: 7,
+          hookAnalysis: 'Default analysis - AI response parsing failed',
+          emotionalTriggers: ['curiosity', 'desire'],
+          problemClarity: 7,
+          demoPower: 7,
+          socialProofElements: [],
+          offerClarity: 7,
+          ctaEffectiveness: 7,
+          editingPacing: 'fast',
+          messagingTone: 'energetic',
+          narrativeFlow: { currentStructure: ['hook', 'demo', 'cta'], recommendedStructure: ['hook', 'problem', 'demo', 'cta'], reasoning: 'Standard ad structure' },
+          ctaRecommendations: [{ text: 'اطلب الآن', placement: 'end-card', timing: '25' }],
+          durationOptimization: { currentDuration: '30s', recommendedDuration: '15-25s', cutsToMake: [] },
+          improvements: [],
+          ffmpegPipeline: ['normalize-audio', 'color-grade', 'add-cta'],
+          motionEffectsForImages: ['ken-burns', 'slow-push']
+        };
+        const parsed = safeParseJSON(content, fallbackAnalysis);
+        result = { analysis: parsed };
         break;
       }
 
@@ -151,7 +225,12 @@ Return ONLY valid JSON array.`;
 
         const aiData = await aiResponse.json();
         const content = aiData.choices?.[0]?.message?.content;
-        result = { hooks: JSON.parse(content.replace(/```json\n?|\n?```/g, '').trim()) };
+        const fallbackHooks = [
+          { text: 'هل تبحث عن الحل المثالي؟', style: 'question', visualEffect: 'zoom-pop' },
+          { text: 'اكتشف السر الذي غير حياة الآلاف', style: 'story', visualEffect: 'flash-intro' }
+        ];
+        const parsed = safeParseJSON(content, fallbackHooks);
+        result = { hooks: Array.isArray(parsed) ? parsed : fallbackHooks };
         break;
       }
 
@@ -190,7 +269,12 @@ Return ONLY valid JSON array.`;
 
         const aiData = await aiResponse.json();
         const content = aiData.choices?.[0]?.message?.content;
-        result = { ctas: JSON.parse(content.replace(/```json\n?|\n?```/g, '').trim()) };
+        const fallbackCtas = [
+          { text: 'اطلب الآن - الدفع عند الاستلام', overlay: 'button', urgency: 'high', ffmpegEffect: 'cta-button' },
+          { text: 'عرض محدود - احصل عليه اليوم', overlay: 'banner', urgency: 'high', ffmpegEffect: 'flash-transition' }
+        ];
+        const parsed = safeParseJSON(content, fallbackCtas);
+        result = { ctas: Array.isArray(parsed) ? parsed : fallbackCtas };
         break;
       }
 
@@ -276,7 +360,14 @@ Return JSON with:
 
         const aiData = await aiResponse.json();
         const content = aiData.choices?.[0]?.message?.content;
-        result = { narrativeOptimization: JSON.parse(content.replace(/```json\n?|\n?```/g, '').trim()) };
+        const fallbackNarrative = {
+          originalOrder: [0, 1, 2, 3],
+          optimizedOrder: [0, 2, 1, 3],
+          reasoning: 'Default optimization - show hook then benefits before demo',
+          insertPoints: []
+        };
+        const parsed = safeParseJSON(content, fallbackNarrative);
+        result = { narrativeOptimization: parsed };
         break;
       }
 
