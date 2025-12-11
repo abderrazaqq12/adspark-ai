@@ -48,15 +48,13 @@ Deno.serve(async (req) => {
       apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
       model = "google/gemini-2.5-flash";
     } else if (provider === "openai") {
-      // Get user's OpenAI key
-      const { data: settings } = await supabase
-        .from("user_settings")
-        .select("api_keys")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      // Get user's OpenAI key from secure_api_keys table
+      const { data: keyData, error: keyError } = await supabase.rpc('get_user_api_key', {
+        p_user_id: user.id,
+        p_provider: 'OPENAI_API_KEY',
+      });
 
-      const keys = settings?.api_keys as Record<string, string> | null;
-      apiKey = keys?.OPENAI_API_KEY || "";
+      apiKey = keyData || "";
       
       if (!apiKey) {
         return new Response(JSON.stringify({ error: "OpenAI API key not configured" }), {
@@ -68,15 +66,13 @@ Deno.serve(async (req) => {
       apiUrl = "https://api.openai.com/v1/chat/completions";
       model = "gpt-4o-mini";
     } else if (provider === "gemini") {
-      // Get user's Gemini key
-      const { data: settings } = await supabase
-        .from("user_settings")
-        .select("api_keys")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      // Get user's Gemini key from secure_api_keys table
+      const { data: keyData, error: keyError } = await supabase.rpc('get_user_api_key', {
+        p_user_id: user.id,
+        p_provider: 'GEMINI_API_KEY',
+      });
 
-      const keys = settings?.api_keys as Record<string, string> | null;
-      apiKey = keys?.GEMINI_API_KEY || "";
+      apiKey = keyData || "";
       
       if (!apiKey) {
         return new Response(JSON.stringify({ error: "Gemini API key not configured" }), {

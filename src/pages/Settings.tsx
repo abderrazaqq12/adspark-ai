@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
-import { Save, Plus, Trash2, FileText, Loader2, Pencil, Webhook, Copy, CheckCircle, XCircle, ExternalLink, Zap, Key, Eye, EyeOff, Bot, RefreshCw, DollarSign, Sparkles, TrendingUp, Crown, ChevronDown, Power, Database } from "lucide-react";
+import { Save, Plus, Trash2, FileText, Loader2, Pencil, Webhook, Copy, CheckCircle, XCircle, ExternalLink, Zap, Key, Eye, EyeOff, Bot, RefreshCw, DollarSign, Sparkles, TrendingUp, Crown, ChevronDown, Power, Database, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -20,6 +20,7 @@ import N8nBackendSettings from "@/components/N8nBackendSettings";
 import { StudioDataSettings } from "@/components/studio/StudioDataSettings";
 import StudioPrompts from "@/components/StudioPrompts";
 import DeploymentSettings from "@/components/DeploymentSettings";
+import { useSecureApiKeys } from "@/hooks/useSecureApiKeys";
 
 
 interface PromptTemplate {
@@ -383,7 +384,19 @@ export default function Settings() {
     category: "script",
   });
   
-  // API Keys state
+  // Secure API Keys hook
+  const { 
+    providers: secureProviders, 
+    loading: secureKeysLoading, 
+    saveApiKey: saveSecureApiKey,
+    deleteApiKey: deleteSecureApiKey,
+    toggleApiKeyActive: toggleSecureKeyActive,
+    hasApiKey,
+    isApiKeyActive,
+    refreshProviders,
+  } = useSecureApiKeys();
+  
+  // API Keys state - now only for input values (not storage)
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [activatedModels, setActivatedModels] = useState<Record<string, string[]>>({});
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
@@ -456,30 +469,18 @@ export default function Settings() {
       
       if (settingsRes.data) {
         setSettings(settingsRes.data as UserSettings);
+        // Only load activated models from user_settings (not API keys)
         if (settingsRes.data.api_keys) {
           const keys = settingsRes.data.api_keys as Record<string, any>;
-          // Separate API keys from activated models and active states
-          const apiKeysOnly: Record<string, string> = {};
           const modelsOnly: Record<string, string[]> = {};
-          const activeOnly: Record<string, boolean> = {};
           
           Object.entries(keys).forEach(([key, value]) => {
             if (key.endsWith('_MODELS') && Array.isArray(value)) {
               modelsOnly[key.replace('_MODELS', '')] = value;
-            } else if (key.endsWith('_ACTIVE') && typeof value === 'boolean') {
-              activeOnly[key.replace('_ACTIVE', '')] = value;
-            } else if (typeof value === 'string') {
-              apiKeysOnly[key] = value;
-              // Default to active if has value
-              if (!keys[`${key}_ACTIVE`]) {
-                activeOnly[key] = true;
-              }
             }
           });
           
-          setApiKeys(apiKeysOnly);
           setActivatedModels(modelsOnly);
-          setActiveApiKeys(activeOnly);
         }
         // Load n8n settings and Google Drive from preferences
         const prefs = settingsRes.data.preferences as Record<string, any> | null;
@@ -489,6 +490,9 @@ export default function Settings() {
           setGoogleDriveFolderUrl(prefs.google_drive_folder_url || "");
         }
       }
+      
+      // Refresh secure API key providers
+      await refreshProviders();
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Failed to load settings");
@@ -586,22 +590,41 @@ export default function Settings() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Combine API keys with activated models and active states
-      const combinedKeys: Record<string, any> = { ...apiKeys };
-      Object.entries(activatedModels).forEach(([provider, models]) => {
-        combinedKeys[`${provider}_MODELS`] = models;
+      // Save each API key securely using the secure_api_keys table
+      const savePromises: Promise<boolean>[] = [];
+      
+      Object.entries(apiKeys).forEach(([provider, key]) => {
+        if (key && key.trim().length > 0) {
+          // Save to secure storage
+          savePromises.push(
+            saveSecureApiKey(provider, key, activeApiKeys[provider] ?? true)
+          );
+        }
       });
-      Object.entries(activeApiKeys).forEach(([key, isActive]) => {
-        combinedKeys[`${key}_ACTIVE`] = isActive;
+      
+      await Promise.all(savePromises);
+
+      // Only save model preferences to user_settings (no API keys)
+      const modelPrefs: Record<string, any> = {};
+      Object.entries(activatedModels).forEach(([provider, models]) => {
+        modelPrefs[`${provider}_MODELS`] = models;
       });
 
       const { error } = await supabase
         .from("user_settings")
-        .update({ api_keys: combinedKeys })
+        .update({ api_keys: modelPrefs })
         .eq("user_id", user.id);
 
       if (error) throw error;
-      toast.success("API keys and model preferences saved securely");
+      
+      // Clear the input fields after saving (keys are now stored securely)
+      setApiKeys({});
+      await refreshProviders();
+      
+      toast.success("API keys saved securely", {
+        description: "Your API keys are now encrypted and stored safely",
+        icon: <ShieldCheck className="h-4 w-4 text-green-500" />,
+      });
     } catch (error) {
       console.error("Error saving API keys:", error);
       toast.error("Failed to save API keys");
@@ -610,11 +633,26 @@ export default function Settings() {
     }
   };
 
-  const toggleApiKeyActive = (key: string) => {
-    setActiveApiKeys(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
+  const toggleApiKeyActive = async (key: string) => {
+    // Check if key exists in secure storage
+    if (hasApiKey(key)) {
+      // Toggle in secure storage
+      const newState = !isApiKeyActive(key);
+      await toggleSecureKeyActive(key, newState);
+    } else {
+      // Toggle in local state for new keys being entered
+      setActiveApiKeys(prev => ({
+        ...prev,
+        [key]: !prev[key]
+      }));
+    }
+  };
+  
+  const handleDeleteApiKey = async (provider: string) => {
+    const success = await deleteSecureApiKey(provider);
+    if (success) {
+      toast.success(`${provider} API key deleted`);
+    }
   };
 
   const toggleModel = (providerKey: string, modelId: string) => {
@@ -1027,10 +1065,10 @@ export default function Settings() {
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="secondary">Lovable AI (Free)</Badge>
-                  {apiKeys.OPENAI_API_KEY && <Badge className="bg-green-500/20 text-green-500">ChatGPT ✓</Badge>}
-                  {apiKeys.GEMINI_API_KEY && <Badge className="bg-blue-500/20 text-blue-500">Gemini ✓</Badge>}
-                  {!apiKeys.OPENAI_API_KEY && <Badge variant="outline">ChatGPT (needs key)</Badge>}
-                  {!apiKeys.GEMINI_API_KEY && <Badge variant="outline">Gemini (needs key)</Badge>}
+                  {hasApiKey('OPENAI_API_KEY') && <Badge className="bg-green-500/20 text-green-500">ChatGPT ✓</Badge>}
+                  {hasApiKey('GEMINI_API_KEY') && <Badge className="bg-blue-500/20 text-blue-500">Gemini ✓</Badge>}
+                  {!hasApiKey('OPENAI_API_KEY') && <Badge variant="outline">ChatGPT (needs key)</Badge>}
+                  {!hasApiKey('GEMINI_API_KEY') && <Badge variant="outline">Gemini (needs key)</Badge>}
                 </div>
               </div>
 
@@ -1050,32 +1088,39 @@ export default function Settings() {
                   {GLOBAL_API_PROVIDERS.map((provider) => {
                     const isExpanded = expandedProviders[provider.key];
                     const selectedModels = activatedModels[provider.key] || [];
-                    const hasKey = !!apiKeys[provider.key];
+                    const isSecurelyStored = hasApiKey(provider.key);
+                    const hasInputValue = !!apiKeys[provider.key];
+                    const keyStatus = isSecurelyStored || hasInputValue;
                     
                     return (
                       <div key={provider.key} className="border border-border rounded-lg overflow-hidden">
                         <div 
-                          className={`p-4 cursor-pointer transition-colors ${hasKey ? 'bg-primary/5' : 'bg-muted/20'}`}
+                          className={`p-4 cursor-pointer transition-colors ${keyStatus ? 'bg-primary/5' : 'bg-muted/20'}`}
                           onClick={() => setExpandedProviders(prev => ({ ...prev, [provider.key]: !prev[provider.key] }))}
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                              <div className={`w-2 h-2 rounded-full ${hasKey ? 'bg-green-500' : 'bg-muted-foreground'}`} />
+                              <div className={`w-2 h-2 rounded-full ${isSecurelyStored ? 'bg-green-500' : hasInputValue ? 'bg-yellow-500' : 'bg-muted-foreground'}`} />
                               <div>
                                 <Label className="text-foreground font-medium cursor-pointer">{provider.label}</Label>
                                 <p className="text-xs text-muted-foreground">{provider.description}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              {hasKey && selectedModels.length > 0 && (
+                              {keyStatus && selectedModels.length > 0 && (
                                 <Badge className="bg-primary/20 text-primary text-xs">
                                   {selectedModels.length} models active
                                 </Badge>
                               )}
-                              {hasKey && (
+                              {isSecurelyStored && (
                                 <Badge variant="outline" className="text-green-500 border-green-500 text-xs">
-                                  <CheckCircle className="w-3 h-3 mr-1" />
-                                  Connected
+                                  <ShieldCheck className="w-3 h-3 mr-1" />
+                                  Secured
+                                </Badge>
+                              )}
+                              {!isSecurelyStored && hasInputValue && (
+                                <Badge variant="outline" className="text-yellow-500 border-yellow-500 text-xs">
+                                  Unsaved
                                 </Badge>
                               )}
                               <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
@@ -1144,7 +1189,7 @@ export default function Settings() {
                             </div>
                             
                             {/* Model Selection */}
-                            {hasKey && (
+                            {(isSecurelyStored || hasInputValue) && (
                               <div className="space-y-3">
                                 <div className="flex items-center justify-between">
                                   <Label className="text-sm">Available Models</Label>
