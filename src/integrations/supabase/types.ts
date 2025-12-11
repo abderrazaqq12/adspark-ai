@@ -1489,6 +1489,10 @@ export type Database = {
           provider: string
         }[]
       }
+      get_user_api_key: {
+        Args: { p_provider: string; p_user_id: string }
+        Returns: string
+      }
       toggle_api_key_active: {
         Args: { p_is_active: boolean; p_provider: string }
         Returns: boolean
