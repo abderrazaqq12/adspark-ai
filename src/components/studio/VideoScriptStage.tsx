@@ -31,6 +31,8 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useBackendMode } from '@/hooks/useBackendMode';
+import { VoiceAudioPlayer } from './VoiceAudioPlayer';
+import { ElevenLabsVoiceSelector } from './ElevenLabsVoiceSelector';
 
 // Script types for video ads
 const SCRIPT_TYPES = [
@@ -44,15 +46,7 @@ const SCRIPT_TYPES = [
   { id: 'educational', name: 'Educational', description: 'Informative how-to style' },
 ];
 
-// ElevenLabs voices
-const ELEVENLABS_VOICES = [
-  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', gender: 'female', accent: 'American' },
-  { id: 'CwhRBWXzGAHq8TQ4Fs17', name: 'Roger', gender: 'male', accent: 'American' },
-  { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', gender: 'female', accent: 'Arabic' },
-  { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'George', gender: 'male', accent: 'British' },
-  { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam', gender: 'male', accent: 'American' },
-  { id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura', gender: 'female', accent: 'Spanish' },
-];
+// Removed hardcoded ELEVENLABS_VOICES - now fetched dynamically via ElevenLabsVoiceSelector
 
 const ELEVENLABS_MODELS = [
   { id: 'eleven_multilingual_v2', name: 'Multilingual v2', description: '29 languages' },
@@ -120,9 +114,7 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
   // Store generation params for individual regeneration
   const [generationParams, setGenerationParams] = useState<GenerationParams | null>(null);
   
-  // Audio playback
-  const [playingId, setPlayingId] = useState<string | null>(null);
-  const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
+  // Note: Audio playback is now handled by VoiceAudioPlayer component
 
   // Load saved scripts on mount
   useEffect(() => {
@@ -462,9 +454,25 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
 
       if (error) throw error;
 
+      // Handle both URL and base64 responses
+      let audioUrl = data.audio_url;
+      
+      // If we got base64 instead of URL (e.g., storage failed), create blob URL
+      if (!audioUrl && data.audio_base64) {
+        const audioBlob = new Blob(
+          [Uint8Array.from(atob(data.audio_base64), c => c.charCodeAt(0))],
+          { type: 'audio/mpeg' }
+        );
+        audioUrl = URL.createObjectURL(audioBlob);
+      }
+
+      if (!audioUrl) {
+        throw new Error('No audio returned from API');
+      }
+
       const finalScripts = scripts.map(s => 
         s.id === scriptId 
-          ? { ...s, audioUrl: data.audioUrl, status: 'completed' as const }
+          ? { ...s, audioUrl, status: 'completed' as const }
           : s
       );
       setScripts(finalScripts);
@@ -476,7 +484,7 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
         s.id === scriptId ? { ...s, status: 'failed' as const } : s
       );
       setScripts(finalScripts);
-      toast.error(error.message || 'Failed to generate voice-over');
+      toast.error(error.message || 'Voice generation failed. Check API key or try again.');
     }
   };
 
@@ -493,31 +501,15 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
     await generateVoiceover(scriptId);
   };
 
-  const playAudio = (scriptId: string) => {
-    const script = scripts.find(s => s.id === scriptId);
-    if (!script?.audioUrl) return;
-
-    // Stop any currently playing
-    if (playingId && audioRefs.current[playingId]) {
-      audioRefs.current[playingId].pause();
-      audioRefs.current[playingId].currentTime = 0;
-    }
-
-    if (playingId === scriptId) {
-      setPlayingId(null);
-      return;
-    }
-
-    let audio = audioRefs.current[scriptId];
-    if (!audio) {
-      audio = new Audio(script.audioUrl);
-      audio.onended = () => setPlayingId(null);
-      audioRefs.current[scriptId] = audio;
-    }
-
-    audio.play();
-    setPlayingId(scriptId);
+  const deleteAudio = (scriptId: string) => {
+    const updatedScripts = scripts.map(s => 
+      s.id === scriptId ? { ...s, audioUrl: null } : s
+    );
+    setScripts(updatedScripts);
+    saveScripts(updatedScripts);
   };
+
+  // Note: playAudio function moved to VoiceAudioPlayer component
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -1068,34 +1060,23 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
 
           {/* Voice-Over Tab */}
           <TabsContent value="voiceover" className="space-y-4 mt-4">
+            {/* Voice Settings */}
             <div className="p-4 rounded-lg bg-muted/30 border border-border space-y-4">
-              <h4 className="font-medium flex items-center gap-2">
-                <Volume2 className="w-4 h-4 text-primary" />
-                ElevenLabs Voice Settings
-              </h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs">Voice</Label>
-                  <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-                    <SelectTrigger className="bg-muted/50">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ELEVENLABS_VOICES.map(voice => (
-                        <SelectItem key={voice.id} value={voice.id}>
-                          <div className="flex items-center gap-2">
-                            <span>{voice.name}</span>
-                            <Badge variant="outline" className="text-[10px]">{voice.accent}</Badge>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Model</Label>
+              <div className="grid grid-cols-2 gap-6">
+                {/* Voice Selector with Library/My Voices tabs */}
+                <ElevenLabsVoiceSelector 
+                  selectedVoice={selectedVoice}
+                  onVoiceSelect={setSelectedVoice}
+                />
+
+                {/* Model Selector */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    Select Model
+                  </Label>
                   <Select value={selectedModel} onValueChange={setSelectedModel}>
-                    <SelectTrigger className="bg-muted/50">
+                    <SelectTrigger className="bg-background">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1109,18 +1090,25 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
                       ))}
                     </SelectContent>
                   </Select>
+                  
+                  <div className="p-2 rounded bg-muted/50 text-xs text-muted-foreground">
+                    <p><strong>Multilingual v2:</strong> Best quality, 29 languages</p>
+                    <p><strong>Turbo v2.5:</strong> Fast generation, good for iteration</p>
+                    <p><strong>Flash v2.5:</strong> Ultra-fast, draft quality</p>
+                  </div>
                 </div>
               </div>
             </div>
 
+            {/* Scripts with Voice Generation */}
             {scripts.filter(s => s.correctedText || s.vocalizedText).length > 0 ? (
-              <div className="space-y-3 max-h-[500px] overflow-y-auto">
+              <div className="space-y-4 max-h-[600px] overflow-y-auto">
                 {scripts.filter(s => s.correctedText || s.vocalizedText).map((script, i) => (
                   <div 
                     key={script.id} 
                     className={`p-4 rounded-lg border transition-all duration-300 ${
                       script.status === 'generating' 
-                        ? 'bg-primary/10 border-primary/30 animate-pulse' 
+                        ? 'bg-primary/10 border-primary/30' 
                         : script.isLocked 
                           ? 'bg-muted/50 border-primary/40' 
                           : 'bg-muted/30 border-border'
@@ -1136,57 +1124,14 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
                             Locked
                           </Badge>
                         )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {script.audioUrl ? (
-                          <>
-                            <Button
-                              variant={playingId === script.id ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => playAudio(script.id)}
-                            >
-                              {playingId === script.id ? (
-                                <>
-                                  <Pause className="w-3 h-3 mr-1" />
-                                  Playing
-                                </>
-                              ) : (
-                                <>
-                                  <Play className="w-3 h-3 mr-1" />
-                                  Play
-                                </>
-                              )}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => regenerateVoiceover(script.id)}
-                              disabled={script.isLocked}
-                            >
-                              <RefreshCw className="w-3 h-3 mr-1" />
-                              Regenerate
-                            </Button>
-                          </>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => generateVoiceover(script.id)}
-                            disabled={script.status === 'generating' || script.isLocked}
-                          >
-                            {script.status === 'generating' ? (
-                              <>
-                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                Generating...
-                              </>
-                            ) : (
-                              <>
-                                <Sparkles className="w-3 h-3 mr-1" />
-                                Generate Voice
-                              </>
-                            )}
-                          </Button>
+                        {script.audioUrl && (
+                          <Badge variant="secondary" className="text-xs bg-green-500/10 text-green-600">
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                            Audio Ready
+                          </Badge>
                         )}
+                      </div>
+                      <div className="flex items-center gap-1">
                         <Button 
                           variant="ghost" 
                           size="sm" 
@@ -1223,20 +1168,20 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
                       </div>
                     </div>
 
-                    <p className="text-sm text-muted-foreground p-2 rounded bg-background/50" dir="rtl">
+                    {/* Script text */}
+                    <p className="text-sm text-muted-foreground p-2 rounded bg-background/50 mb-3" dir="rtl">
                       {script.vocalizedText || script.correctedText || script.originalText}
                     </p>
 
-                    {script.audioUrl && (
-                      <div className="mt-3 p-2 rounded bg-primary/10 border border-primary/20">
-                        <audio 
-                          controls 
-                          src={script.audioUrl} 
-                          className="w-full h-8"
-                          style={{ minHeight: '32px' }}
-                        />
-                      </div>
-                    )}
+                    {/* Audio Player */}
+                    <VoiceAudioPlayer
+                      audioUrl={script.audioUrl}
+                      isGenerating={script.status === 'generating'}
+                      isLocked={script.isLocked}
+                      onGenerate={() => generateVoiceover(script.id)}
+                      onRegenerate={() => regenerateVoiceover(script.id)}
+                      onDelete={() => deleteAudio(script.id)}
+                    />
                   </div>
                 ))}
               </div>
@@ -1245,6 +1190,43 @@ export const VideoScriptStage = ({ onNext, productInfo, language, market }: Vide
                 <Volume2 className="w-12 h-12 mx-auto mb-3 opacity-30" />
                 <p className="text-sm">No validated scripts available</p>
                 <p className="text-xs mt-1">Validate scripts first in the "AI Validation" tab</p>
+              </div>
+            )}
+
+            {/* Batch Generate All Button */}
+            {scripts.filter(s => (s.correctedText || s.vocalizedText) && !s.audioUrl).length > 0 && (
+              <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Generate All Voice-Overs</p>
+                    <p className="text-xs text-muted-foreground">
+                      {scripts.filter(s => (s.correctedText || s.vocalizedText) && !s.audioUrl).length} scripts without audio
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      const scriptsToGenerate = scripts.filter(s => (s.correctedText || s.vocalizedText) && !s.audioUrl && !s.isLocked);
+                      for (const script of scriptsToGenerate) {
+                        await generateVoiceover(script.id);
+                      }
+                    }}
+                    disabled={scripts.some(s => s.status === 'generating')}
+                  >
+                    {scripts.some(s => s.status === 'generating') ? (
+                      <>
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Volume2 className="w-3 h-3 mr-1" />
+                        Generate All
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             )}
           </TabsContent>
