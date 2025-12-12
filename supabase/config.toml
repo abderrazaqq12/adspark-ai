@@ -113,3 +113,6 @@ verify_jwt = true
 
 [functions.creative-replicator-v2]
 verify_jwt = true
+
+[functions.debug-ffmpeg-test]
+verify_jwt = false
