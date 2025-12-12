@@ -21,14 +21,21 @@ if (typeof window === 'undefined') {
 
     self.addEventListener("fetch", function (event) {
         const r = event.request;
+        const url = new URL(r.url);
+        
         if (r.cache === "only-if-cached" && r.mode !== "same-origin") return;
+
+        // Skip caching for FFmpeg assets - always fetch fresh
+        const isFFmpegAsset = url.pathname.includes('/ffmpeg/') || 
+                              url.pathname.endsWith('.wasm') ||
+                              url.href.includes('@ffmpeg/core');
 
         const request = (coepCredentialless && r.mode === "no-cors")
             ? new Request(r, { credentials: "omit" })
             : r;
 
         event.respondWith(
-            fetch(request)
+            fetch(request, isFFmpegAsset ? { cache: 'no-store' } : undefined)
                 .then((response) => {
                     if (response.status === 0) return response;
 
