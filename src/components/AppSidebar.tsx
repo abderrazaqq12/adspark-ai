@@ -18,10 +18,11 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-// Main workflows - Agency Mode + Creative Replicator
+// Main workflows - Agency Mode + Creative Replicator + AI Tools
 const workflowItems = [
   { title: "Agency Mode", url: "/agency", icon: Building2, description: "Batch generation" },
   { title: "Creative Replicator", url: "/creative-replicator", icon: SlidersHorizontal, description: "Replicate winning ads" },
+  { title: "AI Tools", url: "/ai-tools", icon: Wand2, description: "AI-powered tools" },
 ];
 
 // Quick access items - Dashboard and Studio
@@ -37,9 +38,8 @@ const libraryItems = [
   { title: "Templates", url: "/templates", icon: LayoutTemplate },
 ];
 
-// Tools items - added AI Tools
+// Tools items
 const toolsItems = [
-  { title: "AI Tools", url: "/ai-tools", icon: Wand2 },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "AI Engines", url: "/engines", icon: Cpu },
   { title: "Data", url: "/settings?tab=data", icon: Database },
