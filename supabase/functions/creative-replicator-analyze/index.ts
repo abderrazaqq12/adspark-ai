@@ -7,6 +7,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+interface AnalysisRequest {
+  videoUrl: string;
+  fileName: string;
+  duration: number;
+  market?: string;
+  language?: string;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -18,6 +26,7 @@ serve(async (req) => {
       throw new Error('No authorization header');
     }
 
+    // Initialize Supabase (for future DB storage if needed)
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -29,38 +38,61 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { videoUrl, fileName, duration } = await req.json();
+    const { fileName, duration, market = "Saudi Arabia", language = "Arabic" }: AnalysisRequest = await req.json();
 
-    console.log('[creative-replicator-analyze] Analyzing video:', fileName);
+    console.log(`[AI-Brain] Analyzing ${fileName} (${duration}s) for ${market}/${language}`);
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY not configured');
     }
 
-    // Use Lovable AI to analyze the video content
-    const analysisPrompt = `You are a video ad analyst. Based on the video file name "${fileName}" and duration ${duration} seconds, generate a realistic analysis of what this ad might contain.
+    // 1. AI BRAIN: PLANNER ONLY
+    // We strictly separate planning from execution.
+    // This prompt generates a Scene Plan JSON.
+    const analysisPrompt = `
+      You are a Senior Video Ad Strategist. 
+      Analyze the video context based on filename "${fileName}" (Duration: ${duration}s).
+      Target Market: ${market}
+      Language: ${language}
 
-Generate a JSON response with this exact structure:
-{
-  "transcript": "A realistic script/transcript for this video ad (2-4 sentences)",
-  "scenes": [
-    {"startTime": 0, "endTime": 3, "description": "Hook scene description", "type": "hook"},
-    {"startTime": 3, "endTime": 8, "description": "Main content description", "type": "showcase"},
-    {"startTime": 8, "endTime": 12, "description": "Benefits description", "type": "benefits"},
-    {"startTime": 12, "endTime": ${duration}, "description": "Call to action", "type": "cta"}
-  ],
-  "hook": "problem-solution|question|shock|emotional|story|humor|statistic",
-  "pacing": "fast|medium|slow",
-  "style": "UGC Review|Testimonial|Product Demo|Before/After|Lifestyle|Cinematic",
-  "transitions": ["hard-cut", "zoom", "slide", "whip-pan", "glitch"],
-  "voiceTone": "energetic|calm|emotional|professional|casual",
-  "musicType": "upbeat|dramatic|calm|trendy|none",
-  "aspectRatio": "9:16|16:9|1:1|4:5"
-}
+      OBJECTIVE:
+      Break this video down into a high-converting Direct Response structure.
+      You must identify where to cut the video to create a perfect ad flow.
 
-Make the analysis realistic and varied. Return ONLY valid JSON, no markdown.`;
+      REQUIRED JSON STRUCTURE (Return ONLY this JSON):
+      {
+        "scenes": [
+          { "type": "hook", "start": 0, "end": 3, "style": "fast", "description": "Visual hook to stop scroll" },
+          { "type": "problem", "start": 3, "end": 7, "description": "Agitate the user pain point" },
+          { "type": "solution", "start": 7, "end": 12, "description": "Introduce product as solution" },
+          { "type": "benefits", "start": 12, "end": 18, "description": "Key features and social proof" },
+          { "type": "cta", "start": 18, "end": ${duration}, "description": "Strong call to action" }
+        ],
+        "variants": 5,
+        "market": "${market}",
+        "language": "${language}",
+        "hook": "shock", // Main hook angle
+        "pacing": "fast", // fast, medium, slow
+        "style": "UGC", // UGC, Cinematic, etc.
+        "transcript": "Brief summary of the ad content",
+        "strategy": {
+          "pacing": "fast",
+          "tone": "energetic",
+          "hook_angle": "shock"
+        }
+      }
 
+      RULES:
+      1. 'scenes' must cover the entire duration if possible, or key parts.
+      2. 'start' and 'end' are in seconds.
+      3. Ensure 'end' > 'start'.
+      4. Do not exceed ${duration} seconds.
+      5. Adjust scene lengths based on the requested 'fast' or 'medium' pacing associated with the market.
+      6. Return ONLY valid JSON. No markdown.
+    `;
+
+    // Using the configured AI Gateway (Generic OpenAI/Gemini interface)
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -68,68 +100,65 @@ Make the analysis realistic and varied. Return ONLY valid JSON, no markdown.`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-flash', // Fast, efficient model for analysis
         messages: [
+          { role: 'system', content: "You are a JSON-only API. You must output minified JSON with no markdown formatting." },
           { role: 'user', content: analysisPrompt }
         ],
+        temperature: 0.2, // Low temperature for deterministic output
       }),
     });
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error('[creative-replicator-analyze] AI error:', errorText);
-      throw new Error(`AI analysis failed: ${aiResponse.status}`);
+      console.error('[AI-Brain] Provider error:', errorText);
+      throw new Error(`AI Provider failed: ${aiResponse.status}`);
     }
 
     const aiData = await aiResponse.json();
     const content = aiData.choices?.[0]?.message?.content;
 
     if (!content) {
-      throw new Error('No content in AI response');
+      throw new Error('Empty response from AI Brain');
     }
 
-    // Parse the JSON response
+    // Robust JSON Parsing
     let analysis;
     try {
-      // Clean the response - remove markdown code blocks if present
       const cleanContent = content.replace(/```json\n?|\n?```/g, '').trim();
       analysis = JSON.parse(cleanContent);
     } catch (parseError) {
-      console.error('[creative-replicator-analyze] Parse error:', parseError, 'Content:', content);
-      // Return a default analysis if parsing fails
+      console.error('[AI-Brain] JSON Parse Error:', parseError);
+      console.log('Raw content:', content);
+
+      // Fallback Plan for robustness
       analysis = {
-        transcript: "This is a product showcase video demonstrating key features and benefits.",
         scenes: [
-          { startTime: 0, endTime: 3, description: "Attention-grabbing hook", type: "hook" },
-          { startTime: 3, endTime: Math.floor(duration * 0.5), description: "Product demonstration", type: "showcase" },
-          { startTime: Math.floor(duration * 0.5), endTime: Math.floor(duration * 0.8), description: "Benefits highlight", type: "benefits" },
-          { startTime: Math.floor(duration * 0.8), endTime: duration, description: "Call to action", type: "cta" }
+          { type: "hook", start: 0, end: 3, style: "fast", description: "Hook" },
+          { type: "body", start: 3, end: duration - 3, description: "Main Content" },
+          { type: "cta", start: duration - 3, end: duration, description: "Call to Action" }
         ],
-        hook: "problem-solution",
-        pacing: "fast",
-        style: "UGC Review",
-        transitions: ["hard-cut", "zoom"],
-        voiceTone: "energetic",
-        musicType: "upbeat",
-        aspectRatio: "9:16"
+        market,
+        language,
+        fallback: true
       };
     }
 
-    console.log('[creative-replicator-analyze] Analysis complete');
+    console.log('[AI-Brain] Plan generated successfully');
 
-    return new Response(JSON.stringify({ 
-      success: true, 
-      analysis 
+    return new Response(JSON.stringify({
+      success: true,
+      analysis
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error: unknown) {
-    console.error('[creative-replicator-analyze] Error:', error);
+    console.error('[AI-Brain] Critical Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(JSON.stringify({ 
-      success: false, 
-      error: errorMessage 
+    return new Response(JSON.stringify({
+      success: false,
+      error: errorMessage
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

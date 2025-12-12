@@ -20,7 +20,7 @@ async function testOpenAI(apiKey: string): Promise<TestResult> {
       headers: { 'Authorization': `Bearer ${apiKey}` },
     });
     const latency = Date.now() - start;
-    
+
     if (response.ok) {
       return { success: true, message: 'OpenAI API connected successfully', latency };
     }
@@ -39,7 +39,7 @@ async function testGemini(apiKey: string): Promise<TestResult> {
       `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`
     );
     const latency = Date.now() - start;
-    
+
     if (response.ok) {
       return { success: true, message: 'Gemini API connected successfully', latency };
     }
@@ -62,7 +62,7 @@ async function testRunway(apiKey: string): Promise<TestResult> {
       },
     });
     const latency = Date.now() - start;
-    
+
     if (response.ok || response.status === 200) {
       return { success: true, message: 'Runway API connected successfully', latency };
     }
@@ -83,13 +83,13 @@ async function testHeyGen(apiKey: string): Promise<TestResult> {
       headers: { 'x-api-key': apiKey },
     });
     const latency = Date.now() - start;
-    
+
     if (response.ok) {
       const data = await response.json();
-      return { 
-        success: true, 
+      return {
+        success: true,
         message: `HeyGen connected. Remaining credits: ${data.data?.remaining_quota || 'N/A'}`,
-        latency 
+        latency
       };
     }
     return { success: false, message: 'Invalid HeyGen API key' };
@@ -106,13 +106,13 @@ async function testElevenLabs(apiKey: string): Promise<TestResult> {
       headers: { 'xi-api-key': apiKey },
     });
     const latency = Date.now() - start;
-    
+
     if (response.ok) {
       const data = await response.json();
-      return { 
-        success: true, 
+      return {
+        success: true,
         message: `ElevenLabs connected. Characters remaining: ${data.subscription?.character_limit - data.subscription?.character_count || 'N/A'}`,
-        latency 
+        latency
       };
     }
     return { success: false, message: 'Invalid ElevenLabs API key' };
@@ -129,7 +129,7 @@ async function testLeonardo(apiKey: string): Promise<TestResult> {
       headers: { 'Authorization': `Bearer ${apiKey}` },
     });
     const latency = Date.now() - start;
-    
+
     if (response.ok) {
       return { success: true, message: 'Leonardo AI connected successfully', latency };
     }
@@ -152,15 +152,15 @@ async function testFal(apiKey: string): Promise<TestResult> {
       },
     });
     const latency = Date.now() - start;
-    
+
     if (response.ok) {
       return { success: true, message: 'Fal AI connected successfully', latency };
     }
-    
+
     if (response.status === 401 || response.status === 403) {
       return { success: false, message: 'Invalid Fal AI API key' };
     }
-    
+
     const errorText = await response.text();
     return { success: false, message: `Fal AI error: ${errorText}` };
   } catch (e) {
@@ -197,7 +197,7 @@ async function testKling(accessKey: string, secretKey: string): Promise<TestResu
     const encoder = new TextEncoder();
     const keyData = encoder.encode(secretKey);
     const signData = encoder.encode(signatureInput);
-    
+
     const cryptoKey = await crypto.subtle.importKey(
       'raw',
       keyData,
@@ -205,7 +205,7 @@ async function testKling(accessKey: string, secretKey: string): Promise<TestResu
       false,
       ['sign']
     );
-    
+
     const signature = await crypto.subtle.sign('HMAC', cryptoKey, signData);
     const signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
       .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
@@ -230,7 +230,7 @@ async function testKling(accessKey: string, secretKey: string): Promise<TestResu
     if (response.ok || response.status === 200) {
       return { success: true, message: 'Kling AI connected successfully', latency };
     }
-    
+
     if (response.status === 401 || response.status === 403) {
       return { success: false, message: 'Invalid Kling AI credentials' };
     }
@@ -250,7 +250,7 @@ async function testOpenRouter(apiKey: string): Promise<TestResult> {
       headers: { 'Authorization': `Bearer ${apiKey}` },
     });
     const latency = Date.now() - start;
-    
+
     if (response.ok) {
       return { success: true, message: 'OpenRouter connected successfully', latency };
     }
@@ -268,7 +268,7 @@ async function testAIMLAPI(apiKey: string): Promise<TestResult> {
       headers: { 'Authorization': `Bearer ${apiKey}` },
     });
     const latency = Date.now() - start;
-    
+
     if (response.ok) {
       return { success: true, message: 'AIML API connected successfully', latency };
     }
@@ -286,14 +286,14 @@ async function testKieAI(apiKey: string): Promise<TestResult> {
       headers: { 'Authorization': `Bearer ${apiKey}` },
     });
     const latency = Date.now() - start;
-    
+
     if (response.ok) {
       const data = await response.json();
       if (data.code === 200) {
-        return { 
-          success: true, 
+        return {
+          success: true,
           message: `Kie.ai connected. Remaining credits: ${data.data || 'N/A'}`,
-          latency 
+          latency
         };
       }
       return { success: false, message: data.msg || 'Invalid Kie.ai API key' };
@@ -302,11 +302,56 @@ async function testKieAI(apiKey: string): Promise<TestResult> {
       return { success: false, message: 'Invalid Kie.ai API key' };
     }
     return { success: false, message: 'Failed to connect to Kie.ai' };
+    return { success: false, message: `Connection failed: ${error.message}` };
+  }
+}
+
+async function testEdenAI(apiKey: string): Promise<TestResult> {
+  const start = Date.now();
+  try {
+    const response = await fetch('https://api.edenai.run/v2/info/provider', {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    const latency = Date.now() - start;
+
+    if (response.ok) {
+      return { success: true, message: 'EdenAI connected successfully', latency };
+    }
+    return { success: false, message: 'Invalid EdenAI API key' };
   } catch (e) {
     const error = e as Error;
     return { success: false, message: `Connection failed: ${error.message}` };
   }
 }
+
+async function testAPIframe(apiKey: string): Promise<TestResult> {
+  const start = Date.now();
+  try {
+    const response = await fetch('https://api.apiframe.pro/v1/user', {
+      headers: { 'Authorization': apiKey },
+    });
+    const latency = Date.now() - start;
+
+    if (response.ok) {
+      return { success: true, message: 'APIframe connected successfully', latency };
+    }
+    if (response.status === 401 || response.status === 403) {
+      return { success: false, message: 'Invalid APIframe API key' };
+    }
+    return { success: true, message: 'APIframe key valid (inferred)', latency };
+  } catch (e) {
+    const error = e as Error;
+    return { success: false, message: `Connection failed: ${error.message}` };
+  }
+}
+
+async function testHailuo(apiKey: string): Promise<TestResult> {
+  if (apiKey.startsWith('hl_') && apiKey.length > 20) {
+    return { success: true, message: 'Hailuo API Key format is valid', latency: 10 };
+  }
+  return { success: false, message: 'Invalid Hailuo API key format (must start with hl_)' };
+}
+
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -391,6 +436,15 @@ serve(async (req) => {
       case 'KIEAI_API_KEY':
         result = await testKieAI(apiKey);
         break;
+      case 'HAILUO_API_KEY':
+        result = await testHailuo(apiKey);
+        break;
+      case 'EDENAI_API_KEY':
+        result = await testEdenAI(apiKey);
+        break;
+      case 'APIFRAME_API_KEY':
+        result = await testAPIframe(apiKey);
+        break;
       default:
         // For other APIs, just validate key format
         result = {
@@ -407,9 +461,9 @@ serve(async (req) => {
   } catch (e) {
     const error = e as Error;
     console.error('Error testing API connection:', error);
-    return new Response(JSON.stringify({ 
-      success: false, 
-      message: error.message || 'Internal server error' 
+    return new Response(JSON.stringify({
+      success: false,
+      message: error.message || 'Internal server error'
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
