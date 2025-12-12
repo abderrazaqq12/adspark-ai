@@ -1,7 +1,7 @@
 /**
  * Unified Landing Page Compiler
- * Consumes: Product Input + Marketing Angles Output
- * Produces: Production-ready HTML website directly
+ * ONE intelligence, MULTIPLE execution adapters
+ * Uses unified generation system with execution mode selector
  */
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
@@ -17,17 +17,24 @@ import {
   Eye,
   Copy,
   Download,
-  ExternalLink,
   Bug,
-  RefreshCw
+  RefreshCw,
+  Settings2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
 import { usePromptProfiles, PromptProfile } from '@/hooks/usePromptProfiles';
 import { usePipelineOutputs, MarketingAnglesOutput } from '@/hooks/usePipelineOutputs';
 import { PromptSettingsModal } from '@/components/studio/PromptSettingsModal';
 import { PromptIndicator } from '@/components/studio/PromptIndicator';
-import { useAIAgent, getModelName } from '@/hooks/useAIAgent';
+import { ExecutionModeSelector } from '@/components/ExecutionModeSelector';
+import { executeUnified, ExecutionMode } from '@/lib/unified-generation/executor';
+import { UnifiedInput, UnifiedOutput } from '@/lib/unified-generation/types';
+import { UNIFIED_LANDING_PAGE_PROMPT } from '@/lib/unified-generation/prompts';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 
 interface LandingPageCompilerProps {
   projectId: string;
@@ -46,102 +53,6 @@ interface LandingPageCompilerProps {
   onGenerated?: (html: string) => void;
 }
 
-const DEFAULT_COMPILER_PROMPT = `You are a senior Arabic eCommerce conversion expert and front-end page compiler.
-
-Your task is to generate a FULL production-ready landing page for a COD eCommerce product in Saudi Arabia.
-
-You MUST follow these steps internally and return ALL outputs in a single JSON response.
-
-────────────────────────
-INPUT DATA
-────────────────────────
-Product Title:
-{{product_name}}
-
-Product Description:
-{{product_description}}
-
-Target Market:
-{{market}}
-
-Language:
-{{language}}
-
-Audience Age: {{audience_age}}
-Audience Gender: {{audience_gender}}
-
-Direction:
-RTL (dir="rtl")
-
-────────────────────────
-INTERNAL STEPS (DO NOT SKIP)
-────────────────────────
-
-STEP 1: Generate Marketing Angles
-- Identify pain points
-- Emotional triggers
-- Lifestyle desires
-- Objections
-- Trust elements
-
-STEP 2: Generate Landing Page Text Content
-Follow this structure strictly:
-1. Strong opening headline (benefit-driven)
-2. Subheadline (supporting promise)
-3. Bullet-point benefits (emotional)
-4. Usage instructions
-5. Technical specifications
-6. Problem → Solution section
-7. FAQ (minimum 6 questions)
-8. Customer reviews (10 reviews, Saudi dialect)
-
-STEP 3: Compile HTML Landing Page
-Rules:
-- Output CLEAN HTML ONLY
-- Mobile-first
-- RTL layout
-- Use semantic HTML
-- Rounded cards
-- Soft shadows
-- Generous spacing
-- Placeholder image blocks (1080x1080)
-- No external JS frameworks
-- Inline CSS allowed
-- Font: Tajawal or Cairo
-- Use color variables:
-  --bg-primary
-  --text-accent
-  --card-bg
-
-────────────────────────
-OUTPUT FORMAT (STRICT)
-────────────────────────
-Return ONLY valid JSON with this structure:
-
-{
-  "marketingAngles": {
-    "painPoints": [],
-    "desires": [],
-    "emotionalHooks": [],
-    "trustBuilders": []
-  },
-  "landingPageText": {
-    "headline": "",
-    "subheadline": "",
-    "benefits": [],
-    "usage": [],
-    "technicalDetails": [],
-    "problemSolution": "",
-    "faq": [],
-    "reviews": []
-  },
-  "landingPageHTML": "<!DOCTYPE html>...</html>"
-}
-
-DO NOT add explanations.
-DO NOT add markdown.
-DO NOT add comments outside JSON.`;
-
 export const LandingPageCompiler = ({
   projectId,
   productInfo,
@@ -149,17 +60,25 @@ export const LandingPageCompiler = ({
   onGenerated
 }: LandingPageCompilerProps) => {
   const { toast } = useToast();
-  const { aiAgent } = useAIAgent();
   const { getActivePrompt, getPromptForExecution, debugMode, setDebugMode } = usePromptProfiles();
   const { getMarketingAnglesOutput, saveLandingPageHtmlOutput, getLandingPageHtmlOutput } = usePipelineOutputs();
 
+  // State
   const [isGenerating, setIsGenerating] = useState(false);
   const [marketingAngles, setMarketingAngles] = useState<MarketingAnglesOutput | null>(null);
   const [htmlOutput, setHtmlOutput] = useState<string>('');
+  const [sectionsOutput, setSectionsOutput] = useState<UnifiedOutput['sections'] | null>(null);
   const [viewMode, setViewMode] = useState<'code' | 'preview'>('code');
   const [promptProfile, setPromptProfile] = useState<PromptProfile | null>(null);
   const [showPromptModal, setShowPromptModal] = useState(false);
-  const [lastUsedPromptDebug, setLastUsedPromptDebug] = useState<{ id: string; hash: string; version: number } | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  
+  // Execution mode state
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>('agent');
+  const [webhookUrl, setWebhookUrl] = useState('');
+  
+  // Debug state
+  const [lastResult, setLastResult] = useState<UnifiedOutput | null>(null);
 
   useEffect(() => {
     loadData();
@@ -190,29 +109,6 @@ export const LandingPageCompiler = ({
     setPromptProfile(profile);
   };
 
-  const buildPrompt = (template: string): string => {
-    if (!marketingAngles) return template;
-
-    const problems = marketingAngles.problems?.join('\n- ') || '';
-    const desires = marketingAngles.desires?.join('\n- ') || '';
-    const emotional = marketingAngles.emotional_triggers?.join('\n- ') || '';
-    const angles = marketingAngles.angles?.map(a => `${a.angle_type}: ${a.hook} - ${a.promise}`).join('\n- ') || '';
-    const mediaLinks = productInfo.mediaLinks?.join('\n') || 'No media provided';
-
-    return template
-      .replace(/\{\{product_name\}\}/g, productInfo.name)
-      .replace(/\{\{product_description\}\}/g, productInfo.description)
-      .replace(/\{\{media_links\}\}/g, mediaLinks)
-      .replace(/\{\{problems\}\}/g, problems)
-      .replace(/\{\{desires\}\}/g, desires)
-      .replace(/\{\{emotional_triggers\}\}/g, emotional)
-      .replace(/\{\{angles\}\}/g, angles)
-      .replace(/\{\{market\}\}/g, audienceTargeting.targetMarket)
-      .replace(/\{\{language\}\}/g, audienceTargeting.language)
-      .replace(/\{\{audience_age\}\}/g, audienceTargeting.audienceAge)
-      .replace(/\{\{audience_gender\}\}/g, audienceTargeting.audienceGender);
-  };
-
   const generateHtml = async () => {
     // BLOCK if Marketing Angles not available
     if (!marketingAngles) {
@@ -225,102 +121,63 @@ export const LandingPageCompiler = ({
     }
 
     setIsGenerating(true);
-    setLastUsedPromptDebug(null);
+    setLastResult(null);
 
     try {
       const language = audienceTargeting.language.split('-')[0] || 'ar';
       const market = audienceTargeting.targetMarket || 'gcc';
 
-      // Get prompt from database or use default
+      // Get custom prompt from database if available
       const promptResult = await getPromptForExecution('landing_page' as any, language, market);
-      
-      let finalPrompt: string;
-      let debugInfo = { id: 'default', hash: 'n/a', version: 0 };
+      const customPrompt = promptResult?.prompt?.prompt_text;
 
-      if (promptResult) {
-        const { prompt: activePrompt, debugInfo: dbDebugInfo } = promptResult;
-        debugInfo = dbDebugInfo;
-        finalPrompt = buildPrompt(activePrompt.prompt_text || DEFAULT_COMPILER_PROMPT);
-      } else {
-        finalPrompt = buildPrompt(DEFAULT_COMPILER_PROMPT);
-      }
-
-      setLastUsedPromptDebug(debugInfo);
+      // Build unified input
+      const input: UnifiedInput = {
+        product: {
+          title: productInfo.name,
+          description: productInfo.description,
+          media: productInfo.mediaLinks || []
+        },
+        marketingAngles: marketingAngles.angles?.map(a => a.hook) || [],
+        promptId: promptResult?.prompt?.id || 'landing-page-default',
+        locale: audienceTargeting.language,
+        executionMode,
+        webhookUrl: executionMode === 'n8n' ? webhookUrl : undefined
+      };
 
       if (debugMode) {
-        console.log('[LandingPageCompiler] Using prompt:', {
-          id: debugInfo.id,
-          hash: debugInfo.hash,
-          version: debugInfo.version,
-          marketingAnglesPresent: !!marketingAngles
-        });
+        console.log('[LandingPageCompiler] Unified input:', input);
+        console.log('[LandingPageCompiler] Execution mode:', executionMode);
       }
 
-      // Call AI
-      const response = await supabase.functions.invoke('ai-assistant', {
-        body: {
-          message: finalPrompt,
-          model: getModelName(aiAgent),
-        }
-      });
+      // Execute using unified system
+      const result = await executeUnified(input, customPrompt);
 
-      if (response.error) throw new Error(response.error.message);
-
-      let rawResponse = response.data?.response || response.data?.content || '';
-      
-      // Parse JSON response
-      let html = '';
-      try {
-        // Extract JSON from response (may be wrapped in markdown)
-        let jsonStr = rawResponse;
-        const jsonMatch = rawResponse.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (jsonMatch) {
-          jsonStr = jsonMatch[1].trim();
-        }
-        
-        const parsed = JSON.parse(jsonStr);
-        html = parsed.landingPageHTML || '';
-        
-        // Also save marketing angles and text if present
-        if (parsed.marketingAngles) {
-          console.log('[LandingPageCompiler] Marketing Angles:', parsed.marketingAngles);
-        }
-        if (parsed.landingPageText) {
-          console.log('[LandingPageCompiler] Landing Page Text:', parsed.landingPageText);
-        }
-      } catch (parseError) {
-        // Fallback: try to extract HTML directly
-        console.warn('[LandingPageCompiler] JSON parse failed, extracting HTML:', parseError);
-        const htmlMatch = rawResponse.match(/```html\s*([\s\S]*?)```/);
-        if (htmlMatch) {
-          html = htmlMatch[1].trim();
-        } else {
-          const codeMatch = rawResponse.match(/```\s*([\s\S]*?)```/);
-          if (codeMatch) {
-            html = codeMatch[1].trim();
-          } else if (rawResponse.includes('<!DOCTYPE') || rawResponse.includes('<html')) {
-            html = rawResponse;
-          }
-        }
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Generation failed');
       }
 
-      if (!html) {
+      const output = result.data;
+      setLastResult(output);
+
+      if (!output.html) {
         throw new Error('No HTML output received from AI');
       }
 
       // Save to database
-      await saveLandingPageHtmlOutput(projectId, html, {
-        prompt_id: debugInfo.id,
-        prompt_hash: debugInfo.hash
+      await saveLandingPageHtmlOutput(projectId, output.html, {
+        prompt_id: input.promptId,
+        prompt_hash: output.meta.promptVersion.toString()
       });
       
-      setHtmlOutput(html);
+      setHtmlOutput(output.html);
+      setSectionsOutput(output.sections);
       setViewMode('preview');
-      onGenerated?.(html);
+      onGenerated?.(output.html);
 
       toast({
         title: "Landing Page Generated",
-        description: `Production-ready HTML compiled from Marketing Angles`,
+        description: `Compiled via ${output.meta.engine.toUpperCase()} in ${output.meta.latencyMs}ms`,
       });
     } catch (error: any) {
       console.error('[LandingPageCompiler] Generation error:', error);
@@ -349,10 +206,6 @@ export const LandingPageCompiler = ({
     URL.revokeObjectURL(url);
   };
 
-  const openGoogleAIStudio = () => {
-    window.open('https://aistudio.google.com/app/prompts/new_chat', '_blank');
-  };
-
   const hasAngles = !!(marketingAngles && (marketingAngles.problems?.length > 0 || marketingAngles.angles?.length > 0));
 
   return (
@@ -364,10 +217,19 @@ export const LandingPageCompiler = ({
           </div>
           <div>
             <h3 className="font-semibold">Landing Page Compiler</h3>
-            <p className="text-xs text-muted-foreground">Generate HTML directly from Marketing Angles</p>
+            <p className="text-xs text-muted-foreground">Unified generation with multiple execution modes</p>
           </div>
         </div>
-        <Badge variant="outline" className="text-primary border-primary/50">HTML Generator</Badge>
+        <div className="flex items-center gap-2">
+          <ExecutionModeSelector
+            value={executionMode}
+            onChange={setExecutionMode}
+            compact
+          />
+          <Badge variant="outline" className="text-primary border-primary/50">
+            {executionMode === 'agent' ? 'AI Agent' : executionMode === 'n8n' ? 'n8n' : 'Edge API'}
+          </Badge>
+        </div>
       </div>
 
       {/* Data Source Status */}
@@ -389,12 +251,43 @@ export const LandingPageCompiler = ({
         />
       </div>
 
+      {/* Settings Panel */}
+      <Collapsible open={showSettings} onOpenChange={setShowSettings}>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="sm" className="w-full justify-between">
+            <span className="flex items-center gap-2">
+              <Settings2 className="w-4 h-4" />
+              Execution Settings
+            </span>
+            <Badge variant="secondary" className="text-xs">
+              {executionMode === 'agent' ? 'Default' : executionMode.toUpperCase()}
+            </Badge>
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-3">
+          <div className="p-4 rounded-lg bg-muted/30 border border-border">
+            <ExecutionModeSelector
+              value={executionMode}
+              onChange={setExecutionMode}
+              webhookUrl={webhookUrl}
+              onWebhookUrlChange={setWebhookUrl}
+            />
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
       {/* Debug Panel */}
-      {debugMode && lastUsedPromptDebug && (
-        <div className="p-3 rounded-lg bg-slate-900/50 border border-border">
+      {debugMode && lastResult && (
+        <div className="p-3 rounded-lg bg-slate-900/50 border border-border space-y-2">
           <p className="text-xs font-mono text-muted-foreground">
-            Prompt: {lastUsedPromptDebug.id.slice(0, 8)}... | Hash: {lastUsedPromptDebug.hash} | v{lastUsedPromptDebug.version}
+            Engine: {lastResult.meta.engine} | Latency: {lastResult.meta.latencyMs}ms | v{lastResult.meta.promptVersion}
           </p>
+          {lastResult.marketingAngles && (
+            <p className="text-xs text-muted-foreground">
+              Pain Points: {lastResult.marketingAngles.painPoints.length} | 
+              Desires: {lastResult.marketingAngles.desires.length}
+            </p>
+          )}
         </div>
       )}
 
@@ -408,19 +301,14 @@ export const LandingPageCompiler = ({
           {isGenerating ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              Compiling HTML...
+              Generating...
             </>
           ) : (
             <>
               <Sparkles className="w-4 h-4" />
-              Generate HTML Page
+              Generate Landing Page
             </>
           )}
-        </Button>
-
-        <Button variant="outline" size="sm" onClick={openGoogleAIStudio} className="gap-2">
-          <ExternalLink className="w-4 h-4" />
-          Open AI Studio
         </Button>
 
         {htmlOutput && (
@@ -441,7 +329,7 @@ export const LandingPageCompiler = ({
               className="gap-1 text-xs"
             >
               <Bug className="w-3 h-3" />
-              Debug
+              {debugMode ? 'Hide Debug' : 'Debug'}
             </Button>
           </>
         )}
@@ -449,7 +337,7 @@ export const LandingPageCompiler = ({
 
       {/* View Mode Toggle */}
       {htmlOutput && (
-        <div className="flex items-center bg-slate-800/50 rounded-lg p-1 border border-border w-fit">
+        <div className="flex items-center bg-muted/30 rounded-lg p-1 border border-border w-fit">
           <button
             onClick={() => setViewMode('code')}
             className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
@@ -480,7 +368,7 @@ export const LandingPageCompiler = ({
         <Textarea
           value={htmlOutput}
           onChange={(e) => setHtmlOutput(e.target.value)}
-          className="min-h-[300px] bg-slate-900/50 border-border text-xs font-mono"
+          className="min-h-[300px] bg-muted/30 border-border text-xs font-mono"
         />
       )}
 
@@ -498,24 +386,21 @@ export const LandingPageCompiler = ({
       {!htmlOutput && !isGenerating && (
         <div className="flex flex-col items-center justify-center min-h-[200px] text-muted-foreground">
           <Sparkles className="w-10 h-10 mb-3 text-primary/30" />
-          <p className="text-sm text-center">
-            {hasAngles 
-              ? "Click 'Generate HTML Page' to compile your landing page"
-              : "Marketing Angles required from previous step"}
-          </p>
+          <p className="text-sm">Click "Generate Landing Page" to compile HTML</p>
+          <p className="text-xs mt-1">Requires Marketing Angles from previous stage</p>
         </div>
       )}
 
-      {/* Prompt Modal */}
+      {/* Prompt Settings Modal */}
       <PromptSettingsModal
         isOpen={showPromptModal}
         onClose={() => setShowPromptModal(false)}
         type="landing_page"
-        defaultTitle="Landing Page Compiler Prompt"
-        defaultPrompt={DEFAULT_COMPILER_PROMPT}
         language={audienceTargeting.language.split('-')[0] || 'ar'}
         market={audienceTargeting.targetMarket || 'gcc'}
-        onSaved={() => loadPromptProfile()}
+        defaultPrompt={UNIFIED_LANDING_PAGE_PROMPT}
+        defaultTitle="Landing Page Compiler"
+        onSaved={loadPromptProfile}
       />
     </Card>
   );
