@@ -302,7 +302,8 @@ async function testKieAI(apiKey: string): Promise<TestResult> {
       return { success: false, message: 'Invalid Kie.ai API key' };
     }
     return { success: false, message: 'Failed to connect to Kie.ai' };
-    return { success: false, message: `Connection failed: ${error.message}` };
+  } catch (error) {
+    return { success: false, message: `Connection failed: ${(error as Error).message}` };
   }
 }
 
