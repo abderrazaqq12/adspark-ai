@@ -25,11 +25,18 @@ if (typeof window === 'undefined') {
         
         if (r.cache === "only-if-cached" && r.mode !== "same-origin") return;
 
-        // BYPASS Service Worker completely for FFmpeg assets (local and CDN)
-        if (url.pathname.startsWith('/ffmpeg/') || 
+        // BYPASS Service Worker completely for FFmpeg assets
+        // This is CRITICAL - intercepting these will break WASM loading
+        const isFFmpegAsset = 
+            url.pathname.startsWith('/ffmpeg/') ||
             url.href.includes('@ffmpeg/core') ||
-            url.href.includes('ffmpeg-core')) {
-            return; // Let browser handle directly - no interception
+            url.href.includes('@ffmpeg/ffmpeg') ||
+            url.href.includes('ffmpeg-core') ||
+            url.pathname.endsWith('.wasm');
+        
+        if (isFFmpegAsset) {
+            // Let the browser handle these directly - no interception
+            return;
         }
 
         const request = (coepCredentialless && r.mode === "no-cors")

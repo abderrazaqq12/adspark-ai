@@ -3,7 +3,7 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { IVideoEngine, EngineTask, EngineResult } from './types';
 
-// FFmpeg core version - pinned for compatibility
+// FFmpeg core version - MUST match @ffmpeg/core installed version
 const FFMPEG_CORE_VERSION = '0.12.6';
 const FFMPEG_CDN_BASE = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`;
 
@@ -88,7 +88,7 @@ export class FFmpegEngine implements IVideoEngine {
 
         this.loadState = "loading";
         this.loadError = null;
-        console.log('[FFmpegEngine] Initializing...');
+        console.log('[FFmpegEngine] Initializing FFmpeg.wasm...');
 
         try {
             this.ffmpeg = new FFmpeg();
@@ -102,35 +102,42 @@ export class FFmpegEngine implements IVideoEngine {
                 console.log('[FFmpeg Progress]', Math.round(progress * 100) + '%', 'time:', time);
             });
 
-            // Load FFmpeg core using toBlobURL for CORS compatibility
-            console.log('[FFmpegEngine] Loading FFmpeg core from CDN:', FFMPEG_CDN_BASE);
-            
+            // Load FFmpeg core from CDN using toBlobURL for CORS compatibility
+            // @ffmpeg/core@0.12.6 is single-threaded, so NO workerURL is needed
+            console.log('[FFmpegEngine] Loading FFmpeg core v' + FFMPEG_CORE_VERSION + ' from CDN...');
+            console.log('[FFmpegEngine] CDN Base:', FFMPEG_CDN_BASE);
+
+            // toBlobURL fetches the file and creates a blob URL, bypassing CORS issues
             const coreURL = await toBlobURL(
                 `${FFMPEG_CDN_BASE}/ffmpeg-core.js`,
                 'text/javascript'
             );
-            
+            console.log('[FFmpegEngine] ✓ Core JS loaded');
+
             const wasmURL = await toBlobURL(
                 `${FFMPEG_CDN_BASE}/ffmpeg-core.wasm`,
                 'application/wasm'
             );
+            console.log('[FFmpegEngine] ✓ WASM loaded');
 
-            console.log('[FFmpegEngine] Core and WASM blob URLs created');
-
-            // Load with timeout
+            // Load with explicit URLs (single-thread, no workerURL needed)
+            console.log('[FFmpegEngine] Calling ffmpeg.load()...');
+            
             const loadPromise = this.ffmpeg.load({
                 coreURL,
                 wasmURL,
+                // Note: workerURL is NOT used for single-threaded @ffmpeg/core
+                // Only @ffmpeg/core-mt (multi-threaded) requires workerURL
             });
 
             const timeoutPromise = new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error("FFmpeg load timeout (45s)")), 45000)
+                setTimeout(() => reject(new Error("FFmpeg load timeout (90s)")), 90000)
             );
 
             await Promise.race([loadPromise, timeoutPromise]);
 
             this.loadState = "ready";
-            console.log('[FFmpegEngine] ✓ Initialized successfully');
+            console.log('[FFmpegEngine] ✓ FFmpeg initialized successfully!');
 
         } catch (err: unknown) {
             this.loadState = "failed";
@@ -138,7 +145,7 @@ export class FFmpegEngine implements IVideoEngine {
             this.loadError = errorMessage;
             this.ffmpeg = null;
             
-            console.error('[FFmpegEngine] Initialization failed:', errorMessage);
+            console.error('[FFmpegEngine] ✗ Initialization failed:', errorMessage);
             throw new Error(`FFmpeg Initialization Failed: ${errorMessage}`);
         }
     }
