@@ -24,7 +24,7 @@ import {
 
 interface PipelineError {
   stage: string;
-  errorType: 'engine_error' | 'ffmpeg_error' | 'upload_error' | 'url_error' | 'timeout_error' | 'validation_error';
+  errorType: 'engine_error' | 'ffmpeg_error' | 'upload_error' | 'url_error' | 'timeout_error' | 'validation_error' | 'file_missing' | 'permission_denied';
   message: string;
   code?: string;
   details?: string;
