@@ -257,10 +257,12 @@ const CreativeReplicator = () => {
       const { error: jobError } = await supabase
         .from('pipeline_jobs')
         .insert({
-          id: jobId,
           user_id: userId,
+          stage_name: 'creative_replicator',
+          stage_number: 1,
           status: 'pending',
-          progress: {
+          progress: 0,
+          input_data: {
             totalVideos: variationConfig.count,
             completedVideos: 0,
             currentStage: 'queued'
