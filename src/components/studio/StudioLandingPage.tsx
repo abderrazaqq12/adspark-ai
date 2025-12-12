@@ -55,59 +55,118 @@ interface ProductInfo {
 }
 
 // Default prompt template - used ONLY when creating initial prompt
-const DEFAULT_LANDING_PROMPT = `You are a landing page copywriter for Arabic COD eCommerce.
+// This is a FULL HTML LANDING PAGE COMPILER - outputs production-ready HTML
+const DEFAULT_LANDING_PROMPT = `You are an AI Landing Page Compiler.
+Your task is to BUILD a complete, production-ready landing page WEBSITE using structured data.
 
-PRODUCT CONTEXT:
-Product Name: {{product_name}}
-Description: {{product_description}}
+========================
+INPUT DATA
+========================
+PRODUCT:
+- Name: {{product_name}}
+- Description: {{product_description}}
+- Media: {{media_links}}
 
-MARKETING INTELLIGENCE (from previous step):
-Pain Points: {{pain_points}}
-Emotional Triggers: {{emotional_triggers}}
-Best Marketing Angles: {{marketing_angles}}
-Customer Value Points: {{customer_value}}
+MARKETING INTELLIGENCE:
+- Pain Points: {{pain_points}}
+- Emotional Triggers: {{emotional_triggers}}
+- Marketing Angles: {{marketing_angles}}
+- Customer Value: {{customer_value}}
 
 AUDIENCE:
-Language: {{language}}
-Market: {{market}}
-Audience: {{audience_age}} {{audience_gender}}
+- Language: {{language}}
+- Market: {{market}}
+- Age: {{audience_age}}
+- Gender: {{audience_gender}}
 
-TASK:
-Create complete landing page content with these sections:
+========================
+OUTPUT REQUIREMENTS
+========================
+Return ONLY valid HTML + embedded CSS.
+NO explanations. NO markdown. NO comments outside code.
 
-1. HERO SECTION:
-   - Headline (using strongest pain point or emotional trigger)
-   - Sub-headline (reinforce value)
+========================
+MANDATORY RULES
+========================
+- Root element MUST include: dir="rtl" lang="ar"
+- Language: Saudi Arabic dialect (100%)
+- Mobile-first design (max-width: 480px optimized)
+- Clean, modern, conversion-focused UI
+- Rounded corners, soft shadows, generous spacing
+- Use CSS variables for colors:
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #1a1a1a;
+  --text-primary: #ffffff;
+  --text-accent: #a855f7;
+  --cta-bg: #22c55e;
 
-2. PROBLEM SECTION:
-   - Elaborate on top 3 pain points
+========================
+PAGE STRUCTURE (STRICT)
+========================
+1. HERO SECTION
+   - Strong Arabic headline (benefit-driven from pain_points)
+   - Subheadline (from customer_value)
+   - <div class="image-placeholder">1080x1080</div>
 
-3. SOLUTION SECTION:
+2. PROBLEM SECTION
+   - Derived ONLY from pain_points
+   - 3-4 bullet points
+
+3. SOLUTION / VALUE SECTION
+   - Derived ONLY from customer_value
    - Position product as the answer
 
-4. BENEFITS SECTION:
-   - 4-6 key benefits with emotional hooks
+4. FEATURES & BENEFITS
+   - From marketing_angles
+   - EACH point followed by <div class="image-placeholder">1080x1080</div>
 
-5. SOCIAL PROOF:
-   - 3 testimonial placeholders
+5. HOW TO USE
+   - Step-by-step instructions (3-5 steps)
 
-6. OFFER SECTION:
-   - Clear value proposition
-   - Pricing anchor if applicable
+6. TECHNICAL DETAILS
+   - Specs, origin, shelf life, quantity
 
-7. CTA SECTION:
-   - Strong call-to-action text
+7. SOCIAL PROOF
+   - 10 customer reviews
+   - ⭐⭐⭐⭐⭐ ratings
+   - 100% Saudi Arabic dialect
+   - NO quotation marks
 
-8. FAQ SECTION:
-   - 5 common objections as questions
+8. FAQ
+   - 5-7 questions & answers in Arabic
 
-RULES:
-- Output in {{language}}
-- Adapt tone to {{market}} culture
-- Mobile-first copy (short paragraphs)
-- COD-optimized messaging
-- No HTML, just structured content
-- Use emotional triggers from marketing angles`;
+9. FINAL CTA
+   - Strong closing statement
+   - Order now CTA (COD friendly)
+   - Phone/WhatsApp button
+
+========================
+DESIGN RULES
+========================
+- Centered content (max-width: 500px)
+- Arabic font: font-family: 'Cairo', 'Tajawal', sans-serif
+- Include Google Fonts link
+- Generous padding (20px+ on mobile)
+- Large touch targets (min-height: 50px for buttons)
+- High contrast text
+
+========================
+IMAGE HANDLING
+========================
+Insert square div placeholders:
+<div class="image-placeholder" style="width:100%;aspect-ratio:1;background:#2a2a2a;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#666;">1080×1080</div>
+
+========================
+OUTPUT FORMAT
+========================
+Return a SINGLE HTML document with:
+- <style> embedded in <head>
+- Ready to render inside iframe
+- No external dependencies except Google Fonts
+- Complete and valid HTML5
+
+CRITICAL: Use pain_points, customer_value, and marketing_angles as SOURCE OF TRUTH.
+Do NOT invent benefits not present in the provided data.`;
 
 export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
   const { toast } = useToast();
@@ -256,11 +315,13 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
     const emotionalTriggers = marketingAngles.marketingAngles?.slice(0, 3).join('\n- ') || '';
     const bestAngles = marketingAngles.marketingAngles?.join('\n- ') || '';
     const customerValue = marketingAngles.customerValue?.join('\n- ') || '';
+    const mediaLinks = productInfo.mediaLinks?.join('\n') || 'No media provided';
 
     // Replace all variables
     return promptTemplate
       .replace(/\{\{product_name\}\}/g, productInfo.name)
       .replace(/\{\{product_description\}\}/g, productInfo.description)
+      .replace(/\{\{media_links\}\}/g, mediaLinks)
       .replace(/\{\{pain_points\}\}/g, painPoints)
       .replace(/\{\{emotional_triggers\}\}/g, emotionalTriggers)
       .replace(/\{\{marketing_angles\}\}/g, bestAngles)
@@ -384,14 +445,33 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
 
         if (response.error) throw new Error(response.error.message || 'Failed to generate landing page');
 
-        const content = response.data?.response || response.data?.content || response.data?.text || '';
+        let content = response.data?.response || response.data?.content || response.data?.text || '';
+        
+        // Extract HTML from markdown code blocks if present
+        const htmlMatch = content.match(/```html\s*([\s\S]*?)```/);
+        if (htmlMatch) {
+          content = htmlMatch[1].trim();
+        } else {
+          const codeMatch = content.match(/```\s*([\s\S]*?)```/);
+          if (codeMatch) {
+            content = codeMatch[1].trim();
+          }
+        }
+        
         setGeneratedContent(content);
         saveContent(content);
-        setViewMode('content');
+        
+        // Auto-set code if it's valid HTML for preview
+        if (content.includes('<!DOCTYPE') || content.includes('<html')) {
+          setGeneratedCode(content);
+          setViewMode('preview');
+        } else {
+          setViewMode('content');
+        }
 
         toast({
           title: "Landing Page Generated",
-          description: `Content created using Marketing Angles + Custom Prompt v${debugInfo.version}`,
+          description: `HTML page created using Marketing Angles + Custom Prompt v${debugInfo.version}`,
         });
       }
     } catch (error: any) {
@@ -495,9 +575,9 @@ Requirements:
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Landing Page Builder</h2>
+          <h2 className="text-2xl font-bold text-foreground">AI Landing Page Compiler</h2>
           <p className="text-muted-foreground text-sm mt-1">
-            Aggregates Product Info + Marketing Angles + Custom Prompt
+            Generates production-ready HTML from Product + Marketing Angles + Custom Prompt
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -639,12 +719,12 @@ Requirements:
               {isGenerating && generationType === 'content' ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Generating...
+                  Compiling HTML...
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  Generate Content
+                  Generate HTML Page
                 </>
               )}
             </Button>
@@ -688,7 +768,7 @@ Requirements:
               }`}
             >
               <Code className="w-4 h-4" />
-              Content
+              HTML Code
             </button>
             <button 
               onClick={() => generatedCode && setViewMode('preview')}
@@ -711,7 +791,7 @@ Requirements:
         {viewMode === 'content' ? (
           <div className="p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <Label className="text-lg font-semibold text-foreground">Landing Page Content</Label>
+              <Label className="text-lg font-semibold text-foreground">HTML Landing Page</Label>
               {generatedContent && (
                 <Button 
                   variant="ghost" 
@@ -730,7 +810,7 @@ Requirements:
                 value={generatedContent}
                 onChange={(e) => setGeneratedContent(e.target.value)}
                 placeholder={hasMarketingAngles 
-                  ? "Click 'Generate Content' to create landing page from Marketing Angles + Custom Prompt..."
+                  ? "Click 'Generate HTML Page' to compile landing page from Marketing Angles + Custom Prompt..."
                   : "Generate Marketing Angles in the previous step first..."}
                 className="min-h-[400px] bg-slate-900/50 border-primary/30 text-sm font-mono resize-none focus:border-primary/50 focus:ring-primary/20"
                 dir="rtl"
@@ -741,7 +821,7 @@ Requirements:
                     <Sparkles className="w-10 h-10 mx-auto mb-3 text-primary/30" />
                     <p className="text-sm">
                       {hasMarketingAngles 
-                        ? "Click 'Generate Content' to create landing page"
+                        ? "Click 'Generate HTML Page' to compile landing page"
                         : "Marketing Angles required from previous step"}
                     </p>
                   </div>
