@@ -110,3 +110,6 @@ verify_jwt = true
 
 [functions.creative-replicator-generate]
 verify_jwt = true
+
+[functions.creative-replicator-v2]
+verify_jwt = true

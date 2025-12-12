@@ -8,6 +8,7 @@ import { SimplifiedVariationSettings } from "@/components/replicator/SimplifiedV
 import { GenerationProgress } from "@/components/replicator/GenerationProgress";
 import { EnhancedResultsGallery } from "@/components/replicator/EnhancedResultsGallery";
 import { ProcessingTimeline } from "@/components/replicator/ProcessingTimeline";
+import { PipelineProgressPanel } from "@/components/replicator/PipelineProgressPanel";
 import { BackendModeSelector } from "@/components/BackendModeSelector";
 import { useBackendMode } from "@/hooks/useBackendMode";
 import { toast } from "sonner";
@@ -541,11 +542,21 @@ const CreativeReplicator = () => {
 
             {activeStep === "generate" && (
               <div className="space-y-6">
-                <GenerationProgress
-                  progress={generationProgress}
-                  config={variationConfig}
-                  uploadedAds={uploadedAds}
+                {/* Real-time pipeline progress - backend-driven, not timer-based */}
+                <PipelineProgressPanel
+                  jobId={currentJobId}
+                  onComplete={() => {
+                    setIsGenerating(false);
+                    setActiveStep("results");
+                    toast.success("Generation complete!");
+                  }}
+                  onVideoReady={(videoId, url) => {
+                    setGeneratedVideos(prev => prev.map(v => 
+                      v.id === videoId ? { ...v, url, status: 'completed' as const } : v
+                    ));
+                  }}
                 />
+                {/* Legacy processing timeline for compatibility */}
                 {currentJobId && (
                   <ProcessingTimeline
                     jobId={currentJobId}
