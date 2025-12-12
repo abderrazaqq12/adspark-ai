@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,10 +21,14 @@ import {
   Users,
   Zap,
   Play,
-  Settings2
+  Settings2,
+  X,
+  FileVideo,
+  FileImage
 } from "lucide-react";
 import { toast } from "sonner";
 import { useExtendedAITools } from "@/hooks/useExtendedAITools";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function AITools() {
   const { 
@@ -44,12 +48,93 @@ export default function AITools() {
   const [outputUrl, setOutputUrl] = useState<string | null>(null);
   const [targetMarket, setTargetMarket] = useState("GCC");
   const [language, setLanguage] = useState("ar");
+  const [activeCategory, setActiveCategory] = useState("tools");
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const tools = getTools();
   const imageModels = getImageModels();
   const videoModels = getVideoModels();
   const talkingActorModels = getTalkingActorModels();
   const presets = getPresets();
+
+  // Determine accepted file types based on active category
+  const getAcceptedFileTypes = () => {
+    switch (activeCategory) {
+      case "video":
+        return "video/*";
+      case "image":
+        return "image/*";
+      case "actor":
+        return "image/*,audio/*";
+      default:
+        return "image/*,video/*";
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type based on category
+    if (activeCategory === "video" && !file.type.startsWith("video/")) {
+      toast.error("Please upload a video file for video models");
+      return;
+    }
+    if (activeCategory === "image" && !file.type.startsWith("image/")) {
+      toast.error("Please upload an image file for image models");
+      return;
+    }
+
+    setUploadedFile(file);
+    setIsUploading(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Please sign in to upload files");
+        setIsUploading(false);
+        return;
+      }
+
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${user.id}/ai-tools/${Date.now()}.${fileExt}`;
+      const bucket = file.type.startsWith("video/") ? "videos" : "custom-scenes";
+
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .upload(fileName, file, { cacheControl: "3600", upsert: false });
+
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(data.path);
+
+      setUploadedFileUrl(publicUrl);
+      setInputUrl(publicUrl);
+      toast.success("File uploaded successfully");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to upload file");
+      setUploadedFile(null);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const clearUploadedFile = () => {
+    setUploadedFile(null);
+    setUploadedFileUrl(null);
+    if (inputUrl === uploadedFileUrl) {
+      setInputUrl("");
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const handleExecuteTool = async (toolId: string) => {
     if (!inputUrl && !prompt) {
@@ -171,7 +256,7 @@ export default function AITools() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Tool Selection */}
         <div className="lg:col-span-2">
-          <Tabs defaultValue="tools" className="w-full">
+          <Tabs defaultValue="tools" className="w-full" onValueChange={setActiveCategory}>
             <TabsList className="grid grid-cols-5 bg-muted">
               {toolCategories.map((cat) => (
                 <TabsTrigger key={cat.id} value={cat.id} className="gap-2">
@@ -250,6 +335,98 @@ export default function AITools() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* File Upload Section */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  {activeCategory === "video" ? (
+                    <><FileVideo className="w-4 h-4" /> Upload Video</>
+                  ) : activeCategory === "image" ? (
+                    <><FileImage className="w-4 h-4" /> Upload Image</>
+                  ) : (
+                    <><Upload className="w-4 h-4" /> Upload File</>
+                  )}
+                </Label>
+                
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={getAcceptedFileTypes()}
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  id="file-upload"
+                />
+                
+                {uploadedFile ? (
+                  <div className="relative p-3 bg-muted/50 rounded-lg border border-border">
+                    <div className="flex items-center gap-3">
+                      {uploadedFile.type.startsWith("video/") ? (
+                        <FileVideo className="w-8 h-8 text-primary" />
+                      ) : (
+                        <FileImage className="w-8 h-8 text-primary" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {uploadedFile.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={clearUploadedFile}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    {isUploading && (
+                      <div className="mt-2">
+                        <Progress value={50} className="h-1" />
+                        <p className="text-xs text-muted-foreground mt-1">Uploading...</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <label
+                    htmlFor="file-upload"
+                    className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                  >
+                    {activeCategory === "video" ? (
+                      <FileVideo className="w-8 h-8 text-muted-foreground mb-2" />
+                    ) : activeCategory === "image" ? (
+                      <FileImage className="w-8 h-8 text-muted-foreground mb-2" />
+                    ) : (
+                      <Upload className="w-8 h-8 text-muted-foreground mb-2" />
+                    )}
+                    <span className="text-sm text-muted-foreground text-center">
+                      {activeCategory === "video" 
+                        ? "Click to upload video" 
+                        : activeCategory === "image" 
+                          ? "Click to upload image"
+                          : "Click to upload file"}
+                    </span>
+                    <span className="text-xs text-muted-foreground mt-1">
+                      {activeCategory === "video" 
+                        ? "MP4, MOV, WebM" 
+                        : activeCategory === "image" 
+                          ? "PNG, JPG, WebP"
+                          : "Image or Video"}
+                    </span>
+                  </label>
+                )}
+              </div>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">Or enter URL</span>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label>Asset URL</Label>
                 <Input
