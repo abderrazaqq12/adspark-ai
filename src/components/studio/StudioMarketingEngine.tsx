@@ -32,6 +32,8 @@ import { parseEdgeFunctionError, formatErrorForToast, createDetailedErrorLog } f
 import { usePromptProfiles, PromptProfile, PromptType } from '@/hooks/usePromptProfiles';
 import { PromptSettingsModal } from '@/components/studio/PromptSettingsModal';
 import { PromptIndicator } from '@/components/studio/PromptIndicator';
+import { usePipelineOutputs, MarketingAnglesOutput } from '@/hooks/usePipelineOutputs';
+import { useProject } from '@/contexts/ProjectContext';
 
 interface AudienceTargeting {
   targetMarket: string;
@@ -94,6 +96,8 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   const { aiAgent, loading: aiAgentLoading } = useAIAgent();
   const { mode: backendMode, n8nEnabled: useN8nBackend, aiOperatorEnabled, getActiveBackend } = useBackendMode();
   const { getActivePrompt, getPromptForExecution, debugMode, setDebugMode } = usePromptProfiles();
+  const { saveMarketingAnglesOutput } = usePipelineOutputs();
+  const { projectId, createProject } = useProject();
   
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeTab, setActiveTab] = useState('angles');
@@ -336,6 +340,29 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         setGeneratedAngles(angles);
         saveContent({ angles });
         
+        // Save structured output to projects table for Stage 2 consumption
+        let currentProjectId = projectId;
+        if (!currentProjectId) {
+          currentProjectId = await createProject();
+        }
+        if (currentProjectId) {
+          const structuredOutput: MarketingAnglesOutput = {
+            problems: angles.problemsSolved || [],
+            desires: angles.customerValue || [],
+            objections: [],
+            emotional_triggers: angles.marketingAngles?.slice(0, 3) || [],
+            angles: angles.marketingAngles?.map((a, i) => ({
+              angle_type: `angle_${i + 1}`,
+              hook: a.split(':')[0] || a,
+              promise: a.split(':')[1] || '',
+              audience_focus: audienceTargeting.audienceGender
+            })) || [],
+            generated_at: new Date().toISOString(),
+            prompt_id: debugInfo?.id,
+            prompt_hash: debugInfo?.hash
+          };
+          await saveMarketingAnglesOutput(currentProjectId, structuredOutput);
+        }
         toast({
           title: "تم إنشاء الزوايا التسويقية",
           description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل (via n8n)",
