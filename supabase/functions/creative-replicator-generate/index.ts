@@ -6,25 +6,47 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// EXPLICIT PIPELINE STATES - No ambiguity
+type PipelineState = 
+  | 'queued'
+  | 'generating'
+  | 'encoding'
+  | 'uploading'
+  | 'validating_url'
+  | 'ready'
+  | 'failed'
+  | 'timed_out';
+
 interface PipelineStage {
   id: string;
-  status: "pending" | "running" | "completed" | "error";
+  status: "pending" | "running" | "completed" | "error" | "timed_out";
   startedAt?: string;
   completedAt?: string;
   error?: string;
   progress?: number;
 }
 
+interface PipelineError {
+  stage: string;
+  errorType: 'engine_error' | 'ffmpeg_error' | 'upload_error' | 'url_error' | 'timeout_error' | 'validation_error' | 'file_missing';
+  message: string;
+  code?: string;
+  retryable: boolean;
+  suggestedFix?: string;
+}
+
 interface VideoVariation {
   id: string;
   ratio: string;
   variationNumber: number;
-  status: "pending" | "processing" | "uploading" | "validating" | "completed" | "failed";
+  status: 'queued' | 'generating' | 'encoding' | 'uploading' | 'validating_url' | 'ready' | 'failed' | 'timed_out';
   videoUrl?: string;
   thumbnailUrl?: string;
   duration?: number;
   error?: string;
   retryCount: number;
+  stageStartTime?: number;
+  engineUsed?: string;
 }
 
 const STAGES = [
@@ -32,9 +54,12 @@ const STAGES = [
   "music", "subtitles", "export", "upload", "url", "complete"
 ];
 
+// HARD LIMITS - No infinite waits
 const MAX_RETRIES = 3;
+const URL_VALIDATION_TIMEOUT_MS = 60000; // 60 seconds MAX
 const URL_VALIDATION_ATTEMPTS = 5;
 const VALIDATION_RETRY_DELAY = 2000;
+const PIPELINE_TIMEOUT_MS = 600000; // 10 minutes MAX for entire pipeline
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -274,17 +299,17 @@ serve(async (req) => {
               id: videoId,
               ratio,
               variationNumber: v + 1,
-              status: 'pending',
+              status: 'queued',
               retryCount: 0,
             };
             
-            // Create video variation record with pending status
+            // Create video variation record with queued status
             await supabaseAdmin.from('video_variations').insert({
               id: videoId,
               user_id: user.id,
               project_id: projectId,
               variation_number: v + 1,
-              status: 'pending',
+              status: 'processing',
               variation_config: {
                 hookStyle: variationConfig?.hookStyles?.[v % (variationConfig?.hookStyles?.length || 1)] || 'ai-auto',
                 pacing: variationConfig?.pacing || 'dynamic',
@@ -301,7 +326,7 @@ serve(async (req) => {
 
         // Update progress with video statuses
         const videoStatuses: Record<string, string> = {};
-        videoVariations.forEach(v => { videoStatuses[v.id] = 'pending'; });
+        videoVariations.forEach(v => { videoStatuses[v.id] = 'queued'; });
         await updateStage('video', 'running', { 
           stageProgress: 10,
           completedVideos: 0,
@@ -314,9 +339,9 @@ serve(async (req) => {
         
         let processedCount = 0;
         for (const variation of videoVariations) {
-          // Update to processing
-          await updateVideoStatus(variation.id, 'processing');
-          videoStatuses[variation.id] = 'processing';
+          // Update to generating
+          await updateVideoStatus(variation.id, 'generating');
+          videoStatuses[variation.id] = 'generating';
           await updateStage('ffmpeg', 'running', { 
             stageProgress: Math.round((processedCount / totalVideos) * 50),
             videoStatuses,
@@ -325,7 +350,7 @@ serve(async (req) => {
           // Simulate processing time
           await new Promise(r => setTimeout(r, 500));
           
-          variation.status = 'processing';
+          variation.status = 'generating';
           processedCount++;
         }
         
@@ -402,8 +427,8 @@ serve(async (req) => {
         for (const variation of videoVariations) {
           if (!variation.videoUrl) continue;
           
-          variation.status = 'validating';
-          videoStatuses[variation.id] = 'validating';
+          variation.status = 'validating_url';
+          videoStatuses[variation.id] = 'validating_url';
           await updateStage('url', 'running', { 
             stageProgress: Math.round((validatedCount / successfulUploads.length) * 100),
             videoStatuses,
@@ -414,12 +439,12 @@ serve(async (req) => {
           const isValid = await validateUrl(variation.videoUrl);
           
           if (isValid) {
-            variation.status = 'completed';
-            videoStatuses[variation.id] = 'completed';
+            variation.status = 'ready';
+            videoStatuses[variation.id] = 'ready';
             validatedUrls.push(variation.videoUrl);
             
             // Update database with validated URL
-            await updateVideoStatus(variation.id, 'completed', {
+            await updateVideoStatus(variation.id, 'ready', {
               videoUrl: variation.videoUrl,
               thumbnailUrl: variation.thumbnailUrl,
               duration: variation.duration,
@@ -445,10 +470,10 @@ serve(async (req) => {
         });
 
         // Stage 11: Mark Complete - ONLY if we have validated URLs
-        const completedVariations = videoVariations.filter(v => v.status === 'completed');
+        const completedVariations = videoVariations.filter(v => v.status === 'ready');
         const failedVariations = videoVariations.filter(v => v.status === 'failed');
 
-        console.log(`[creative-replicator] Final status: ${completedVariations.length} completed, ${failedVariations.length} failed`);
+        console.log(`[creative-replicator] Final status: ${completedVariations.length} ready, ${failedVariations.length} failed`);
 
         if (completedVariations.length > 0) {
           // Job is successful if at least some videos completed
