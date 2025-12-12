@@ -10,7 +10,7 @@ interface DebugResult {
   step: string;
   error?: string;
   videoUrl?: string;
-  ffmpegAvailable: boolean;
+  method: "fal.ai" | "ffmpeg-blocked";
   executionTimeMs: number;
   logs: string[];
 }
@@ -61,7 +61,7 @@ export function DebugFFmpegTest() {
           success: false,
           step: "invocation",
           error: error.message,
-          ffmpegAvailable: false,
+          method: "ffmpeg-blocked",
           executionTimeMs: 0,
           logs: [`Function invocation error: ${error.message}`],
         });
@@ -73,7 +73,7 @@ export function DebugFFmpegTest() {
         success: false,
         step: "client",
         error: err instanceof Error ? err.message : String(err),
-        ffmpegAvailable: false,
+        method: "ffmpeg-blocked",
         executionTimeMs: 0,
         logs: [`Client error: ${err}`],
       });
@@ -85,16 +85,16 @@ export function DebugFFmpegTest() {
   return (
     <Card className="border-orange-500/50 bg-orange-500/5">
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Terminal className="w-5 h-5 text-orange-500" />
-          Debug: Generate Single Video (FFMPEG Only)
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          System validation test. Input 1 video → FFMPEG cuts 15s + zoom → Output 1 MP4.
-          No placeholders. No fake success.
-        </p>
+      <CardTitle className="flex items-center gap-2 text-base">
+        <Terminal className="w-5 h-5 text-orange-500" />
+        Debug: Video Processing Test (fal.ai)
+      </CardTitle>
+    </CardHeader>
+    <CardContent className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        System validation test. Supabase Edge Runtime blocks FFMPEG subprocesses.
+        This test uses <strong>fal.ai cloud API</strong> for real video processing.
+      </p>
 
         {/* File Input */}
         <div className="flex items-center gap-3">
@@ -154,9 +154,9 @@ export function DebugFFmpegTest() {
               <span className="text-xs text-muted-foreground">
                 {result.executionTimeMs}ms
               </span>
-              <Badge variant="outline">
-                FFMPEG: {result.ffmpegAvailable ? "Available" : "Blocked"}
-              </Badge>
+            <Badge variant="outline">
+              Method: {result.method}
+            </Badge>
             </div>
 
             {/* Error */}
