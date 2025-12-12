@@ -66,6 +66,7 @@ import { AutoAdFactory } from "@/components/video/AutoAdFactory";
 import { SmartSceneBuilder } from "@/components/video/SmartSceneBuilder";
 import { BackendModeSelector, BackendModeIndicator } from "@/components/BackendModeSelector";
 import { useBackendMode } from "@/hooks/useBackendMode";
+import { UnifiedVideoCreation } from "@/components/video/UnifiedVideoCreation";
 
 // ElevenLabs voices - expanded list with categories
 const ELEVENLABS_VOICES = [
@@ -1118,37 +1119,34 @@ export default function CreateVideo() {
           {/* Stage 5: Unified Scene Builder & Video Generation */}
           {expandedStage === 5 && (
             <div className="space-y-6">
-              {/* One-Click Create All Button */}
-              <Card className="p-4 bg-gradient-card border-border shadow-card">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-primary" />
-                      One-Click Video Production
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      Build scenes, generate videos, and auto-assemble {videosToGenerate}+ ads under 30s
-                    </p>
-                  </div>
-                  <Button
-                    size="lg"
-                    onClick={async () => {
-                      if (unifiedScenes.length === 0 && scenes.length === 0) {
-                        toast.error("Add scenes first or analyze a script");
-                        return;
-                      }
-                      toast.info("Starting automated video production...");
-                      // This will flow through: scenes → video generation → assembly
-                      setExpandedStage(6);
-                      setCurrentStage(6);
-                    }}
-                    className="bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow gap-2"
-                  >
-                    <Sparkles className="w-5 h-5" />
-                    ⚡ Create All Videos
-                  </Button>
-                </div>
-              </Card>
+              {/* Unified Video Creation - Intelligent Engine Selection */}
+              <UnifiedVideoCreation
+                script={scriptSlots.map(s => s.text).filter(t => t.trim()).join('\n\n')}
+                voiceoverUrl={scriptSlots.find(s => s.generatedAudioUrl || s.audioUrl)?.generatedAudioUrl || scriptSlots.find(s => s.audioUrl)?.audioUrl || undefined}
+                scenes={unifiedScenes.length > 0 ? unifiedScenes.map(s => ({
+                  id: s.id,
+                  index: s.index,
+                  text: s.text,
+                  visualPrompt: s.visualPrompt,
+                  duration: s.duration,
+                  imageUrl: s.thumbnailUrl, // Use thumbnailUrl as imageUrl fallback
+                  videoUrl: s.videoUrl,
+                })) : scenes.map((s, i) => ({
+                  id: s.id || `scene-${i}`,
+                  index: i,
+                  text: s.description || s.text || '',
+                  visualPrompt: s.visualPrompt || '',
+                  duration: s.duration || 5,
+                }))}
+                images={productInfo.imageUrl ? [productInfo.imageUrl] : []}
+                onComplete={(output) => {
+                  if (output.status === 'success') {
+                    toast.success('Video generated! Proceeding to assembly...');
+                    setExpandedStage(6);
+                    setCurrentStage(6);
+                  }
+                }}
+              />
 
               {/* Cost Calculator */}
               <CostCalculatorPreview
@@ -1158,7 +1156,8 @@ export default function CreateVideo() {
                 onFreeOnlyChange={setFreeEnginesOnly}
               />
 
-              {projectId ? (
+              {/* Smart Scene Builder - for scene management */}
+              {projectId && (
                 <SmartSceneBuilder
                   projectId={projectId}
                   scriptId={scriptId || undefined}
@@ -1187,7 +1186,6 @@ export default function CreateVideo() {
                       engine: s.engine || 'auto',
                       status: s.status as 'pending' | 'generating' | 'completed' | 'failed',
                     })));
-                    // Also update legacy scenes for compatibility
                     setScenes(newScenes.map((s) => ({
                       id: s.id,
                       title: `Scene ${s.index + 1}`,
@@ -1204,21 +1202,15 @@ export default function CreateVideo() {
                   onVideosToGenerateChange={setVideosToGenerate}
                   productImages={productInfo.imageUrl ? [productInfo.imageUrl] : []}
                 />
-              ) : (
+              )}
+
+              {!projectId && (
                 <Card className="bg-gradient-card border-border shadow-card p-8 text-center">
                   <Wand2 className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
                   <p className="text-muted-foreground">Save your project first to use the Scene Builder</p>
                   <p className="text-xs text-muted-foreground mt-2">Complete earlier steps and save your project</p>
                 </Card>
               )}
-
-              {/* AI Tools Selector */}
-              <AIToolsSelector 
-                onToolSelect={(tool) => {
-                  toast.info(`Selected tool: ${tool.name}`);
-                }}
-                mode="select"
-              />
             </div>
           )}
 
