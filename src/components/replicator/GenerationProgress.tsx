@@ -29,6 +29,9 @@ export const GenerationProgress = ({
   const currentStageIndex = Math.floor((progress / 100) * PIPELINE_STAGES.length);
   const completedVideos = Math.floor((progress / 100) * config.count);
 
+  // DIAGNOSTIC: Show waiting state when no backend updates received
+  const isWaitingForBackend = progress === 0;
+
   return (
     <div className="space-y-8">
       <div className="text-center space-y-4">
@@ -44,21 +47,30 @@ export const GenerationProgress = ({
       </div>
 
       {/* Main Progress */}
-      <Card>
+      <Card className={isWaitingForBackend ? "border-orange-500/50" : ""}>
         <CardContent className="p-6 space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Overall Progress</span>
             <span className="text-2xl font-bold text-primary">{progress}%</span>
           </div>
           <Progress value={progress} className="h-3" />
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">
-              {completedVideos} of {config.count} videos
-            </span>
-            <span className="text-muted-foreground">
-              ETA: ~{Math.ceil(((100 - progress) / 100) * config.count * 0.5)} min
-            </span>
-          </div>
+          
+          {/* DIAGNOSTIC: Waiting for backend message */}
+          {isWaitingForBackend ? (
+            <div className="flex items-center justify-center gap-2 text-orange-500 text-sm font-medium py-2 bg-orange-500/10 rounded">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Waiting for backend update...
+            </div>
+          ) : (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">
+                {completedVideos} of {config.count} videos
+              </span>
+              <span className="text-muted-foreground">
+                ETA: ~{Math.ceil(((100 - progress) / 100) * config.count * 0.5)} min
+              </span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
