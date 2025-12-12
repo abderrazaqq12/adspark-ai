@@ -13,8 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useBackendMode } from '@/hooks/useBackendMode';
 import { BackendModeSelector } from '@/components/BackendModeSelector';
-import { LandingPageTextGenerator } from '@/components/studio/LandingPageTextGenerator';
-import { LandingPageHtmlGenerator } from '@/components/studio/LandingPageHtmlGenerator';
+import { LandingPageCompiler } from '@/components/studio/LandingPageCompiler';
 
 interface StudioLandingPageProps {
   onNext: () => void;
@@ -35,18 +34,11 @@ interface ProductInfo {
   mediaLinks?: string[];
 }
 
-interface MarketingAnglesData {
-  problemsSolved: string[];
-  customerValue: string[];
-  marketingAngles: string[];
-}
-
 export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
   const { toast } = useToast();
   const { n8nEnabled: useN8nBackend } = useBackendMode();
   
   const [productInfo, setProductInfo] = useState<ProductInfo>({ name: '', description: '', url: '', url2: '' });
-  const [marketingAngles, setMarketingAngles] = useState<MarketingAnglesData | null>(null);
   const [hasMarketingAngles, setHasMarketingAngles] = useState(false);
   const [projectId, setProjectId] = useState<string>('');
   const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
@@ -92,13 +84,12 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
             audienceGender: prefs.studio_audience_gender || 'both',
           });
 
-          // Load Marketing Angles from previous step (Stage 1)
+          // Check Marketing Angles from previous step
           const savedAngles = prefs.studio_marketing_angles;
           if (savedAngles && 
               (savedAngles.problemsSolved?.length > 0 || 
                savedAngles.customerValue?.length > 0 || 
                savedAngles.marketingAngles?.length > 0)) {
-            setMarketingAngles(savedAngles);
             setHasMarketingAngles(true);
           } else {
             setHasMarketingAngles(false);
@@ -116,7 +107,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
         }
       }
 
-      // Try to get/create project for pipeline outputs
+      // Load or create project for pipeline outputs
       await loadOrCreateProject(user.id);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -125,7 +116,6 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
 
   const loadOrCreateProject = async (userId: string) => {
     try {
-      // Check for existing project
       const { data: projects } = await supabase
         .from('projects')
         .select('id')
@@ -136,7 +126,6 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
       if (projects && projects.length > 0) {
         setProjectId(projects[0].id);
       } else {
-        // Create a new project for the pipeline
         const { data: newProject } = await supabase
           .from('projects')
           .insert({
@@ -161,9 +150,9 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Landing Page Pipeline</h2>
+          <h2 className="text-2xl font-bold text-foreground">Landing Page Compiler</h2>
           <p className="text-muted-foreground text-sm mt-1">
-            3-stage content generation: Marketing Angles → Text Content → HTML Website
+            Generate production-ready HTML from Marketing Angles
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -176,7 +165,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
       <Card className="p-4 bg-card/50 border-border">
         <div className="flex items-center gap-2 mb-3">
           <Database className="w-4 h-4 text-primary" />
-          <span className="font-medium text-sm">Pipeline Data Sources</span>
+          <span className="font-medium text-sm">Pipeline Status</span>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -226,7 +215,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
             <div>
               <p className="font-medium text-destructive">Marketing Angles Required</p>
               <p className="text-sm text-muted-foreground">
-                This pipeline requires Marketing Angles from the previous step (Product Content). Please go back and generate Marketing Angles first.
+                Please generate Marketing Angles in the Product Content step first.
               </p>
             </div>
           </div>
@@ -241,33 +230,20 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
         </div>
       )}
 
-      {/* Stage 2: Landing Page Text Generator */}
+      {/* Landing Page Compiler (Unified Stage 2+3) */}
       {projectId && (
-        <LandingPageTextGenerator
+        <LandingPageCompiler
           projectId={projectId}
           productInfo={{
             name: productInfo.name,
             description: productInfo.description,
-            url: productInfo.url
+            url: productInfo.url,
+            mediaLinks: productInfo.mediaLinks
           }}
-          audienceTargeting={audienceTargeting}
-          onGenerated={(output) => {
-            toast({
-              title: "Stage 2 Complete",
-              description: "Text content saved. You can now generate HTML.",
-            });
-          }}
-        />
-      )}
-
-      {/* Stage 3: Landing Page HTML Generator */}
-      {projectId && (
-        <LandingPageHtmlGenerator
-          projectId={projectId}
           audienceTargeting={audienceTargeting}
           onGenerated={(html) => {
             toast({
-              title: "Stage 3 Complete",
+              title: "Landing Page Complete",
               description: "HTML website generated and saved.",
             });
           }}

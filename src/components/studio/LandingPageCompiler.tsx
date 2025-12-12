@@ -1,7 +1,7 @@
 /**
- * Stage 3: Landing Page HTML Generator
- * Consumes: Landing Page Text Output
- * Produces: Production-ready HTML website
+ * Unified Landing Page Compiler
+ * Consumes: Product Input + Marketing Angles Output
+ * Produces: Production-ready HTML website directly
  */
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
@@ -18,18 +18,25 @@ import {
   Copy,
   Download,
   ExternalLink,
-  Bug
+  Bug,
+  RefreshCw
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { usePromptProfiles, PromptProfile } from '@/hooks/usePromptProfiles';
-import { usePipelineOutputs, LandingPageTextOutput } from '@/hooks/usePipelineOutputs';
+import { usePipelineOutputs, MarketingAnglesOutput } from '@/hooks/usePipelineOutputs';
 import { PromptSettingsModal } from '@/components/studio/PromptSettingsModal';
 import { PromptIndicator } from '@/components/studio/PromptIndicator';
 import { useAIAgent, getModelName } from '@/hooks/useAIAgent';
 
-interface LandingPageHtmlGeneratorProps {
+interface LandingPageCompilerProps {
   projectId: string;
+  productInfo: {
+    name: string;
+    description: string;
+    url?: string;
+    mediaLinks?: string[];
+  };
   audienceTargeting: {
     targetMarket: string;
     language: string;
@@ -39,13 +46,28 @@ interface LandingPageHtmlGeneratorProps {
   onGenerated?: (html: string) => void;
 }
 
-const DEFAULT_HTML_PROMPT = `You are an AI Landing Page Compiler.
+const DEFAULT_COMPILER_PROMPT = `You are an AI Landing Page Compiler.
 Your task is to BUILD a complete, production-ready landing page WEBSITE.
 
 ========================
 INPUT DATA
 ========================
-{{text_content}}
+PRODUCT:
+- Name: {{product_name}}
+- Description: {{product_description}}
+- Media: {{media_links}}
+
+MARKETING INTELLIGENCE:
+- Problems: {{problems}}
+- Desires: {{desires}}
+- Emotional Triggers: {{emotional_triggers}}
+- Marketing Angles: {{angles}}
+
+AUDIENCE:
+- Market: {{market}}
+- Language: {{language}}
+- Age: {{audience_age}}
+- Gender: {{audience_gender}}
 
 ========================
 OUTPUT REQUIREMENTS
@@ -68,16 +90,44 @@ MANDATORY RULES
   --cta-bg: #22c55e;
 
 ========================
-PAGE STRUCTURE
+PAGE STRUCTURE (STRICT)
 ========================
-1. HERO - headline + subheadline + image placeholder
-2. BENEFITS - bullet points
-3. FEATURES - with descriptions
-4. HOW TO USE - steps
-5. TECHNICAL DETAILS
-6. REVIEWS - with ⭐⭐⭐⭐⭐ ratings
-7. FAQ - questions & answers
-8. FINAL CTA - order button
+1. HERO SECTION
+   - Strong Arabic headline (benefit-driven from problems)
+   - Subheadline (from desires)
+   - <div class="image-placeholder">1080x1080</div>
+
+2. PROBLEM SECTION
+   - Derived ONLY from problems
+   - 3-4 bullet points
+
+3. SOLUTION / VALUE SECTION
+   - Derived ONLY from desires
+   - Position product as the answer
+
+4. FEATURES & BENEFITS
+   - From marketing angles
+   - EACH point followed by <div class="image-placeholder">1080x1080</div>
+
+5. HOW TO USE
+   - Step-by-step instructions (3-5 steps)
+
+6. TECHNICAL DETAILS
+   - Specs, origin, shelf life, quantity
+
+7. SOCIAL PROOF
+   - 10 customer reviews
+   - ⭐⭐⭐⭐⭐ ratings
+   - 100% Saudi Arabic dialect
+   - NO quotation marks
+
+8. FAQ
+   - 5-7 questions & answers in Arabic
+
+9. FINAL CTA
+   - Strong closing statement
+   - Order now CTA (COD friendly)
+   - Phone/WhatsApp button
 
 ========================
 DESIGN RULES
@@ -93,20 +143,24 @@ IMAGE HANDLING
 ========================
 <div class="image-placeholder" style="width:100%;aspect-ratio:1;background:#2a2a2a;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#666;">1080×1080</div>
 
-Return a SINGLE complete HTML document.`;
+Return a SINGLE complete HTML document.
 
-export const LandingPageHtmlGenerator = ({
+CRITICAL: Use problems, desires, and angles as SOURCE OF TRUTH.
+Do NOT invent benefits not present in the provided data.`;
+
+export const LandingPageCompiler = ({
   projectId,
+  productInfo,
   audienceTargeting,
   onGenerated
-}: LandingPageHtmlGeneratorProps) => {
+}: LandingPageCompilerProps) => {
   const { toast } = useToast();
   const { aiAgent } = useAIAgent();
   const { getActivePrompt, getPromptForExecution, debugMode, setDebugMode } = usePromptProfiles();
-  const { getLandingPageTextOutput, saveLandingPageHtmlOutput, getLandingPageHtmlOutput } = usePipelineOutputs();
+  const { getMarketingAnglesOutput, saveLandingPageHtmlOutput, getLandingPageHtmlOutput } = usePipelineOutputs();
 
   const [isGenerating, setIsGenerating] = useState(false);
-  const [textOutput, setTextOutput] = useState<LandingPageTextOutput | null>(null);
+  const [marketingAngles, setMarketingAngles] = useState<MarketingAnglesOutput | null>(null);
   const [htmlOutput, setHtmlOutput] = useState<string>('');
   const [viewMode, setViewMode] = useState<'code' | 'preview'>('code');
   const [promptProfile, setPromptProfile] = useState<PromptProfile | null>(null);
@@ -120,13 +174,16 @@ export const LandingPageHtmlGenerator = ({
   const loadData = async () => {
     if (!projectId) return;
 
-    // Load Stage 2 output (required)
-    const text = await getLandingPageTextOutput(projectId);
-    setTextOutput(text);
+    // Load Stage 1 output (required)
+    const angles = await getMarketingAnglesOutput(projectId);
+    setMarketingAngles(angles);
 
     // Load existing HTML if any
     const existingHtml = await getLandingPageHtmlOutput(projectId);
-    if (existingHtml) setHtmlOutput(existingHtml);
+    if (existingHtml) {
+      setHtmlOutput(existingHtml);
+      setViewMode('preview');
+    }
 
     // Load prompt
     await loadPromptProfile();
@@ -135,48 +192,39 @@ export const LandingPageHtmlGenerator = ({
   const loadPromptProfile = async () => {
     const language = audienceTargeting.language.split('-')[0] || 'ar';
     const market = audienceTargeting.targetMarket || 'gcc';
-    // Use a different prompt type for HTML generation
     const profile = await getActivePrompt('landing_page' as any, language, market);
     setPromptProfile(profile);
   };
 
   const buildPrompt = (template: string): string => {
-    if (!textOutput) return template;
+    if (!marketingAngles) return template;
 
-    // Convert structured text to readable format for AI
-    const textContent = `
-HERO:
-- Headline: ${textOutput.hero?.headline || ''}
-- Subheadline: ${textOutput.hero?.subheadline || ''}
+    const problems = marketingAngles.problems?.join('\n- ') || '';
+    const desires = marketingAngles.desires?.join('\n- ') || '';
+    const emotional = marketingAngles.emotional_triggers?.join('\n- ') || '';
+    const angles = marketingAngles.angles?.map(a => `${a.angle_type}: ${a.hook} - ${a.promise}`).join('\n- ') || '';
+    const mediaLinks = productInfo.mediaLinks?.join('\n') || 'No media provided';
 
-BENEFITS:
-${textOutput.benefits?.map((b, i) => `${i + 1}. ${b}`).join('\n') || 'None'}
-
-FEATURES:
-${textOutput.features?.map(f => `- ${f.title}: ${f.description}`).join('\n') || 'None'}
-
-USAGE STEPS:
-${textOutput.usage_steps?.map((s, i) => `${i + 1}. ${s}`).join('\n') || 'None'}
-
-TECHNICAL DETAILS:
-${textOutput.technical_details?.join('\n') || 'None'}
-
-FAQ:
-${textOutput.faq?.map(f => `Q: ${f.question}\nA: ${f.answer}`).join('\n\n') || 'None'}
-
-REVIEWS:
-${textOutput.reviews?.map(r => `${r.name} (${r.rating}★): ${r.text}`).join('\n') || 'None'}
-`;
-
-    return template.replace(/\{\{text_content\}\}/g, textContent);
+    return template
+      .replace(/\{\{product_name\}\}/g, productInfo.name)
+      .replace(/\{\{product_description\}\}/g, productInfo.description)
+      .replace(/\{\{media_links\}\}/g, mediaLinks)
+      .replace(/\{\{problems\}\}/g, problems)
+      .replace(/\{\{desires\}\}/g, desires)
+      .replace(/\{\{emotional_triggers\}\}/g, emotional)
+      .replace(/\{\{angles\}\}/g, angles)
+      .replace(/\{\{market\}\}/g, audienceTargeting.targetMarket)
+      .replace(/\{\{language\}\}/g, audienceTargeting.language)
+      .replace(/\{\{audience_age\}\}/g, audienceTargeting.audienceAge)
+      .replace(/\{\{audience_gender\}\}/g, audienceTargeting.audienceGender);
   };
 
   const generateHtml = async () => {
-    // BLOCK if Stage 2 not complete
-    if (!textOutput) {
+    // BLOCK if Marketing Angles not available
+    if (!marketingAngles) {
       toast({
-        title: "Text Content Required",
-        description: "Please generate Landing Page Text first. Stage 3 depends on Stage 2 output.",
+        title: "Marketing Angles Required",
+        description: "Please generate Marketing Angles first. This step depends on that output.",
         variant: "destructive",
       });
       return;
@@ -189,31 +237,28 @@ ${textOutput.reviews?.map(r => `${r.name} (${r.rating}★): ${r.text}`).join('\n
       const language = audienceTargeting.language.split('-')[0] || 'ar';
       const market = audienceTargeting.targetMarket || 'gcc';
 
-      // Get prompt from database
+      // Get prompt from database or use default
       const promptResult = await getPromptForExecution('landing_page' as any, language, market);
+      
+      let finalPrompt: string;
+      let debugInfo = { id: 'default', hash: 'n/a', version: 0 };
 
-      if (!promptResult) {
-        toast({
-          title: "Prompt Not Configured",
-          description: "Please configure the HTML Builder prompt in Prompt Settings.",
-          variant: "destructive",
-        });
-        setIsGenerating(false);
-        return;
+      if (promptResult) {
+        const { prompt: activePrompt, debugInfo: dbDebugInfo } = promptResult;
+        debugInfo = dbDebugInfo;
+        finalPrompt = buildPrompt(activePrompt.prompt_text || DEFAULT_COMPILER_PROMPT);
+      } else {
+        finalPrompt = buildPrompt(DEFAULT_COMPILER_PROMPT);
       }
 
-      const { prompt: activePrompt, debugInfo } = promptResult;
       setLastUsedPromptDebug(debugInfo);
 
-      // Build the final prompt with text content
-      const finalPrompt = buildPrompt(DEFAULT_HTML_PROMPT);
-
       if (debugMode) {
-        console.log('[Stage3] Using prompt:', {
+        console.log('[LandingPageCompiler] Using prompt:', {
           id: debugInfo.id,
           hash: debugInfo.hash,
           version: debugInfo.version,
-          textContentPresent: !!textOutput
+          marketingAnglesPresent: !!marketingAngles
         });
       }
 
@@ -251,11 +296,11 @@ ${textOutput.reviews?.map(r => `${r.name} (${r.rating}★): ${r.text}`).join('\n
       onGenerated?.(html);
 
       toast({
-        title: "HTML Page Generated",
-        description: `Production-ready HTML saved (Prompt v${debugInfo.version})`,
+        title: "Landing Page Generated",
+        description: `Production-ready HTML compiled from Marketing Angles`,
       });
     } catch (error: any) {
-      console.error('[Stage3] Generation error:', error);
+      console.error('[LandingPageCompiler] Generation error:', error);
       toast({
         title: "Generation Error",
         description: error.message || "Failed to generate HTML",
@@ -285,39 +330,39 @@ ${textOutput.reviews?.map(r => `${r.name} (${r.rating}★): ${r.text}`).join('\n
     window.open('https://aistudio.google.com/app/prompts/new_chat', '_blank');
   };
 
-  const hasTextContent = !!(textOutput && textOutput.hero?.headline);
+  const hasAngles = !!(marketingAngles && (marketingAngles.problems?.length > 0 || marketingAngles.angles?.length > 0));
 
   return (
     <Card className="p-5 bg-card/50 border-border space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-purple-500/20 border border-purple-500/30">
-            <Code className="w-5 h-5 text-purple-400" />
+          <div className="p-2 rounded-lg bg-primary/20 border border-primary/30">
+            <Sparkles className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h3 className="font-semibold">Stage 3: HTML Website</h3>
-            <p className="text-xs text-muted-foreground">Production-ready HTML from Text Content</p>
+            <h3 className="font-semibold">Landing Page Compiler</h3>
+            <p className="text-xs text-muted-foreground">Generate HTML directly from Marketing Angles</p>
           </div>
         </div>
-        <Badge variant="outline" className="text-purple-400 border-purple-400/50">Step 3</Badge>
+        <Badge variant="outline" className="text-primary border-primary/50">HTML Generator</Badge>
       </div>
 
       {/* Data Source Status */}
       <div className="grid grid-cols-2 gap-3">
         <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
-          {hasTextContent ? (
+          {hasAngles ? (
             <CheckCircle2 className="w-4 h-4 text-green-500" />
           ) : (
             <AlertTriangle className="w-4 h-4 text-destructive" />
           )}
           <span className="text-xs">
-            Text Content: {hasTextContent ? 'Ready' : 'Missing (Required)'}
+            Marketing Angles: {hasAngles ? 'Ready' : 'Missing (Required)'}
           </span>
         </div>
         <PromptIndicator
           prompt={promptProfile}
           onClick={() => setShowPromptModal(true)}
-          label="HTML Prompt"
+          label="Compiler Prompt"
         />
       </div>
 
@@ -334,7 +379,7 @@ ${textOutput.reviews?.map(r => `${r.name} (${r.rating}★): ${r.text}`).join('\n
       <div className="flex items-center gap-3 flex-wrap">
         <Button
           onClick={generateHtml}
-          disabled={isGenerating || !hasTextContent}
+          disabled={isGenerating || !hasAngles}
           className="gap-2"
         >
           {isGenerating ? (
@@ -362,6 +407,9 @@ ${textOutput.reviews?.map(r => `${r.name} (${r.rating}★): ${r.text}`).join('\n
             </Button>
             <Button variant="ghost" size="icon" onClick={downloadHtml}>
               <Download className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={generateHtml} disabled={isGenerating}>
+              <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
             </Button>
             <Button
               variant="ghost"
@@ -424,13 +472,24 @@ ${textOutput.reviews?.map(r => `${r.name} (${r.rating}★): ${r.text}`).join('\n
         </div>
       )}
 
+      {!htmlOutput && !isGenerating && (
+        <div className="flex flex-col items-center justify-center min-h-[200px] text-muted-foreground">
+          <Sparkles className="w-10 h-10 mb-3 text-primary/30" />
+          <p className="text-sm text-center">
+            {hasAngles 
+              ? "Click 'Generate HTML Page' to compile your landing page"
+              : "Marketing Angles required from previous step"}
+          </p>
+        </div>
+      )}
+
       {/* Prompt Modal */}
       <PromptSettingsModal
         isOpen={showPromptModal}
         onClose={() => setShowPromptModal(false)}
         type="landing_page"
-        defaultTitle="HTML Builder Prompt"
-        defaultPrompt={DEFAULT_HTML_PROMPT}
+        defaultTitle="Landing Page Compiler Prompt"
+        defaultPrompt={DEFAULT_COMPILER_PROMPT}
         language={audienceTargeting.language.split('-')[0] || 'ar'}
         market={audienceTargeting.targetMarket || 'gcc'}
         onSaved={() => loadPromptProfile()}
