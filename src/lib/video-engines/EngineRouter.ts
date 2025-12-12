@@ -1,38 +1,76 @@
 
 import { IVideoEngine } from "./types";
 import { FFmpegEngine } from "./FFmpegEngine";
+import { WebCodecsEngine } from "./WebCodecsEngine";
+import { checkCOIStatus } from "./coi-helper";
 
 export class EngineRouter {
     private static instances: Record<string, IVideoEngine> = {};
 
+    /**
+     * Check which browser engine is available
+     */
+    static getBrowserEngineStatus(): {
+        ffmpegAvailable: boolean;
+        webCodecsAvailable: boolean;
+        reason?: string;
+    } {
+        const coiStatus = checkCOIStatus();
+        const ffmpegCheck = FFmpegEngine.checkSupport();
+        const webCodecsAvailable = typeof window !== 'undefined' && 
+            'VideoEncoder' in window && 'VideoDecoder' in window;
+
+        return {
+            ffmpegAvailable: ffmpegCheck.supported,
+            webCodecsAvailable,
+            reason: ffmpegCheck.reason
+        };
+    }
+
     static getEngine(tier: "free" | "low" | "medium" | "premium"): IVideoEngine {
-        // Singleton pattern to reuse loaded engines (like ffmpeg.wasm)
+        // Singleton pattern to reuse loaded engines
         if (this.instances[tier]) {
             return this.instances[tier];
         }
 
         let engine: IVideoEngine;
+        const status = this.getBrowserEngineStatus();
 
         switch (tier) {
             case "free":
-                engine = new FFmpegEngine();
+                // Prefer FFmpeg if available (requires COI), fallback to WebCodecs
+                if (status.ffmpegAvailable) {
+                    engine = new FFmpegEngine();
+                } else if (status.webCodecsAvailable) {
+                    console.warn(`[EngineRouter] FFmpeg unavailable (${status.reason}), using WebCodecs`);
+                    engine = new WebCodecsEngine();
+                } else {
+                    // Last resort - try FFmpeg anyway (will trigger COI registration)
+                    console.warn('[EngineRouter] No browser engine fully ready, attempting FFmpeg...');
+                    engine = new FFmpegEngine();
+                }
                 break;
             case "low":
-                // Fallback to FFmpeg for now, or implement Remotion client-side
-                console.warn("Low tier engine not implemented, falling back to Free (FFmpeg)");
-                engine = new FFmpegEngine();
+                console.warn("Low tier engine not implemented, using browser engine");
+                engine = status.ffmpegAvailable ? new FFmpegEngine() : new WebCodecsEngine();
                 break;
             case "medium":
             case "premium":
-                // Future: Return a CloudEngine wrapper (Fal.ai / Mux)
-                console.warn("Premium engine not implemented, falling back to Free (FFmpeg) for Architecture Demo");
-                engine = new FFmpegEngine(); // Placeholder for now
+                console.warn("Premium engine not implemented, using browser engine");
+                engine = status.ffmpegAvailable ? new FFmpegEngine() : new WebCodecsEngine();
                 break;
             default:
-                engine = new FFmpegEngine();
+                engine = status.ffmpegAvailable ? new FFmpegEngine() : new WebCodecsEngine();
         }
 
         this.instances[tier] = engine;
         return engine;
+    }
+
+    /**
+     * Clear cached engine instances (useful after COI activation)
+     */
+    static clearCache(): void {
+        this.instances = {};
     }
 }

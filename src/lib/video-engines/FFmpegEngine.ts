@@ -2,6 +2,7 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { IVideoEngine, EngineTask, EngineResult } from './types';
+import { checkCOIStatus, ensureCrossOriginIsolation } from './coi-helper';
 
 export class FFmpegEngine implements IVideoEngine {
     name = "FFmpeg.wasm (Browser)";
@@ -9,21 +10,60 @@ export class FFmpegEngine implements IVideoEngine {
     private ffmpeg: FFmpeg | null = null;
     private loadState: "idle" | "loading" | "ready" | "failed" = "idle";
 
+    /**
+     * Check if the environment supports FFmpeg.wasm
+     */
+    static checkSupport(): { supported: boolean; reason?: string } {
+        const status = checkCOIStatus();
+        
+        if (!status.serviceWorkerSupported) {
+            return { supported: false, reason: 'Service Workers not supported' };
+        }
+        
+        if (!status.isIsolated) {
+            return { supported: false, reason: 'Cross-Origin Isolation required' };
+        }
+        
+        if (!status.hasSharedArrayBuffer) {
+            return { supported: false, reason: 'SharedArrayBuffer not available' };
+        }
+        
+        return { supported: true };
+    }
+
     async initialize(): Promise<void> {
         // 1. Browser Capability Check (Pre-flight)
         if (typeof window === 'undefined') {
             throw new Error("FFmpeg.wasm can ONLY run in a browser environment. Server-side execution is blocked.");
         }
 
-        // Check for necessary APIs
+        // Check Cross-Origin Isolation status
+        const coiStatus = checkCOIStatus();
+        
+        if (!coiStatus.isIsolated) {
+            console.log('[FFmpegEngine] Not cross-origin isolated, attempting to enable...');
+            
+            // Try to register the service worker
+            const success = await ensureCrossOriginIsolation();
+            if (!success) {
+                throw new Error(
+                    "Cross-Origin Isolation required for FFmpeg.wasm. " +
+                    "The service worker has been registered - please reload the page."
+                );
+            }
+        }
+
+        // Check for SharedArrayBuffer after isolation
         if (!window.SharedArrayBuffer) {
-            throw new Error("SharedArrayBuffer is not available. Ensure COOP/COEP headers are set.");
+            throw new Error(
+                "SharedArrayBuffer is not available even after isolation. " +
+                "This may be a browser security setting."
+            );
         }
 
         // 2. Readiness Guard
         if (this.loadState === "ready") return;
         if (this.loadState === "loading") {
-            // Wait for existing load to finish (simple polling for this demo)
             let attempts = 0;
             while ((this.loadState as string) === "loading" && attempts < 20) {
                 await new Promise(r => setTimeout(r, 500));
@@ -39,35 +79,35 @@ export class FFmpegEngine implements IVideoEngine {
         try {
             this.ffmpeg = new FFmpeg();
 
-            // 3. Explicit WASM Loading & Network Validation
+            // 3. Explicit WASM Loading from CDN with CORS support
             const coreVersion = '0.12.6';
-            const baseURL = `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${coreVersion}/dist/umd`;
+            const baseURL = `https://unpkg.com/@ffmpeg/core@${coreVersion}/dist/umd`;
 
-            // Validate availability first (Head request)
             const coreUrl = `${baseURL}/ffmpeg-core.js`;
             const wasmUrl = `${baseURL}/ffmpeg-core.wasm`;
 
+            // Validate availability
+            console.log('[FFmpegEngine] Checking CDN availability...');
             const [coreCheck, wasmCheck] = await Promise.all([
-                fetch(coreUrl, { method: 'HEAD' }),
-                fetch(wasmUrl, { method: 'HEAD' })
+                fetch(coreUrl, { method: 'HEAD', mode: 'cors' }),
+                fetch(wasmUrl, { method: 'HEAD', mode: 'cors' })
             ]);
 
             if (!coreCheck.ok || !wasmCheck.ok) {
                 throw new Error(`FFmpeg CDN Unreachable: JS=${coreCheck.status}, WASM=${wasmCheck.status}`);
             }
 
-            // 4. Cache Safety (Cache busting if needed, or rely on browser cache but validated)
-            // We use standard toBlobURL as requested
-            console.log('[FFmpegEngine] Fetching blobs...');
+            console.log('[FFmpegEngine] CDN available, loading WASM...');
 
+            // Load FFmpeg with blob URLs for CORS compatibility
             const loadPromise = this.ffmpeg.load({
                 coreURL: await toBlobURL(coreUrl, 'text/javascript'),
                 wasmURL: await toBlobURL(wasmUrl, 'application/wasm'),
             });
 
-            // 5. Timeout Enforcement
+            // Timeout enforcement
             const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("FFmpeg loading timed out after 15s")), 15000)
+                setTimeout(() => reject(new Error("FFmpeg loading timed out after 30s")), 30000)
             );
 
             await Promise.race([loadPromise, timeoutPromise]);
@@ -78,7 +118,6 @@ export class FFmpegEngine implements IVideoEngine {
         } catch (err: any) {
             this.loadState = "failed";
             console.error('[FFmpegEngine] Init failed:', err);
-            // reset ffmpeg instance
             this.ffmpeg = null;
             throw new Error(`FFmpeg Initialization Failed: ${err.message}`);
         }
