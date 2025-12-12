@@ -960,9 +960,12 @@ export type Database = {
           audience: string | null
           created_at: string | null
           id: string
+          landing_page_html_output: string | null
+          landing_page_text_output: Json | null
           language: string | null
           localization_profile_id: string | null
           market: string | null
+          marketing_angles_output: Json | null
           name: string
           output_count: number | null
           pipeline_status: Json | null
@@ -976,9 +979,12 @@ export type Database = {
           audience?: string | null
           created_at?: string | null
           id?: string
+          landing_page_html_output?: string | null
+          landing_page_text_output?: Json | null
           language?: string | null
           localization_profile_id?: string | null
           market?: string | null
+          marketing_angles_output?: Json | null
           name: string
           output_count?: number | null
           pipeline_status?: Json | null
@@ -992,9 +998,12 @@ export type Database = {
           audience?: string | null
           created_at?: string | null
           id?: string
+          landing_page_html_output?: string | null
+          landing_page_text_output?: Json | null
           language?: string | null
           localization_profile_id?: string | null
           market?: string | null
+          marketing_angles_output?: Json | null
           name?: string
           output_count?: number | null
           pipeline_status?: Json | null
