@@ -46,107 +46,101 @@ interface LandingPageCompilerProps {
   onGenerated?: (html: string) => void;
 }
 
-const DEFAULT_COMPILER_PROMPT = `You are an AI Landing Page Compiler.
-Your task is to BUILD a complete, production-ready landing page WEBSITE.
+const DEFAULT_COMPILER_PROMPT = `You are a senior Arabic eCommerce conversion expert and front-end page compiler.
 
-========================
+Your task is to generate a FULL production-ready landing page for a COD eCommerce product in Saudi Arabia.
+
+You MUST follow these steps internally and return ALL outputs in a single JSON response.
+
+────────────────────────
 INPUT DATA
-========================
-PRODUCT:
-- Name: {{product_name}}
-- Description: {{product_description}}
-- Media: {{media_links}}
+────────────────────────
+Product Title:
+{{product_name}}
 
-MARKETING INTELLIGENCE:
-- Problems: {{problems}}
-- Desires: {{desires}}
-- Emotional Triggers: {{emotional_triggers}}
-- Marketing Angles: {{angles}}
+Product Description:
+{{product_description}}
 
-AUDIENCE:
-- Market: {{market}}
-- Language: {{language}}
-- Age: {{audience_age}}
-- Gender: {{audience_gender}}
+Target Market:
+{{market}}
 
-========================
-OUTPUT REQUIREMENTS
-========================
-Return ONLY valid HTML + embedded CSS.
-NO explanations. NO markdown. NO comments.
+Language:
+{{language}}
 
-========================
-MANDATORY RULES
-========================
-- Root element MUST include: dir="rtl" lang="ar"
-- Language: Saudi Arabic dialect (100%)
-- Mobile-first design (max-width: 480px)
-- Modern, conversion-focused UI
-- CSS variables for colors:
-  --bg-primary: #0a0a0a;
-  --bg-secondary: #1a1a1a;
-  --text-primary: #ffffff;
-  --text-accent: #a855f7;
-  --cta-bg: #22c55e;
+Audience Age: {{audience_age}}
+Audience Gender: {{audience_gender}}
 
-========================
-PAGE STRUCTURE (STRICT)
-========================
-1. HERO SECTION
-   - Strong Arabic headline (benefit-driven from problems)
-   - Subheadline (from desires)
-   - <div class="image-placeholder">1080x1080</div>
+Direction:
+RTL (dir="rtl")
 
-2. PROBLEM SECTION
-   - Derived ONLY from problems
-   - 3-4 bullet points
+────────────────────────
+INTERNAL STEPS (DO NOT SKIP)
+────────────────────────
 
-3. SOLUTION / VALUE SECTION
-   - Derived ONLY from desires
-   - Position product as the answer
+STEP 1: Generate Marketing Angles
+- Identify pain points
+- Emotional triggers
+- Lifestyle desires
+- Objections
+- Trust elements
 
-4. FEATURES & BENEFITS
-   - From marketing angles
-   - EACH point followed by <div class="image-placeholder">1080x1080</div>
+STEP 2: Generate Landing Page Text Content
+Follow this structure strictly:
+1. Strong opening headline (benefit-driven)
+2. Subheadline (supporting promise)
+3. Bullet-point benefits (emotional)
+4. Usage instructions
+5. Technical specifications
+6. Problem → Solution section
+7. FAQ (minimum 6 questions)
+8. Customer reviews (10 reviews, Saudi dialect)
 
-5. HOW TO USE
-   - Step-by-step instructions (3-5 steps)
+STEP 3: Compile HTML Landing Page
+Rules:
+- Output CLEAN HTML ONLY
+- Mobile-first
+- RTL layout
+- Use semantic HTML
+- Rounded cards
+- Soft shadows
+- Generous spacing
+- Placeholder image blocks (1080x1080)
+- No external JS frameworks
+- Inline CSS allowed
+- Font: Tajawal or Cairo
+- Use color variables:
+  --bg-primary
+  --text-accent
+  --card-bg
 
-6. TECHNICAL DETAILS
-   - Specs, origin, shelf life, quantity
+────────────────────────
+OUTPUT FORMAT (STRICT)
+────────────────────────
+Return ONLY valid JSON with this structure:
 
-7. SOCIAL PROOF
-   - 10 customer reviews
-   - ⭐⭐⭐⭐⭐ ratings
-   - 100% Saudi Arabic dialect
-   - NO quotation marks
+{
+  "marketingAngles": {
+    "painPoints": [],
+    "desires": [],
+    "emotionalHooks": [],
+    "trustBuilders": []
+  },
+  "landingPageText": {
+    "headline": "",
+    "subheadline": "",
+    "benefits": [],
+    "usage": [],
+    "technicalDetails": [],
+    "problemSolution": "",
+    "faq": [],
+    "reviews": []
+  },
+  "landingPageHTML": "<!DOCTYPE html>...</html>"
+}
 
-8. FAQ
-   - 5-7 questions & answers in Arabic
-
-9. FINAL CTA
-   - Strong closing statement
-   - Order now CTA (COD friendly)
-   - Phone/WhatsApp button
-
-========================
-DESIGN RULES
-========================
-- Centered content (max-width: 500px)
-- Arabic font: 'Cairo', 'Tajawal', sans-serif
-- Include Google Fonts link
-- Generous padding (20px+)
-- Large touch targets (min 50px)
-
-========================
-IMAGE HANDLING
-========================
-<div class="image-placeholder" style="width:100%;aspect-ratio:1;background:#2a2a2a;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#666;">1080×1080</div>
-
-Return a SINGLE complete HTML document.
-
-CRITICAL: Use problems, desires, and angles as SOURCE OF TRUTH.
-Do NOT invent benefits not present in the provided data.`;
+DO NOT add explanations.
+DO NOT add markdown.
+DO NOT add comments outside JSON.`;
 
 export const LandingPageCompiler = ({
   projectId,
@@ -272,17 +266,46 @@ export const LandingPageCompiler = ({
 
       if (response.error) throw new Error(response.error.message);
 
-      let html = response.data?.response || response.data?.content || '';
+      let rawResponse = response.data?.response || response.data?.content || '';
       
-      // Extract HTML from markdown code blocks
-      const htmlMatch = html.match(/```html\s*([\s\S]*?)```/);
-      if (htmlMatch) {
-        html = htmlMatch[1].trim();
-      } else {
-        const codeMatch = html.match(/```\s*([\s\S]*?)```/);
-        if (codeMatch) {
-          html = codeMatch[1].trim();
+      // Parse JSON response
+      let html = '';
+      try {
+        // Extract JSON from response (may be wrapped in markdown)
+        let jsonStr = rawResponse;
+        const jsonMatch = rawResponse.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (jsonMatch) {
+          jsonStr = jsonMatch[1].trim();
         }
+        
+        const parsed = JSON.parse(jsonStr);
+        html = parsed.landingPageHTML || '';
+        
+        // Also save marketing angles and text if present
+        if (parsed.marketingAngles) {
+          console.log('[LandingPageCompiler] Marketing Angles:', parsed.marketingAngles);
+        }
+        if (parsed.landingPageText) {
+          console.log('[LandingPageCompiler] Landing Page Text:', parsed.landingPageText);
+        }
+      } catch (parseError) {
+        // Fallback: try to extract HTML directly
+        console.warn('[LandingPageCompiler] JSON parse failed, extracting HTML:', parseError);
+        const htmlMatch = rawResponse.match(/```html\s*([\s\S]*?)```/);
+        if (htmlMatch) {
+          html = htmlMatch[1].trim();
+        } else {
+          const codeMatch = rawResponse.match(/```\s*([\s\S]*?)```/);
+          if (codeMatch) {
+            html = codeMatch[1].trim();
+          } else if (rawResponse.includes('<!DOCTYPE') || rawResponse.includes('<html')) {
+            html = rawResponse;
+          }
+        }
+      }
+
+      if (!html) {
+        throw new Error('No HTML output received from AI');
       }
 
       // Save to database
