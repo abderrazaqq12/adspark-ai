@@ -319,20 +319,12 @@ const CreativeReplicator = () => {
         }
       }
 
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setGenerationProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(progressInterval);
-            return 100;
-          }
-          return prev + 2;
-        });
-      }, 100);
-
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      clearInterval(progressInterval);
-      setGenerationProgress(100);
+      // DIAGNOSTIC: No fake progress - progress stays at 0% until backend updates
+      // Previously: setInterval incrementing by 2% every 100ms (fake timer-based progress)
+      // Now: Progress must come from pipeline_jobs.progress or video_variations.status
+      console.log('[DIAGNOSTIC] Fake progress timer DISABLED - waiting for backend updates');
+      
+      // No artificial delay - let backend drive the timeline
 
       // Generate results with AI-selected parameters and insert into database
       const { data: userData } = await supabase.auth.getUser();
