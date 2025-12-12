@@ -15,14 +15,19 @@ import {
   FileCode,
   RefreshCw,
   CheckCircle2,
-  Webhook
+  Webhook,
+  AlertTriangle,
+  Database,
+  Bug
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { useStudioPrompts } from '@/hooks/useStudioPrompts';
 import { useAIAgent, getModelName } from '@/hooks/useAIAgent';
 import { useBackendMode } from '@/hooks/useBackendMode';
 import { BackendModeSelector } from '@/components/BackendModeSelector';
+import { usePromptProfiles, PromptProfile } from '@/hooks/usePromptProfiles';
+import { PromptSettingsModal } from '@/components/studio/PromptSettingsModal';
+import { PromptIndicator } from '@/components/studio/PromptIndicator';
 
 interface StudioLandingPageProps {
   onNext: () => void;
@@ -35,18 +40,91 @@ interface AudienceTargeting {
   audienceGender: string;
 }
 
+interface MarketingAnglesData {
+  problemsSolved: string[];
+  customerValue: string[];
+  marketingAngles: string[];
+}
+
+interface ProductInfo {
+  name: string;
+  description: string;
+  url: string;
+  url2: string;
+  mediaLinks?: string[];
+}
+
+// Default prompt template - used ONLY when creating initial prompt
+const DEFAULT_LANDING_PROMPT = `You are a landing page copywriter for Arabic COD eCommerce.
+
+PRODUCT CONTEXT:
+Product Name: {{product_name}}
+Description: {{product_description}}
+
+MARKETING INTELLIGENCE (from previous step):
+Pain Points: {{pain_points}}
+Emotional Triggers: {{emotional_triggers}}
+Best Marketing Angles: {{marketing_angles}}
+Customer Value Points: {{customer_value}}
+
+AUDIENCE:
+Language: {{language}}
+Market: {{market}}
+Audience: {{audience_age}} {{audience_gender}}
+
+TASK:
+Create complete landing page content with these sections:
+
+1. HERO SECTION:
+   - Headline (using strongest pain point or emotional trigger)
+   - Sub-headline (reinforce value)
+
+2. PROBLEM SECTION:
+   - Elaborate on top 3 pain points
+
+3. SOLUTION SECTION:
+   - Position product as the answer
+
+4. BENEFITS SECTION:
+   - 4-6 key benefits with emotional hooks
+
+5. SOCIAL PROOF:
+   - 3 testimonial placeholders
+
+6. OFFER SECTION:
+   - Clear value proposition
+   - Pricing anchor if applicable
+
+7. CTA SECTION:
+   - Strong call-to-action text
+
+8. FAQ SECTION:
+   - 5 common objections as questions
+
+RULES:
+- Output in {{language}}
+- Adapt tone to {{market}} culture
+- Mobile-first copy (short paragraphs)
+- COD-optimized messaging
+- No HTML, just structured content
+- Use emotional triggers from marketing angles`;
+
 export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
   const { toast } = useToast();
-  const { getPrompt, loading: promptsLoading } = useStudioPrompts();
-  const { aiAgent, loading: aiAgentLoading } = useAIAgent();
-  const { mode: backendMode, n8nEnabled: useN8nBackend, aiOperatorEnabled, getActiveBackend } = useBackendMode();
+  const { aiAgent } = useAIAgent();
+  const { mode: backendMode, n8nEnabled: useN8nBackend, aiOperatorEnabled } = useBackendMode();
+  const { getActivePrompt, getPromptForExecution, debugMode, setDebugMode } = usePromptProfiles();
+  
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationType, setGenerationType] = useState<'content' | 'code' | null>(null);
   const [viewMode, setViewMode] = useState<'content' | 'preview'>('content');
-  const [productInfo, setProductInfo] = useState({ name: '', description: '', url: '', url2: '' });
-  const [marketingContent, setMarketingContent] = useState('');
+  const [productInfo, setProductInfo] = useState<ProductInfo>({ name: '', description: '', url: '', url2: '' });
   const [generatedContent, setGeneratedContent] = useState('');
   const [generatedCode, setGeneratedCode] = useState('');
+
+  // Marketing Angles from previous step (REQUIRED)
+  const [marketingAngles, setMarketingAngles] = useState<MarketingAnglesData | null>(null);
+  const [hasMarketingAngles, setHasMarketingAngles] = useState(false);
 
   // N8n backend mode settings
   const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
@@ -57,11 +135,16 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
     audienceGender: 'both',
   });
 
+  // Prompt profile state
+  const [landingPromptProfile, setLandingPromptProfile] = useState<PromptProfile | null>(null);
+  const [showPromptModal, setShowPromptModal] = useState(false);
+  const [lastUsedPromptDebug, setLastUsedPromptDebug] = useState<{ id: string; hash: string; version: number } | null>(null);
+
   useEffect(() => {
-    loadProductInfo();
+    loadAllData();
   }, []);
 
-  const loadProductInfo = async () => {
+  const loadAllData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -73,17 +156,17 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
         .maybeSingle();
 
       if (settings) {
-        // Backend mode is now managed by useBackendMode hook
-
         const prefs = settings.preferences as Record<string, any>;
         if (prefs) {
+          // Load product info
           setProductInfo({
             name: prefs.studio_product_name || '',
             description: prefs.studio_description || '',
             url: prefs.studio_product_url || '',
-            url2: prefs.studio_product_url_2 || ''
+            url2: prefs.studio_product_url_2 || '',
+            mediaLinks: prefs.studio_media_links || []
           });
-          setMarketingContent(prefs.studio_marketing_content || '');
+
           // Load audience targeting
           setAudienceTargeting({
             targetMarket: prefs.studio_target_market || 'gcc',
@@ -91,51 +174,162 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
             audienceAge: prefs.studio_audience_age || '25-34',
             audienceGender: prefs.studio_audience_gender || 'both',
           });
-          // Load webhook URL - prefer per-stage, fallback to global
+
+          // CRITICAL: Load Marketing Angles from previous step
+          const savedAngles = prefs.studio_marketing_angles;
+          if (savedAngles && 
+              (savedAngles.problemsSolved?.length > 0 || 
+               savedAngles.customerValue?.length > 0 || 
+               savedAngles.marketingAngles?.length > 0)) {
+            setMarketingAngles(savedAngles);
+            setHasMarketingAngles(true);
+          } else {
+            setHasMarketingAngles(false);
+          }
+
+          // Load saved landing content if exists
+          if (prefs.studio_landing_content) {
+            setGeneratedContent(prefs.studio_landing_content);
+          }
+
+          // Load webhook URL
           const stageWebhooks = prefs.stage_webhooks || {};
           const globalWebhookUrl = prefs.n8n_global_webhook_url || prefs.global_webhook_url || '';
           
           if (stageWebhooks.landing_page?.webhook_url) {
             setN8nWebhookUrl(stageWebhooks.landing_page.webhook_url);
           } else if (globalWebhookUrl) {
-            // Fallback to global webhook if per-stage is not configured
             setN8nWebhookUrl(globalWebhookUrl);
-            console.log('Using global webhook URL as fallback for landing page:', globalWebhookUrl);
           }
         }
       }
+
+      // Load prompt profile
+      await loadPromptProfile();
     } catch (error) {
-      console.error('Error loading product info:', error);
+      console.error('Error loading data:', error);
     }
   };
 
+  const loadPromptProfile = async () => {
+    const language = audienceTargeting.language.split('-')[0] || 'ar';
+    const market = audienceTargeting.targetMarket || 'gcc';
+    
+    const profile = await getActivePrompt('landing_page', language, market);
+    setLandingPromptProfile(profile);
+  };
+
+  // Save generated content to database
+  const saveContent = async (content: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: existingSettings } = await supabase
+        .from('user_settings')
+        .select('preferences')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const currentPrefs = (existingSettings?.preferences as Record<string, unknown>) || {};
+      
+      await supabase
+        .from('user_settings')
+        .update({ 
+          preferences: {
+            ...currentPrefs,
+            studio_landing_content: content
+          } as any 
+        })
+        .eq('user_id', user.id);
+    } catch (error) {
+      console.error('Error saving content:', error);
+    }
+  };
+
+  // Build the landing page prompt with all aggregated data
+  const buildAggregatedPrompt = (promptTemplate: string): string => {
+    if (!marketingAngles) return promptTemplate;
+
+    // Extract strongest elements from marketing angles
+    const painPoints = marketingAngles.problemsSolved?.join('\n- ') || '';
+    const emotionalTriggers = marketingAngles.marketingAngles?.slice(0, 3).join('\n- ') || '';
+    const bestAngles = marketingAngles.marketingAngles?.join('\n- ') || '';
+    const customerValue = marketingAngles.customerValue?.join('\n- ') || '';
+
+    // Replace all variables
+    return promptTemplate
+      .replace(/\{\{product_name\}\}/g, productInfo.name)
+      .replace(/\{\{product_description\}\}/g, productInfo.description)
+      .replace(/\{\{pain_points\}\}/g, painPoints)
+      .replace(/\{\{emotional_triggers\}\}/g, emotionalTriggers)
+      .replace(/\{\{marketing_angles\}\}/g, bestAngles)
+      .replace(/\{\{customer_value\}\}/g, customerValue)
+      .replace(/\{\{language\}\}/g, audienceTargeting.language)
+      .replace(/\{\{market\}\}/g, audienceTargeting.targetMarket)
+      .replace(/\{\{audience_age\}\}/g, audienceTargeting.audienceAge)
+      .replace(/\{\{audience_gender\}\}/g, audienceTargeting.audienceGender);
+  };
+
   const generateLandingPage = async () => {
-    // Backend mode is now managed by useBackendMode hook - 'auto' mode uses Lovable AI
+    // CRITICAL: Block generation if Marketing Angles are missing
+    if (!hasMarketingAngles) {
+      toast({
+        title: "Marketing Angles Required",
+        description: "Please generate Marketing Angles in the previous step first. Landing Page depends on that data.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGenerating(true);
     setGenerationType('content');
+    setLastUsedPromptDebug(null);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      // Get the landing page prompt from settings
-      const landingPrompt = getPrompt('landing_page_content', {
-        product_name: productInfo.name,
-        product_description: productInfo.description,
-        product_url: productInfo.url,
-        product_url_2: productInfo.url2,
-        marketing_content: marketingContent
-      });
+      // Get language/market for prompt lookup
+      const language = audienceTargeting.language.split('-')[0] || 'ar';
+      const market = audienceTargeting.targetMarket || 'gcc';
+
+      // CRITICAL: Get prompt from database - block if not configured
+      const promptResult = await getPromptForExecution('landing_page', language, market);
+      
+      if (!promptResult) {
+        toast({
+          title: "Prompt Not Configured",
+          description: "Please configure the Landing Page prompt in Prompt Settings before generating.",
+          variant: "destructive",
+        });
+        setIsGenerating(false);
+        setGenerationType(null);
+        return;
+      }
+
+      const { prompt: activePrompt, debugInfo } = promptResult;
+      setLastUsedPromptDebug(debugInfo);
+
+      // Build the aggregated prompt with all data sources
+      const finalPrompt = buildAggregatedPrompt(activePrompt.prompt_text);
+
+      if (debugMode) {
+        console.log('[LandingPage] Using prompt:', {
+          id: debugInfo.id,
+          hash: debugInfo.hash,
+          version: debugInfo.version,
+          marketingAnglesIncluded: !!marketingAngles,
+          promptPreview: finalPrompt.substring(0, 200) + '...'
+        });
+      }
 
       // Priority 1: n8n Backend Mode
       if (useN8nBackend) {
         if (!n8nWebhookUrl) {
-          throw new Error('n8n Backend Mode is enabled but no webhook URL is configured for Landing Page stage. Please configure it in Settings.');
+          throw new Error('n8n Backend Mode is enabled but no webhook URL is configured. Please configure it in Settings.');
         }
         
-        console.log('Calling Landing Page webhook via proxy (n8n mode):', n8nWebhookUrl);
-        
-        // Use edge function proxy to avoid CORS issues
         const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('n8n-proxy', {
           body: {
             webhookUrl: n8nWebhookUrl,
@@ -144,7 +338,9 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
               productName: productInfo.name,
               productDescription: productInfo.description,
               productUrl: productInfo.url,
-              prompt: landingPrompt,
+              marketingAngles: marketingAngles,
+              prompt: finalPrompt,
+              promptDebug: debugInfo,
               model: getModelName(aiAgent),
               audienceTargeting: {
                 targetMarket: audienceTargeting.targetMarket,
@@ -156,30 +352,26 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
           }
         });
 
-        if (proxyError) {
-          throw new Error(proxyError.message || 'Webhook proxy error');
-        }
+        if (proxyError) throw new Error(proxyError.message || 'Webhook proxy error');
 
         if (proxyResponse?.success) {
-          const data = proxyResponse.data;
-          const content = data?.content || data?.html || '';
+          const content = proxyResponse.data?.content || proxyResponse.data?.html || '';
           setGeneratedContent(content);
+          saveContent(content);
           setViewMode('content');
           toast({
-            title: "تم إنشاء صفحة الهبوط",
-            description: "تم إنشاء محتوى صفحة الهبوط بنجاح (via n8n)",
+            title: "Landing Page Generated",
+            description: "Content created successfully via n8n webhook",
           });
         } else {
           throw new Error(proxyResponse?.error || 'Webhook call failed');
         }
       }
-      // Priority 2: AI Operator Agent Mode
-      else if (aiOperatorEnabled) {
-        console.log('Calling Landing Page Generation (AI Operator mode)');
-        
+      // Priority 2: AI Operator Agent Mode or Auto Mode
+      else {
         const response = await supabase.functions.invoke('ai-assistant', {
           body: {
-            message: landingPrompt || `Generate landing page content for ${productInfo.name}: ${productInfo.description}`,
+            message: finalPrompt,
             model: getModelName(aiAgent),
             audienceTargeting: {
               targetMarket: audienceTargeting.targetMarket,
@@ -190,23 +382,22 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
           }
         });
 
-        if (response.error) {
-          throw new Error(response.error.message || 'Failed to generate landing page');
-        }
+        if (response.error) throw new Error(response.error.message || 'Failed to generate landing page');
 
         const content = response.data?.response || response.data?.content || response.data?.text || '';
         setGeneratedContent(content);
+        saveContent(content);
         setViewMode('content');
 
         toast({
-          title: "تم إنشاء صفحة الهبوط",
-          description: "تم إنشاء محتوى صفحة الهبوط بنجاح (via AI Operator)",
+          title: "Landing Page Generated",
+          description: `Content created using Marketing Angles + Custom Prompt v${debugInfo.version}`,
         });
       }
     } catch (error: any) {
       console.error('Landing page generation error:', error);
       toast({
-        title: "Error",
+        title: "Generation Error",
         description: error.message || "Failed to generate landing page",
         variant: "destructive",
       });
@@ -217,6 +408,15 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
   };
 
   const generateLandingCode = async () => {
+    if (!generatedContent) {
+      toast({
+        title: "Content Required",
+        description: "Please generate landing page content first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGenerating(true);
     setGenerationType('code');
 
@@ -224,33 +424,34 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      // Get the landing page builder code prompt
-      const builderPrompt = getPrompt('landing_page_builder', {
-        product_name: productInfo.name,
-        product_description: productInfo.description,
-        landing_content: generatedContent || marketingContent,
-      });
+      const codePrompt = `Convert this landing page content to a beautiful, responsive HTML page:
 
-      // Use the AI assistant edge function for HTML code generation
+${generatedContent}
+
+Requirements:
+- Use Tailwind CSS (include CDN)
+- RTL support for Arabic
+- Mobile-first responsive design
+- Modern, clean styling
+- Include all sections from the content
+- Return ONLY the HTML code, no explanations`;
+
       const response = await supabase.functions.invoke('ai-assistant', {
         body: {
-          message: builderPrompt,
+          message: codePrompt,
           model: getModelName(aiAgent),
         }
       });
 
-      if (response.error) {
-        throw new Error(response.error.message || 'Failed to generate landing page code');
-      }
+      if (response.error) throw new Error(response.error.message || 'Failed to generate HTML code');
 
       let code = response.data?.response || response.data?.content || response.data?.code || '';
       
-      // Extract HTML code if wrapped in markdown code blocks
+      // Extract HTML from markdown code blocks
       const htmlMatch = code.match(/```html\s*([\s\S]*?)```/);
       if (htmlMatch) {
         code = htmlMatch[1].trim();
       } else {
-        // Try generic code block
         const codeMatch = code.match(/```\s*([\s\S]*?)```/);
         if (codeMatch) {
           code = codeMatch[1].trim();
@@ -261,14 +462,14 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
       setViewMode('preview');
 
       toast({
-        title: "تم إنشاء الكود",
-        description: "تم إنشاء كود صفحة الهبوط بنجاح",
+        title: "HTML Code Generated",
+        description: "Landing page HTML created successfully",
       });
     } catch (error: any) {
       console.error('Landing code generation error:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to generate landing page code",
+        description: error.message || "Failed to generate HTML code",
         variant: "destructive",
       });
     } finally {
@@ -280,10 +481,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
   const copyContent = () => {
     const content = viewMode === 'content' ? generatedContent : generatedCode;
     navigator.clipboard.writeText(content);
-    toast({
-      title: "تم النسخ",
-      description: "تم نسخ المحتوى بنجاح",
-    });
+    toast({ title: "Copied", description: "Content copied to clipboard" });
   };
 
   const openGoogleAIStudio = () => {
@@ -299,7 +497,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
         <div>
           <h2 className="text-2xl font-bold text-foreground">Landing Page Builder</h2>
           <p className="text-muted-foreground text-sm mt-1">
-            Generate Arabic landing page content using Google AI Studio
+            Aggregates Product Info + Marketing Angles + Custom Prompt
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -307,6 +505,86 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
           <Badge variant="outline" className="text-primary border-primary px-3 py-1">Step 4</Badge>
         </div>
       </div>
+
+      {/* Data Source Status */}
+      <Card className="p-4 bg-card/50 border-border">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Database className="w-4 h-4 text-primary" />
+            <span className="font-medium text-sm">Data Sources</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setDebugMode(!debugMode)}
+            className="gap-1 text-xs"
+          >
+            <Bug className="w-3 h-3" />
+            {debugMode ? 'Hide Debug' : 'Debug'}
+          </Button>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* Product Info Status */}
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
+            {productInfo.name ? (
+              <CheckCircle2 className="w-4 h-4 text-green-500" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-yellow-500" />
+            )}
+            <span className="text-xs">
+              Product: {productInfo.name || 'Not set'}
+            </span>
+          </div>
+
+          {/* Marketing Angles Status */}
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
+            {hasMarketingAngles ? (
+              <CheckCircle2 className="w-4 h-4 text-green-500" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-destructive" />
+            )}
+            <span className="text-xs">
+              Marketing Angles: {hasMarketingAngles ? 'Ready' : 'Missing (Required)'}
+            </span>
+          </div>
+
+          {/* Prompt Status */}
+          <div className="flex items-center gap-2">
+            <PromptIndicator
+              prompt={landingPromptProfile}
+              onClick={() => setShowPromptModal(true)}
+              label="Landing Page Prompt"
+            />
+          </div>
+        </div>
+
+        {/* Debug Panel */}
+        {debugMode && lastUsedPromptDebug && (
+          <div className="mt-3 p-3 rounded-lg bg-slate-900/50 border border-border">
+            <p className="text-xs font-mono text-muted-foreground">
+              Prompt ID: {lastUsedPromptDebug.id}<br />
+              Hash: {lastUsedPromptDebug.hash}<br />
+              Version: {lastUsedPromptDebug.version}
+            </p>
+          </div>
+        )}
+      </Card>
+
+      {/* Missing Marketing Angles Warning */}
+      {!hasMarketingAngles && (
+        <Card className="p-4 bg-destructive/10 border-destructive/30">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-destructive" />
+            <div>
+              <p className="font-medium text-destructive">Marketing Angles Required</p>
+              <p className="text-sm text-muted-foreground">
+                This step requires Marketing Angles from the previous step. Please go back and generate Marketing Angles first.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Webhook indicator */}
       {useN8nBackend && n8nWebhookUrl && (
@@ -325,14 +603,14 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <p className="font-semibold text-foreground">Google AI Studio Integration</p>
+                <p className="font-semibold text-foreground">Intelligent Aggregator</p>
                 <div className="flex items-center gap-1 text-xs text-green-400">
                   <CheckCircle2 className="w-3 h-3" />
                   <span>Connected</span>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Uses your prompts from Settings → Prompts to generate content
+                Combines Product + Marketing Angles + Your Custom Prompt
               </p>
             </div>
           </div>
@@ -355,7 +633,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
           <div className="flex items-center gap-3">
             <Button 
               onClick={generateLandingPage} 
-              disabled={isGenerating || promptsLoading}
+              disabled={isGenerating || !hasMarketingAngles}
               className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25 px-5"
             >
               {isGenerating && generationType === 'content' ? (
@@ -399,7 +677,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
             )}
           </div>
           
-          {/* View Mode Toggle - Segmented Control */}
+          {/* View Mode Toggle */}
           <div className="flex items-center bg-slate-800/50 rounded-lg p-1 border border-border">
             <button 
               onClick={() => setViewMode('content')}
@@ -439,7 +717,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
                   variant="ghost" 
                   size="sm" 
                   onClick={generateLandingPage}
-                  disabled={isGenerating}
+                  disabled={isGenerating || !hasMarketingAngles}
                   className="gap-2 text-muted-foreground hover:text-foreground"
                 >
                   <RefreshCw className={`w-4 h-4 ${isGenerating && generationType === 'content' ? 'animate-spin' : ''}`} />
@@ -451,7 +729,9 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
               <Textarea
                 value={generatedContent}
                 onChange={(e) => setGeneratedContent(e.target.value)}
-                placeholder="Click 'Generate Content' to create Arabic landing page content using your prompts from Settings..."
+                placeholder={hasMarketingAngles 
+                  ? "Click 'Generate Content' to create landing page from Marketing Angles + Custom Prompt..."
+                  : "Generate Marketing Angles in the previous step first..."}
                 className="min-h-[400px] bg-slate-900/50 border-primary/30 text-sm font-mono resize-none focus:border-primary/50 focus:ring-primary/20"
                 dir="rtl"
               />
@@ -459,8 +739,11 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="text-center text-muted-foreground">
                     <Sparkles className="w-10 h-10 mx-auto mb-3 text-primary/30" />
-                    <p className="text-sm">Click 'Generate Content' to create Arabic landing page</p>
-                    <p className="text-xs mt-1">...content using your prompts from Settings</p>
+                    <p className="text-sm">
+                      {hasMarketingAngles 
+                        ? "Click 'Generate Content' to create landing page"
+                        : "Marketing Angles required from previous step"}
+                    </p>
                   </div>
                 </div>
               )}
@@ -509,6 +792,18 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
           <ArrowRight className="w-4 h-4" />
         </Button>
       </div>
+
+      {/* Prompt Settings Modal */}
+      <PromptSettingsModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        type="landing_page"
+        defaultTitle="Landing Page Prompt"
+        defaultPrompt={DEFAULT_LANDING_PROMPT}
+        language={audienceTargeting.language.split('-')[0] || 'ar'}
+        market={audienceTargeting.targetMarket || 'gcc'}
+        onSaved={() => loadPromptProfile()}
+      />
     </div>
   );
 };
