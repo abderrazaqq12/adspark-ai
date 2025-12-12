@@ -2,128 +2,149 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { IVideoEngine, EngineTask, EngineResult } from './types';
-import { checkCOIStatus, ensureCrossOriginIsolation } from './coi-helper';
+
+// FFmpeg core version - must match @ffmpeg/ffmpeg version
+const FFMPEG_CORE_VERSION = '0.12.6';
+const FFMPEG_BASE_URL = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`;
+
+type LoadState = "idle" | "loading" | "ready" | "failed";
+
+/**
+ * Preflight check - must pass before any FFmpeg operation
+ */
+export async function assertFFmpegReady(): Promise<boolean> {
+    // Check Cross-Origin Isolation
+    if (!window.crossOriginIsolated) {
+        throw new Error("Cross-Origin Isolation missing - COOP/COEP headers required");
+    }
+
+    // Check SharedArrayBuffer
+    if (typeof SharedArrayBuffer === "undefined") {
+        throw new Error("SharedArrayBuffer unavailable - cannot run FFmpeg.wasm");
+    }
+
+    console.log('[FFmpeg Preflight] ✓ Cross-Origin Isolated');
+    console.log('[FFmpeg Preflight] ✓ SharedArrayBuffer available');
+    
+    return true;
+}
+
+/**
+ * Check environment support for FFmpeg.wasm
+ */
+export function checkFFmpegSupport(): { supported: boolean; reason?: string } {
+    if (typeof window === 'undefined') {
+        return { supported: false, reason: 'Server-side environment not supported' };
+    }
+    
+    if (!window.crossOriginIsolated) {
+        return { supported: false, reason: 'Cross-Origin Isolation required (COOP/COEP headers)' };
+    }
+    
+    if (typeof SharedArrayBuffer === 'undefined') {
+        return { supported: false, reason: 'SharedArrayBuffer not available' };
+    }
+    
+    return { supported: true };
+}
 
 export class FFmpegEngine implements IVideoEngine {
     name = "FFmpeg.wasm (Browser)";
     tier = "free" as const;
     private ffmpeg: FFmpeg | null = null;
-    private loadState: "idle" | "loading" | "ready" | "failed" = "idle";
+    private loadState: LoadState = "idle";
+    private loadError: string | null = null;
 
     /**
-     * Check if the environment supports FFmpeg.wasm
+     * Static support check
      */
     static checkSupport(): { supported: boolean; reason?: string } {
-        const status = checkCOIStatus();
-        
-        if (!status.serviceWorkerSupported) {
-            return { supported: false, reason: 'Service Workers not supported' };
-        }
-        
-        if (!status.isIsolated) {
-            return { supported: false, reason: 'Cross-Origin Isolation required' };
-        }
-        
-        if (!status.hasSharedArrayBuffer) {
-            return { supported: false, reason: 'SharedArrayBuffer not available' };
-        }
-        
-        return { supported: true };
+        return checkFFmpegSupport();
     }
 
     async initialize(): Promise<void> {
-        // 1. Browser Capability Check (Pre-flight)
-        if (typeof window === 'undefined') {
-            throw new Error("FFmpeg.wasm can ONLY run in a browser environment. Server-side execution is blocked.");
+        // 1. Run preflight checks
+        await assertFFmpegReady();
+
+        // 2. Check if already ready
+        if (this.loadState === "ready" && this.ffmpeg) {
+            console.log('[FFmpegEngine] Already initialized');
+            return;
         }
 
-        // Check Cross-Origin Isolation status
-        const coiStatus = checkCOIStatus();
-        
-        if (!coiStatus.isIsolated) {
-            console.log('[FFmpegEngine] Not cross-origin isolated, attempting to enable...');
-            
-            // Try to register the service worker
-            const success = await ensureCrossOriginIsolation();
-            if (!success) {
-                throw new Error(
-                    "Cross-Origin Isolation required for FFmpeg.wasm. " +
-                    "The service worker has been registered - please reload the page."
-                );
-            }
-        }
-
-        // Check for SharedArrayBuffer after isolation
-        if (!window.SharedArrayBuffer) {
-            throw new Error(
-                "SharedArrayBuffer is not available even after isolation. " +
-                "This may be a browser security setting."
-            );
-        }
-
-        // 2. Readiness Guard
-        if (this.loadState === "ready") return;
+        // 3. Wait if currently loading
         if (this.loadState === "loading") {
+            console.log('[FFmpegEngine] Already loading, waiting...');
             let attempts = 0;
-            while ((this.loadState as string) === "loading" && attempts < 20) {
+            while (this.loadState as LoadState === "loading" && attempts < 30) {
                 await new Promise(r => setTimeout(r, 500));
                 attempts++;
             }
-            if ((this.loadState as string) === "ready") return;
-            if ((this.loadState as string) === "failed") throw new Error("Previous FFmpeg load failed");
+            if ((this.loadState as LoadState) === "ready") return;
+            if ((this.loadState as LoadState) === "failed") {
+                throw new Error(`FFmpeg load failed: ${this.loadError}`);
+            }
         }
 
         this.loadState = "loading";
-        console.log('[FFmpegEngine] State: loading');
+        this.loadError = null;
+        console.log('[FFmpegEngine] Initializing...');
 
         try {
             this.ffmpeg = new FFmpeg();
 
-            // 3. Explicit WASM Loading from CDN with CORS support
-            const coreVersion = '0.12.6';
-            const baseURL = `https://unpkg.com/@ffmpeg/core@${coreVersion}/dist/umd`;
-
-            const coreUrl = `${baseURL}/ffmpeg-core.js`;
-            const wasmUrl = `${baseURL}/ffmpeg-core.wasm`;
-
-            // Validate availability
-            console.log('[FFmpegEngine] Checking CDN availability...');
-            const [coreCheck, wasmCheck] = await Promise.all([
-                fetch(coreUrl, { method: 'HEAD', mode: 'cors' }),
-                fetch(wasmUrl, { method: 'HEAD', mode: 'cors' })
-            ]);
-
-            if (!coreCheck.ok || !wasmCheck.ok) {
-                throw new Error(`FFmpeg CDN Unreachable: JS=${coreCheck.status}, WASM=${wasmCheck.status}`);
-            }
-
-            console.log('[FFmpegEngine] CDN available, loading WASM...');
-
-            // Load FFmpeg with blob URLs for CORS compatibility
-            const loadPromise = this.ffmpeg.load({
-                coreURL: await toBlobURL(coreUrl, 'text/javascript'),
-                wasmURL: await toBlobURL(wasmUrl, 'application/wasm'),
+            // Set up logging
+            this.ffmpeg.on('log', ({ message }) => {
+                console.log('[FFmpeg Log]', message);
             });
 
-            // Timeout enforcement
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("FFmpeg loading timed out after 30s")), 30000)
+            this.ffmpeg.on('progress', ({ progress, time }) => {
+                console.log('[FFmpeg Progress]', Math.round(progress * 100) + '%', 'time:', time);
+            });
+
+            // Load with explicit versioned URLs using blob URLs for CORS
+            console.log('[FFmpegEngine] Loading core from CDN:', FFMPEG_BASE_URL);
+            
+            const coreURL = await toBlobURL(
+                `${FFMPEG_BASE_URL}/ffmpeg-core.js`,
+                'text/javascript'
+            );
+            
+            const wasmURL = await toBlobURL(
+                `${FFMPEG_BASE_URL}/ffmpeg-core.wasm`,
+                'application/wasm'
+            );
+
+            console.log('[FFmpegEngine] Core and WASM blob URLs created');
+
+            // Load with timeout
+            const loadPromise = this.ffmpeg.load({
+                coreURL,
+                wasmURL,
+            });
+
+            const timeoutPromise = new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error("FFmpeg load timeout (45s)")), 45000)
             );
 
             await Promise.race([loadPromise, timeoutPromise]);
 
             this.loadState = "ready";
-            console.log('[FFmpegEngine] State: ready (WASM compiled)');
+            console.log('[FFmpegEngine] ✓ Initialized successfully');
 
-        } catch (err: any) {
+        } catch (err: unknown) {
             this.loadState = "failed";
-            console.error('[FFmpegEngine] Init failed:', err);
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            this.loadError = errorMessage;
             this.ffmpeg = null;
-            throw new Error(`FFmpeg Initialization Failed: ${err.message}`);
+            
+            console.error('[FFmpegEngine] Initialization failed:', errorMessage);
+            throw new Error(`FFmpeg Initialization Failed: ${errorMessage}`);
         }
     }
 
     async process(task: EngineTask): Promise<EngineResult> {
+        // Ensure initialized
         if (!this.ffmpeg || this.loadState !== 'ready') {
             await this.initialize();
         }
@@ -132,15 +153,21 @@ export class FFmpegEngine implements IVideoEngine {
         const startTime = Date.now();
         const logs: string[] = [];
 
-        ffmpeg.on('log', ({ message }) => {
+        // Capture logs for this operation
+        const logHandler = ({ message }: { message: string }) => {
             logs.push(message);
-            console.log('[FFmpeg]', message);
-        });
+        };
+        ffmpeg.on('log', logHandler);
 
         try {
+            console.log('[FFmpegEngine] Processing task:', task.config);
+
             // 1. Write Input File
             const inputFileName = 'input.mp4';
-            await ffmpeg.writeFile(inputFileName, await fetchFile(task.videoUrl));
+            console.log('[FFmpegEngine] Fetching input video...');
+            const inputData = await fetchFile(task.videoUrl);
+            await ffmpeg.writeFile(inputFileName, inputData);
+            console.log('[FFmpegEngine] Input video loaded');
 
             const { scenes } = task.config;
             const segmentFiles: string[] = [];
@@ -149,28 +176,35 @@ export class FFmpegEngine implements IVideoEngine {
             for (let i = 0; i < scenes.length; i++) {
                 const scene = scenes[i];
                 const segmentName = `segment_${i}.mp4`;
-
-                // Trim command
-                // -ss start -t duration
                 const duration = scene.end - scene.start;
-                if (duration <= 0) continue;
+                
+                if (duration <= 0) {
+                    console.log(`[FFmpegEngine] Skipping scene ${i} (invalid duration)`);
+                    continue;
+                }
 
-                // Uses fast re-encode to ensure compatible concatenation
+                console.log(`[FFmpegEngine] Trimming scene ${i}: ${scene.start}s to ${scene.end}s`);
+                
                 await ffmpeg.exec([
                     '-i', inputFileName,
                     '-ss', scene.start.toString(),
                     '-t', duration.toString(),
                     '-c:v', 'libx264',
-                    '-preset', 'ultrafast', // Speed over compression for browser
+                    '-preset', 'ultrafast',
                     '-c:a', 'aac',
+                    '-y',
                     segmentName
                 ]);
 
                 segmentFiles.push(segmentName);
             }
 
+            if (segmentFiles.length === 0) {
+                throw new Error('No valid segments to process');
+            }
+
             // 3. Concatenate Scenes
-            // Create concat list file
+            console.log('[FFmpegEngine] Concatenating', segmentFiles.length, 'segments');
             const concatListName = 'concat_list.txt';
             const concatContent = segmentFiles.map(f => `file '${f}'`).join('\n');
             await ffmpeg.writeFile(concatListName, concatContent);
@@ -180,35 +214,80 @@ export class FFmpegEngine implements IVideoEngine {
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', concatListName,
-                '-c', 'copy', // Stream copy for speed since we re-encoded segments
+                '-c', 'copy',
+                '-y',
                 outputFileName
             ]);
 
             // 4. Read Output
+            console.log('[FFmpegEngine] Reading output file...');
             const data = await ffmpeg.readFile(outputFileName);
-            const blob = new Blob([data as any], { type: 'video/mp4' });
+            // Handle FileData type - can be Uint8Array or string
+            let blobData: BlobPart;
+            if (typeof data === 'string') {
+                blobData = new TextEncoder().encode(data);
+            } else {
+                // Copy to regular ArrayBuffer to avoid SharedArrayBuffer issues
+                blobData = new Uint8Array(data).slice();
+            }
+            const blob = new Blob([blobData], { type: 'video/mp4' });
             const videoUrl = URL.createObjectURL(blob);
 
-            // Cleanup
+            // 5. Cleanup
+            console.log('[FFmpegEngine] Cleaning up temp files...');
             await ffmpeg.deleteFile(inputFileName);
             await ffmpeg.deleteFile(concatListName);
             await ffmpeg.deleteFile(outputFileName);
-            for (const f of segmentFiles) await ffmpeg.deleteFile(f);
+            for (const f of segmentFiles) {
+                await ffmpeg.deleteFile(f);
+            }
+
+            const processingTimeMs = Date.now() - startTime;
+            console.log(`[FFmpegEngine] ✓ Processing complete in ${processingTimeMs}ms`);
 
             return {
                 success: true,
                 videoUrl,
-                processingTimeMs: Date.now() - startTime,
+                processingTimeMs,
                 logs
             };
 
-        } catch (error: any) {
-            console.error('[FFmpegEngine] Error:', error);
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('[FFmpegEngine] Processing error:', errorMessage);
+            
             return {
                 success: false,
-                error: error.message || 'Unknown FFmpeg error',
+                error: errorMessage,
                 logs
             };
         }
+    }
+
+    /**
+     * Check if engine is ready for processing
+     */
+    isReady(): boolean {
+        return this.loadState === "ready" && this.ffmpeg !== null;
+    }
+
+    /**
+     * Get current state
+     */
+    getState(): { state: string; error?: string } {
+        return {
+            state: this.loadState,
+            error: this.loadError || undefined
+        };
+    }
+
+    /**
+     * Reset the engine (for retry scenarios)
+     */
+    reset(): void {
+        this.ffmpeg = null;
+        this.loadState = "idle";
+        this.loadError = null;
+        console.log('[FFmpegEngine] Reset');
     }
 }
