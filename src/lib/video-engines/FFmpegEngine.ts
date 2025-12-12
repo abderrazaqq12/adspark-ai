@@ -3,9 +3,9 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { IVideoEngine, EngineTask, EngineResult } from './types';
 
-// FFmpeg core version - must match @ffmpeg/ffmpeg version
+// FFmpeg core version - pinned for compatibility
 const FFMPEG_CORE_VERSION = '0.12.6';
-const FFMPEG_BASE_URL = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`;
+const FFMPEG_CDN_BASE = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`;
 
 type LoadState = "idle" | "loading" | "ready" | "failed";
 
@@ -102,16 +102,16 @@ export class FFmpegEngine implements IVideoEngine {
                 console.log('[FFmpeg Progress]', Math.round(progress * 100) + '%', 'time:', time);
             });
 
-            // Load with explicit versioned URLs using blob URLs for CORS
-            console.log('[FFmpegEngine] Loading core from CDN:', FFMPEG_BASE_URL);
+            // Load FFmpeg core using toBlobURL for CORS compatibility
+            console.log('[FFmpegEngine] Loading FFmpeg core from CDN:', FFMPEG_CDN_BASE);
             
             const coreURL = await toBlobURL(
-                `${FFMPEG_BASE_URL}/ffmpeg-core.js`,
+                `${FFMPEG_CDN_BASE}/ffmpeg-core.js`,
                 'text/javascript'
             );
             
             const wasmURL = await toBlobURL(
-                `${FFMPEG_BASE_URL}/ffmpeg-core.wasm`,
+                `${FFMPEG_CDN_BASE}/ffmpeg-core.wasm`,
                 'application/wasm'
             );
 

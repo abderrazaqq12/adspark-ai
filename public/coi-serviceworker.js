@@ -25,17 +25,19 @@ if (typeof window === 'undefined') {
         
         if (r.cache === "only-if-cached" && r.mode !== "same-origin") return;
 
-        // Skip caching for FFmpeg assets - always fetch fresh
-        const isFFmpegAsset = url.pathname.includes('/ffmpeg/') || 
-                              url.pathname.endsWith('.wasm') ||
-                              url.href.includes('@ffmpeg/core');
+        // BYPASS Service Worker completely for FFmpeg assets (local and CDN)
+        if (url.pathname.startsWith('/ffmpeg/') || 
+            url.href.includes('@ffmpeg/core') ||
+            url.href.includes('ffmpeg-core')) {
+            return; // Let browser handle directly - no interception
+        }
 
         const request = (coepCredentialless && r.mode === "no-cors")
             ? new Request(r, { credentials: "omit" })
             : r;
 
         event.respondWith(
-            fetch(request, isFFmpegAsset ? { cache: 'no-store' } : undefined)
+            fetch(request)
                 .then((response) => {
                     if (response.status === 0) return response;
 
