@@ -116,3 +116,6 @@ verify_jwt = true
 
 [functions.debug-ffmpeg-test]
 verify_jwt = false
+
+[functions.unified-generation]
+verify_jwt = false
