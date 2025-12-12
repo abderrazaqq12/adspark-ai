@@ -11,7 +11,7 @@ interface DebugResult {
   step: string;
   error?: string;
   videoUrl?: string;
-  ffmpegAvailable: boolean;
+  method: "fal.ai" | "ffmpeg-blocked";
   executionTimeMs: number;
   logs: string[];
 }
@@ -30,7 +30,7 @@ serve(async (req) => {
   };
 
   try {
-    log("Starting debug FFMPEG test");
+    log("Starting video processing test");
 
     const { videoUrl } = await req.json();
     if (!videoUrl) {
@@ -39,7 +39,7 @@ serve(async (req) => {
           success: false,
           step: "input_validation",
           error: "No videoUrl provided",
-          ffmpegAvailable: false,
+          method: "ffmpeg-blocked",
           executionTimeMs: Date.now() - startTime,
           logs,
         } as DebugResult),
@@ -49,32 +49,16 @@ serve(async (req) => {
 
     log(`Input video: ${videoUrl}`);
 
-    // Step 1: Check if FFMPEG subprocess is allowed
-    log("Testing subprocess availability...");
-    let ffmpegAvailable = false;
-    let subprocessError: string | null = null;
-
-    try {
-      const testCmd = new Deno.Command("ffmpeg", {
-        args: ["-version"],
-        stdout: "piped",
-        stderr: "piped",
-      });
-      const testResult = await testCmd.output();
-      ffmpegAvailable = testResult.success;
-      log(`FFMPEG version check: ${ffmpegAvailable ? "SUCCESS" : "FAILED"}`);
-    } catch (err) {
-      subprocessError = err instanceof Error ? err.message : String(err);
-      log(`FFMPEG subprocess blocked: ${subprocessError}`);
-    }
-
-    if (!ffmpegAvailable) {
+    // Check for fal.ai API key
+    const FAL_API_KEY = Deno.env.get("fal_ai");
+    if (!FAL_API_KEY) {
+      log("fal_ai API key not found - cannot process video");
       return new Response(
         JSON.stringify({
           success: false,
-          step: "ffmpeg_availability",
-          error: subprocessError || "FFMPEG not available - Supabase Edge Runtime blocks subprocesses",
-          ffmpegAvailable: false,
+          step: "api_key_check",
+          error: "fal_ai API key not configured. Add it in Settings > Secrets.",
+          method: "ffmpeg-blocked",
           executionTimeMs: Date.now() - startTime,
           logs,
         } as DebugResult),
@@ -82,116 +66,90 @@ serve(async (req) => {
       );
     }
 
-    // Step 2: Download input video
-    log("Downloading input video...");
-    const videoResponse = await fetch(videoUrl);
-    if (!videoResponse.ok) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          step: "download_input",
-          error: `Failed to download video: ${videoResponse.status} ${videoResponse.statusText}`,
-          ffmpegAvailable,
-          executionTimeMs: Date.now() - startTime,
-          logs,
-        } as DebugResult),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
-      );
-    }
+    log("fal.ai API key found - using cloud video processing");
 
-    const videoBytes = await videoResponse.arrayBuffer();
-    log(`Downloaded ${videoBytes.byteLength} bytes`);
-
-    // Step 3: Write to temp file
-    const workDir = `/tmp/debug_${Date.now()}`;
-    await Deno.mkdir(workDir, { recursive: true });
-    const inputPath = `${workDir}/input.mp4`;
-    const outputPath = `${workDir}/output.mp4`;
-
-    await Deno.writeFile(inputPath, new Uint8Array(videoBytes));
-    log(`Wrote input to ${inputPath}`);
-
-    // Step 4: Run FFMPEG - Cut first 15s + simple zoom
-    log("Executing FFMPEG: cut 15s + zoom effect...");
-    const ffmpegCmd = new Deno.Command("ffmpeg", {
-      args: [
-        "-i", inputPath,
-        "-t", "15",                           // First 15 seconds
-        "-vf", "scale=2*iw:-1,zoompan=z='min(zoom+0.0015,1.5)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=375:s=1080x1920:fps=25", // Zoom effect
-        "-c:v", "libx264",                    // H.264 codec
-        "-preset", "fast",
-        "-crf", "23",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-movflags", "+faststart",
-        "-y",
-        outputPath,
-      ],
-      stdout: "piped",
-      stderr: "piped",
+    // Use fal.ai video-to-video transformation
+    // This uses their fast-svd model for video enhancement/transformation
+    log("Calling fal.ai video processing API...");
+    
+    const falResponse = await fetch("https://queue.fal.run/fal-ai/fast-svd-lcm", {
+      method: "POST",
+      headers: {
+        "Authorization": `Key ${FAL_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        video_url: videoUrl,
+        motion_bucket_id: 100,
+        cond_aug: 0.02,
+        fps: 7,
+        num_frames: 25, // ~3.5 seconds at 7fps
+      }),
     });
 
-    const ffmpegResult = await ffmpegCmd.output();
-    const stderr = new TextDecoder().decode(ffmpegResult.stderr);
-
-    if (!ffmpegResult.success) {
-      log(`FFMPEG failed: ${stderr.slice(-500)}`);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          step: "ffmpeg_execution",
-          error: `FFMPEG failed: ${stderr.slice(-300)}`,
-          ffmpegAvailable,
-          executionTimeMs: Date.now() - startTime,
-          logs,
-        } as DebugResult),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
-      );
-    }
-
-    log("FFMPEG completed successfully");
-
-    // Step 5: Read output file
-    const outputBytes = await Deno.readFile(outputPath);
-    log(`Output file size: ${outputBytes.byteLength} bytes`);
-
-    if (outputBytes.byteLength < 1000) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          step: "output_validation",
-          error: `Output file too small: ${outputBytes.byteLength} bytes`,
-          ffmpegAvailable,
-          executionTimeMs: Date.now() - startTime,
-          logs,
-        } as DebugResult),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
-      );
-    }
-
-    // Step 6: Upload to Supabase Storage
-    log("Uploading to storage...");
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") || "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
-    );
-
-    const fileName = `debug/test_${Date.now()}.mp4`;
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from("videos")
-      .upload(fileName, outputBytes, {
-        contentType: "video/mp4",
-        upsert: true,
+    if (!falResponse.ok) {
+      const errorText = await falResponse.text();
+      log(`fal.ai API error: ${falResponse.status} - ${errorText}`);
+      
+      // Try alternative: video upscaling model
+      log("Trying alternative: video upscaling...");
+      
+      const upscaleResponse = await fetch("https://queue.fal.run/fal-ai/video-upscaler", {
+        method: "POST",
+        headers: {
+          "Authorization": `Key ${FAL_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          video_url: videoUrl,
+          scale: 2,
+        }),
       });
 
-    if (uploadError) {
-      log(`Upload failed: ${uploadError.message}`);
+      if (!upscaleResponse.ok) {
+        const upscaleError = await upscaleResponse.text();
+        log(`fal.ai upscaler error: ${upscaleResponse.status} - ${upscaleError}`);
+        
+        return new Response(
+          JSON.stringify({
+            success: false,
+            step: "fal_api_call",
+            error: `fal.ai API failed: ${upscaleError}`,
+            method: "fal.ai",
+            executionTimeMs: Date.now() - startTime,
+            logs,
+          } as DebugResult),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+        );
+      }
+
+      const upscaleData = await upscaleResponse.json();
+      log(`Upscale request queued: ${JSON.stringify(upscaleData)}`);
+      
+      // Poll for result
+      if (upscaleData.request_id) {
+        const resultUrl = await pollForResult(FAL_API_KEY, upscaleData.request_id, log, "fal-ai/video-upscaler");
+        if (resultUrl) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              step: "complete",
+              videoUrl: resultUrl,
+              method: "fal.ai",
+              executionTimeMs: Date.now() - startTime,
+              logs,
+            } as DebugResult),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
       return new Response(
         JSON.stringify({
           success: false,
-          step: "upload",
-          error: `Upload failed: ${uploadError.message}`,
-          ffmpegAvailable,
+          step: "polling",
+          error: "Could not get result from fal.ai",
+          method: "fal.ai",
           executionTimeMs: Date.now() - startTime,
           logs,
         } as DebugResult),
@@ -199,50 +157,56 @@ serve(async (req) => {
       );
     }
 
-    log(`Uploaded to ${uploadData.path}`);
+    const falData = await falResponse.json();
+    log(`fal.ai response: ${JSON.stringify(falData).slice(0, 200)}`);
 
-    // Step 7: Get public URL
-    const { data: publicUrlData } = supabase.storage
-      .from("videos")
-      .getPublicUrl(fileName);
+    // If queued, poll for result
+    if (falData.request_id) {
+      log(`Request queued with ID: ${falData.request_id}`);
+      const resultUrl = await pollForResult(FAL_API_KEY, falData.request_id, log, "fal-ai/fast-svd-lcm");
+      
+      if (resultUrl) {
+        log(`Video ready: ${resultUrl}`);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            step: "complete",
+            videoUrl: resultUrl,
+            method: "fal.ai",
+            executionTimeMs: Date.now() - startTime,
+            logs,
+          } as DebugResult),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
 
-    const finalUrl = publicUrlData.publicUrl;
-    log(`Public URL: ${finalUrl}`);
-
-    // Step 8: Validate URL is accessible
-    log("Validating URL accessibility...");
-    const headCheck = await fetch(finalUrl, { method: "HEAD" });
-    if (!headCheck.ok) {
+    // Direct result
+    if (falData.video?.url) {
+      log(`Video ready: ${falData.video.url}`);
       return new Response(
         JSON.stringify({
-          success: false,
-          step: "url_validation",
-          error: `URL not accessible: ${headCheck.status}`,
-          ffmpegAvailable,
+          success: true,
+          step: "complete",
+          videoUrl: falData.video.url,
+          method: "fal.ai",
           executionTimeMs: Date.now() - startTime,
           logs,
         } as DebugResult),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    log("URL validated - SUCCESS");
-
-    // Cleanup
-    try {
-      await Deno.remove(workDir, { recursive: true });
-    } catch {}
 
     return new Response(
       JSON.stringify({
-        success: true,
-        step: "complete",
-        videoUrl: finalUrl,
-        ffmpegAvailable: true,
+        success: false,
+        step: "result_extraction",
+        error: `Unexpected response format: ${JSON.stringify(falData).slice(0, 200)}`,
+        method: "fal.ai",
         executionTimeMs: Date.now() - startTime,
         logs,
       } as DebugResult),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
     );
 
   } catch (err) {
@@ -255,7 +219,7 @@ serve(async (req) => {
         success: false,
         step: "unknown",
         error: errorMessage,
-        ffmpegAvailable: false,
+        method: "ffmpeg-blocked",
         executionTimeMs: Date.now() - startTime,
         logs,
       } as DebugResult),
@@ -263,3 +227,47 @@ serve(async (req) => {
     );
   }
 });
+
+async function pollForResult(
+  apiKey: string, 
+  requestId: string, 
+  log: (msg: string) => void,
+  model: string
+): Promise<string | null> {
+  const maxAttempts = 30; // 30 seconds max
+  
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(r => setTimeout(r, 1000));
+    log(`Polling attempt ${i + 1}/${maxAttempts}...`);
+    
+    const statusResponse = await fetch(`https://queue.fal.run/${model}/requests/${requestId}/status`, {
+      headers: { "Authorization": `Key ${apiKey}` },
+    });
+    
+    if (!statusResponse.ok) {
+      log(`Status check failed: ${statusResponse.status}`);
+      continue;
+    }
+    
+    const status = await statusResponse.json();
+    log(`Status: ${status.status}`);
+    
+    if (status.status === "COMPLETED") {
+      // Get the result
+      const resultResponse = await fetch(`https://queue.fal.run/${model}/requests/${requestId}`, {
+        headers: { "Authorization": `Key ${apiKey}` },
+      });
+      
+      if (resultResponse.ok) {
+        const result = await resultResponse.json();
+        return result.video?.url || result.output?.url || null;
+      }
+    } else if (status.status === "FAILED") {
+      log(`Request failed: ${JSON.stringify(status)}`);
+      return null;
+    }
+  }
+  
+  log("Polling timeout - result not ready");
+  return null;
+}
