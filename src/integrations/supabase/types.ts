@@ -1014,6 +1014,54 @@ export type Database = {
           },
         ]
       }
+      prompt_profiles: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          language: string
+          market: string
+          metadata: Json | null
+          prompt_hash: string
+          prompt_text: string
+          title: string
+          type: string
+          updated_at: string
+          user_id: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          language?: string
+          market?: string
+          metadata?: Json | null
+          prompt_hash: string
+          prompt_text: string
+          title: string
+          type: string
+          updated_at?: string
+          user_id: string
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          language?: string
+          market?: string
+          metadata?: Json | null
+          prompt_hash?: string
+          prompt_text?: string
+          title?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+          version?: number
+        }
+        Relationships: []
+      }
       prompt_templates: {
         Row: {
           category: string | null
@@ -1052,6 +1100,41 @@ export type Database = {
           variables?: Json | null
         }
         Relationships: []
+      }
+      prompt_versions: {
+        Row: {
+          created_at: string
+          id: string
+          prompt_hash: string
+          prompt_profile_id: string
+          prompt_text: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          prompt_hash: string
+          prompt_profile_id: string
+          prompt_text: string
+          version: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          prompt_hash?: string
+          prompt_profile_id?: string
+          prompt_text?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prompt_versions_prompt_profile_id_fkey"
+            columns: ["prompt_profile_id"]
+            isOneToOne: false
+            referencedRelation: "prompt_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       scenes: {
         Row: {
@@ -1482,6 +1565,20 @@ export type Database = {
     }
     Functions: {
       delete_my_api_key: { Args: { p_provider: string }; Returns: boolean }
+      get_active_prompt: {
+        Args: {
+          p_language?: string
+          p_market?: string
+          p_type: string
+          p_user_id: string
+        }
+        Returns: {
+          id: string
+          prompt_hash: string
+          prompt_text: string
+          version: number
+        }[]
+      }
       get_my_api_key_providers: {
         Args: never
         Returns: {
