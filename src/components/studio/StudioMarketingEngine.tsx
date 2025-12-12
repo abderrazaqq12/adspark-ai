@@ -19,7 +19,8 @@ import {
   Heart,
   Zap,
   Webhook,
-  AlertTriangle
+  AlertTriangle,
+  Settings
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,6 +29,9 @@ import { useAIAgent, getModelName } from '@/hooks/useAIAgent';
 import { useBackendMode } from '@/hooks/useBackendMode';
 import { BackendModeSelector } from '@/components/BackendModeSelector';
 import { parseEdgeFunctionError, formatErrorForToast, createDetailedErrorLog } from '@/lib/edgeFunctionErrors';
+import { usePromptProfiles, PromptProfile, PromptType } from '@/hooks/usePromptProfiles';
+import { PromptSettingsModal } from '@/components/studio/PromptSettingsModal';
+import { PromptIndicator } from '@/components/studio/PromptIndicator';
 
 interface AudienceTargeting {
   targetMarket: string;
@@ -53,11 +57,44 @@ interface GeneratedScript {
   wordCount: number;
 }
 
+// Default prompts (used ONLY as fallback for initial setup)
+const DEFAULT_PROMPTS = {
+  marketing_angles: `You are a marketing expert specializing in Arabic COD eCommerce.
+Analyze this product and generate marketing content:
+
+Product: {{product_name}}
+Description: {{product_description}}
+
+Generate:
+1. 3 problems this product solves
+2. 3 customer value points
+3. 4 marketing angles
+
+Output in Arabic. Be specific to the product. Use emotional triggers for Saudi/Gulf audience.`,
+
+  landing_page: `You are a landing page copywriter for Arabic COD eCommerce.
+
+Product: {{product_name}}
+Description: {{product_description}}
+
+Create complete landing page content in Arabic including:
+- Hero headline and subheadline
+- 4-6 key features with icons
+- 3 customer testimonials
+- FAQ section (5 questions)
+- Guarantee section
+- CTA buttons text
+
+Format in Markdown. Use persuasive language for Saudi Arabia market.`
+};
+
 export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) => {
   const { toast } = useToast();
   const { getPrompt, loading: promptsLoading } = useStudioPrompts();
   const { aiAgent, loading: aiAgentLoading } = useAIAgent();
   const { mode: backendMode, n8nEnabled: useN8nBackend, aiOperatorEnabled, getActiveBackend } = useBackendMode();
+  const { getActivePrompt, getPromptForExecution, debugMode, setDebugMode } = usePromptProfiles();
+  
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeTab, setActiveTab] = useState('angles');
   const [generatedAngles, setGeneratedAngles] = useState<GeneratedAngles | null>(null);
@@ -73,10 +110,32 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
     audienceAge: '25-34',
     audienceGender: 'both',
   });
+  
+  // Prompt profiles state
+  const [anglesPromptProfile, setAnglesPromptProfile] = useState<PromptProfile | null>(null);
+  const [landingPromptProfile, setLandingPromptProfile] = useState<PromptProfile | null>(null);
+  const [showAnglesPromptModal, setShowAnglesPromptModal] = useState(false);
+  const [showLandingPromptModal, setShowLandingPromptModal] = useState(false);
+  const [lastUsedPromptDebug, setLastUsedPromptDebug] = useState<{ id: string; hash: string; version: number } | null>(null);
 
   useEffect(() => {
     loadProductInfo();
+    loadPromptProfiles();
   }, []);
+
+  // Load prompt profiles from database
+  const loadPromptProfiles = async () => {
+    const language = audienceTargeting.language.split('-')[0] || 'ar';
+    const market = audienceTargeting.targetMarket || 'gcc';
+    
+    const [anglesProfile, landingProfile] = await Promise.all([
+      getActivePrompt('marketing_angles', language, market),
+      getActivePrompt('landing_page', language, market)
+    ]);
+    
+    setAnglesPromptProfile(anglesProfile);
+    setLandingPromptProfile(landingProfile);
+  };
 
   // Save content to database whenever it changes
   const saveContent = async (data: { angles?: GeneratedAngles | null; scripts?: GeneratedScript[]; landingContent?: string }) => {
@@ -173,19 +232,48 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   };
 
   const generateMarketingAngles = async () => {
-    // Backend mode is now managed by useBackendMode hook - 'auto' mode uses Lovable AI
+    // CRITICAL: Pull prompt from database - NO hardcoded fallbacks
     setIsGenerating(true);
     setWebhookResponse(null);
+    setLastUsedPromptDebug(null);
     
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      // Get the prompt from Settings with variable replacement
-      const anglesPrompt = getPrompt('product_content', {
-        product_name: productInfo.name,
-        product_description: productInfo.description,
-      });
+      // Get language/market for prompt lookup
+      const language = audienceTargeting.language.split('-')[0] || 'ar';
+      const market = audienceTargeting.targetMarket || 'gcc';
+
+      // CRITICAL: Get prompt from database - block if not configured
+      const promptResult = await getPromptForExecution('marketing_angles', language, market);
+      
+      if (!promptResult) {
+        toast({
+          title: "Prompt Not Configured",
+          description: "Please configure the Marketing Angles prompt in Prompt Settings before generating.",
+          variant: "destructive",
+        });
+        setIsGenerating(false);
+        return;
+      }
+
+      const { prompt: activePrompt, debugInfo } = promptResult;
+      setLastUsedPromptDebug(debugInfo);
+      
+      // Replace variables in prompt
+      const anglesPrompt = activePrompt.prompt_text
+        .replace(/\{\{product_name\}\}/g, productInfo.name)
+        .replace(/\{\{product_description\}\}/g, productInfo.description);
+
+      if (debugMode) {
+        console.log('[ProductContent] Using prompt:', {
+          id: debugInfo.id,
+          hash: debugInfo.hash,
+          version: debugInfo.version,
+          promptPreview: anglesPrompt.substring(0, 100) + '...'
+        });
+      }
 
       // Priority 1: When n8n Backend Mode is enabled, use per-stage webhook via proxy
       if (useN8nBackend) {
@@ -806,19 +894,45 @@ ${landingData.finalCta?.urgencyText || ''}`;
         <TabsContent value="angles" className="mt-4">
           <Card className="p-6 bg-card border-border">
             <div className="flex items-center justify-between mb-4">
-              <div>
+              <div className="space-y-1">
                 <h3 className="font-semibold">Product Marketing Angles</h3>
                 <p className="text-sm text-muted-foreground">AI-generated marketing angles in Arabic</p>
+                <PromptIndicator 
+                  prompt={anglesPromptProfile} 
+                  onClick={() => setShowAnglesPromptModal(true)}
+                  label="Marketing Angles Prompt"
+                />
               </div>
-              <Button onClick={generateMarketingAngles} disabled={isGenerating} className="gap-2">
-                {isGenerating ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Sparkles className="w-4 h-4" />
-                )}
-                {generatedAngles ? 'Regenerate' : 'Generate Angles'}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setShowAnglesPromptModal(true)}
+                  className="gap-1"
+                >
+                  <Settings className="w-4 h-4" />
+                  Prompt Settings
+                </Button>
+                <Button onClick={generateMarketingAngles} disabled={isGenerating || !anglesPromptProfile} className="gap-2">
+                  {isGenerating ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                  {generatedAngles ? 'Regenerate' : 'Generate Angles'}
+                </Button>
+              </div>
             </div>
+
+            {/* Debug info panel */}
+            {debugMode && lastUsedPromptDebug && (
+              <div className="mb-4 p-3 rounded-lg bg-muted/50 border font-mono text-xs">
+                <p className="text-muted-foreground">Last generation used:</p>
+                <p>Prompt ID: {lastUsedPromptDebug.id}</p>
+                <p>Hash: {lastUsedPromptDebug.hash}</p>
+                <p>Version: {lastUsedPromptDebug.version}</p>
+              </div>
+            )}
 
             {!generatedAngles ? (
               <div className="text-center py-12 text-muted-foreground">
@@ -905,12 +1019,26 @@ ${landingData.finalCta?.urgencyText || ''}`;
         <TabsContent value="landing" className="mt-4">
           <Card className="p-6 bg-card border-border">
             <div className="flex items-center justify-between mb-4">
-              <div>
+              <div className="space-y-1">
                 <h3 className="font-semibold">Landing Page Content</h3>
                 <p className="text-sm text-muted-foreground">Generate Arabic landing page content for COD eCommerce</p>
+                <PromptIndicator 
+                  prompt={landingPromptProfile} 
+                  onClick={() => setShowLandingPromptModal(true)}
+                  label="Landing Page Prompt"
+                />
               </div>
               <div className="flex items-center gap-2">
-                <Button onClick={generateLandingContent} disabled={isGenerating} className="gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setShowLandingPromptModal(true)}
+                  className="gap-1"
+                >
+                  <Settings className="w-4 h-4" />
+                  Prompt Settings
+                </Button>
+                <Button onClick={generateLandingContent} disabled={isGenerating || !landingPromptProfile} className="gap-2">
                   {isGenerating ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
@@ -944,6 +1072,35 @@ ${landingData.finalCta?.urgencyText || ''}`;
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Prompt Settings Modals */}
+      <PromptSettingsModal
+        isOpen={showAnglesPromptModal}
+        onClose={() => setShowAnglesPromptModal(false)}
+        type="marketing_angles"
+        language={audienceTargeting.language.split('-')[0] || 'ar'}
+        market={audienceTargeting.targetMarket || 'gcc'}
+        defaultPrompt={DEFAULT_PROMPTS.marketing_angles}
+        defaultTitle="Marketing Angles Generator"
+        onSaved={(prompt) => {
+          setAnglesPromptProfile(prompt);
+          setShowAnglesPromptModal(false);
+        }}
+      />
+      
+      <PromptSettingsModal
+        isOpen={showLandingPromptModal}
+        onClose={() => setShowLandingPromptModal(false)}
+        type="landing_page"
+        language={audienceTargeting.language.split('-')[0] || 'ar'}
+        market={audienceTargeting.targetMarket || 'gcc'}
+        defaultPrompt={DEFAULT_PROMPTS.landing_page}
+        defaultTitle="Landing Page Content Generator"
+        onSaved={(prompt) => {
+          setLandingPromptProfile(prompt);
+          setShowLandingPromptModal(false);
+        }}
+      />
 
       {/* Continue */}
       <div className="flex justify-between">
