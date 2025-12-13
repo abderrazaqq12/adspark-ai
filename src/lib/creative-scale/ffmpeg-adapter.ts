@@ -204,8 +204,17 @@ export class FFmpegAdapter {
     try {
       options.onLog?.('Processing execution plan...');
 
-      // 1. Fetch source video(s)
-      const sourceVideos = new Set(plan.timeline.map(s => s.asset_url).filter(Boolean));
+      // 1. Fetch source video(s) - collect all unique asset_urls from timeline
+      const assetUrls = plan.timeline.map(s => s.asset_url).filter(Boolean) as string[];
+      const sourceVideos = new Set(assetUrls);
+      
+      console.log('[FFmpegAdapter] Timeline segments:', plan.timeline.length);
+      console.log('[FFmpegAdapter] Asset URLs found:', assetUrls.length);
+      console.log('[FFmpegAdapter] Unique sources:', sourceVideos.size);
+      if (assetUrls[0]) {
+        console.log('[FFmpegAdapter] First asset URL prefix:', assetUrls[0].substring(0, 50));
+      }
+      
       const sourceMap = new Map<string, string>();
       let inputIndex = 0;
 
@@ -213,15 +222,24 @@ export class FFmpegAdapter {
         if (!sourceUrl) continue;
         const inputName = `input_${inputIndex}.mp4`;
         options.onLog?.(`Loading source video ${inputIndex + 1}...`);
+        console.log('[FFmpegAdapter] Fetching video from:', sourceUrl.substring(0, 80));
         
-        const data = await fetchFile(sourceUrl);
-        await ffmpeg.writeFile(inputName, data);
-        sourceMap.set(sourceUrl, inputName);
-        inputIndex++;
+        try {
+          const data = await fetchFile(sourceUrl);
+          console.log('[FFmpegAdapter] Fetched bytes:', data.byteLength);
+          await ffmpeg.writeFile(inputName, data);
+          sourceMap.set(sourceUrl, inputName);
+          inputIndex++;
+        } catch (fetchErr) {
+          console.error('[FFmpegAdapter] Failed to fetch video:', fetchErr);
+          throw new Error(`Failed to fetch source video: ${fetchErr instanceof Error ? fetchErr.message : 'Unknown error'}`);
+        }
       }
 
       if (sourceMap.size === 0) {
-        throw new Error('No source videos found in execution plan');
+        // Log more details about the plan for debugging
+        console.error('[FFmpegAdapter] Plan timeline:', JSON.stringify(plan.timeline.slice(0, 2), null, 2));
+        throw new Error(`No source videos found. Timeline has ${plan.timeline.length} segments but no valid asset_url values.`);
       }
 
       // 2. Process timeline segments
