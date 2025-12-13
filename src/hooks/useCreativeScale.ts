@@ -1,6 +1,6 @@
 /**
  * Creative Scale - Full Pipeline Hook
- * Phase A (Analysis) + Step 4 (Compiler)
+ * Phase A (Analysis) + Step 4 (Compiler) + Phase B (Router)
  */
 
 import { useState, useCallback } from 'react';
@@ -12,6 +12,19 @@ import type {
   MarketingFramework 
 } from '@/lib/creative-scale/types';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
+import type { 
+  RouterResult, 
+  EngineScore, 
+  CostProfile, 
+  ProcessingLocation,
+  RouterEvent 
+} from '@/lib/creative-scale/router-types';
+import { 
+  routeExecution, 
+  getCompatibleEngines, 
+  scoreEngines, 
+  extractRequiredCapabilities 
+} from '@/lib/creative-scale/router';
 
 interface FullPipelineOutput extends PhaseAOutput {
   plans: ExecutionPlan[];
@@ -22,12 +35,15 @@ interface UseCreativeScaleReturn {
   isAnalyzing: boolean;
   isGeneratingBlueprint: boolean;
   isCompiling: boolean;
+  isRouting: boolean;
   error: string | null;
   
   // Results
   currentAnalysis: VideoAnalysis | null;
   currentBlueprint: CreativeBlueprint | null;
   currentPlans: ExecutionPlan[];
+  routerResult: RouterResult | null;
+  routerEvents: RouterEvent[];
   
   // Phase A Actions
   analyzeVideo: (videoUrl: string, videoId: string, options?: {
@@ -61,6 +77,20 @@ interface UseCreativeScaleReturn {
     assetBaseUrl?: string
   ) => Promise<ExecutionPlan[]>;
   
+  // Phase B: Router Actions
+  getCompatibleEnginesForPlan: (plan: ExecutionPlan) => EngineScore[];
+  
+  routePlan: (
+    plan: ExecutionPlan,
+    analysis: VideoAnalysis,
+    blueprint: CreativeBlueprint,
+    options?: {
+      preferredEngineId?: string;
+      maxCostProfile?: CostProfile;
+      forceLocation?: ProcessingLocation;
+    }
+  ) => Promise<RouterResult>;
+  
   // Full Pipeline
   runFullPipeline: (videoUrl: string, videoId: string, options?: {
     language?: string;
@@ -77,10 +107,13 @@ export function useCreativeScale(): UseCreativeScaleReturn {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGeneratingBlueprint, setIsGeneratingBlueprint] = useState(false);
   const [isCompiling, setIsCompiling] = useState(false);
+  const [isRouting, setIsRouting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentAnalysis, setCurrentAnalysis] = useState<VideoAnalysis | null>(null);
   const [currentBlueprint, setCurrentBlueprint] = useState<CreativeBlueprint | null>(null);
   const [currentPlans, setCurrentPlans] = useState<ExecutionPlan[]>([]);
+  const [routerResult, setRouterResult] = useState<RouterResult | null>(null);
+  const [routerEvents, setRouterEvents] = useState<RouterEvent[]>([]);
 
   // ============================================
   // PHASE A: ANALYZE
@@ -309,6 +342,72 @@ export function useCreativeScale(): UseCreativeScaleReturn {
   }, [runFullPhaseA, compileAllVariations]);
 
   // ============================================
+  // PHASE B: ROUTER
+  // ============================================
+
+  const getCompatibleEnginesForPlan = useCallback((plan: ExecutionPlan): EngineScore[] => {
+    return getCompatibleEngines(plan);
+  }, []);
+
+  const routePlan = useCallback(async (
+    plan: ExecutionPlan,
+    analysis: VideoAnalysis,
+    blueprint: CreativeBlueprint,
+    options?: {
+      preferredEngineId?: string;
+      maxCostProfile?: CostProfile;
+      forceLocation?: ProcessingLocation;
+    }
+  ): Promise<RouterResult> => {
+    setIsRouting(true);
+    setError(null);
+    setRouterEvents([]);
+
+    const eventEmitter = (event: RouterEvent) => {
+      setRouterEvents(prev => [...prev, event]);
+    };
+
+    try {
+      const result = await routeExecution(
+        {
+          execution_plan: plan,
+          analysis,
+          blueprint,
+          preferred_engine_id: options?.preferredEngineId,
+          max_cost_profile: options?.maxCostProfile,
+          force_location: options?.forceLocation,
+        },
+        { emitEvent: eventEmitter }
+      );
+
+      setRouterResult(result);
+      return result;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Routing failed';
+      setError(message);
+      
+      // Even on error, return partial success (router never fails user)
+      const partialResult: RouterResult = {
+        status: 'partial_success',
+        job_id: `job_${Date.now()}`,
+        reason: message,
+        artifacts: {
+          analysis,
+          blueprint,
+          execution_plan: plan,
+        },
+        attempted_engines: [],
+        human_readable_message: 'An error occurred during routing. Your creative plan has been preserved.',
+      };
+      
+      setRouterResult(partialResult);
+      return partialResult;
+    } finally {
+      setIsRouting(false);
+    }
+  }, []);
+
+  // ============================================
   // RESET
   // ============================================
 
@@ -316,6 +415,8 @@ export function useCreativeScale(): UseCreativeScaleReturn {
     setCurrentAnalysis(null);
     setCurrentBlueprint(null);
     setCurrentPlans([]);
+    setRouterResult(null);
+    setRouterEvents([]);
     setError(null);
   }, []);
 
@@ -323,15 +424,20 @@ export function useCreativeScale(): UseCreativeScaleReturn {
     isAnalyzing,
     isGeneratingBlueprint,
     isCompiling,
+    isRouting,
     error,
     currentAnalysis,
     currentBlueprint,
     currentPlans,
+    routerResult,
+    routerEvents,
     analyzeVideo,
     generateBlueprint,
     runFullPhaseA,
     compileVariation,
     compileAllVariations,
+    getCompatibleEnginesForPlan,
+    routePlan,
     runFullPipeline,
     reset
   };
