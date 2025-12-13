@@ -8,7 +8,7 @@ const corsHeaders = {
 
 interface TimelineSegment {
   segment_id: string;
-  track: 'main' | 'overlay';
+  track: 'main' | 'overlay' | 'video';
   asset_url: string;
   source_start_ms: number;
   source_duration_ms: number;
@@ -119,10 +119,10 @@ async function assembleFromPlan(
   workDir: string,
   outputPath: string
 ): Promise<{ success: boolean; error?: string; stderr?: string }> {
-  // Download source video from first timeline segment
-  const mainSegments = plan.timeline.filter(s => s.track === 'main');
+  // Download source video from timeline segments (accept 'main' or 'video' track)
+  const mainSegments = plan.timeline.filter(s => s.track === 'main' || s.track === 'video');
   if (mainSegments.length === 0) {
-    return { success: false, error: 'No main track segments in plan' };
+    return { success: false, error: `No video track segments in plan. Found tracks: ${plan.timeline.map(s => s.track).join(', ')}` };
   }
 
   const inputPaths: string[] = [];
