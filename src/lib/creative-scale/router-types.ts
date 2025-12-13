@@ -174,6 +174,7 @@ export interface PartialSuccessResult {
     analysis: VideoAnalysis;
     blueprint: CreativeBlueprint;
     execution_plan: ExecutionPlan;
+    ffmpeg_command?: string;
   };
   attempted_engines: string[];
   human_readable_message: string;
