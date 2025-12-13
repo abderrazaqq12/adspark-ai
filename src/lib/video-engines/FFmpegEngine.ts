@@ -3,28 +3,103 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { IVideoEngine, EngineTask, EngineResult } from './types';
 
-// FFmpeg core version - MUST match @ffmpeg/core installed version
+// FFmpeg core version - pinned for stability
 const FFMPEG_CORE_VERSION = '0.12.6';
-const FFMPEG_CDN_BASE = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`;
+// jsDelivr provides CORS headers required for cross-origin isolated environments
+const FFMPEG_CDN_BASE = `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`;
 
 type LoadState = "idle" | "loading" | "ready" | "failed";
 
 /**
- * Preflight check - must pass before any FFmpeg operation
+ * Comprehensive environment check - MUST pass before any FFmpeg operation
+ */
+export async function checkFfmpegEnvironment(): Promise<{
+    ready: boolean;
+    diagnostics: Record<string, { pass: boolean; message: string }>;
+}> {
+    const diagnostics: Record<string, { pass: boolean; message: string }> = {};
+
+    // 1. Cross-Origin Isolation
+    diagnostics.crossOriginIsolated = {
+        pass: !!window.crossOriginIsolated,
+        message: window.crossOriginIsolated 
+            ? 'COOP/COEP headers active' 
+            : 'Missing COOP/COEP headers - SharedArrayBuffer blocked'
+    };
+
+    // 2. SharedArrayBuffer
+    diagnostics.sharedArrayBuffer = {
+        pass: typeof SharedArrayBuffer !== 'undefined',
+        message: typeof SharedArrayBuffer !== 'undefined'
+            ? 'SharedArrayBuffer available'
+            : 'SharedArrayBuffer unavailable'
+    };
+
+    // 3. WebAssembly support
+    diagnostics.webAssembly = {
+        pass: typeof WebAssembly !== 'undefined',
+        message: typeof WebAssembly !== 'undefined'
+            ? 'WebAssembly supported'
+            : 'WebAssembly not supported'
+    };
+
+    // 4. Fetch ffmpeg-core.js from CDN
+    try {
+        const coreRes = await fetch(`${FFMPEG_CDN_BASE}/ffmpeg-core.js`, { method: 'HEAD' });
+        const corsHeader = coreRes.headers.get('access-control-allow-origin');
+        diagnostics.coreJsFile = {
+            pass: coreRes.ok && corsHeader === '*',
+            message: coreRes.ok 
+                ? `ffmpeg-core.js accessible (CORS: ${corsHeader || 'none'})`
+                : `ffmpeg-core.js failed: ${coreRes.status}`
+        };
+    } catch (e) {
+        diagnostics.coreJsFile = {
+            pass: false,
+            message: `ffmpeg-core.js fetch error: ${e}`
+        };
+    }
+
+    // 5. Fetch ffmpeg-core.wasm from CDN
+    try {
+        const wasmRes = await fetch(`${FFMPEG_CDN_BASE}/ffmpeg-core.wasm`, { method: 'HEAD' });
+        const corsHeader = wasmRes.headers.get('access-control-allow-origin');
+        diagnostics.wasmFile = {
+            pass: wasmRes.ok && corsHeader === '*',
+            message: wasmRes.ok 
+                ? `ffmpeg-core.wasm accessible (CORS: ${corsHeader || 'none'})`
+                : `ffmpeg-core.wasm failed: ${wasmRes.status}`
+        };
+    } catch (e) {
+        diagnostics.wasmFile = {
+            pass: false,
+            message: `ffmpeg-core.wasm fetch error: ${e}`
+        };
+    }
+
+    const allPass = Object.values(diagnostics).every(d => d.pass);
+    
+    console.log('[FFmpeg Environment Check]', allPass ? '✓ All checks passed' : '✗ Some checks failed');
+    Object.entries(diagnostics).forEach(([key, val]) => {
+        console.log(`  ${val.pass ? '✓' : '✗'} ${key}: ${val.message}`);
+    });
+
+    return { ready: allPass, diagnostics };
+}
+
+/**
+ * Preflight check - throws if not ready
  */
 export async function assertFFmpegReady(): Promise<boolean> {
-    // Check Cross-Origin Isolation
-    if (!window.crossOriginIsolated) {
-        throw new Error("Cross-Origin Isolation missing - COOP/COEP headers required");
+    const { ready, diagnostics } = await checkFfmpegEnvironment();
+    
+    if (!ready) {
+        const failures = Object.entries(diagnostics)
+            .filter(([_, d]) => !d.pass)
+            .map(([k, d]) => `${k}: ${d.message}`)
+            .join('; ');
+        throw new Error(`FFmpeg environment check failed: ${failures}`);
     }
-
-    // Check SharedArrayBuffer
-    if (typeof SharedArrayBuffer === "undefined") {
-        throw new Error("SharedArrayBuffer unavailable - cannot run FFmpeg.wasm");
-    }
-
-    console.log('[FFmpeg Preflight] ✓ Cross-Origin Isolated');
-    console.log('[FFmpeg Preflight] ✓ SharedArrayBuffer available');
     
     return true;
 }
@@ -102,12 +177,12 @@ export class FFmpegEngine implements IVideoEngine {
                 console.log('[FFmpeg Progress]', Math.round(progress * 100) + '%', 'time:', time);
             });
 
-            // Load FFmpeg core from CDN using toBlobURL for CORS compatibility
-            // @ffmpeg/core@0.12.6 is single-threaded, so NO workerURL is needed
-            console.log('[FFmpegEngine] Loading FFmpeg core v' + FFMPEG_CORE_VERSION + ' from CDN...');
-            console.log('[FFmpegEngine] CDN Base:', FFMPEG_CDN_BASE);
+            // Load FFmpeg core from jsDelivr CDN (has proper CORS headers)
+            // Using toBlobURL to convert CDN files to blob URLs
+            console.log('[FFmpegEngine] Loading FFmpeg core v' + FFMPEG_CORE_VERSION + '...');
+            console.log('[FFmpegEngine] CDN:', FFMPEG_CDN_BASE);
 
-            // toBlobURL fetches the file and creates a blob URL, bypassing CORS issues
+            // toBlobURL fetches and converts to blob URL, working around CORS
             const coreURL = await toBlobURL(
                 `${FFMPEG_CDN_BASE}/ffmpeg-core.js`,
                 'text/javascript'
@@ -118,16 +193,14 @@ export class FFmpegEngine implements IVideoEngine {
                 `${FFMPEG_CDN_BASE}/ffmpeg-core.wasm`,
                 'application/wasm'
             );
-            console.log('[FFmpegEngine] ✓ WASM loaded');
+            console.log('[FFmpegEngine] ✓ WASM loaded (~32MB)');
 
-            // Load with explicit URLs (single-thread, no workerURL needed)
+            // @ffmpeg/core@0.12.6 is single-threaded - NO workerURL needed
             console.log('[FFmpegEngine] Calling ffmpeg.load()...');
             
             const loadPromise = this.ffmpeg.load({
                 coreURL,
                 wasmURL,
-                // Note: workerURL is NOT used for single-threaded @ffmpeg/core
-                // Only @ffmpeg/core-mt (multi-threaded) requires workerURL
             });
 
             const timeoutPromise = new Promise<never>((_, reject) =>
