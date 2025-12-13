@@ -35,6 +35,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useCreativeScale } from '@/hooks/useCreativeScale';
 import { validateVideoFile, sanitizeFilename, LIMITS } from '@/lib/creative-scale/validation';
+import { checkFFmpegEnvironment } from '@/lib/creative-scale/ffmpeg-adapter';
 import { SignalsDisplay } from '@/components/creative-scale/SignalsDisplay';
 import { VariationCard } from '@/components/creative-scale/VariationCard';
 import { ExecutionExplainer } from '@/components/creative-scale/ExecutionExplainer';
@@ -150,6 +151,7 @@ export default function CreativeScale() {
   const [selectedVideoIndex, setSelectedVideoIndex] = useState(0);
   const [selectedVariationIndex, setSelectedVariationIndex] = useState(0);
   const [executionResults, setExecutionResults] = useState<Map<string, any>>(new Map());
+  const [variationCount, setVariationCount] = useState(3); // User-configurable
   
   // Hook
   const {
@@ -398,9 +400,9 @@ export default function CreativeScale() {
     setJobStatus('ANALYZING');
     
     try {
-      // Use Brain V2 for strategy generation
+      // Use Brain V2 for strategy generation with user-selected count
       const brainResult = await generateBrainV2Strategy(currentAnalysis, {
-        variationCount: Math.min(5, LIMITS.MAX_VARIATIONS)
+        variationCount: Math.min(variationCount, LIMITS.MAX_VARIATIONS)
       });
       
       if (!brainResult.success) {
@@ -414,7 +416,7 @@ export default function CreativeScale() {
       
       // Also generate legacy blueprint for compatibility with compiler
       const blueprint = await generateBlueprint(currentAnalysis, {
-        variationCount: brainResult.blueprints.length
+        variationCount: Math.min(variationCount, brainResult.blueprints.length || variationCount)
       });
       
       if (!blueprint) {
@@ -453,7 +455,7 @@ export default function CreativeScale() {
       toast.error(err instanceof Error ? err.message : 'Strategy generation failed');
       setJobStatus('STRATEGY_READY');
     }
-  }, [currentAnalysis, generateBrainV2Strategy, generateBlueprint, compileAllVariations, uploadedVideos]);
+  }, [currentAnalysis, generateBrainV2Strategy, generateBlueprint, compileAllVariations, uploadedVideos, variationCount]);
 
   // ============================================
   // STEP 4: EXECUTE (Phase B - Optional)
@@ -465,15 +467,24 @@ export default function CreativeScale() {
       return;
     }
     
+    // Check FFmpeg environment before starting
+    const envCheck = typeof window !== 'undefined' && window.crossOriginIsolated;
+    if (!envCheck) {
+      toast.error('FFmpeg requires Cross-Origin Isolation. Video execution may fail.');
+    }
+    
     setJobStatus('EXECUTING');
     setCurrentStep(4);
     
     const results = new Map();
     let successCount = 0;
     let failCount = 0;
+    const errors: string[] = [];
     
     for (let i = 0; i < currentPlans.length; i++) {
       try {
+        toast.info(`Processing variation ${i + 1}/${currentPlans.length}...`);
+        
         const result = await routePlan(
           currentPlans[i],
           currentAnalysis,
@@ -486,11 +497,14 @@ export default function CreativeScale() {
           successCount++;
         } else {
           failCount++;
+          if (result.reason) errors.push(result.reason);
         }
       } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(errorMsg);
         results.set(currentPlans[i].plan_id, {
           status: 'partial_success',
-          error_reason: err instanceof Error ? err.message : 'Unknown error'
+          error_reason: errorMsg
         });
         failCount++;
       }
@@ -506,7 +520,8 @@ export default function CreativeScale() {
       toast.info(`${successCount} succeeded, ${failCount} failed`);
     } else {
       setJobStatus('PARTIAL_SUCCESS');
-      toast.warning('Execution failed - artifacts preserved');
+      const errorSummary = errors[0] || 'FFmpeg execution failed';
+      toast.warning(`Execution failed: ${errorSummary.substring(0, 100)}`);
     }
   }, [currentAnalysis, currentBlueprint, currentPlans, routePlan]);
 
@@ -568,6 +583,9 @@ export default function CreativeScale() {
   const canAnalyze = readyVideos.length > 0 && !isProcessing;
   const canGenerateStrategy = !!currentAnalysis && !isProcessing;
   const canExecute = currentPlans.length > 0 && !isProcessing;
+  
+  // Check FFmpeg environment
+  const ffmpegEnv = checkFFmpegEnvironment();
 
   // ============================================
   // RENDER
@@ -807,7 +825,7 @@ export default function CreativeScale() {
                     <TabsContent value="signals">
                       <ScrollArea className="h-[450px]">
                         {/* Brain V2 Controls */}
-                        <div className="flex items-center gap-4 mb-4 p-3 bg-muted/30 rounded-lg">
+                        <div className="flex flex-wrap items-center gap-4 mb-4 p-3 bg-muted/30 rounded-lg">
                           <div className="flex items-center gap-2">
                             <Brain className="w-4 h-4 text-primary" />
                             <span className="text-sm font-medium">Brain V2</span>
@@ -841,6 +859,22 @@ export default function CreativeScale() {
                                 <SelectItem value="low">Low</SelectItem>
                                 <SelectItem value="medium">Medium</SelectItem>
                                 <SelectItem value="high">High</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">Variations:</span>
+                            <Select 
+                              value={variationCount.toString()} 
+                              onValueChange={(value) => setVariationCount(parseInt(value))}
+                            >
+                              <SelectTrigger className="w-[70px] h-7 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {[1, 2, 3, 4, 5, 6, 8, 10, 15, 20].map(n => (
+                                  <SelectItem key={n} value={n.toString()}>{n}</SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </div>
@@ -1013,12 +1047,18 @@ export default function CreativeScale() {
                               <Button 
                                 className="flex-1"
                                 onClick={handleExecute}
-                                disabled={isProcessing}
+                                disabled={isProcessing || !ffmpegEnv.ready}
+                                title={!ffmpegEnv.ready ? ffmpegEnv.reason : undefined}
                               >
                                 {isRouting ? (
                                   <>
                                     <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                                     Executing...
+                                  </>
+                                ) : !ffmpegEnv.ready ? (
+                                  <>
+                                    <AlertCircle className="w-4 h-4 mr-2" />
+                                    FFmpeg Unavailable
                                   </>
                                 ) : (
                                   <>
@@ -1028,6 +1068,16 @@ export default function CreativeScale() {
                                 )}
                               </Button>
                             </div>
+                            
+                            {/* FFmpeg Status Warning */}
+                            {!ffmpegEnv.ready && (
+                              <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-sm">
+                                <p className="text-yellow-500 font-medium">⚠️ FFmpeg WASM Unavailable</p>
+                                <p className="text-yellow-500/70 text-xs mt-1">
+                                  {ffmpegEnv.reason}. Videos cannot be rendered in browser. You can still download the execution plans.
+                                </p>
+                              </div>
+                            )}
                           </div>
                         </ScrollArea>
                       </TabsContent>
