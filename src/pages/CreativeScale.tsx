@@ -44,6 +44,7 @@ import { ExecutionExplainer } from '@/components/creative-scale/ExecutionExplain
 import { V1ConstraintsBanner } from '@/components/creative-scale/V1ConstraintsBanner';
 import { ResultsGrid } from '@/components/creative-scale/ResultsGrid';
 import { FFmpegProgressPanel } from '@/components/creative-scale/FFmpegProgressPanel';
+import { ExecutionProgressPanel, ExecutionProgressState, createInitialProgressState } from '@/components/creative-scale/ExecutionProgressPanel';
 import { 
   ProblemDisplay, 
   ScoringDisplay, 
@@ -154,6 +155,7 @@ export default function CreativeScale() {
   const [selectedVariationIndex, setSelectedVariationIndex] = useState(0);
   const [executionResults, setExecutionResults] = useState<Map<string, any>>(new Map());
   const [variationCount, setVariationCount] = useState(3); // User-configurable
+  const [executionProgress, setExecutionProgress] = useState<ExecutionProgressState>(createInitialProgressState(0));
   
   // Hook
   const {
@@ -472,6 +474,21 @@ export default function CreativeScale() {
     setJobStatus('EXECUTING');
     setCurrentStep(4);
     
+    // Initialize progress state
+    setExecutionProgress({
+      variationIndex: 0,
+      totalVariations: currentPlans.length,
+      currentEngine: null,
+      engines: [
+        { engine: 'ffmpeg-browser', status: 'pending', progress: 0, message: '' },
+        { engine: 'ffmpeg-cloud', status: 'pending', progress: 0, message: '' },
+        { engine: 'cloudinary', status: 'pending', progress: 0, message: '' },
+        { engine: 'no-render', status: 'pending', progress: 0, message: '' },
+      ],
+      overallProgress: 0,
+      status: 'executing'
+    });
+    
     const results = new Map<string, ExecutionResult>();
     let successCount = 0;
     let partialCount = 0;
@@ -479,6 +496,20 @@ export default function CreativeScale() {
     
     for (let i = 0; i < currentPlans.length; i++) {
       const plan = currentPlans[i];
+      
+      // Reset engine states for this variation
+      setExecutionProgress(prev => ({
+        ...prev,
+        variationIndex: i,
+        currentEngine: null,
+        engines: [
+          { engine: 'ffmpeg-browser', status: 'pending', progress: 0, message: '' },
+          { engine: 'ffmpeg-cloud', status: 'pending', progress: 0, message: '' },
+          { engine: 'cloudinary', status: 'pending', progress: 0, message: '' },
+          { engine: 'no-render', status: 'pending', progress: 0, message: '' },
+        ],
+        overallProgress: (i / currentPlans.length) * 100
+      }));
       
       // Use the new 4-engine execution ladder
       const result = await executeWithFallback({
@@ -488,19 +519,53 @@ export default function CreativeScale() {
         variationIndex: i,
         onProgress: (engine: EngineType, progress: number, message: string) => {
           console.log(`[Engine ${engine}] ${progress.toFixed(0)}%: ${message}`);
+          setExecutionProgress(prev => ({
+            ...prev,
+            currentEngine: engine,
+            engines: prev.engines.map(e => 
+              e.engine === engine 
+                ? { ...e, status: 'attempting' as const, progress, message }
+                : e
+            )
+          }));
         },
         onEngineSwitch: (from: EngineType | null, to: EngineType, reason: string) => {
+          console.log(`[ExecutionEngine] Switch: ${from} → ${to}: ${reason}`);
+          setExecutionProgress(prev => ({
+            ...prev,
+            currentEngine: to,
+            engines: prev.engines.map(e => {
+              if (from && e.engine === from) {
+                return { ...e, status: 'failed' as const, error: reason.substring(0, 100) };
+              }
+              if (e.engine === to) {
+                return { ...e, status: 'attempting' as const, message: 'Starting...' };
+              }
+              return e;
+            })
+          }));
           if (from) {
-            toast.info(`Switching from ${from} to ${to}: ${reason.substring(0, 60)}`);
+            toast.info(`Trying ${to.replace('-', ' ')}...`);
           }
         }
       });
+      
+      // Update progress with result
+      setExecutionProgress(prev => ({
+        ...prev,
+        engines: prev.engines.map(e => 
+          e.engine === result.engine_used
+            ? { ...e, status: result.status === 'success' ? 'success' as const : 'failed' as const, progress: 100 }
+            : e.status === 'pending' ? { ...e, status: 'skipped' as const } : e
+        ),
+        overallProgress: ((i + 1) / currentPlans.length) * 100
+      }));
       
       results.set(plan.plan_id, result);
       
       if (result.status === 'success') {
         successCount++;
-        toast.success(`Variation ${i + 1}: Rendered with ${result.engine_used}`);
+        toast.success(`Variation ${i + 1}: Rendered with ${result.engine_used.replace('-', ' ')}`);
       } else if (result.status === 'partial_success') {
         partialCount++;
         toast.info(`Variation ${i + 1}: Partial success (${result.engine_used})`);
@@ -511,6 +576,14 @@ export default function CreativeScale() {
     }
     
     setExecutionResults(results);
+    
+    // Final progress state
+    setExecutionProgress(prev => ({
+      ...prev,
+      overallProgress: 100,
+      status: successCount > 0 ? 'complete' : 'partial',
+      currentEngine: null
+    }));
     
     if (successCount > 0 && failCount === 0 && partialCount === 0) {
       setJobStatus('DONE');
@@ -1064,8 +1137,15 @@ export default function CreativeScale() {
                               </Button>
                             </div>
                             
+                            {/* Execution Progress Panel */}
+                            {executionProgress.status !== 'idle' && (
+                              <div className="mt-4">
+                                <ExecutionProgressPanel state={executionProgress} />
+                              </div>
+                            )}
+                            
                             {/* Cloud Processing Info */}
-                            {!ffmpegEnv.ready && (
+                            {!ffmpegEnv.ready && executionProgress.status === 'idle' && (
                               <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-sm">
                                 <p className="text-blue-400 font-medium">☁️ Cloud Processing Mode</p>
                                 <p className="text-blue-400/70 text-xs mt-1">
