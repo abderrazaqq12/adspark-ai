@@ -23,5 +23,8 @@ export {
   getCompatibleEngines,
 } from './router';
 
+// Validation & Safety
+export * from './validation';
+
 // Prompts (for edge functions)
 export * from './prompts';
