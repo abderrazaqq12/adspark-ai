@@ -9,7 +9,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useCreativeScale } from '@/hooks/useCreativeScale';
-import { executeWithFallback, ExecutionResult, EngineType } from '@/lib/creative-scale/execution-engine';
+import { executeWithFallback, ExecutionResult, EngineId } from '@/lib/creative-scale/execution-engine';
 import { validateVideoFile, sanitizeFilename, LIMITS } from '@/lib/creative-scale/validation';
 import { checkFFmpegEnvironment } from '@/lib/creative-scale/ffmpeg-adapter';
 import { createInitialProgressState, ExecutionProgressState } from '@/components/creative-scale/ExecutionProgressPanel';
@@ -369,10 +369,10 @@ export default function CreativeScale() {
       totalVariations: currentPlans.length,
       currentEngine: null,
       engines: [
-        { engine: 'ffmpeg-browser', status: 'pending', progress: 0, message: '' },
-        { engine: 'ffmpeg-cloud', status: 'pending', progress: 0, message: '' },
+        { engine: 'webcodecs', status: 'pending', progress: 0, message: '' },
         { engine: 'cloudinary', status: 'pending', progress: 0, message: '' },
-        { engine: 'no-render', status: 'pending', progress: 0, message: '' },
+        { engine: 'server_ffmpeg', status: 'pending', progress: 0, message: '' },
+        { engine: 'plan_export', status: 'pending', progress: 0, message: '' },
       ],
       overallProgress: 0,
       status: 'executing'
@@ -388,10 +388,10 @@ export default function CreativeScale() {
         variationIndex: i,
         currentEngine: null,
         engines: [
-          { engine: 'ffmpeg-browser', status: 'pending', progress: 0, message: '' },
-          { engine: 'ffmpeg-cloud', status: 'pending', progress: 0, message: '' },
+          { engine: 'webcodecs', status: 'pending', progress: 0, message: '' },
           { engine: 'cloudinary', status: 'pending', progress: 0, message: '' },
-          { engine: 'no-render', status: 'pending', progress: 0, message: '' },
+          { engine: 'server_ffmpeg', status: 'pending', progress: 0, message: '' },
+          { engine: 'plan_export', status: 'pending', progress: 0, message: '' },
         ],
         overallProgress: (i / currentPlans.length) * 100
       }));
@@ -401,7 +401,7 @@ export default function CreativeScale() {
         analysis: currentAnalysis,
         blueprint: currentBlueprint,
         variationIndex: i,
-        onProgress: (engine: EngineType, progress: number, message: string) => {
+        onProgress: (engine: EngineId, progress: number, message: string) => {
           setExecutionProgress(prev => ({
             ...prev,
             currentEngine: engine,
@@ -412,7 +412,7 @@ export default function CreativeScale() {
             )
           }));
         },
-        onEngineSwitch: (from: EngineType | null, to: EngineType, reason: string) => {
+        onEngineSwitch: (from: EngineId | null, to: EngineId, reason: string) => {
           setExecutionProgress(prev => ({
             ...prev,
             currentEngine: to,
