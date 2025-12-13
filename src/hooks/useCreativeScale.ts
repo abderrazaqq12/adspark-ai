@@ -521,18 +521,20 @@ export function useCreativeScale(): UseCreativeScaleReturn {
   const compileAllVariations = useCallback(async (
     analysis: VideoAnalysis,
     blueprint: CreativeBlueprint,
-    assetBaseUrl?: string
+    sourceVideoUrl?: string
   ): Promise<ExecutionPlan[]> => {
     setIsCompiling(true);
     setError(null);
 
     try {
+      console.log('[useCreativeScale] Compiling with source video URL:', sourceVideoUrl ? 'provided' : 'missing');
+      
       const { data, error: fnError } = await supabase.functions.invoke('creative-scale-compile', {
         body: {
           analysis,
           blueprint,
           compile_all: true,
-          asset_base_url: assetBaseUrl
+          source_video_url: sourceVideoUrl
         }
       });
 
@@ -540,6 +542,12 @@ export function useCreativeScale(): UseCreativeScaleReturn {
       if (!data?.plans) throw new Error('No execution plans returned');
 
       const plans = data.plans as ExecutionPlan[];
+      
+      // Log first plan's asset_url for debugging
+      if (plans[0]?.timeline?.[0]) {
+        console.log('[useCreativeScale] First plan asset_url:', plans[0].timeline[0].asset_url);
+      }
+      
       setCurrentPlans(plans);
       return plans;
     } catch (err) {

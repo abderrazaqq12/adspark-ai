@@ -134,7 +134,7 @@ function resolveAction(idea: any, segments: any[]): any {
 function buildTimeline(
   analysis: any,
   resolvedActions: any[],
-  assetBaseUrl?: string
+  sourceVideoUrl?: string
 ): { timeline: any[]; warnings: string[] } {
   const warnings: string[] = [];
   const timeline: any[] = [];
@@ -178,11 +178,12 @@ function buildTimeline(
     const trimmedDuration = sourceDuration - trimStartMs - trimEndMs;
     const outputDuration = Math.round(trimmedDuration / speedMultiplier);
 
+    // Use the source video URL directly (blob URL or HTTP URL)
     const timelineSegment = {
       segment_id: `ts_${segmentIndex}`,
       source_video_id: analysis.source_video_id,
       source_segment_id: segment.id,
-      asset_url: assetBaseUrl ? `${assetBaseUrl}/${analysis.source_video_id}` : null,
+      asset_url: sourceVideoUrl || null,
       
       trim_start_ms: segment.start_ms + trimStartMs,
       trim_end_ms: segment.end_ms - trimEndMs,
@@ -213,7 +214,7 @@ function buildTimeline(
 function buildAudioTracks(
   analysis: any,
   timeline: any[],
-  assetBaseUrl?: string
+  sourceVideoUrl?: string
 ): any[] {
   const audioTracks: any[] = [];
 
@@ -229,10 +230,11 @@ function buildAudioTracks(
     return audioTracks;
   }
 
+  // Use the source video URL directly for audio extraction
   const audioSegment = {
     audio_id: 'audio_0',
     source_video_id: analysis.source_video_id,
-    asset_url: assetBaseUrl ? `${assetBaseUrl}/${analysis.source_video_id}` : null,
+    asset_url: sourceVideoUrl || null,
     
     trim_start_ms: 0,
     trim_end_ms: analysis.metadata.duration_ms,
@@ -304,7 +306,7 @@ function validateTimeline(timeline: any[], audioTracks: any[]): any {
 // MAIN COMPILER
 // ============================================
 
-function compile(analysis: any, blueprint: any, variationIndex: number, assetBaseUrl?: string): any {
+function compile(analysis: any, blueprint: any, variationIndex: number, sourceVideoUrl?: string): any {
   if (!analysis || !analysis.segments || analysis.segments.length === 0) {
     return {
       plan_id: `exec_${crypto.randomUUID()}`,
@@ -358,10 +360,10 @@ function compile(analysis: any, blueprint: any, variationIndex: number, assetBas
   const { timeline, warnings: timelineWarnings } = buildTimeline(
     analysis, 
     [resolvedAction], 
-    assetBaseUrl
+    sourceVideoUrl
   );
 
-  const audioTracks = buildAudioTracks(analysis, timeline, assetBaseUrl);
+  const audioTracks = buildAudioTracks(analysis, timeline, sourceVideoUrl);
   const validation = validateTimeline(timeline, audioTracks);
   validation.warnings.push(...timelineWarnings);
 
@@ -402,8 +404,12 @@ serve(async (req) => {
       blueprint, 
       variation_index, 
       compile_all = false,
-      asset_base_url 
+      asset_base_url,
+      source_video_url
     } = await req.json();
+
+    // Support both old parameter name (asset_base_url) and new (source_video_url)
+    const videoUrl = source_video_url || asset_base_url;
 
     if (!analysis || !blueprint) {
       return new Response(
@@ -412,7 +418,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[creative-scale-compile] Compiling: analysis=${analysis.id}, blueprint=${blueprint.id}`);
+    console.log(`[creative-scale-compile] Compiling: analysis=${analysis.id}, blueprint=${blueprint.id}, videoUrl=${videoUrl ? 'provided' : 'missing'}`);
 
     let plans: any[];
 
@@ -420,13 +426,13 @@ serve(async (req) => {
       // Compile all variations
       plans = [];
       for (let i = 0; i < (blueprint.variation_ideas?.length || 0); i++) {
-        const plan = compile(analysis, blueprint, i, asset_base_url);
+        const plan = compile(analysis, blueprint, i, videoUrl);
         plans.push(plan);
       }
     } else {
       // Compile single variation
       const idx = variation_index ?? 0;
-      const plan = compile(analysis, blueprint, idx, asset_base_url);
+      const plan = compile(analysis, blueprint, idx, videoUrl);
       plans = [plan];
     }
 

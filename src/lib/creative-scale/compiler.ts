@@ -151,7 +151,7 @@ function resolveAction(
 function buildTimeline(
   analysis: VideoAnalysis,
   resolvedActions: ResolvedAction[],
-  assetBaseUrl?: string
+  sourceVideoUrl?: string
 ): { timeline: TimelineSegment[]; warnings: string[] } {
   const warnings: string[] = [];
   const timeline: TimelineSegment[] = [];
@@ -199,11 +199,12 @@ function buildTimeline(
     const trimmedDuration = sourceDuration - trimStartMs - trimEndMs;
     const outputDuration = Math.round(trimmedDuration / speedMultiplier);
 
+    // Use source video URL directly (blob URL or HTTP URL)
     const timelineSegment: TimelineSegment = {
       segment_id: `ts_${segmentIndex}`,
       source_video_id: analysis.source_video_id,
       source_segment_id: segment.id,
-      asset_url: assetBaseUrl ? `${assetBaseUrl}/${analysis.source_video_id}` : null,
+      asset_url: sourceVideoUrl || null,
       
       trim_start_ms: segment.start_ms + trimStartMs,
       trim_end_ms: segment.end_ms - trimEndMs,
@@ -234,7 +235,7 @@ function buildTimeline(
 function buildAudioTracks(
   analysis: VideoAnalysis,
   timeline: TimelineSegment[],
-  assetBaseUrl?: string
+  sourceVideoUrl?: string
 ): AudioSegment[] {
   const audioTracks: AudioSegment[] = [];
 
@@ -252,10 +253,11 @@ function buildAudioTracks(
   }
 
   // Create single audio track synced to video timeline
+  // Use source video URL directly for audio extraction
   const audioSegment: AudioSegment = {
     audio_id: 'audio_0',
     source_video_id: analysis.source_video_id,
-    asset_url: assetBaseUrl ? `${assetBaseUrl}/${analysis.source_video_id}` : null,
+    asset_url: sourceVideoUrl || null,
     
     trim_start_ms: 0,
     trim_end_ms: analysis.metadata.duration_ms,
@@ -334,7 +336,7 @@ function validateTimeline(
 // ============================================
 
 export function compile(input: CompilerInput): CompilerOutput {
-  const { analysis, blueprint, variation_index, asset_base_url } = input;
+  const { analysis, blueprint, variation_index, asset_base_url: sourceVideoUrl } = input;
 
   // Validate inputs
   if (!analysis || !analysis.segments || analysis.segments.length === 0) {
@@ -388,15 +390,15 @@ export function compile(input: CompilerInput): CompilerOutput {
     return { success: true, plan };
   }
 
-  // Build timeline
+  // Build timeline with source video URL directly
   const { timeline, warnings: timelineWarnings } = buildTimeline(
     analysis, 
     [resolvedAction], 
-    asset_base_url
+    sourceVideoUrl
   );
 
   // Build audio tracks
-  const audioTracks = buildAudioTracks(analysis, timeline, asset_base_url);
+  const audioTracks = buildAudioTracks(analysis, timeline, sourceVideoUrl);
 
   // Validate
   const validation = validateTimeline(timeline, audioTracks);
@@ -434,7 +436,7 @@ export function compile(input: CompilerInput): CompilerOutput {
 export function compileAll(
   analysis: VideoAnalysis,
   blueprint: CreativeBlueprint,
-  assetBaseUrl?: string
+  sourceVideoUrl?: string
 ): ExecutionPlan[] {
   const plans: ExecutionPlan[] = [];
 
@@ -443,7 +445,7 @@ export function compileAll(
       analysis,
       blueprint,
       variation_index: i,
-      asset_base_url: assetBaseUrl
+      asset_base_url: sourceVideoUrl
     });
 
     if (result.plan) {
