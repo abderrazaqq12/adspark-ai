@@ -1,9 +1,10 @@
 /**
  * Creative Scale - Full Pipeline Hook
  * Phase A (Analysis) + Step 4 (Compiler) + Phase B (Router)
+ * WITH: Timeouts, schema validation, error handling
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { 
   VideoAnalysis, 
@@ -25,6 +26,92 @@ import {
   scoreEngines, 
   extractRequiredCapabilities 
 } from '@/lib/creative-scale/router';
+import {
+  validateVideoAnalysis,
+  validateCreativeBlueprint,
+  clampVariationCount,
+  LIMITS
+} from '@/lib/creative-scale/validation';
+
+// ============================================
+// SESSION STORAGE PERSISTENCE
+// ============================================
+
+const STORAGE_KEY = 'creative_scale_state';
+
+interface PersistedState {
+  currentAnalysis: VideoAnalysis | null;
+  currentBlueprint: CreativeBlueprint | null;
+  currentPlans: ExecutionPlan[];
+}
+
+function saveToSession(state: PersistedState): void {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.warn('[CreativeScale] Failed to save state:', e);
+  }
+}
+
+function loadFromSession(): PersistedState | null {
+  try {
+    const stored = sessionStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.warn('[CreativeScale] Failed to load state:', e);
+  }
+  return null;
+}
+
+function clearSession(): void {
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+  } catch (e) {
+    // Ignore
+  }
+}
+
+// ============================================
+// FETCH WITH TIMEOUT
+// ============================================
+
+async function invokeWithTimeout<T>(
+  functionName: string,
+  body: Record<string, unknown>,
+  timeoutMs: number = LIMITS.REQUEST_TIMEOUT_MS
+): Promise<{ data: T | null; error: Error | null }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const { data, error } = await supabase.functions.invoke(functionName, {
+      body,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (error) {
+      // Handle specific error codes
+      if (error.message?.includes('402') || error.message?.includes('payment')) {
+        return { data: null, error: new Error('Payment required. Please add credits to continue.') };
+      }
+      if (error.message?.includes('429') || error.message?.includes('rate')) {
+        return { data: null, error: new Error('Rate limit exceeded. Please wait a moment.') };
+      }
+      return { data: null, error: new Error(error.message) };
+    }
+
+    return { data: data as T, error: null };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err instanceof Error && err.name === 'AbortError') {
+      return { data: null, error: new Error(`Request timed out after ${timeoutMs / 1000}s`) };
+    }
+    return { data: null, error: err instanceof Error ? err : new Error('Unknown error') };
+  }
+}
 
 interface FullPipelineOutput extends PhaseAOutput {
   plans: ExecutionPlan[];
@@ -116,7 +203,30 @@ export function useCreativeScale(): UseCreativeScaleReturn {
   const [routerEvents, setRouterEvents] = useState<RouterEvent[]>([]);
 
   // ============================================
-  // PHASE A: ANALYZE
+  // RESTORE STATE ON MOUNT
+  // ============================================
+
+  useEffect(() => {
+    const saved = loadFromSession();
+    if (saved) {
+      if (saved.currentAnalysis) setCurrentAnalysis(saved.currentAnalysis);
+      if (saved.currentBlueprint) setCurrentBlueprint(saved.currentBlueprint);
+      if (saved.currentPlans?.length) setCurrentPlans(saved.currentPlans);
+    }
+  }, []);
+
+  // ============================================
+  // PERSIST STATE ON CHANGE
+  // ============================================
+
+  useEffect(() => {
+    if (currentAnalysis || currentBlueprint || currentPlans.length > 0) {
+      saveToSession({ currentAnalysis, currentBlueprint, currentPlans });
+    }
+  }, [currentAnalysis, currentBlueprint, currentPlans]);
+
+  // ============================================
+  // PHASE A: ANALYZE (with timeout + validation)
   // ============================================
 
   const analyzeVideo = useCallback(async (
@@ -128,24 +238,33 @@ export function useCreativeScale(): UseCreativeScaleReturn {
     setError(null);
     
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('creative-scale-analyze', {
-        body: {
+      const { data, error: fnError } = await invokeWithTimeout<{ analysis: unknown }>(
+        'creative-scale-analyze',
+        {
           video_url: videoUrl,
           video_id: videoId,
           language: options?.language,
           market: options?.market
         }
-      });
+      );
 
-      if (fnError) throw new Error(fnError.message);
-      if (!data?.analysis) throw new Error('No analysis returned');
+      if (fnError) throw fnError;
+      if (!data?.analysis) throw new Error('No analysis returned from AI');
 
-      const analysis = data.analysis as VideoAnalysis;
+      // Schema validation
+      const validation = validateVideoAnalysis(data.analysis);
+      if (!validation.success) {
+        throw new Error(validation.error || 'Invalid analysis format');
+      }
+
+      // Cast to VideoAnalysis after validation (Zod makes all fields optional in inferred type)
+      const analysis = validation.data as unknown as VideoAnalysis;
       setCurrentAnalysis(analysis);
       return analysis;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Analysis failed';
       setError(message);
+      setIsAnalyzing(false); // Ensure state reset
       return null;
     } finally {
       setIsAnalyzing(false);
@@ -153,7 +272,7 @@ export function useCreativeScale(): UseCreativeScaleReturn {
   }, []);
 
   // ============================================
-  // PHASE A: STRATEGIZE
+  // PHASE A: STRATEGIZE (with timeout + validation)
   // ============================================
 
   const generateBlueprint = useCallback(async (
@@ -163,24 +282,36 @@ export function useCreativeScale(): UseCreativeScaleReturn {
     setIsGeneratingBlueprint(true);
     setError(null);
 
+    // Clamp variation count to safe limits
+    const safeVariationCount = clampVariationCount(options?.variationCount || 3);
+
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('creative-scale-strategize', {
-        body: {
+      const { data, error: fnError } = await invokeWithTimeout<{ blueprint: unknown }>(
+        'creative-scale-strategize',
+        {
           analysis,
           target_framework: options?.targetFramework,
-          variation_count: options?.variationCount || 3
+          variation_count: safeVariationCount
         }
-      });
+      );
 
-      if (fnError) throw new Error(fnError.message);
-      if (!data?.blueprint) throw new Error('No blueprint returned');
+      if (fnError) throw fnError;
+      if (!data?.blueprint) throw new Error('No blueprint returned from AI');
 
-      const blueprint = data.blueprint as CreativeBlueprint;
+      // Schema validation
+      const validation = validateCreativeBlueprint(data.blueprint);
+      if (!validation.success) {
+        throw new Error(validation.error || 'Invalid blueprint format');
+      }
+
+      // Cast to CreativeBlueprint after validation (Zod makes all fields optional in inferred type)
+      const blueprint = validation.data as unknown as CreativeBlueprint;
       setCurrentBlueprint(blueprint);
       return blueprint;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Blueprint generation failed';
       setError(message);
+      setIsGeneratingBlueprint(false); // Ensure state reset
       return null;
     } finally {
       setIsGeneratingBlueprint(false);
@@ -408,7 +539,7 @@ export function useCreativeScale(): UseCreativeScaleReturn {
   }, []);
 
   // ============================================
-  // RESET
+  // RESET (with session clear)
   // ============================================
 
   const reset = useCallback(() => {
@@ -418,6 +549,11 @@ export function useCreativeScale(): UseCreativeScaleReturn {
     setRouterResult(null);
     setRouterEvents([]);
     setError(null);
+    setIsAnalyzing(false);
+    setIsGeneratingBlueprint(false);
+    setIsCompiling(false);
+    setIsRouting(false);
+    clearSession();
   }, []);
 
   return {

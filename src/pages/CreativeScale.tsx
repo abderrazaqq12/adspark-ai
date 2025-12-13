@@ -4,7 +4,7 @@
  * 4-step workflow: Upload → Analyze → Plan → Execute
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,9 +29,38 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCreativeScale } from '@/hooks/useCreativeScale';
+import { validateVideoFile, sanitizeFilename, LIMITS } from '@/lib/creative-scale/validation';
 import type { VideoAnalysis, CreativeBlueprint } from '@/lib/creative-scale/types';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
 import type { RouterResult } from '@/lib/creative-scale/router-types';
+
+// ============================================
+// SESSION PERSISTENCE FOR UI STATE
+// ============================================
+
+const UI_STORAGE_KEY = 'creative_scale_ui';
+
+interface PersistedUIState {
+  currentStep: number;
+  jobState: JobState;
+}
+
+function saveUIState(state: PersistedUIState): void {
+  try {
+    sessionStorage.setItem(UI_STORAGE_KEY, JSON.stringify(state));
+  } catch (e) { /* ignore */ }
+}
+
+function loadUIState(): PersistedUIState | null {
+  try {
+    const stored = sessionStorage.getItem(UI_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : null;
+  } catch (e) { return null; }
+}
+
+function clearUIState(): void {
+  try { sessionStorage.removeItem(UI_STORAGE_KEY); } catch (e) { /* ignore */ }
+}
 
 // ============================================
 // JOB STATE MACHINE
@@ -120,6 +149,32 @@ export default function CreativeScale() {
   } = useCreativeScale();
 
   // ============================================
+  // RESTORE UI STATE ON MOUNT
+  // ============================================
+
+  useEffect(() => {
+    const savedUI = loadUIState();
+    if (savedUI) {
+      // Only restore if we have analysis data
+      if (currentAnalysis) {
+        setCurrentStep(savedUI.currentStep);
+        // Don't restore processing states
+        if (savedUI.jobState !== 'uploading' && 
+            savedUI.jobState !== 'analyzing' && 
+            savedUI.jobState !== 'planning' && 
+            savedUI.jobState !== 'executing') {
+          setJobState(savedUI.jobState);
+        }
+      }
+    }
+  }, [currentAnalysis]);
+
+  // Persist UI state on change
+  useEffect(() => {
+    saveUIState({ currentStep, jobState });
+  }, [currentStep, jobState]);
+
+  // ============================================
   // STEP 1: UPLOAD
   // ============================================
 
@@ -130,24 +185,31 @@ export default function CreativeScale() {
     const newVideos: UploadedVideo[] = [];
     
     for (const file of Array.from(files)) {
-      // Validate file type
-      if (!['video/mp4', 'video/webm', 'video/quicktime'].includes(file.type)) {
-        toast.error(`${file.name}: Invalid format. Use MP4, WebM, or MOV.`);
+      // Sanitize filename
+      const safeFilename = sanitizeFilename(file.name);
+      
+      // Validate file (size + type)
+      const validation = validateVideoFile(file);
+      if (!validation.valid) {
+        toast.error(`${safeFilename}: ${validation.error}`);
         continue;
       }
       
       // Validate file count
-      if (uploadedVideos.length + newVideos.length >= 20) {
-        toast.error('Maximum 20 videos allowed');
+      if (uploadedVideos.length + newVideos.length >= LIMITS.MAX_VIDEOS) {
+        toast.error(`Maximum ${LIMITS.MAX_VIDEOS} videos allowed`);
         break;
       }
       
       // Create object URL for preview
       const url = URL.createObjectURL(file);
       
+      // Create safe file reference with sanitized name
+      const safeFile = new File([file], safeFilename, { type: file.type });
+      
       newVideos.push({
         id: `video_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-        file,
+        file: safeFile,
         url,
         status: 'pending'
       });
@@ -159,19 +221,27 @@ export default function CreativeScale() {
       videoEl.preload = 'metadata';
       
       await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          video.status = 'error';
+          video.error = 'Video load timeout';
+          resolve();
+        }, 10000); // 10s timeout for metadata load
+        
         videoEl.onloadedmetadata = () => {
+          clearTimeout(timeout);
           video.duration = videoEl.duration;
-          if (videoEl.duration > 60) {
+          if (videoEl.duration > LIMITS.MAX_DURATION_SEC) {
             video.status = 'error';
-            video.error = 'Duration exceeds 60 seconds';
+            video.error = `Duration exceeds ${LIMITS.MAX_DURATION_SEC} seconds`;
           } else {
             video.status = 'ready';
           }
           resolve();
         };
         videoEl.onerror = () => {
+          clearTimeout(timeout);
           video.status = 'error';
-          video.error = 'Failed to load video';
+          video.error = 'Failed to load video (may be corrupted)';
           resolve();
         };
         videoEl.src = video.url;
@@ -219,16 +289,21 @@ export default function CreativeScale() {
       });
       
       if (!analysis) {
-        throw new Error('Analysis failed');
+        // Error already set by hook
+        setJobState('idle');
+        setCurrentStep(1);
+        return;
       }
       
-      // Generate blueprint
+      // Generate blueprint with capped variations
       const blueprint = await generateBlueprint(analysis, {
-        variationCount: 5
+        variationCount: Math.min(5, LIMITS.MAX_VARIATIONS)
       });
       
       if (!blueprint) {
-        throw new Error('Blueprint generation failed');
+        // Error already set by hook
+        setJobState('idle');
+        return;
       }
       
       toast.success('Analysis complete');
@@ -237,7 +312,8 @@ export default function CreativeScale() {
       
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Analysis failed');
-      setJobState('idle');
+      setJobState('idle'); // Always reset state on error
+      setCurrentStep(1);
     }
   }, [uploadedVideos, selectedVideoIndex, analyzeVideo, generateBlueprint]);
 
@@ -261,7 +337,9 @@ export default function CreativeScale() {
       );
       
       if (plans.length === 0) {
-        throw new Error('No execution plans generated');
+        toast.warning('No execution plans could be generated. Check variation compatibility.');
+        setJobState('idle');
+        return;
       }
       
       toast.success(`${plans.length} variation(s) planned`);
@@ -270,7 +348,7 @@ export default function CreativeScale() {
       
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Planning failed');
-      setJobState('idle');
+      setJobState('idle'); // Always reset state on error
     }
   }, [currentAnalysis, currentBlueprint, compileAllVariations, uploadedVideos]);
 
@@ -319,6 +397,7 @@ export default function CreativeScale() {
     setJobState('idle');
     setSelectedVideoIndex(0);
     resetHook();
+    clearUIState();
   }, [uploadedVideos, resetHook]);
 
   // ============================================

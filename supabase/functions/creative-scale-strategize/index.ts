@@ -12,6 +12,9 @@ serve(async (req) => {
 
   try {
     const { analysis, target_framework, variation_count = 3 } = await req.json();
+    
+    // Clamp variation count to safe limits (1-20)
+    const safeVariationCount = Math.max(1, Math.min(20, variation_count));
 
     if (!analysis || !analysis.segments) {
       return new Response(
@@ -75,7 +78,7 @@ Detected Style: ${analysis.detected_style}
 Duration: ${analysis.metadata?.duration_ms}ms
 ${target_framework ? `Preferred Framework: ${target_framework}` : 'Choose the best framework based on the content.'}
 
-Generate exactly ${variation_count} variation ideas.
+Generate exactly ${safeVariationCount} variation ideas (must be between 1-20).
 
 Return this exact JSON structure:
 {
@@ -136,6 +139,13 @@ Return ONLY the JSON, no markdown, no explanation.`;
         return new Response(
           JSON.stringify({ error: 'Rate limit exceeded, please try again later' }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ error: 'Payment required. Please add credits to continue.' }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
