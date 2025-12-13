@@ -39,6 +39,8 @@ export {
 
 // Validation & Safety
 export * from './validation';
+export * from './brain-v2-types';
+export * from './brain-v2-engine';
 
 // Prompts (for edge functions)
 export * from './prompts';
