@@ -2,6 +2,7 @@
  * Creative Scale - Phase B Step 5: Engine Router
  * Capability-based routing with graceful degradation
  * NEVER returns error - ALWAYS provides value
+ * NOW WITH: Real FFmpeg WASM execution
  */
 
 import { ExecutionPlan, OutputFormat } from './compiler-types';
@@ -26,6 +27,7 @@ import {
   CostProfile,
 } from './router-types';
 import { ENGINE_REGISTRY, getAvailableEngines } from './engine-registry';
+import { getFFmpegAdapter, checkFFmpegEnvironment } from './ffmpeg-adapter';
 
 // ============================================
 // CAPABILITY EXTRACTION
@@ -459,47 +461,87 @@ export async function routeExecution(
       payload: { engine_id: selectedEngine.engine_id },
     });
     
-    // Simulate execution (actual engine dispatch would happen here)
-    // In real implementation, this would call the engine adapter
+    // Execute using FFmpeg adapter (real execution)
     try {
-      // Placeholder for actual execution
-      // const result = await engineAdapters[selectedEngine.engine_id].execute(currentPlan);
-      
-      // For now, simulate success path structure
-      // Real implementation would have engine-specific adapters
-      const simulatedSuccess = false; // Will be replaced with real execution
-      
-      if (simulatedSuccess) {
-        context = transitionState(context, 'validating', { engine_id: selectedEngine.engine_id });
-        
-        // Validation would happen here
-        
-        context = transitionState(context, 'completed', { engine_id: selectedEngine.engine_id });
+      // Check if FFmpeg is available for browser engines
+      if (selectedEngine.location === 'browser') {
+        const envCheck = checkFFmpegEnvironment();
+        if (!envCheck.ready) {
+          throw new Error(`FFmpeg unavailable: ${envCheck.reason}`);
+        }
+
+        const adapter = getFFmpegAdapter();
         
         emitEvent({
           event_id: `evt_${Date.now()}`,
           job_id: jobId,
           timestamp: new Date().toISOString(),
-          event_type: 'execution_complete',
-          payload: { 
-            engine_id: selectedEngine.engine_id,
-            processing_time_ms: Date.now() - startTime,
-          },
+          event_type: 'ffmpeg_init',
+          payload: { engine_id: selectedEngine.engine_id },
         });
+
+        const result = await adapter.execute(currentPlan, {
+          onProgress: (progress) => {
+            emitEvent({
+              event_id: `evt_${Date.now()}`,
+              job_id: jobId,
+              timestamp: new Date().toISOString(),
+              event_type: 'progress',
+              payload: { progress, engine_id: selectedEngine.engine_id },
+            });
+          },
+          onLog: (message) => {
+            emitEvent({
+              event_id: `evt_${Date.now()}`,
+              job_id: jobId,
+              timestamp: new Date().toISOString(),
+              event_type: 'log',
+              payload: { message },
+            });
+          },
+          timeoutMs: options.timeoutMs || 300000, // 5 min default
+        });
+
+        if (result.success && result.video_url) {
+          context = transitionState(context, 'validating', { engine_id: selectedEngine.engine_id });
+          
+          // Validation: check blob exists
+          if (!result.video_blob || result.video_blob.size < 1000) {
+            throw new Error('Output video is too small or invalid');
+          }
+
+          context = transitionState(context, 'completed', { engine_id: selectedEngine.engine_id });
+          
+          emitEvent({
+            event_id: `evt_${Date.now()}`,
+            job_id: jobId,
+            timestamp: new Date().toISOString(),
+            event_type: 'execution_complete',
+            payload: { 
+              engine_id: selectedEngine.engine_id,
+              processing_time_ms: result.processing_time_ms,
+              video_size_bytes: result.video_blob.size,
+            },
+          });
+          
+          return {
+            status: 'completed',
+            job_id: jobId,
+            engine_id: selectedEngine.engine_id,
+            video_url: result.video_url,
+            processing_time_ms: result.processing_time_ms,
+            degradation_level: context.degradation_level,
+            warnings: [...currentPlan.validation.warnings, ...result.logs.slice(-5)],
+            output_video_url: result.video_url,
+          } satisfies RouteSuccessResult;
+        }
         
-        return {
-          status: 'completed',
-          job_id: jobId,
-          engine_id: selectedEngine.engine_id,
-          video_url: '', // Would come from engine result
-          processing_time_ms: Date.now() - startTime,
-          degradation_level: context.degradation_level,
-          warnings: currentPlan.validation.warnings,
-        } satisfies RouteSuccessResult;
+        // Execution failed
+        throw new Error(result.error || 'FFmpeg execution failed');
+      } else {
+        // Cloud engines - not yet implemented
+        throw new Error(`Cloud engine ${selectedEngine.engine_id} not implemented`);
       }
-      
-      // Execution failed, try next degradation level
-      throw new Error('Engine execution not implemented');
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

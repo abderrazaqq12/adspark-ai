@@ -5,6 +5,9 @@
 // Phase A Types
 export * from './types';
 
+// PRD Types
+export * from './prd-types';
+
 // Step 4: Compiler
 export * from './compiler-types';
 export { compile, compileAll } from './compiler';
@@ -22,6 +25,17 @@ export {
   routeExecution,
   getCompatibleEngines,
 } from './router';
+
+// FFmpeg Adapter
+export {
+  FFmpegAdapter,
+  getFFmpegAdapter,
+  resetFFmpegAdapter,
+  checkFFmpegEnvironment,
+  type FFmpegAdapterResult,
+  type FFmpegAdapterOptions,
+  type EnvironmentCheck,
+} from './ffmpeg-adapter';
 
 // Validation & Safety
 export * from './validation';
