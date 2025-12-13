@@ -267,7 +267,9 @@ export default function CreativeScale() {
     
     for (const video of uploadingVideos) {
       try {
-        const filePath = `creative-scale/${video.id}/${video.file.name}`;
+        // Sanitize filename - use only ASCII characters to avoid storage errors
+        const fileExt = video.file.name.split('.').pop() || 'mp4';
+        const filePath = `creative-scale/${video.id}/video.${fileExt}`;
         
         const { error: uploadError } = await supabase.storage
           .from('videos')
