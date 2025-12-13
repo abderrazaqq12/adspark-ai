@@ -32,6 +32,7 @@ import {
   Settings2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import { useCreativeScale } from '@/hooks/useCreativeScale';
 import { validateVideoFile, sanitizeFilename, LIMITS } from '@/lib/creative-scale/validation';
 import { SignalsDisplay } from '@/components/creative-scale/SignalsDisplay';
@@ -85,9 +86,10 @@ function clearUIState(): void {
 interface UploadedVideo {
   id: string;
   file: File;
-  url: string;
+  url: string; // Local blob URL for preview
+  storageUrl?: string; // Supabase storage URL for FFmpeg
   duration?: number;
-  status: 'pending' | 'ready' | 'error';
+  status: 'pending' | 'uploading' | 'ready' | 'error';
   error?: string;
 }
 
@@ -211,9 +213,10 @@ export default function CreativeScale() {
       
       const url = URL.createObjectURL(file);
       const safeFile = new File([file], safeFilename, { type: file.type });
+      const videoId = `video_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       
       newVideos.push({
-        id: `video_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        id: videoId,
         file: safeFile,
         url,
         status: 'pending'
@@ -239,7 +242,7 @@ export default function CreativeScale() {
             video.status = 'error';
             video.error = `Duration exceeds ${LIMITS.MAX_DURATION_SEC}s`;
           } else {
-            video.status = 'ready';
+            video.status = 'uploading'; // Mark as uploading to storage
           }
           resolve();
         };
@@ -253,11 +256,57 @@ export default function CreativeScale() {
       });
     }
     
+    // Add videos to state (will show uploading status)
     setUploadedVideos(prev => [...prev, ...newVideos]);
     
-    const readyCount = newVideos.filter(v => v.status === 'ready').length;
+    // Upload valid videos to Supabase storage
+    const uploadingVideos = newVideos.filter(v => v.status === 'uploading');
+    if (uploadingVideos.length > 0) {
+      toast.info(`Uploading ${uploadingVideos.length} video(s) to storage...`);
+    }
+    
+    for (const video of uploadingVideos) {
+      try {
+        const filePath = `creative-scale/${video.id}/${video.file.name}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('videos')
+          .upload(filePath, video.file, {
+            cacheControl: '3600',
+            upsert: true
+          });
+        
+        if (uploadError) {
+          throw uploadError;
+        }
+        
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('videos')
+          .getPublicUrl(filePath);
+        
+        // Update video with storage URL
+        setUploadedVideos(prev => prev.map(v => 
+          v.id === video.id 
+            ? { ...v, status: 'ready' as const, storageUrl: urlData.publicUrl }
+            : v
+        ));
+        
+        console.log('[CreativeScale] Video uploaded to storage:', urlData.publicUrl);
+        
+      } catch (err) {
+        console.error('[CreativeScale] Storage upload failed:', err);
+        setUploadedVideos(prev => prev.map(v => 
+          v.id === video.id 
+            ? { ...v, status: 'error' as const, error: 'Storage upload failed' }
+            : v
+        ));
+      }
+    }
+    
+    const readyCount = newVideos.filter(v => v.status === 'uploading').length;
     if (readyCount > 0) {
-      toast.success(`${readyCount} video(s) uploaded`);
+      toast.success(`${readyCount} video(s) ready`);
     }
   }, [uploadedVideos.length]);
 
@@ -345,10 +394,20 @@ export default function CreativeScale() {
       
       // Compile all variations if we have a blueprint
       if (blueprint) {
+        // Use storage URL for FFmpeg (falls back to blob URL if not available)
+        const videoUrl = uploadedVideos[selectedVideoIndex]?.storageUrl || uploadedVideos[0]?.storageUrl || uploadedVideos[0]?.url;
+        
+        if (!videoUrl) {
+          toast.error('No video URL available for compilation');
+          return;
+        }
+        
+        console.log('[CreativeScale] Compiling with video URL:', videoUrl.substring(0, 80));
+        
         const plans = await compileAllVariations(
           currentAnalysis,
           blueprint,
-          uploadedVideos[0]?.url
+          videoUrl
         );
         
         if (plans.length === 0) {
@@ -567,7 +626,7 @@ export default function CreativeScale() {
                           selectedVideoIndex === idx 
                             ? 'border-primary ring-2 ring-primary/20' 
                             : 'border-border'
-                        } ${video.status === 'error' ? 'opacity-60' : ''}`}
+                        } ${video.status === 'error' ? 'opacity-60' : ''} ${video.status === 'uploading' ? 'opacity-75' : ''}`}
                         onClick={() => setSelectedVideoIndex(idx)}
                       >
                         <div className="aspect-video bg-muted">
@@ -577,12 +636,26 @@ export default function CreativeScale() {
                         <div className="absolute bottom-0 left-0 right-0 p-2">
                           <p className="text-xs text-white truncate">{video.file.name}</p>
                           <p className="text-xs text-white/70">
-                            {video.duration ? `${video.duration.toFixed(1)}s` : 'Loading...'}
+                            {video.status === 'uploading' 
+                              ? 'Uploading...' 
+                              : video.duration 
+                                ? `${video.duration.toFixed(1)}s` 
+                                : 'Loading...'}
                           </p>
                         </div>
                         {video.status === 'error' && (
                           <div className="absolute top-2 right-2">
                             <AlertCircle className="w-4 h-4 text-destructive" />
+                          </div>
+                        )}
+                        {video.status === 'uploading' && (
+                          <div className="absolute top-2 right-2">
+                            <RefreshCw className="w-4 h-4 text-white animate-spin" />
+                          </div>
+                        )}
+                        {video.status === 'ready' && video.storageUrl && (
+                          <div className="absolute top-2 right-2">
+                            <CheckCircle2 className="w-4 h-4 text-green-500" />
                           </div>
                         )}
                         <Button
