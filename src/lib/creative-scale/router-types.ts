@@ -192,6 +192,7 @@ export interface RouteRequest {
   preferred_engine_id?: string;
   max_cost_profile?: CostProfile;
   force_location?: ProcessingLocation;
+  user_id?: string;
 }
 
 // ============================================
@@ -204,7 +205,7 @@ export interface RouterEvent {
   timestamp: string;
   event_type: 'state_change' | 'engine_selected' | 'execution_start' | 
               'execution_complete' | 'execution_failed' | 'degradation_applied' |
-              'retry_triggered' | 'partial_success' | 'ffmpeg_init' | 'progress' | 'log';
+              'retry_triggered' | 'partial_success' | 'ffmpeg_init' | 'progress' | 'log' | 'cloud_fallback';
   payload: Record<string, unknown>;
 }
 
