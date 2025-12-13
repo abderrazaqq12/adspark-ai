@@ -1,6 +1,7 @@
 /**
  * Step 5: Results
  * Download outputs and review generated videos
+ * Updated for capability-based routing
  */
 
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,8 @@ import {
   RefreshCw,
   CheckCircle2,
   AlertCircle,
-  Sparkles
+  Sparkles,
+  FileCode
 } from 'lucide-react';
 import { ResultsGrid } from '@/components/creative-scale/ResultsGrid';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
@@ -33,7 +35,7 @@ export function ResultsStep({
   onReset
 }: ResultsStepProps) {
   const successCount = Array.from(results.values()).filter(r => r.status === 'success').length;
-  const partialCount = Array.from(results.values()).filter(r => r.status === 'partial_success').length;
+  const planOnlyCount = Array.from(results.values()).filter(r => r.status === 'plan_only' || r.status === 'partial').length;
   const failCount = Array.from(results.values()).filter(r => r.status === 'failed').length;
 
   return (
@@ -52,10 +54,10 @@ export function ResultsStep({
           <CheckCircle2 className="w-5 h-5 text-green-500" />
           <span className="font-medium">{successCount} Completed</span>
         </div>
-        {partialCount > 0 && (
+        {planOnlyCount > 0 && (
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-amber-500" />
-            <span className="font-medium">{partialCount} Partial</span>
+            <FileCode className="w-5 h-5 text-amber-500" />
+            <span className="font-medium">{planOnlyCount} Plan Only</span>
           </div>
         )}
         {failCount > 0 && (
@@ -76,14 +78,17 @@ export function ResultsStep({
       <div className="flex-1">
         <ScrollArea className="h-[calc(100vh-350px)] min-h-[300px]">
           <ResultsGrid
-            items={plans.map((plan, idx) => ({
-              variationIndex: idx,
-              plan,
-              result: results.get(plan.plan_id) as any,
-              engineUsed: results.get(plan.plan_id)?.engine_used || 'none',
-              errorReason: results.get(plan.plan_id)?.error_message,
-              fallbackUsed: (results.get(plan.plan_id)?.fallbackChain?.length || 0) > 1
-            }))}
+            items={plans.map((plan, idx) => {
+              const result = results.get(plan.plan_id);
+              return {
+                variationIndex: idx,
+                plan,
+                result: result as any,
+                engineUsed: result?.engine_used || 'none',
+                errorReason: result?.reason,
+                fallbackUsed: (result?.fallbackChain?.length || 0) > 1
+              };
+            })}
             onDownloadPlan={(item) => onDownloadPlan(item.plan)}
             onDownloadVideo={(item) => {
               const result = results.get(item.plan.plan_id);

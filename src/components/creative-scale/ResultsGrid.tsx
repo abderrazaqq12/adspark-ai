@@ -2,6 +2,7 @@
  * Results Grid Component
  * PRD-aligned: Shows variation results with download buttons (only if video exists)
  * Includes engine badges showing which engine rendered each variation
+ * Updated for capability-based routing
  */
 
 import { Badge } from '@/components/ui/badge';
@@ -23,7 +24,8 @@ import {
   Cpu,
   Cloud,
   Server,
-  FileCode
+  FileCode,
+  Monitor
 } from 'lucide-react';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
 import type { RouterResult } from '@/lib/creative-scale/router-types';
@@ -45,7 +47,7 @@ interface ResultsGridProps {
   onRetry?: (item: ResultItem) => void;
 }
 
-// Engine configuration for badges
+// Engine configuration for badges - updated for capability-based routing
 const ENGINE_CONFIG: Record<string, { 
   label: string; 
   icon: typeof Cpu; 
@@ -53,6 +55,36 @@ const ENGINE_CONFIG: Record<string, {
   bgColor: string;
   description: string;
 }> = {
+  // New capability-based engines
+  'webcodecs': {
+    label: 'WebCodecs',
+    icon: Monitor,
+    color: 'text-emerald-600',
+    bgColor: 'bg-emerald-500/10 border-emerald-500/30',
+    description: 'Rendered using browser-native WebCodecs API'
+  },
+  'cloudinary': {
+    label: 'Cloudinary',
+    icon: Cloud,
+    color: 'text-purple-600',
+    bgColor: 'bg-purple-500/10 border-purple-500/30',
+    description: 'Transformed via Cloudinary Video API'
+  },
+  'server_ffmpeg': {
+    label: 'Server FFmpeg',
+    icon: Server,
+    color: 'text-blue-600',
+    bgColor: 'bg-blue-500/10 border-blue-500/30',
+    description: 'Advanced rendering on cloud servers'
+  },
+  'plan_export': {
+    label: 'Plan Export',
+    icon: FileCode,
+    color: 'text-amber-600',
+    bgColor: 'bg-amber-500/10 border-amber-500/30',
+    description: 'Requires advanced rendering. Exported for manual execution.'
+  },
+  // Legacy support for backward compatibility
   'ffmpeg-browser': {
     label: 'Browser FFmpeg',
     icon: Cpu,
@@ -67,13 +99,6 @@ const ENGINE_CONFIG: Record<string, {
     bgColor: 'bg-blue-500/10 border-blue-500/30',
     description: 'Rendered on cloud server via fal.ai'
   },
-  'cloudinary': {
-    label: 'Cloudinary',
-    icon: Server,
-    color: 'text-purple-600',
-    bgColor: 'bg-purple-500/10 border-purple-500/30',
-    description: 'Rendered using Cloudinary Video API'
-  },
   'managed-api': {
     label: 'Managed API',
     icon: Server,
@@ -86,13 +111,20 @@ const ENGINE_CONFIG: Record<string, {
     icon: FileCode,
     color: 'text-amber-600',
     bgColor: 'bg-amber-500/10 border-amber-500/30',
-    description: 'No rendering - execution plan available for manual processing'
+    description: 'Execution plan available for manual processing'
+  },
+  'none': {
+    label: 'Not Executed',
+    icon: FileCode,
+    color: 'text-muted-foreground',
+    bgColor: 'bg-muted border-border',
+    description: 'Execution not attempted'
   }
 };
 
 function getEngineConfig(engineUsed: string) {
   return ENGINE_CONFIG[engineUsed] || {
-    label: engineUsed.replace(/-/g, ' '),
+    label: engineUsed.replace(/[-_]/g, ' '),
     icon: Cpu,
     color: 'text-muted-foreground',
     bgColor: 'bg-muted border-border',
@@ -113,6 +145,7 @@ export function ResultsGrid({
         const hasVideo = item.result?.status === 'completed' && 
           'output_video_url' in item.result && 
           item.result.output_video_url;
+        const isPlanOnly = item.engineUsed === 'plan_export' || item.engineUsed === 'no-render';
         const failed = item.result?.status === 'partial_success' || !item.result;
         const engineConfig = getEngineConfig(item.engineUsed);
         const EngineIcon = engineConfig.icon;
@@ -121,7 +154,9 @@ export function ResultsGrid({
           <div 
             key={item.plan.plan_id} 
             className={`rounded-lg border p-4 ${
-              failed ? 'border-destructive/50 bg-destructive/5' : 'border-border'
+              failed && !isPlanOnly ? 'border-destructive/50 bg-destructive/5' : 
+              isPlanOnly ? 'border-amber-500/30 bg-amber-500/5' :
+              'border-border'
             }`}
           >
             {/* Thumbnail / Placeholder */}
@@ -134,13 +169,17 @@ export function ResultsGrid({
                 />
               ) : (
                 <div className="text-center p-4">
-                  {failed ? (
+                  {isPlanOnly ? (
+                    <FileCode className="w-8 h-8 text-amber-500 mx-auto mb-2" />
+                  ) : failed ? (
                     <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-2" />
                   ) : (
                     <Play className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
                   )}
                   <p className="text-xs text-muted-foreground">
-                    {failed ? 'Execution failed' : 'No video generated'}
+                    {isPlanOnly ? 'Advanced rendering required' : 
+                     failed ? 'Execution failed' : 
+                     'No video generated'}
                   </p>
                 </div>
               )}
@@ -150,12 +189,14 @@ export function ResultsGrid({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-medium text-sm">Variation {item.variationIndex + 1}</span>
-                <Badge variant={hasVideo ? 'default' : failed ? 'destructive' : 'secondary'}>
+                <Badge variant={hasVideo ? 'default' : isPlanOnly ? 'secondary' : failed ? 'destructive' : 'secondary'}>
                   {hasVideo ? (
                     <>
                       <CheckCircle2 className="w-3 h-3 mr-1" />
                       Ready
                     </>
+                  ) : isPlanOnly ? (
+                    'Plan Exported'
                   ) : failed ? (
                     'Failed'
                   ) : (
@@ -182,14 +223,14 @@ export function ResultsGrid({
                     <p className="text-xs">{engineConfig.description}</p>
                     {item.fallbackUsed && (
                       <p className="text-xs text-amber-500 mt-1">
-                        ⚠ Used fallback engine due to primary engine failure
+                        ⚠ Used fallback engine due to primary engine limitation
                       </p>
                     )}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
 
-              {item.errorReason && (
+              {item.errorReason && !isPlanOnly && (
                 <p className="text-xs text-destructive">{item.errorReason}</p>
               )}
 
@@ -211,16 +252,16 @@ export function ResultsGrid({
                 {/* Download Plan - ALWAYS available */}
                 <Button 
                   size="sm" 
-                  variant="outline"
+                  variant={isPlanOnly ? 'default' : 'outline'}
                   className="flex-1"
                   onClick={() => onDownloadPlan(item)}
                 >
                   <FileJson className="w-3 h-3 mr-1" />
-                  Plan
+                  {isPlanOnly ? 'Download Plan' : 'Plan'}
                 </Button>
 
-                {/* Retry if failed */}
-                {failed && onRetry && (
+                {/* Retry if failed (not for plan-only) */}
+                {failed && !isPlanOnly && onRetry && (
                   <Button 
                     size="sm" 
                     variant="ghost"

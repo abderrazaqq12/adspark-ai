@@ -1,6 +1,7 @@
 /**
  * Execution Progress Panel
  * Shows real-time engine ladder progress during video rendering
+ * Updated for capability-based routing
  */
 
 import { Badge } from '@/components/ui/badge';
@@ -14,12 +15,13 @@ import {
   CheckCircle2, 
   XCircle, 
   Loader2,
-  ArrowRight
+  ArrowRight,
+  Monitor
 } from 'lucide-react';
-import type { EngineType } from '@/lib/creative-scale/execution-engine';
+import type { EngineId } from '@/lib/creative-scale/execution-engine';
 
 export interface EngineProgress {
-  engine: EngineType;
+  engine: EngineId;
   status: 'pending' | 'attempting' | 'success' | 'failed' | 'skipped';
   progress: number;
   message: string;
@@ -30,38 +32,38 @@ export interface EngineProgress {
 export interface ExecutionProgressState {
   variationIndex: number;
   totalVariations: number;
-  currentEngine: EngineType | null;
+  currentEngine: EngineId | null;
   engines: EngineProgress[];
   overallProgress: number;
   status: 'idle' | 'executing' | 'complete' | 'partial';
 }
 
-// Engine configuration
-const ENGINE_CONFIG: Record<EngineType, { 
+// Engine configuration - updated for capability-based routing
+const ENGINE_CONFIG: Record<EngineId, { 
   label: string; 
   icon: typeof Cpu; 
   color: string;
   description: string;
 }> = {
-  'ffmpeg-browser': {
-    label: 'Browser FFmpeg',
-    icon: Cpu,
-    color: 'text-green-500',
-    description: 'Local WASM-based rendering'
-  },
-  'ffmpeg-cloud': {
-    label: 'Cloud FFmpeg',
-    icon: Cloud,
-    color: 'text-blue-500',
-    description: 'Server-side rendering via fal.ai'
+  'webcodecs': {
+    label: 'WebCodecs',
+    icon: Monitor,
+    color: 'text-emerald-500',
+    description: 'Browser-native video processing'
   },
   'cloudinary': {
     label: 'Cloudinary',
-    icon: Server,
+    icon: Cloud,
     color: 'text-purple-500',
-    description: 'Managed video transformation API'
+    description: 'Cloud video transformation API'
   },
-  'no-render': {
+  'server_ffmpeg': {
+    label: 'Server FFmpeg',
+    icon: Server,
+    color: 'text-blue-500',
+    description: 'Advanced server-side rendering'
+  },
+  'plan_export': {
     label: 'Plan Export',
     icon: FileCode,
     color: 'text-amber-500',
@@ -103,6 +105,8 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
         <div className="space-y-2">
           {state.engines.map((engine, idx) => {
             const config = ENGINE_CONFIG[engine.engine];
+            if (!config) return null;
+            
             const Icon = config.icon;
             const isActive = state.currentEngine === engine.engine;
             
@@ -199,17 +203,17 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
   );
 }
 
-// Helper to create initial state
+// Helper to create initial state - updated for new engine order
 export function createInitialProgressState(totalVariations: number): ExecutionProgressState {
   return {
     variationIndex: 0,
     totalVariations,
     currentEngine: null,
     engines: [
-      { engine: 'ffmpeg-browser', status: 'pending', progress: 0, message: '' },
-      { engine: 'ffmpeg-cloud', status: 'pending', progress: 0, message: '' },
+      { engine: 'webcodecs', status: 'pending', progress: 0, message: '' },
       { engine: 'cloudinary', status: 'pending', progress: 0, message: '' },
-      { engine: 'no-render', status: 'pending', progress: 0, message: '' },
+      { engine: 'server_ffmpeg', status: 'pending', progress: 0, message: '' },
+      { engine: 'plan_export', status: 'pending', progress: 0, message: '' },
     ],
     overallProgress: 0,
     status: 'idle'
