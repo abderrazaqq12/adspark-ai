@@ -1,4 +1,4 @@
-import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Building2, Database, Clapperboard, Images, Wand2, SlidersHorizontal } from "lucide-react";
+import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Building2, Database, Clapperboard, Images, Wand2, SlidersHorizontal, Scale } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,10 +18,11 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-// Main workflows - Agency Mode + Creative Replicator + AI Tools
+// Main workflows - Agency Mode + Creative Replicator + Creative Scale + AI Tools
 const workflowItems = [
   { title: "Agency Mode", url: "/agency", icon: Building2, description: "Batch generation" },
   { title: "Creative Replicator", url: "/creative-replicator", icon: SlidersHorizontal, description: "Replicate winning ads" },
+  { title: "Creative Scale", url: "/creative-scale", icon: Scale, description: "AI-powered optimization" },
   { title: "AI Tools", url: "/ai-tools", icon: Wand2, description: "AI-powered tools" },
 ];
 
