@@ -172,16 +172,29 @@ serve(async (req) => {
 
     const { sceneIds, forceEngine, optimizeFor } = await req.json();
 
-    // Get user settings
+    // Get user settings (without api_keys - those are in secure_api_keys table)
     const { data: userSettings } = await supabase
       .from('user_settings')
-      .select('pricing_tier, preferences, api_keys')
+      .select('pricing_tier, preferences')
       .eq('user_id', user.id)
       .maybeSingle();
 
     const pricingTier = userSettings?.pricing_tier || 'normal';
     const allowedCosts = TIER_ALLOWED_COSTS[pricingTier] || TIER_ALLOWED_COSTS.normal;
-    const availableApiKeys = userSettings?.api_keys || {};
+    
+    // Fetch API key providers from secure storage
+    const { data: apiKeyProviders } = await supabase
+      .rpc('get_my_api_key_providers');
+    
+    // Build a map of available API key providers
+    const availableApiKeys: Record<string, boolean> = {};
+    if (apiKeyProviders) {
+      for (const provider of apiKeyProviders) {
+        if (provider.is_active) {
+          availableApiKeys[provider.provider] = true;
+        }
+      }
+    }
 
     console.log(`[smart-route] User: ${user.id}, Tier: ${pricingTier}, Optimizing for: ${optimizeFor || 'balanced'}`);
 

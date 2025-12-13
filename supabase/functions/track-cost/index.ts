@@ -84,7 +84,22 @@ serve(async (req) => {
       user_id: providedUserId, // Allow passing user_id for server-to-server calls
     } = body;
 
-    const finalUserId = userId || providedUserId;
+    let finalUserId = userId;
+    
+    // For server-to-server calls without auth header, require service secret
+    if (!userId && providedUserId) {
+      const serviceSecret = req.headers.get('x-service-secret');
+      const expectedSecret = Deno.env.get('INTERNAL_SERVICE_SECRET');
+      
+      if (!expectedSecret || serviceSecret !== expectedSecret) {
+        console.error('[track-cost] Server-to-server call rejected: invalid service secret');
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized: valid auth token or service secret required' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      finalUserId = providedUserId;
+    }
     
     if (!finalUserId) {
       return new Response(
