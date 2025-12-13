@@ -461,26 +461,31 @@ export async function routeExecution(
       payload: { engine_id: selectedEngine.engine_id },
     });
     
-    // Execute using FFmpeg adapter (real execution)
-    try {
-      // Check if FFmpeg is available for browser engines
-      if (selectedEngine.location === 'browser') {
-        const envCheck = checkFFmpegEnvironment();
-        if (!envCheck.ready) {
-          throw new Error(`FFmpeg unavailable: ${envCheck.reason}`);
-        }
+      // Execute using FFmpeg adapter (real execution)
+      try {
+        // Check if FFmpeg is available for browser engines
+        if (selectedEngine.location === 'browser') {
+          const envCheck = checkFFmpegEnvironment();
+          if (!envCheck.ready) {
+            throw new Error(`FFmpeg unavailable: ${envCheck.reason}`);
+          }
+          
+          // Log plan details for debugging
+          console.log('[Router] Executing plan:', currentPlan.plan_id);
+          console.log('[Router] Timeline segments:', currentPlan.timeline.length);
+          console.log('[Router] First segment asset_url:', currentPlan.timeline[0]?.asset_url?.substring(0, 60) || 'MISSING');
 
-        const adapter = getFFmpegAdapter();
-        
-        emitEvent({
-          event_id: `evt_${Date.now()}`,
-          job_id: jobId,
-          timestamp: new Date().toISOString(),
-          event_type: 'ffmpeg_init',
-          payload: { engine_id: selectedEngine.engine_id },
-        });
+          const adapter = getFFmpegAdapter();
+          
+          emitEvent({
+            event_id: `evt_${Date.now()}`,
+            job_id: jobId,
+            timestamp: new Date().toISOString(),
+            event_type: 'ffmpeg_init',
+            payload: { engine_id: selectedEngine.engine_id },
+          });
 
-        const result = await adapter.execute(currentPlan, {
+          const result = await adapter.execute(currentPlan, {
           onProgress: (progress) => {
             emitEvent({
               event_id: `evt_${Date.now()}`,
