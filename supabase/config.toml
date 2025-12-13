@@ -125,3 +125,6 @@ verify_jwt = false
 
 [functions.creative-scale-strategize]
 verify_jwt = false
+
+[functions.creative-scale-compile]
+verify_jwt = false
