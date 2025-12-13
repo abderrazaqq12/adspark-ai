@@ -1,6 +1,6 @@
 /**
- * Creative Scale - Phase A Hook
- * AI Marketing Analysis Layer
+ * Creative Scale - Full Pipeline Hook
+ * Phase A (Analysis) + Step 4 (Compiler)
  */
 
 import { useState, useCallback } from 'react';
@@ -11,18 +11,25 @@ import type {
   PhaseAOutput,
   MarketingFramework 
 } from '@/lib/creative-scale/types';
+import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
+
+interface FullPipelineOutput extends PhaseAOutput {
+  plans: ExecutionPlan[];
+}
 
 interface UseCreativeScaleReturn {
   // State
   isAnalyzing: boolean;
   isGeneratingBlueprint: boolean;
+  isCompiling: boolean;
   error: string | null;
   
   // Results
   currentAnalysis: VideoAnalysis | null;
   currentBlueprint: CreativeBlueprint | null;
+  currentPlans: ExecutionPlan[];
   
-  // Actions
+  // Phase A Actions
   analyzeVideo: (videoUrl: string, videoId: string, options?: {
     language?: string;
     market?: string;
@@ -40,15 +47,44 @@ interface UseCreativeScaleReturn {
     variationCount?: number;
   }) => Promise<PhaseAOutput | null>;
   
+  // Step 4: Compiler Actions
+  compileVariation: (
+    analysis: VideoAnalysis,
+    blueprint: CreativeBlueprint,
+    variationIndex: number,
+    assetBaseUrl?: string
+  ) => Promise<ExecutionPlan | null>;
+  
+  compileAllVariations: (
+    analysis: VideoAnalysis,
+    blueprint: CreativeBlueprint,
+    assetBaseUrl?: string
+  ) => Promise<ExecutionPlan[]>;
+  
+  // Full Pipeline
+  runFullPipeline: (videoUrl: string, videoId: string, options?: {
+    language?: string;
+    market?: string;
+    targetFramework?: MarketingFramework;
+    variationCount?: number;
+    assetBaseUrl?: string;
+  }) => Promise<FullPipelineOutput | null>;
+  
   reset: () => void;
 }
 
 export function useCreativeScale(): UseCreativeScaleReturn {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGeneratingBlueprint, setIsGeneratingBlueprint] = useState(false);
+  const [isCompiling, setIsCompiling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentAnalysis, setCurrentAnalysis] = useState<VideoAnalysis | null>(null);
   const [currentBlueprint, setCurrentBlueprint] = useState<CreativeBlueprint | null>(null);
+  const [currentPlans, setCurrentPlans] = useState<ExecutionPlan[]>([]);
+
+  // ============================================
+  // PHASE A: ANALYZE
+  // ============================================
 
   const analyzeVideo = useCallback(async (
     videoUrl: string, 
@@ -83,6 +119,10 @@ export function useCreativeScale(): UseCreativeScaleReturn {
     }
   }, []);
 
+  // ============================================
+  // PHASE A: STRATEGIZE
+  // ============================================
+
   const generateBlueprint = useCallback(async (
     analysis: VideoAnalysis,
     options?: { targetFramework?: MarketingFramework; variationCount?: number }
@@ -114,6 +154,10 @@ export function useCreativeScale(): UseCreativeScaleReturn {
     }
   }, []);
 
+  // ============================================
+  // PHASE A: FULL RUN
+  // ============================================
+
   const runFullPhaseA = useCallback(async (
     videoUrl: string,
     videoId: string,
@@ -126,7 +170,6 @@ export function useCreativeScale(): UseCreativeScaleReturn {
   ): Promise<PhaseAOutput | null> => {
     const startTime = Date.now();
 
-    // Step 2: Analyze
     const analysis = await analyzeVideo(videoUrl, videoId, {
       language: options?.language,
       market: options?.market
@@ -134,7 +177,6 @@ export function useCreativeScale(): UseCreativeScaleReturn {
 
     if (!analysis) return null;
 
-    // Step 3: Strategize
     const blueprint = await generateBlueprint(analysis, {
       targetFramework: options?.targetFramework,
       variationCount: options?.variationCount
@@ -149,21 +191,148 @@ export function useCreativeScale(): UseCreativeScaleReturn {
     };
   }, [analyzeVideo, generateBlueprint]);
 
+  // ============================================
+  // STEP 4: COMPILE SINGLE VARIATION
+  // ============================================
+
+  const compileVariation = useCallback(async (
+    analysis: VideoAnalysis,
+    blueprint: CreativeBlueprint,
+    variationIndex: number,
+    assetBaseUrl?: string
+  ): Promise<ExecutionPlan | null> => {
+    setIsCompiling(true);
+    setError(null);
+
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('creative-scale-compile', {
+        body: {
+          analysis,
+          blueprint,
+          variation_index: variationIndex,
+          compile_all: false,
+          asset_base_url: assetBaseUrl
+        }
+      });
+
+      if (fnError) throw new Error(fnError.message);
+      if (!data?.plans || data.plans.length === 0) throw new Error('No execution plan returned');
+
+      const plan = data.plans[0] as ExecutionPlan;
+      setCurrentPlans(prev => [...prev, plan]);
+      return plan;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Compilation failed';
+      setError(message);
+      return null;
+    } finally {
+      setIsCompiling(false);
+    }
+  }, []);
+
+  // ============================================
+  // STEP 4: COMPILE ALL VARIATIONS
+  // ============================================
+
+  const compileAllVariations = useCallback(async (
+    analysis: VideoAnalysis,
+    blueprint: CreativeBlueprint,
+    assetBaseUrl?: string
+  ): Promise<ExecutionPlan[]> => {
+    setIsCompiling(true);
+    setError(null);
+
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('creative-scale-compile', {
+        body: {
+          analysis,
+          blueprint,
+          compile_all: true,
+          asset_base_url: assetBaseUrl
+        }
+      });
+
+      if (fnError) throw new Error(fnError.message);
+      if (!data?.plans) throw new Error('No execution plans returned');
+
+      const plans = data.plans as ExecutionPlan[];
+      setCurrentPlans(plans);
+      return plans;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Compilation failed';
+      setError(message);
+      return [];
+    } finally {
+      setIsCompiling(false);
+    }
+  }, []);
+
+  // ============================================
+  // FULL PIPELINE: PHASE A + COMPILER
+  // ============================================
+
+  const runFullPipeline = useCallback(async (
+    videoUrl: string,
+    videoId: string,
+    options?: {
+      language?: string;
+      market?: string;
+      targetFramework?: MarketingFramework;
+      variationCount?: number;
+      assetBaseUrl?: string;
+    }
+  ): Promise<FullPipelineOutput | null> => {
+    const startTime = Date.now();
+
+    // Phase A
+    const phaseAResult = await runFullPhaseA(videoUrl, videoId, {
+      language: options?.language,
+      market: options?.market,
+      targetFramework: options?.targetFramework,
+      variationCount: options?.variationCount
+    });
+
+    if (!phaseAResult) return null;
+
+    // Step 4: Compile
+    const plans = await compileAllVariations(
+      phaseAResult.analysis,
+      phaseAResult.blueprint,
+      options?.assetBaseUrl
+    );
+
+    return {
+      ...phaseAResult,
+      plans,
+      processing_time_ms: Date.now() - startTime
+    };
+  }, [runFullPhaseA, compileAllVariations]);
+
+  // ============================================
+  // RESET
+  // ============================================
+
   const reset = useCallback(() => {
     setCurrentAnalysis(null);
     setCurrentBlueprint(null);
+    setCurrentPlans([]);
     setError(null);
   }, []);
 
   return {
     isAnalyzing,
     isGeneratingBlueprint,
+    isCompiling,
     error,
     currentAnalysis,
     currentBlueprint,
+    currentPlans,
     analyzeVideo,
     generateBlueprint,
     runFullPhaseA,
+    compileVariation,
+    compileAllVariations,
+    runFullPipeline,
     reset
   };
 }
