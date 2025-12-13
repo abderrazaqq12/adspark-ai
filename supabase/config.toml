@@ -119,3 +119,9 @@ verify_jwt = false
 
 [functions.unified-generation]
 verify_jwt = false
+
+[functions.creative-scale-analyze]
+verify_jwt = false
+
+[functions.creative-scale-strategize]
+verify_jwt = false
