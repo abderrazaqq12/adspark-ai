@@ -30,12 +30,24 @@ import { ENGINE_REGISTRY, getAvailableEngines } from './engine-registry';
 import { getFFmpegAdapter, checkFFmpegEnvironment } from './ffmpeg-adapter';
 import { supabase } from '@/integrations/supabase/client';
 
+// Cloud fallback execution response type
+interface CloudFallbackResponse {
+  success: boolean;
+  video_url?: string;
+  error?: string;
+  partial_success?: boolean;
+  reason?: string;
+  execution_plan?: ExecutionPlan;
+  ffmpeg_command?: string;
+  download_available?: boolean;
+}
+
 // Cloud fallback execution
 async function executeCloudFallback(
   plan: ExecutionPlan,
   userId?: string,
   variationIndex?: number
-): Promise<{ success: boolean; video_url?: string; error?: string }> {
+): Promise<CloudFallbackResponse> {
   console.log('[Router] Attempting cloud fallback execution...');
   
   try {
@@ -52,9 +64,24 @@ async function executeCloudFallback(
       return { success: false, error: error.message };
     }
 
+    // Check for full success
     if (data?.success && data?.video_url) {
       console.log('[Router] Cloud fallback success:', data.video_url);
       return { success: true, video_url: data.video_url };
+    }
+
+    // Check for partial success (FFmpeg unavailable in cloud)
+    if (data?.partial_success && data?.download_available) {
+      console.log('[Router] Cloud returned partial success - FFmpeg command available');
+      return {
+        success: false,
+        partial_success: true,
+        reason: data.reason,
+        execution_plan: data.execution_plan,
+        ffmpeg_command: data.ffmpeg_command,
+        download_available: true,
+        error: data.message,
+      };
     }
 
     return { success: false, error: data?.error || 'Cloud rendering failed' };
@@ -540,6 +567,38 @@ export async function routeExecution(
                 warnings: [...currentPlan.validation.warnings, 'Used cloud fallback (browser FFmpeg unavailable)'],
                 output_video_url: cloudResult.video_url,
               } satisfies RouteSuccessResult;
+            }
+            
+            // Handle cloud partial success (FFmpeg unavailable in Supabase Edge Runtime)
+            if (cloudResult.partial_success && cloudResult.download_available) {
+              context = transitionState(context, 'partial_success');
+              
+              emitEvent({
+                event_id: `evt_${Date.now()}`,
+                job_id: jobId,
+                timestamp: new Date().toISOString(),
+                event_type: 'partial_success',
+                payload: { 
+                  reason: 'cloud_ffmpeg_unavailable',
+                  ffmpeg_command_available: true,
+                },
+              });
+              
+              return {
+                status: 'partial_success',
+                job_id: jobId,
+                reason: 'Video rendering requires FFmpeg which is not available in the current environment. Download the execution plan and FFmpeg command to render locally.',
+                artifacts: {
+                  analysis: request.analysis,
+                  blueprint: request.blueprint,
+                  execution_plan: currentPlan,
+                  ffmpeg_command: cloudResult.ffmpeg_command,
+                },
+                attempted_engines: attemptedEngines,
+                human_readable_message: 
+                  'Your video optimization plan is ready! To render the video, download the execution plan ' +
+                  'and use the provided FFmpeg command on your computer or a cloud render service.',
+              } satisfies PartialSuccessResult;
             }
             
             throw new Error(`Cloud fallback failed: ${cloudResult.error}`);
