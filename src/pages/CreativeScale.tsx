@@ -1,9 +1,9 @@
 /**
- * Creative Scale - PRD Aligned Implementation
+ * Creative Scale - PRD Aligned Implementation with AI Brain V2
  * AI Marketing Strategist + Deterministic Video Execution Engine
  * 
  * Core User Value:
- * - Understand why an ad performs or fails
+ * - Understand why AI made decisions
  * - Generate optimized variations based on proven frameworks
  * - See exactly what AI instructed the video engine to do
  */
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Upload, 
   Sparkles, 
@@ -27,7 +28,8 @@ import {
   Brain,
   Target,
   Zap,
-  Eye
+  Eye,
+  Settings2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCreativeScale } from '@/hooks/useCreativeScale';
@@ -38,9 +40,17 @@ import { ExecutionExplainer } from '@/components/creative-scale/ExecutionExplain
 import { V1ConstraintsBanner } from '@/components/creative-scale/V1ConstraintsBanner';
 import { ResultsGrid } from '@/components/creative-scale/ResultsGrid';
 import { FFmpegProgressPanel } from '@/components/creative-scale/FFmpegProgressPanel';
+import { 
+  ProblemDisplay, 
+  ScoringDisplay, 
+  BlueprintV2Card, 
+  FailureDisplay,
+  BrainStatus 
+} from '@/components/creative-scale/BrainV2Display';
 import type { VideoAnalysis, CreativeBlueprint } from '@/lib/creative-scale/types';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
 import type { JobStatus } from '@/lib/creative-scale/prd-types';
+import type { OptimizationGoal, RiskTolerance } from '@/lib/creative-scale/brain-v2-types';
 
 // ============================================
 // SESSION PERSISTENCE
@@ -150,8 +160,11 @@ export default function CreativeScale() {
     currentPlans,
     routerResult,
     routerEvents,
+    brainV2State,
+    setBrainV2Options,
     analyzeVideo,
     generateBlueprint,
+    generateBrainV2Strategy,
     compileAllVariations,
     routePlan,
     reset: resetHook
@@ -295,7 +308,7 @@ export default function CreativeScale() {
   }, [uploadedVideos, selectedVideoIndex, analyzeVideo]);
 
   // ============================================
-  // STEP 3: STRATEGY (Phase A.5)
+  // STEP 3: STRATEGY with Brain V2
   // ============================================
 
   const handleGenerateStrategy = useCallback(async () => {
@@ -307,26 +320,42 @@ export default function CreativeScale() {
     setJobStatus('ANALYZING');
     
     try {
-      const blueprint = await generateBlueprint(currentAnalysis, {
+      // Use Brain V2 for strategy generation
+      const brainResult = await generateBrainV2Strategy(currentAnalysis, {
         variationCount: Math.min(5, LIMITS.MAX_VARIATIONS)
       });
       
-      if (!blueprint) {
+      if (!brainResult.success) {
+        // Brain V2 returned a valid "no action" or failure mode
+        const failureOutput = brainResult as { success: false; failure: { mode: string; reason: string } };
+        toast.info(failureOutput.failure.reason);
+        setCurrentStep(3);
         setJobStatus('STRATEGY_READY');
         return;
       }
       
-      // Compile all variations
-      const plans = await compileAllVariations(
-        currentAnalysis,
-        blueprint,
-        uploadedVideos[0]?.url
-      );
+      // Also generate legacy blueprint for compatibility with compiler
+      const blueprint = await generateBlueprint(currentAnalysis, {
+        variationCount: brainResult.blueprints.length
+      });
       
-      if (plans.length === 0) {
-        toast.warning('No variations could be compiled');
-      } else {
-        toast.success(`${plans.length} variation(s) ready`);
+      if (!blueprint) {
+        toast.warning('Blueprint generation failed, using Brain V2 output only');
+      }
+      
+      // Compile all variations if we have a blueprint
+      if (blueprint) {
+        const plans = await compileAllVariations(
+          currentAnalysis,
+          blueprint,
+          uploadedVideos[0]?.url
+        );
+        
+        if (plans.length === 0) {
+          toast.warning('No variations could be compiled');
+        } else {
+          toast.success(`${plans.length} variation(s) ready with Brain V2 insights`);
+        }
       }
       
       setCurrentStep(3);
@@ -336,7 +365,7 @@ export default function CreativeScale() {
       toast.error(err instanceof Error ? err.message : 'Strategy generation failed');
       setJobStatus('STRATEGY_READY');
     }
-  }, [currentAnalysis, generateBlueprint, compileAllVariations, uploadedVideos]);
+  }, [currentAnalysis, generateBrainV2Strategy, generateBlueprint, compileAllVariations, uploadedVideos]);
 
   // ============================================
   // STEP 4: EXECUTE (Phase B - Optional)
@@ -649,6 +678,16 @@ export default function CreativeScale() {
                   <Tabs defaultValue="signals" className="h-full">
                     <TabsList className="mb-4">
                       <TabsTrigger value="signals">Signals</TabsTrigger>
+                      {brainV2State.detectedProblems.length > 0 && (
+                        <TabsTrigger value="problems">
+                          Problems ({brainV2State.detectedProblems.length})
+                        </TabsTrigger>
+                      )}
+                      {brainV2State.blueprintsV2.length > 0 && (
+                        <TabsTrigger value="brain-strategy">
+                          Brain V2
+                        </TabsTrigger>
+                      )}
                       {currentBlueprint && <TabsTrigger value="strategy">Strategy</TabsTrigger>}
                       {currentPlans.length > 0 && <TabsTrigger value="variations">Variations ({currentPlans.length})</TabsTrigger>}
                       {executionResults.size > 0 && <TabsTrigger value="results">Results</TabsTrigger>}
@@ -657,6 +696,51 @@ export default function CreativeScale() {
                     {/* Signals Tab */}
                     <TabsContent value="signals">
                       <ScrollArea className="h-[450px]">
+                        {/* Brain V2 Controls */}
+                        <div className="flex items-center gap-4 mb-4 p-3 bg-muted/30 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <Brain className="w-4 h-4 text-primary" />
+                            <span className="text-sm font-medium">Brain V2</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">Goal:</span>
+                            <Select 
+                              value={brainV2State.optimizationGoal} 
+                              onValueChange={(value: OptimizationGoal) => setBrainV2Options({ goal: value })}
+                            >
+                              <SelectTrigger className="w-[100px] h-7 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="retention">Retention</SelectItem>
+                                <SelectItem value="ctr">CTR</SelectItem>
+                                <SelectItem value="cpa">CPA</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">Risk:</span>
+                            <Select 
+                              value={brainV2State.riskTolerance} 
+                              onValueChange={(value: RiskTolerance) => setBrainV2Options({ risk: value })}
+                            >
+                              <SelectTrigger className="w-[90px] h-7 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="low">Low</SelectItem>
+                                <SelectItem value="medium">Medium</SelectItem>
+                                <SelectItem value="high">High</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        <BrainStatus 
+                          isProcessing={isGeneratingBlueprint} 
+                          currentLayer={isGeneratingBlueprint ? "Running 5-layer decision engine..." : undefined}
+                        />
+                        
                         <SignalsDisplay analysis={currentAnalysis} />
                         
                         {currentStep === 2 && !currentBlueprint && (
@@ -668,18 +752,63 @@ export default function CreativeScale() {
                             {isGeneratingBlueprint || isCompiling ? (
                               <>
                                 <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                                Generating Strategy...
+                                Brain V2 Processing...
                               </>
                             ) : (
                               <>
-                                <Target className="w-4 h-4 mr-2" />
-                                Generate Optimization Strategy
+                                <Brain className="w-4 h-4 mr-2" />
+                                Generate with Brain V2
                               </>
                             )}
                           </Button>
                         )}
                       </ScrollArea>
                     </TabsContent>
+
+                    {/* Problems Tab */}
+                    {brainV2State.detectedProblems.length > 0 && (
+                      <TabsContent value="problems">
+                        <ScrollArea className="h-[450px]">
+                          <ProblemDisplay problems={brainV2State.detectedProblems} />
+                        </ScrollArea>
+                      </TabsContent>
+                    )}
+
+                    {/* Brain V2 Strategy Tab */}
+                    {brainV2State.blueprintsV2.length > 0 && (
+                      <TabsContent value="brain-strategy">
+                        <ScrollArea className="h-[450px]">
+                          <div className="space-y-4">
+                            {brainV2State.blueprintsV2[0]?.scoring_details && (
+                              <ScoringDisplay 
+                                scoredStrategies={brainV2State.blueprintsV2[0].scoring_details}
+                              />
+                            )}
+                            <div className="grid grid-cols-1 gap-4">
+                              {brainV2State.blueprintsV2.map((blueprint, idx) => (
+                                <BlueprintV2Card
+                                  key={blueprint.variation_id}
+                                  blueprint={blueprint}
+                                  index={idx}
+                                  selected={selectedVariationIndex === idx}
+                                  onSelect={() => setSelectedVariationIndex(idx)}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </ScrollArea>
+                      </TabsContent>
+                    )}
+
+                    {/* Brain V2 Failure */}
+                    {brainV2State.brainOutput && !brainV2State.brainOutput.success && (
+                      <TabsContent value="brain-strategy">
+                        <FailureDisplay 
+                          failure={(brainV2State.brainOutput as { success: false; failure: any }).failure}
+                          onRetry={handleGenerateStrategy}
+                        />
+                      </TabsContent>
+                    )}
 
                     {/* Strategy Tab */}
                     {currentBlueprint && (

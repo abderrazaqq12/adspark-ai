@@ -1,7 +1,7 @@
 /**
- * Creative Scale - Full Pipeline Hook
- * Phase A (Analysis) + Step 4 (Compiler) + Phase B (Router)
- * WITH: Timeouts, schema validation, error handling
+ * Creative Scale - Full Pipeline Hook with AI Brain v2
+ * Phase A (Analysis + Brain v2) + Step 4 (Compiler) + Phase B (Router)
+ * WITH: Timeouts, schema validation, error handling, explainability
  */
 
 import { useState, useCallback, useEffect } from 'react';
@@ -20,6 +20,15 @@ import type {
   ProcessingLocation,
   RouterEvent 
 } from '@/lib/creative-scale/router-types';
+import type {
+  BrainInput,
+  BrainOutput,
+  CreativeBlueprintV2,
+  DetectedProblem,
+  OptimizationGoal,
+  RiskTolerance,
+  VideoAnalysisSignals
+} from '@/lib/creative-scale/brain-v2-types';
 import { 
   routeExecution, 
   getCompatibleEngines, 
@@ -32,6 +41,10 @@ import {
   clampVariationCount,
   LIMITS
 } from '@/lib/creative-scale/validation';
+import {
+  runBrainV2,
+  convertToSignals
+} from '@/lib/creative-scale/brain-v2-engine';
 
 // ============================================
 // SESSION STORAGE PERSISTENCE
@@ -117,6 +130,15 @@ interface FullPipelineOutput extends PhaseAOutput {
   plans: ExecutionPlan[];
 }
 
+// Brain V2 state
+interface BrainV2State {
+  detectedProblems: DetectedProblem[];
+  blueprintsV2: CreativeBlueprintV2[];
+  brainOutput: BrainOutput | null;
+  optimizationGoal: OptimizationGoal;
+  riskTolerance: RiskTolerance;
+}
+
 interface UseCreativeScaleReturn {
   // State
   isAnalyzing: boolean;
@@ -132,6 +154,10 @@ interface UseCreativeScaleReturn {
   routerResult: RouterResult | null;
   routerEvents: RouterEvent[];
   
+  // Brain V2 State
+  brainV2State: BrainV2State;
+  setBrainV2Options: (options: { goal?: OptimizationGoal; risk?: RiskTolerance }) => void;
+  
   // Phase A Actions
   analyzeVideo: (videoUrl: string, videoId: string, options?: {
     language?: string;
@@ -142,6 +168,11 @@ interface UseCreativeScaleReturn {
     targetFramework?: MarketingFramework;
     variationCount?: number;
   }) => Promise<CreativeBlueprint | null>;
+  
+  // Brain V2 Strategy Generation
+  generateBrainV2Strategy: (analysis: VideoAnalysis, options?: {
+    variationCount?: number;
+  }) => Promise<BrainOutput>;
   
   runFullPhaseA: (videoUrl: string, videoId: string, options?: {
     language?: string;
@@ -201,6 +232,27 @@ export function useCreativeScale(): UseCreativeScaleReturn {
   const [currentPlans, setCurrentPlans] = useState<ExecutionPlan[]>([]);
   const [routerResult, setRouterResult] = useState<RouterResult | null>(null);
   const [routerEvents, setRouterEvents] = useState<RouterEvent[]>([]);
+  
+  // Brain V2 State
+  const [brainV2State, setBrainV2State] = useState<BrainV2State>({
+    detectedProblems: [],
+    blueprintsV2: [],
+    brainOutput: null,
+    optimizationGoal: 'retention',
+    riskTolerance: 'medium'
+  });
+
+  // ============================================
+  // BRAIN V2 OPTIONS
+  // ============================================
+
+  const setBrainV2Options = useCallback((options: { goal?: OptimizationGoal; risk?: RiskTolerance }) => {
+    setBrainV2State(prev => ({
+      ...prev,
+      optimizationGoal: options.goal ?? prev.optimizationGoal,
+      riskTolerance: options.risk ?? prev.riskTolerance
+    }));
+  }, []);
 
   // ============================================
   // RESTORE STATE ON MOUNT
@@ -317,6 +369,74 @@ export function useCreativeScale(): UseCreativeScaleReturn {
       setIsGeneratingBlueprint(false);
     }
   }, []);
+
+  // ============================================
+  // BRAIN V2: STRATEGY GENERATION (Code-controlled)
+  // ============================================
+
+  const generateBrainV2Strategy = useCallback(async (
+    analysis: VideoAnalysis,
+    options?: { variationCount?: number }
+  ): Promise<BrainOutput> => {
+    setIsGeneratingBlueprint(true);
+    setError(null);
+
+    try {
+      // Convert analysis to Brain V2 signal format
+      const signals = convertToSignals(analysis);
+      
+      // Build Brain input
+      const brainInput: BrainInput = {
+        video_analysis: signals,
+        optimization_goal: brainV2State.optimizationGoal,
+        user_constraints: {
+          risk_tolerance: brainV2State.riskTolerance
+        }
+      };
+
+      // Run the 5-layer decision engine
+      const result = runBrainV2(brainInput, options?.variationCount || 3);
+
+      // Update Brain V2 state
+      if (result.success) {
+        setBrainV2State(prev => ({
+          ...prev,
+          brainOutput: result,
+          blueprintsV2: result.blueprints,
+          detectedProblems: result.blueprints[0]?.detected_problems || []
+        }));
+      } else {
+        setBrainV2State(prev => ({
+          ...prev,
+          brainOutput: result,
+          blueprintsV2: [],
+          detectedProblems: []
+        }));
+      }
+
+      return result;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Brain V2 strategy generation failed';
+      setError(message);
+      
+      const failureResult: BrainOutput = {
+        success: false,
+        failure: {
+          mode: 'REQUEST_MORE_DATA',
+          reason: message
+        }
+      };
+      
+      setBrainV2State(prev => ({
+        ...prev,
+        brainOutput: failureResult
+      }));
+      
+      return failureResult;
+    } finally {
+      setIsGeneratingBlueprint(false);
+    }
+  }, [brainV2State.optimizationGoal, brainV2State.riskTolerance]);
 
   // ============================================
   // PHASE A: FULL RUN
@@ -553,6 +673,13 @@ export function useCreativeScale(): UseCreativeScaleReturn {
     setIsGeneratingBlueprint(false);
     setIsCompiling(false);
     setIsRouting(false);
+    setBrainV2State({
+      detectedProblems: [],
+      blueprintsV2: [],
+      brainOutput: null,
+      optimizationGoal: 'retention',
+      riskTolerance: 'medium'
+    });
     clearSession();
   }, []);
 
@@ -567,8 +694,11 @@ export function useCreativeScale(): UseCreativeScaleReturn {
     currentPlans,
     routerResult,
     routerEvents,
+    brainV2State,
+    setBrainV2Options,
     analyzeVideo,
     generateBlueprint,
+    generateBrainV2Strategy,
     runFullPhaseA,
     compileVariation,
     compileAllVariations,
