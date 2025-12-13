@@ -160,6 +160,7 @@ export interface RouteSuccessResult {
   job_id: string;
   engine_id: string;
   video_url: string;
+  output_video_url?: string; // Alias for download
   processing_time_ms: number;
   degradation_level: DegradationLevel;
   warnings: string[];
@@ -203,7 +204,7 @@ export interface RouterEvent {
   timestamp: string;
   event_type: 'state_change' | 'engine_selected' | 'execution_start' | 
               'execution_complete' | 'execution_failed' | 'degradation_applied' |
-              'retry_triggered' | 'partial_success';
+              'retry_triggered' | 'partial_success' | 'ffmpeg_init' | 'progress' | 'log';
   payload: Record<string, unknown>;
 }
 

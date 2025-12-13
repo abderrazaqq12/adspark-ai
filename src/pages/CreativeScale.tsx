@@ -37,6 +37,7 @@ import { VariationCard } from '@/components/creative-scale/VariationCard';
 import { ExecutionExplainer } from '@/components/creative-scale/ExecutionExplainer';
 import { V1ConstraintsBanner } from '@/components/creative-scale/V1ConstraintsBanner';
 import { ResultsGrid } from '@/components/creative-scale/ResultsGrid';
+import { FFmpegProgressPanel } from '@/components/creative-scale/FFmpegProgressPanel';
 import type { VideoAnalysis, CreativeBlueprint } from '@/lib/creative-scale/types';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
 import type { JobStatus } from '@/lib/creative-scale/prd-types';
@@ -148,6 +149,7 @@ export default function CreativeScale() {
     currentBlueprint,
     currentPlans,
     routerResult,
+    routerEvents,
     analyzeVideo,
     generateBlueprint,
     compileAllVariations,
@@ -602,6 +604,14 @@ export default function CreativeScale() {
 
             {/* V1 Constraints */}
             <V1ConstraintsBanner />
+
+            {/* FFmpeg Progress Panel - Show during execution */}
+            {(isRouting || jobStatus === 'EXECUTING') && (
+              <FFmpegProgressPanel 
+                events={routerEvents} 
+                isActive={isRouting} 
+              />
+            )}
           </div>
 
           {/* Right Panel - Main Content */}
