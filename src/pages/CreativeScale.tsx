@@ -90,6 +90,7 @@ interface UploadedVideo {
   storageUrl?: string; // Supabase storage URL for FFmpeg
   duration?: number;
   status: 'pending' | 'uploading' | 'ready' | 'error';
+  uploadProgress?: number; // 0-100
   error?: string;
 }
 
@@ -271,16 +272,42 @@ export default function CreativeScale() {
         const fileExt = video.file.name.split('.').pop() || 'mp4';
         const filePath = `creative-scale/${video.id}/video.${fileExt}`;
         
-        const { error: uploadError } = await supabase.storage
-          .from('videos')
-          .upload(filePath, video.file, {
-            cacheControl: '3600',
-            upsert: true
-          });
+        // Use XMLHttpRequest for upload progress
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
         
-        if (uploadError) {
-          throw uploadError;
-        }
+        const formData = new FormData();
+        formData.append('', video.file);
+        
+        const uploadUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/videos/${filePath}`;
+        
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          
+          xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+              const progress = Math.round((e.loaded / e.total) * 100);
+              setUploadedVideos(prev => prev.map(v => 
+                v.id === video.id ? { ...v, uploadProgress: progress } : v
+              ));
+            }
+          });
+          
+          xhr.addEventListener('load', () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve();
+            } else {
+              reject(new Error(`Upload failed: ${xhr.status}`));
+            }
+          });
+          
+          xhr.addEventListener('error', () => reject(new Error('Upload failed')));
+          
+          xhr.open('POST', uploadUrl);
+          xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
+          xhr.setRequestHeader('x-upsert', 'true');
+          xhr.send(video.file);
+        });
         
         // Get public URL
         const { data: urlData } = supabase.storage
@@ -290,7 +317,7 @@ export default function CreativeScale() {
         // Update video with storage URL
         setUploadedVideos(prev => prev.map(v => 
           v.id === video.id 
-            ? { ...v, status: 'ready' as const, storageUrl: urlData.publicUrl }
+            ? { ...v, status: 'ready' as const, storageUrl: urlData.publicUrl, uploadProgress: 100 }
             : v
         ));
         
@@ -300,7 +327,7 @@ export default function CreativeScale() {
         console.error('[CreativeScale] Storage upload failed:', err);
         setUploadedVideos(prev => prev.map(v => 
           v.id === video.id 
-            ? { ...v, status: 'error' as const, error: 'Storage upload failed' }
+            ? { ...v, status: 'error' as const, error: 'Storage upload failed', uploadProgress: undefined }
             : v
         ));
       }
@@ -639,11 +666,19 @@ export default function CreativeScale() {
                           <p className="text-xs text-white truncate">{video.file.name}</p>
                           <p className="text-xs text-white/70">
                             {video.status === 'uploading' 
-                              ? 'Uploading...' 
+                              ? `Uploading... ${video.uploadProgress ?? 0}%` 
                               : video.duration 
                                 ? `${video.duration.toFixed(1)}s` 
                                 : 'Loading...'}
                           </p>
+                          {video.status === 'uploading' && video.uploadProgress !== undefined && (
+                            <div className="w-full h-1 bg-white/20 rounded-full mt-1 overflow-hidden">
+                              <div 
+                                className="h-full bg-primary transition-all duration-200" 
+                                style={{ width: `${video.uploadProgress}%` }}
+                              />
+                            </div>
+                          )}
                         </div>
                         {video.status === 'error' && (
                           <div className="absolute top-2 right-2">
