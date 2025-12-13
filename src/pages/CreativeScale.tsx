@@ -29,7 +29,8 @@ import {
   Target,
   Zap,
   Eye,
-  Settings2
+  Settings2,
+  Cloud
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -1047,34 +1048,30 @@ export default function CreativeScale() {
                               <Button 
                                 className="flex-1"
                                 onClick={handleExecute}
-                                disabled={isProcessing || !ffmpegEnv.ready}
-                                title={!ffmpegEnv.ready ? ffmpegEnv.reason : undefined}
+                                disabled={isProcessing}
+                                title={!ffmpegEnv.ready ? 'Will use cloud processing' : undefined}
                               >
                                 {isRouting ? (
                                   <>
                                     <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                                     Executing...
                                   </>
-                                ) : !ffmpegEnv.ready ? (
-                                  <>
-                                    <AlertCircle className="w-4 h-4 mr-2" />
-                                    FFmpeg Unavailable
-                                  </>
                                 ) : (
                                   <>
                                     <Zap className="w-4 h-4 mr-2" />
                                     Generate {currentPlans.length} Video(s)
+                                    {!ffmpegEnv.ready && <Cloud className="w-3 h-3 ml-1" />}
                                   </>
                                 )}
                               </Button>
                             </div>
                             
-                            {/* FFmpeg Status Warning */}
+                            {/* Cloud Processing Info */}
                             {!ffmpegEnv.ready && (
-                              <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-sm">
-                                <p className="text-yellow-500 font-medium">⚠️ FFmpeg WASM Unavailable</p>
-                                <p className="text-yellow-500/70 text-xs mt-1">
-                                  {ffmpegEnv.reason}. Videos cannot be rendered in browser. You can still download the execution plans.
+                              <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-sm">
+                                <p className="text-blue-400 font-medium">☁️ Cloud Processing Mode</p>
+                                <p className="text-blue-400/70 text-xs mt-1">
+                                  Browser FFmpeg unavailable. Videos will be rendered on cloud servers instead.
                                 </p>
                               </div>
                             )}
