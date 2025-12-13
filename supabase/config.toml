@@ -131,3 +131,9 @@ verify_jwt = false
 
 [functions.creative-scale-render]
 verify_jwt = false
+
+[functions.cloud-ffmpeg-render]
+verify_jwt = false
+
+[functions.cloudinary-video-render]
+verify_jwt = false

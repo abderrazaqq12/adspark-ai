@@ -35,6 +35,7 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useCreativeScale } from '@/hooks/useCreativeScale';
+import { executeWithFallback, ExecutionResult, EngineType } from '@/lib/creative-scale/execution-engine';
 import { validateVideoFile, sanitizeFilename, LIMITS } from '@/lib/creative-scale/validation';
 import { checkFFmpegEnvironment } from '@/lib/creative-scale/ffmpeg-adapter';
 import { SignalsDisplay } from '@/components/creative-scale/SignalsDisplay';
@@ -468,63 +469,60 @@ export default function CreativeScale() {
       return;
     }
     
-    // Check FFmpeg environment before starting
-    const envCheck = typeof window !== 'undefined' && window.crossOriginIsolated;
-    if (!envCheck) {
-      toast.error('FFmpeg requires Cross-Origin Isolation. Video execution may fail.');
-    }
-    
     setJobStatus('EXECUTING');
     setCurrentStep(4);
     
-    const results = new Map();
+    const results = new Map<string, ExecutionResult>();
     let successCount = 0;
+    let partialCount = 0;
     let failCount = 0;
-    const errors: string[] = [];
     
     for (let i = 0; i < currentPlans.length; i++) {
-      try {
-        toast.info(`Processing variation ${i + 1}/${currentPlans.length}...`);
-        
-        const result = await routePlan(
-          currentPlans[i],
-          currentAnalysis,
-          currentBlueprint
-        );
-        
-        results.set(currentPlans[i].plan_id, result);
-        
-        if (result.status === 'completed') {
-          successCount++;
-        } else {
-          failCount++;
-          if (result.reason) errors.push(result.reason);
+      const plan = currentPlans[i];
+      
+      // Use the new 4-engine execution ladder
+      const result = await executeWithFallback({
+        plan,
+        analysis: currentAnalysis,
+        blueprint: currentBlueprint,
+        variationIndex: i,
+        onProgress: (engine: EngineType, progress: number, message: string) => {
+          console.log(`[Engine ${engine}] ${progress.toFixed(0)}%: ${message}`);
+        },
+        onEngineSwitch: (from: EngineType | null, to: EngineType, reason: string) => {
+          if (from) {
+            toast.info(`Switching from ${from} to ${to}: ${reason.substring(0, 60)}`);
+          }
         }
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-        errors.push(errorMsg);
-        results.set(currentPlans[i].plan_id, {
-          status: 'partial_success',
-          error_reason: errorMsg
-        });
+      });
+      
+      results.set(plan.plan_id, result);
+      
+      if (result.status === 'success') {
+        successCount++;
+        toast.success(`Variation ${i + 1}: Rendered with ${result.engine_used}`);
+      } else if (result.status === 'partial_success') {
+        partialCount++;
+        toast.info(`Variation ${i + 1}: Partial success (${result.engine_used})`);
+      } else {
         failCount++;
+        toast.error(`Variation ${i + 1}: ${result.error_message?.substring(0, 60) || 'Failed'}`);
       }
     }
     
     setExecutionResults(results);
     
-    if (successCount > 0 && failCount === 0) {
+    if (successCount > 0 && failCount === 0 && partialCount === 0) {
       setJobStatus('DONE');
-      toast.success(`${successCount} video(s) generated!`);
-    } else if (successCount > 0) {
+      toast.success(`${successCount} video(s) generated successfully!`);
+    } else if (successCount > 0 || partialCount > 0) {
       setJobStatus('PARTIAL_SUCCESS');
-      toast.info(`${successCount} succeeded, ${failCount} failed`);
+      toast.info(`${successCount} succeeded, ${partialCount} partial, ${failCount} failed`);
     } else {
       setJobStatus('PARTIAL_SUCCESS');
-      const errorSummary = errors[0] || 'FFmpeg execution failed';
-      toast.warning(`Execution failed: ${errorSummary.substring(0, 100)}`);
+      toast.warning('All engines failed. Execution plans available for download.');
     }
-  }, [currentAnalysis, currentBlueprint, currentPlans, routePlan]);
+  }, [currentAnalysis, currentBlueprint, currentPlans]);
 
   // ============================================
   // DOWNLOADS
