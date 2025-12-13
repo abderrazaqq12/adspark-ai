@@ -28,6 +28,41 @@ import {
 } from './router-types';
 import { ENGINE_REGISTRY, getAvailableEngines } from './engine-registry';
 import { getFFmpegAdapter, checkFFmpegEnvironment } from './ffmpeg-adapter';
+import { supabase } from '@/integrations/supabase/client';
+
+// Cloud fallback execution
+async function executeCloudFallback(
+  plan: ExecutionPlan,
+  userId?: string,
+  variationIndex?: number
+): Promise<{ success: boolean; video_url?: string; error?: string }> {
+  console.log('[Router] Attempting cloud fallback execution...');
+  
+  try {
+    const { data, error } = await supabase.functions.invoke('creative-scale-render', {
+      body: {
+        execution_plan: plan,
+        user_id: userId,
+        variation_index: variationIndex,
+      },
+    });
+
+    if (error) {
+      console.error('[Router] Cloud fallback error:', error);
+      return { success: false, error: error.message };
+    }
+
+    if (data?.success && data?.video_url) {
+      console.log('[Router] Cloud fallback success:', data.video_url);
+      return { success: true, video_url: data.video_url };
+    }
+
+    return { success: false, error: data?.error || 'Cloud rendering failed' };
+  } catch (err: any) {
+    console.error('[Router] Cloud fallback exception:', err);
+    return { success: false, error: err.message };
+  }
+}
 
 // ============================================
 // CAPABILITY EXTRACTION
@@ -466,8 +501,48 @@ export async function routeExecution(
         // Check if FFmpeg is available for browser engines
         if (selectedEngine.location === 'browser') {
           const envCheck = checkFFmpegEnvironment();
+          
+          // If browser FFmpeg unavailable, try cloud fallback
           if (!envCheck.ready) {
-            throw new Error(`FFmpeg unavailable: ${envCheck.reason}`);
+            console.log('[Router] Browser FFmpeg unavailable, trying cloud fallback...');
+            
+            emitEvent({
+              event_id: `evt_${Date.now()}`,
+              job_id: jobId,
+              timestamp: new Date().toISOString(),
+              event_type: 'cloud_fallback',
+              payload: { reason: envCheck.reason },
+            });
+            
+            const cloudResult = await executeCloudFallback(currentPlan, request.user_id);
+            
+            if (cloudResult.success && cloudResult.video_url) {
+              context = transitionState(context, 'completed', { engine_id: 'cloud-ffmpeg' });
+              
+              emitEvent({
+                event_id: `evt_${Date.now()}`,
+                job_id: jobId,
+                timestamp: new Date().toISOString(),
+                event_type: 'execution_complete',
+                payload: { 
+                  engine_id: 'cloud-ffmpeg',
+                  fallback: true,
+                },
+              });
+              
+              return {
+                status: 'completed',
+                job_id: jobId,
+                engine_id: 'cloud-ffmpeg',
+                video_url: cloudResult.video_url,
+                processing_time_ms: Date.now() - startTime,
+                degradation_level: context.degradation_level,
+                warnings: [...currentPlan.validation.warnings, 'Used cloud fallback (browser FFmpeg unavailable)'],
+                output_video_url: cloudResult.video_url,
+              } satisfies RouteSuccessResult;
+            }
+            
+            throw new Error(`Cloud fallback failed: ${cloudResult.error}`);
           }
           
           // Log plan details for debugging
@@ -541,11 +616,46 @@ export async function routeExecution(
           } satisfies RouteSuccessResult;
         }
         
-        // Execution failed
-        throw new Error(result.error || 'FFmpeg execution failed');
+        // Execution failed, try cloud fallback
+        console.log('[Router] Browser FFmpeg failed, trying cloud fallback...');
+        const cloudResult = await executeCloudFallback(currentPlan, request.user_id);
+        
+        if (cloudResult.success && cloudResult.video_url) {
+          context = transitionState(context, 'completed', { engine_id: 'cloud-ffmpeg' });
+          return {
+            status: 'completed',
+            job_id: jobId,
+            engine_id: 'cloud-ffmpeg',
+            video_url: cloudResult.video_url,
+            processing_time_ms: Date.now() - startTime,
+            degradation_level: context.degradation_level,
+            warnings: [...currentPlan.validation.warnings, 'Used cloud fallback after browser failure'],
+            output_video_url: cloudResult.video_url,
+          } satisfies RouteSuccessResult;
+        }
+        
+        throw new Error(result.error || cloudResult.error || 'FFmpeg execution failed');
+      } else if (selectedEngine.location === 'cloud') {
+        // Cloud engines - use cloud fallback directly
+        const cloudResult = await executeCloudFallback(currentPlan, request.user_id);
+        
+        if (cloudResult.success && cloudResult.video_url) {
+          context = transitionState(context, 'completed', { engine_id: selectedEngine.engine_id });
+          return {
+            status: 'completed',
+            job_id: jobId,
+            engine_id: selectedEngine.engine_id,
+            video_url: cloudResult.video_url,
+            processing_time_ms: Date.now() - startTime,
+            degradation_level: context.degradation_level,
+            warnings: currentPlan.validation.warnings,
+            output_video_url: cloudResult.video_url,
+          } satisfies RouteSuccessResult;
+        }
+        
+        throw new Error(cloudResult.error || 'Cloud execution failed');
       } else {
-        // Cloud engines - not yet implemented
-        throw new Error(`Cloud engine ${selectedEngine.engine_id} not implemented`);
+        throw new Error(`Engine location ${selectedEngine.location} not implemented`);
       }
       
     } catch (error) {

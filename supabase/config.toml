@@ -128,3 +128,6 @@ verify_jwt = false
 
 [functions.creative-scale-compile]
 verify_jwt = false
+
+[functions.creative-scale-render]
+verify_jwt = false
