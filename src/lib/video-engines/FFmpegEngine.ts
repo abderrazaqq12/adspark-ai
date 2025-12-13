@@ -5,7 +5,9 @@ import { IVideoEngine, EngineTask, EngineResult } from './types';
 
 // FFmpeg core version - pinned for stability
 const FFMPEG_CORE_VERSION = '0.12.6';
-// jsDelivr provides CORS headers required for cross-origin isolated environments
+// Local path for ffmpeg-core.js (served from public/ffmpeg/)
+const FFMPEG_LOCAL_BASE = '/ffmpeg';
+// CDN fallback for large WASM file (>10MB cannot be stored locally)
 const FFMPEG_CDN_BASE = `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`;
 
 type LoadState = "idle" | "loading" | "ready" | "failed";
@@ -43,15 +45,14 @@ export async function checkFfmpegEnvironment(): Promise<{
             : 'WebAssembly not supported'
     };
 
-    // 4. Fetch ffmpeg-core.js from CDN
+    // 4. Fetch ffmpeg-core.js from local public folder
     try {
-        const coreRes = await fetch(`${FFMPEG_CDN_BASE}/ffmpeg-core.js`, { method: 'HEAD' });
-        const corsHeader = coreRes.headers.get('access-control-allow-origin');
+        const coreRes = await fetch(`${FFMPEG_LOCAL_BASE}/ffmpeg-core.js`, { method: 'HEAD' });
         diagnostics.coreJsFile = {
-            pass: coreRes.ok && corsHeader === '*',
+            pass: coreRes.ok,
             message: coreRes.ok 
-                ? `ffmpeg-core.js accessible (CORS: ${corsHeader || 'none'})`
-                : `ffmpeg-core.js failed: ${coreRes.status}`
+                ? `ffmpeg-core.js accessible (local)`
+                : `ffmpeg-core.js failed: ${coreRes.status} - ensure file exists at public/ffmpeg/ffmpeg-core.js`
         };
     } catch (e) {
         diagnostics.coreJsFile = {
@@ -60,14 +61,14 @@ export async function checkFfmpegEnvironment(): Promise<{
         };
     }
 
-    // 5. Fetch ffmpeg-core.wasm from CDN
+    // 5. Fetch ffmpeg-core.wasm from CDN (too large for local storage)
     try {
         const wasmRes = await fetch(`${FFMPEG_CDN_BASE}/ffmpeg-core.wasm`, { method: 'HEAD' });
         const corsHeader = wasmRes.headers.get('access-control-allow-origin');
         diagnostics.wasmFile = {
             pass: wasmRes.ok && corsHeader === '*',
             message: wasmRes.ok 
-                ? `ffmpeg-core.wasm accessible (CORS: ${corsHeader || 'none'})`
+                ? `ffmpeg-core.wasm accessible (CDN, CORS: ${corsHeader || 'none'})`
                 : `ffmpeg-core.wasm failed: ${wasmRes.status}`
         };
     } catch (e) {
@@ -177,23 +178,21 @@ export class FFmpegEngine implements IVideoEngine {
                 console.log('[FFmpeg Progress]', Math.round(progress * 100) + '%', 'time:', time);
             });
 
-            // Load FFmpeg core from jsDelivr CDN (has proper CORS headers)
-            // Using toBlobURL to convert CDN files to blob URLs
+            // Load FFmpeg core from local public folder (core.js) and CDN (wasm)
             console.log('[FFmpegEngine] Loading FFmpeg core v' + FFMPEG_CORE_VERSION + '...');
-            console.log('[FFmpegEngine] CDN:', FFMPEG_CDN_BASE);
+            console.log('[FFmpegEngine] Local base:', FFMPEG_LOCAL_BASE);
+            console.log('[FFmpegEngine] CDN base:', FFMPEG_CDN_BASE);
 
-            // toBlobURL fetches and converts to blob URL, working around CORS
-            const coreURL = await toBlobURL(
-                `${FFMPEG_CDN_BASE}/ffmpeg-core.js`,
-                'text/javascript'
-            );
-            console.log('[FFmpegEngine] ✓ Core JS loaded');
+            // Load core.js from local public folder (absolute URL at runtime)
+            const coreURL = `${window.location.origin}${FFMPEG_LOCAL_BASE}/ffmpeg-core.js`;
+            console.log('[FFmpegEngine] ✓ Core JS URL:', coreURL);
 
+            // Load WASM from CDN (too large for local storage ~32MB)
             const wasmURL = await toBlobURL(
                 `${FFMPEG_CDN_BASE}/ffmpeg-core.wasm`,
                 'application/wasm'
             );
-            console.log('[FFmpegEngine] ✓ WASM loaded (~32MB)');
+            console.log('[FFmpegEngine] ✓ WASM loaded from CDN (~32MB)');
 
             // @ffmpeg/core@0.12.6 is single-threaded - NO workerURL needed
             console.log('[FFmpegEngine] Calling ffmpeg.load()...');
