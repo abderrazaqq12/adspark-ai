@@ -350,7 +350,7 @@ const CreativeReplicator = () => {
           // Build Task
           const task: EngineTask = {
             id: insertedVideo.id,
-            videoUrl: currentAd.url, // Blob URL works with FFmpeg.wasm
+            videoUrl: currentAd.url, // Video URL for server-side processing
             outputRatio: ratio,
             config: {
               scenes: currentAd.analysis?.scenes?.map(s => ({
