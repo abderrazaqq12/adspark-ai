@@ -142,6 +142,7 @@ export function extractRequiredCapabilities(plan: ExecutionPlan): RequiredCapabi
 
 // ============================================
 // ENGINE SELECTION (Server-Only)
+// HARD RULE: server_ffmpeg = VPS only, NO fal.ai fallback
 // ============================================
 
 export interface EngineSelectionResult {
@@ -151,6 +152,7 @@ export interface EngineSelectionResult {
   unsatisfiedCapabilities: Capability[];
   reason: string;
   alternativeEngines: EngineCapabilityProfile[];
+  allowCloudFallback: boolean; // Explicit flag - false for server_ffmpeg
 }
 
 export function selectEngine(
@@ -158,6 +160,24 @@ export function selectEngine(
   skipEngines: EngineId[] = []
 ): EngineSelectionResult {
   const required = requiredCapabilities.capabilities;
+  
+  // HARD RULE: If native_ffmpeg capability is required, use server_ffmpeg ONLY
+  // No cloud fallback allowed for this engine
+  if (required.has('advanced_filters') || required.has('segment_replace') || 
+      required.has('audio_fade') || required.has('overlay') || required.has('transition')) {
+    const serverFFmpeg = ENGINE_CAPABILITIES.find(e => e.id === 'server_ffmpeg');
+    if (serverFFmpeg && !skipEngines.includes('server_ffmpeg')) {
+      return {
+        selectedEngine: serverFFmpeg,
+        selectedEngineId: 'server_ffmpeg',
+        canExecute: true,
+        unsatisfiedCapabilities: [],
+        reason: 'Server FFmpeg (VPS) selected for advanced capabilities - VPS only, no cloud fallback',
+        alternativeEngines: [],
+        allowCloudFallback: false, // CRITICAL: No fal.ai allowed
+      };
+    }
+  }
   
   const sortedEngines = [...ENGINE_CAPABILITIES]
     .filter(e => !skipEngines.includes(e.id))
@@ -181,6 +201,7 @@ export function selectEngine(
         unsatisfiedCapabilities: [],
         reason: `${engine.name} satisfies all ${required.size} required capabilities`,
         alternativeEngines: sortedEngines.filter(e => e.id !== engine.id && e.id !== 'plan_export'),
+        allowCloudFallback: engine.id !== 'server_ffmpeg', // Only allow cloud fallback for non-server engines
       };
     }
   }
@@ -194,6 +215,7 @@ export function selectEngine(
     unsatisfiedCapabilities: [...required],
     reason: `This variation requires advanced rendering (${[...required].join(', ')}). Exported as plan.`,
     alternativeEngines: [],
+    allowCloudFallback: false,
   };
 }
 
