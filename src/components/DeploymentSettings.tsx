@@ -23,6 +23,7 @@ import {
 import { toast } from 'sonner';
 import { config, isLovableCloud, isSelfHosted, isDocker, isLocal, AIProvider } from '@/config';
 import { getAvailableProviders } from '@/lib/ai/provider';
+import { VPSServerStatus } from './VPSServerStatus';
 
 interface DeploymentSettingsProps {
   onSave?: () => void;
@@ -481,6 +482,9 @@ export default function DeploymentSettings({ onSave }: DeploymentSettingsProps) 
           </CardContent>
         </Card>
       )}
+
+      {/* VPS Server Status */}
+      <VPSServerStatus />
     </div>
   );
 }
