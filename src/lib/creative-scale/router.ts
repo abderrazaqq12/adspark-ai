@@ -25,7 +25,6 @@ import {
   CostProfile,
 } from './router-types';
 import { ENGINE_REGISTRY, getAvailableEngines } from './engine-registry';
-import { supabase } from '@/integrations/supabase/client';
 
 // Cloud fallback execution response type
 interface CloudFallbackResponse {
@@ -39,16 +38,17 @@ interface CloudFallbackResponse {
   download_available?: boolean;
 }
 
-// Cloud fallback execution - calls VPS server
-async function executeCloudFallback(
+// VPS-ONLY execution - NO fal.ai, NO cloud fallback
+// HARD REQUIREMENT: server_ffmpeg = VPS API only
+async function executeVPSServer(
   plan: ExecutionPlan,
   userId?: string,
   variationIndex?: number
 ): Promise<CloudFallbackResponse> {
-  console.log('[Router] Sending to VPS server for rendering...');
+  console.log('[Router] Sending to VPS server for rendering (VPS ONLY - no cloud fallback)...');
   
   try {
-    // First try VPS API directly
+    // VPS API ONLY - no cloud fallback allowed
     const vpsResponse = await fetch('/api/execute', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -59,47 +59,57 @@ async function executeCloudFallback(
       }),
     });
 
-    if (vpsResponse.ok) {
-      const data = await vpsResponse.json();
-      if (data.success && data.outputPath) {
-        return { success: true, video_url: data.outputPath };
-      }
-    }
-
-    // Fallback to Supabase edge function
-    const { data, error } = await supabase.functions.invoke('creative-scale-render', {
-      body: {
-        execution_plan: plan,
-        user_id: userId,
-        variation_index: variationIndex,
-      },
-    });
-
-    if (error) {
-      console.error('[Router] Edge function error:', error);
-      return { success: false, error: error.message };
-    }
-
-    if (data?.success && data?.video_url) {
-      return { success: true, video_url: data.video_url };
-    }
-
-    if (data?.partial_success && data?.download_available) {
-      return {
-        success: false,
-        partial_success: true,
-        reason: data.reason,
-        execution_plan: data.execution_plan,
-        ffmpeg_command: data.ffmpeg_command,
-        download_available: true,
-        error: data.message,
+    // Check for non-JSON response (Nginx misconfiguration)
+    const contentType = vpsResponse.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      console.error('[Router] Non-JSON response - check Nginx /api proxy configuration');
+      return { 
+        success: false, 
+        error: 'API routing misconfigured. Check Nginx /api proxy.' 
       };
     }
 
-    return { success: false, error: data?.error || 'Server rendering failed' };
+    const data = await vpsResponse.json();
+
+    if (!vpsResponse.ok) {
+      console.error('[Router] VPS API error:', data);
+      return { 
+        success: false, 
+        error: data?.error?.message || data?.error || `VPS API returned ${vpsResponse.status}` 
+      };
+    }
+
+    // Handle new response format
+    if (data.ok && (data.jobId || data.outputPath || data.outputUrl)) {
+      return { 
+        success: true, 
+        video_url: data.outputUrl || data.outputPath || `/outputs/${data.jobId}` 
+      };
+    }
+
+    // Handle legacy response format
+    if (data.success && data.outputPath) {
+      return { success: true, video_url: data.outputPath };
+    }
+
+    // VPS execution failed - return error, NO cloud fallback
+    return { 
+      success: false, 
+      error: data?.error || 'VPS FFmpeg returned no output',
+      partial_success: true,
+      reason: 'VPS rendering unavailable - export plan for manual execution',
+      execution_plan: plan,
+      download_available: true,
+    };
   } catch (err: any) {
-    console.error('[Router] Exception:', err);
-    return { success: false, error: err.message };
+    console.error('[Router] VPS Exception:', err);
+    return { 
+      success: false, 
+      error: err.message,
+      partial_success: true,
+      reason: 'VPS server connection failed',
+      download_available: true,
+    };
   }
 }
 
@@ -424,7 +434,8 @@ export async function routeExecution(
   
   attemptedEngines.push('server_ffmpeg');
   
-  const result = await executeCloudFallback(
+  // VPS ONLY - no cloud fallback
+  const result = await executeVPSServer(
     currentPlan,
     request.user_id,
     0

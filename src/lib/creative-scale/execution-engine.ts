@@ -110,6 +110,7 @@ async function executeCloudinary(
 
 // ============================================
 // ENGINE 2: SERVER FFMPEG (VPS)
+// HARD REQUIREMENT: VPS API ONLY - NO FAL.AI, NO CLOUD FALLBACK
 // ============================================
 
 async function executeServerFFmpeg(
@@ -120,7 +121,7 @@ async function executeServerFFmpeg(
   ctx.onProgress?.('server_ffmpeg', 0, 'Sending to VPS server...');
 
   try {
-    // Try VPS API first
+    // VPS API ONLY - No cloud fallback allowed
     const vpsResponse = await fetch('/api/execute', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -131,53 +132,57 @@ async function executeServerFFmpeg(
       }),
     });
 
-    if (vpsResponse.ok) {
-      const data = await vpsResponse.json();
-      if (data.success && data.outputPath) {
-        ctx.onProgress?.('server_ffmpeg', 100, 'VPS rendering complete');
-        return {
-          success: true,
-          video_url: data.outputPath,
-          duration_ms: Date.now() - start,
-        };
-      }
-    }
-
-    // Fallback to edge function
-    const { data, error } = await supabase.functions.invoke('cloud-ffmpeg-render', {
-      body: {
-        execution_plan: ctx.plan,
-        user_id: ctx.userId,
-        variation_index: ctx.variationIndex,
-      },
-    });
-
-    if (error) {
+    // Check for non-JSON response (Nginx misconfiguration)
+    const contentType = vpsResponse.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      console.error('[ServerFFmpeg] Non-JSON response - check Nginx /api proxy');
       return {
         success: false,
-        error: `Server FFmpeg error: ${error.message}`,
+        error: 'API routing misconfigured. Check Nginx /api proxy.',
         duration_ms: Date.now() - start,
       };
     }
 
-    if (data?.success && data?.video_url) {
-      ctx.onProgress?.('server_ffmpeg', 100, 'Server rendering complete');
+    const data = await vpsResponse.json();
+
+    if (!vpsResponse.ok) {
+      console.error('[ServerFFmpeg] VPS API error:', data);
+      return {
+        success: false,
+        error: data?.error?.message || data?.error || `VPS API returned ${vpsResponse.status}`,
+        duration_ms: Date.now() - start,
+      };
+    }
+
+    if (data.ok && (data.jobId || data.outputPath || data.outputUrl)) {
+      ctx.onProgress?.('server_ffmpeg', 100, 'VPS rendering complete');
       return {
         success: true,
-        video_url: data.video_url,
+        video_url: data.outputUrl || data.outputPath || `/outputs/${data.jobId}`,
+        duration_ms: Date.now() - start,
+      };
+    }
+
+    // Check legacy response format
+    if (data.success && data.outputPath) {
+      ctx.onProgress?.('server_ffmpeg', 100, 'VPS rendering complete');
+      return {
+        success: true,
+        video_url: data.outputPath,
         duration_ms: Date.now() - start,
       };
     }
 
     return {
       success: false,
-      error: data?.error || 'Server FFmpeg returned no video',
+      error: data?.error || 'VPS FFmpeg returned no output',
       duration_ms: Date.now() - start,
     };
   } catch (err: any) {
+    console.error('[ServerFFmpeg] Exception:', err);
     return {
       success: false,
-      error: err.message || 'Server FFmpeg request failed',
+      error: err.message || 'VPS server request failed',
       duration_ms: Date.now() - start,
     };
   }
