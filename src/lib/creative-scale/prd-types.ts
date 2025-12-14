@@ -74,7 +74,7 @@ export type JobStatus =
 // ============================================
 
 export type ExecutionStatus = 'success' | 'partial' | 'failed';
-export type EngineUsed = 'ffmpeg-browser' | 'cloud' | 'none';
+export type EngineUsed = 'server_ffmpeg' | 'cloud' | 'none';
 
 export interface ExecutionResult {
   status: ExecutionStatus;
@@ -104,12 +104,12 @@ export const OPERATION_MAPPINGS: EngineOperationMapping[] = [
 ];
 
 // ============================================
-// V1 CONSTRAINTS
+// V1 CONSTRAINTS (Server-Only)
 // ============================================
 
 export const V1_CONSTRAINTS = {
   SINGLE_SOURCE_MODE: true,
-  FFMPEG_INITIAL_LOAD_MB: 30,
+  SERVER_RENDERING: true,
   NO_PERSISTENT_MEMORY: true,
   MAX_DURATION_SEC: 60,
   MAX_VIDEOS: 20,
