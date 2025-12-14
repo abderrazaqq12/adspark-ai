@@ -47,7 +47,7 @@ interface ResultsGridProps {
   onRetry?: (item: ResultItem) => void;
 }
 
-// Engine configuration for badges - updated for capability-based routing
+// Engine configuration for badges - server-only engines
 const ENGINE_CONFIG: Record<string, { 
   label: string; 
   icon: typeof Cpu; 
@@ -55,14 +55,22 @@ const ENGINE_CONFIG: Record<string, {
   bgColor: string;
   description: string;
 }> = {
-  // New capability-based engines
-  'webcodecs': {
-    label: 'WebCodecs',
-    icon: Monitor,
-    color: 'text-emerald-600',
-    bgColor: 'bg-emerald-500/10 border-emerald-500/30',
-    description: 'Rendered using browser-native WebCodecs API'
+  // Server engines (primary)
+  'server_ffmpeg': {
+    label: 'Server FFmpeg',
+    icon: Server,
+    color: 'text-blue-600',
+    bgColor: 'bg-blue-500/10 border-blue-500/30',
+    description: 'Rendered on VPS server with native FFmpeg'
   },
+  'vps-ffmpeg': {
+    label: 'VPS FFmpeg',
+    icon: Server,
+    color: 'text-blue-600',
+    bgColor: 'bg-blue-500/10 border-blue-500/30',
+    description: 'Rendered on VPS server with native FFmpeg'
+  },
+  // Cloud APIs
   'cloudinary': {
     label: 'Cloudinary',
     icon: Cloud,
@@ -70,41 +78,27 @@ const ENGINE_CONFIG: Record<string, {
     bgColor: 'bg-purple-500/10 border-purple-500/30',
     description: 'Transformed via Cloudinary Video API'
   },
-  'server_ffmpeg': {
-    label: 'Server FFmpeg',
-    icon: Server,
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-500/10 border-blue-500/30',
-    description: 'Advanced rendering on cloud servers'
+  'mux': {
+    label: 'Mux',
+    icon: Cloud,
+    color: 'text-pink-600',
+    bgColor: 'bg-pink-500/10 border-pink-500/30',
+    description: 'Processed via Mux Video API'
   },
+  'fal-ai': {
+    label: 'fal.ai',
+    icon: Cloud,
+    color: 'text-orange-600',
+    bgColor: 'bg-orange-500/10 border-orange-500/30',
+    description: 'Processed via fal.ai API'
+  },
+  // Plan export (no rendering)
   'plan_export': {
     label: 'Plan Export',
     icon: FileCode,
     color: 'text-amber-600',
     bgColor: 'bg-amber-500/10 border-amber-500/30',
-    description: 'Requires advanced rendering. Exported for manual execution.'
-  },
-  // Legacy support for backward compatibility
-  'ffmpeg-browser': {
-    label: 'Browser FFmpeg',
-    icon: Cpu,
-    color: 'text-green-600',
-    bgColor: 'bg-green-500/10 border-green-500/30',
-    description: 'Rendered locally using FFmpeg WASM'
-  },
-  'ffmpeg-cloud': {
-    label: 'Cloud FFmpeg',
-    icon: Cloud,
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-500/10 border-blue-500/30',
-    description: 'Rendered on cloud server via fal.ai'
-  },
-  'managed-api': {
-    label: 'Managed API',
-    icon: Server,
-    color: 'text-purple-600',
-    bgColor: 'bg-purple-500/10 border-purple-500/30',
-    description: 'Rendered using managed video API'
+    description: 'Execution plan exported for external processing'
   },
   'no-render': {
     label: 'Plan Only',

@@ -31,7 +31,7 @@ export async function executeVideoCreation(
   onProgress?.(0.02, 'Checking VPS server status...');
   const healthCheck = await checkServerHealth();
   
-  if (!healthCheck.healthy) {
+  if (!healthCheck.ok) {
     throw createError(
       'VPS_UNREACHABLE',
       `VPS server is not available: ${healthCheck.error || 'Connection failed'}`,
@@ -40,7 +40,7 @@ export async function executeVideoCreation(
     );
   }
   
-  if (healthCheck.ffmpeg !== 'available') {
+  if (healthCheck.ffmpeg !== 'ready') {
     throw createError(
       'FFMPEG_UNAVAILABLE',
       `FFmpeg is not available on VPS: ${healthCheck.ffmpeg}`,

@@ -1,10 +1,11 @@
 /**
  * VPS Video Rendering Service
- * Handles upload → execute chain for server-side FFmpeg rendering
+ * Server-only FFmpeg rendering with job queue support
  * 
  * Flow:
  * 1. Upload video to /api/upload → get server path
- * 2. Call /api/execute with path → get rendered output
+ * 2. Call /api/execute → get jobId (queued)
+ * 3. Poll /api/job/:jobId → get result when complete
  */
 
 // ============================================
@@ -27,6 +28,30 @@ export interface ExecuteOptions {
   outputName?: string;
 }
 
+export interface QueuedJob {
+  ok: boolean;
+  jobId: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  queuePosition?: number;
+  statusUrl: string;
+}
+
+export interface JobStatus {
+  ok: boolean;
+  jobId: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  progress: number;
+  output?: {
+    outputPath: string;
+    outputUrl: string;
+    size: number;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
 export interface ExecuteResult {
   success: boolean;
   jobId: string;
@@ -37,9 +62,10 @@ export interface ExecuteResult {
 }
 
 export interface RenderProgress {
-  stage: 'uploading' | 'processing' | 'complete' | 'error';
+  stage: 'uploading' | 'queued' | 'processing' | 'complete' | 'error';
   progress: number;
   message: string;
+  jobId?: string;
 }
 
 export type ProgressCallback = (progress: RenderProgress) => void;
@@ -48,7 +74,7 @@ export type ProgressCallback = (progress: RenderProgress) => void;
 // API BASE URL
 // ============================================
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const API_BASE = import.meta.env.VITE_VPS_API_URL || import.meta.env.VITE_API_BASE_URL || '';
 
 // ============================================
 // UPLOAD VIDEO
@@ -72,20 +98,15 @@ export async function uploadVideo(
     });
 
     xhr.addEventListener('load', () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const result = JSON.parse(xhr.responseText);
+      try {
+        const result = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300) {
           resolve(result);
-        } catch {
-          reject(new Error('Invalid response from server'));
+        } else {
+          reject(new Error(result.error || `Upload failed: ${xhr.status}`));
         }
-      } else {
-        try {
-          const error = JSON.parse(xhr.responseText);
-          reject(new Error(error.error || `Upload failed: ${xhr.status}`));
-        } catch {
-          reject(new Error(`Upload failed: ${xhr.status}`));
-        }
+      } catch {
+        reject(new Error(`Invalid response from server (status ${xhr.status})`));
       }
     });
 
@@ -103,65 +124,124 @@ export async function uploadVideo(
 }
 
 // ============================================
-// EXECUTE FFMPEG
+// QUEUE FFMPEG JOB
 // ============================================
 
-export async function executeFFmpeg(
+export async function queueFFmpegJob(
   sourcePath: string,
   options: ExecuteOptions = {}
-): Promise<ExecuteResult> {
+): Promise<QueuedJob> {
   const response = await fetch(`${API_BASE}/api/execute`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      sourcePath,
-      ...options,
-    }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sourcePath, ...options }),
   });
 
   const result = await response.json();
 
   if (!response.ok) {
-    throw new Error(result.error || 'FFmpeg execution failed');
+    throw new Error(result.error || `Queue failed: ${response.status}`);
   }
 
   return result;
 }
 
 // ============================================
-// EXECUTE PLAN (Full ExecutionPlan)
+// QUEUE PLAN JOB
 // ============================================
 
-export async function executePlan(
+export async function queuePlanJob(
   sourceVideoPath: string,
   plan: Record<string, unknown>,
   outputName?: string
-): Promise<ExecuteResult> {
+): Promise<QueuedJob> {
   const response = await fetch(`${API_BASE}/api/execute-plan`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      sourceVideoUrl: sourceVideoPath,
-      plan,
-      outputName,
-    }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sourceVideoUrl: sourceVideoPath, plan, outputName }),
   });
 
   const result = await response.json();
 
   if (!response.ok) {
-    throw new Error(result.error || 'Plan execution failed');
+    throw new Error(result.error || `Queue failed: ${response.status}`);
   }
 
   return result;
 }
 
 // ============================================
-// UPLOAD + EXECUTE CHAIN
+// POLL JOB STATUS
+// ============================================
+
+export async function getJobStatus(jobId: string): Promise<JobStatus> {
+  const response = await fetch(`${API_BASE}/api/job/${jobId}`);
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.error || `Status check failed: ${response.status}`);
+  }
+
+  return result;
+}
+
+// ============================================
+// WAIT FOR JOB COMPLETION
+// ============================================
+
+export async function waitForJob(
+  jobId: string,
+  onProgress?: ProgressCallback,
+  pollInterval = 1000,
+  maxWait = 600000 // 10 minutes
+): Promise<JobStatus> {
+  const startTime = Date.now();
+
+  while (true) {
+    const status = await getJobStatus(jobId);
+
+    if (status.status === 'completed') {
+      onProgress?.({
+        stage: 'complete',
+        progress: 100,
+        message: 'Rendering complete!',
+        jobId,
+      });
+      return status;
+    }
+
+    if (status.status === 'failed') {
+      const errorMsg = status.error?.message || 'Job failed';
+      onProgress?.({
+        stage: 'error',
+        progress: 0,
+        message: errorMsg,
+        jobId,
+      });
+      throw new Error(errorMsg);
+    }
+
+    // Update progress
+    onProgress?.({
+      stage: status.status === 'processing' ? 'processing' : 'queued',
+      progress: status.progress || (status.status === 'queued' ? 10 : 50),
+      message: status.status === 'queued' 
+        ? 'Waiting in queue...' 
+        : 'Processing with FFmpeg...',
+      jobId,
+    });
+
+    // Check timeout
+    if (Date.now() - startTime > maxWait) {
+      throw new Error('Job timeout exceeded');
+    }
+
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
+  }
+}
+
+// ============================================
+// UPLOAD + EXECUTE (Full Flow)
 // ============================================
 
 export async function uploadAndRender(
@@ -169,6 +249,8 @@ export async function uploadAndRender(
   options: ExecuteOptions = {},
   onProgress?: ProgressCallback
 ): Promise<ExecuteResult> {
+  const startTime = Date.now();
+
   // Stage 1: Upload
   onProgress?.({
     stage: 'uploading',
@@ -181,7 +263,7 @@ export async function uploadAndRender(
     uploadResult = await uploadVideo(file, (percent) => {
       onProgress?.({
         stage: 'uploading',
-        progress: percent * 0.5, // Upload is 50% of total
+        progress: percent * 0.3, // Upload is 30% of total
         message: `Uploading: ${percent}%`,
       });
     });
@@ -204,35 +286,36 @@ export async function uploadAndRender(
     throw error;
   }
 
-  // Stage 2: Execute FFmpeg
+  // Stage 2: Queue job
   onProgress?.({
-    stage: 'processing',
-    progress: 50,
-    message: 'Processing video with FFmpeg...',
+    stage: 'queued',
+    progress: 30,
+    message: 'Queueing render job...',
   });
 
-  try {
-    const result = await executeFFmpeg(uploadResult.path, options);
-    
-    onProgress?.({
-      stage: 'complete',
-      progress: 100,
-      message: 'Rendering complete!',
-    });
+  const queueResult = await queueFFmpegJob(uploadResult.path, options);
 
-    return result;
-  } catch (error) {
+  // Stage 3: Wait for completion
+  const finalStatus = await waitForJob(queueResult.jobId, (progress) => {
+    // Remap progress to 30-100 range
+    const mappedProgress = 30 + (progress.progress * 0.7);
     onProgress?.({
-      stage: 'error',
-      progress: 50,
-      message: error instanceof Error ? error.message : 'Rendering failed',
+      ...progress,
+      progress: mappedProgress,
     });
-    throw error;
-  }
+  });
+
+  return {
+    success: true,
+    jobId: queueResult.jobId,
+    outputUrl: finalStatus.output?.outputUrl || '',
+    size: finalStatus.output?.size || 0,
+    processingTimeMs: Date.now() - startTime,
+  };
 }
 
 // ============================================
-// UPLOAD + EXECUTE PLAN CHAIN
+// UPLOAD + EXECUTE PLAN (Full Flow)
 // ============================================
 
 export async function uploadAndExecutePlan(
@@ -241,6 +324,8 @@ export async function uploadAndExecutePlan(
   outputName?: string,
   onProgress?: ProgressCallback
 ): Promise<ExecuteResult> {
+  const startTime = Date.now();
+
   // Stage 1: Upload
   onProgress?.({
     stage: 'uploading',
@@ -253,7 +338,7 @@ export async function uploadAndExecutePlan(
     uploadResult = await uploadVideo(file, (percent) => {
       onProgress?.({
         stage: 'uploading',
-        progress: percent * 0.5,
+        progress: percent * 0.3,
         message: `Uploading: ${percent}%`,
       });
     });
@@ -270,55 +355,121 @@ export async function uploadAndExecutePlan(
     throw new Error(uploadResult.error || 'Upload failed');
   }
 
-  // Stage 2: Execute Plan
+  // Stage 2: Queue plan job
   onProgress?.({
-    stage: 'processing',
-    progress: 50,
-    message: 'Executing render plan...',
+    stage: 'queued',
+    progress: 30,
+    message: 'Queueing render plan...',
   });
 
-  try {
-    const result = await executePlan(uploadResult.path, plan, outputName);
-    
-    onProgress?.({
-      stage: 'complete',
-      progress: 100,
-      message: 'Rendering complete!',
-    });
+  const queueResult = await queuePlanJob(uploadResult.path, plan, outputName);
 
-    return result;
-  } catch (error) {
+  // Stage 3: Wait for completion
+  const finalStatus = await waitForJob(queueResult.jobId, (progress) => {
+    const mappedProgress = 30 + (progress.progress * 0.7);
     onProgress?.({
-      stage: 'error',
-      progress: 50,
-      message: error instanceof Error ? error.message : 'Rendering failed',
+      ...progress,
+      progress: mappedProgress,
     });
-    throw error;
-  }
+  });
+
+  return {
+    success: true,
+    jobId: queueResult.jobId,
+    outputUrl: finalStatus.output?.outputUrl || '',
+    size: finalStatus.output?.size || 0,
+    processingTimeMs: Date.now() - startTime,
+  };
+}
+
+// ============================================
+// LEGACY COMPATIBILITY (Synchronous-style API)
+// ============================================
+
+export async function executeFFmpeg(
+  sourcePath: string,
+  options: ExecuteOptions = {}
+): Promise<ExecuteResult> {
+  const queueResult = await queueFFmpegJob(sourcePath, options);
+  const finalStatus = await waitForJob(queueResult.jobId);
+
+  return {
+    success: true,
+    jobId: queueResult.jobId,
+    outputUrl: finalStatus.output?.outputUrl || '',
+    size: finalStatus.output?.size || 0,
+    processingTimeMs: 0,
+  };
+}
+
+export async function executePlan(
+  sourceVideoPath: string,
+  plan: Record<string, unknown>,
+  outputName?: string
+): Promise<ExecuteResult> {
+  const queueResult = await queuePlanJob(sourceVideoPath, plan, outputName);
+  const finalStatus = await waitForJob(queueResult.jobId);
+
+  return {
+    success: true,
+    jobId: queueResult.jobId,
+    outputUrl: finalStatus.output?.outputUrl || '',
+    size: finalStatus.output?.size || 0,
+    processingTimeMs: 0,
+  };
 }
 
 // ============================================
 // HEALTH CHECK
 // ============================================
 
-export async function checkServerHealth(): Promise<{
-  healthy: boolean;
-  ffmpeg: string;
+export interface VPSHealthStatus {
+  ok: boolean;
+  ffmpeg: 'ready' | 'unavailable';
+  ffmpegPath?: string;
+  ffmpegVersion?: string;
+  mode: string;
+  queueLength: number;
   error?: string;
-}> {
+}
+
+export async function checkServerHealth(): Promise<VPSHealthStatus> {
   try {
     const response = await fetch(`${API_BASE}/api/health`);
+    
+    // Check for HTML response (nginx error page)
+    const contentType = response.headers.get('content-type');
+    if (contentType && !contentType.includes('application/json')) {
+      return {
+        ok: false,
+        ffmpeg: 'unavailable',
+        mode: 'unknown',
+        queueLength: 0,
+        error: 'Server returned non-JSON response (check nginx config)',
+      };
+    }
+
     const result = await response.json();
     
     return {
-      healthy: result.status === 'healthy',
-      ffmpeg: result.ffmpeg || 'unknown',
+      ok: result.ok === true,
+      ffmpeg: result.ffmpeg === 'ready' ? 'ready' : 'unavailable',
+      ffmpegPath: result.ffmpegPath,
+      ffmpegVersion: result.ffmpegVersion,
+      mode: result.mode || 'server-only',
+      queueLength: result.queueLength || 0,
+      error: result.error,
     };
   } catch (error) {
     return {
-      healthy: false,
+      ok: false,
       ffmpeg: 'unavailable',
+      mode: 'unknown',
+      queueLength: 0,
       error: error instanceof Error ? error.message : 'Health check failed',
     };
   }
 }
+
+// Legacy alias for backward compatibility
+export { checkServerHealth as checkVPSHealth };

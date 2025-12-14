@@ -36,7 +36,7 @@ export function useVPSRender() {
 
   const checkHealth = useCallback(async () => {
     const health = await checkServerHealth();
-    setState(prev => ({ ...prev, serverHealthy: health.healthy }));
+    setState(prev => ({ ...prev, serverHealthy: health.ok }));
     return health;
   }, []);
 
