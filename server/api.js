@@ -1,63 +1,163 @@
 /**
  * FlowScale Server API - FFmpeg Rendering Backend
- * VPS Production Server - Node.js + Native FFmpeg
+ * VPS Production Server - Node.js + Express + Native FFmpeg
+ * 
+ * Endpoints:
+ *   POST /api/upload      - Upload video files
+ *   POST /api/execute     - Execute FFmpeg on uploaded files
+ *   POST /api/execute-plan - Execute full ExecutionPlan
+ *   GET  /api/health      - Health check
  * 
  * Usage:
+ *   npm install express multer uuid
  *   pm2 start server/api.js --name flowscale-api
- *   pm2 save
  */
 
-const http = require('http');
+const express = require('express');
+const multer = require('multer');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const url = require('url');
+const { v4: uuidv4 } = require('uuid');
+
+const app = express();
 
 // Configuration
 const PORT = process.env.PORT || 3000;
 const HOST = '127.0.0.1'; // Only listen locally (Nginx proxies)
 const OUTPUT_DIR = process.env.OUTPUT_DIR || '/var/www/flowscale/outputs';
+const UPLOAD_DIR = process.env.UPLOAD_DIR || '/var/www/flowscale/uploads';
 const MAX_DURATION = 600; // 10 minutes max per job
+const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
 
-// Ensure output directory exists
-if (!fs.existsSync(OUTPUT_DIR)) {
-  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-}
+// Allowed MIME types
+const ALLOWED_MIME_TYPES = [
+  'video/mp4',
+  'video/webm',
+  'video/quicktime', // .mov
+  'video/x-msvideo', // .avi
+  'video/x-matroska', // .mkv
+];
 
-/**
- * Parse JSON body from request
- */
-function parseBody(req) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', chunk => {
-      body += chunk.toString();
-      if (body.length > 10 * 1024 * 1024) { // 10MB limit
-        reject(new Error('Request body too large'));
+// Ensure directories exist
+[OUTPUT_DIR, UPLOAD_DIR].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
+
+// ============================================
+// MULTER CONFIGURATION (Secure Upload)
+// ============================================
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, UPLOAD_DIR);
+  },
+  filename: (req, file, cb) => {
+    // Generate unique filename with timestamp + UUID
+    const timestamp = Date.now();
+    const uniqueId = uuidv4().split('-')[0];
+    const ext = path.extname(file.originalname).toLowerCase() || '.mp4';
+    // Sanitize: only allow alphanumeric, dash, underscore, dot
+    const safeExt = ext.replace(/[^a-z0-9.]/gi, '');
+    const filename = `video_${timestamp}_${uniqueId}${safeExt}`;
+    cb(null, filename);
+  },
+});
+
+const fileFilter = (req, file, cb) => {
+  // Check MIME type
+  if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+    return cb(new Error(`Invalid file type: ${file.mimetype}. Allowed: ${ALLOWED_MIME_TYPES.join(', ')}`), false);
+  }
+  
+  // Check for path traversal in filename
+  if (file.originalname.includes('..') || file.originalname.includes('/') || file.originalname.includes('\\')) {
+    return cb(new Error('Invalid filename: path traversal detected'), false);
+  }
+  
+  cb(null, true);
+};
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: MAX_FILE_SIZE,
+    files: 1, // Only one file per request
+  },
+});
+
+// ============================================
+// MIDDLEWARE
+// ============================================
+
+app.use(express.json({ limit: '10mb' }));
+
+// Request logging
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  next();
+});
+
+// ============================================
+// UPLOAD ENDPOINT
+// ============================================
+
+app.post('/api/upload', (req, res) => {
+  upload.single('video')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({
+          ok: false,
+          error: `File too large. Maximum size: ${MAX_FILE_SIZE / (1024 * 1024)}MB`,
+        });
       }
-    });
-    req.on('end', () => {
-      try {
-        resolve(JSON.parse(body));
-      } catch (e) {
-        reject(new Error('Invalid JSON'));
+      if (err.code === 'LIMIT_FILE_COUNT') {
+        return res.status(400).json({
+          ok: false,
+          error: 'Only one file per request allowed',
+        });
       }
+      return res.status(400).json({
+        ok: false,
+        error: err.message,
+      });
+    }
+    
+    if (err) {
+      return res.status(400).json({
+        ok: false,
+        error: err.message,
+      });
+    }
+    
+    if (!req.file) {
+      return res.status(400).json({
+        ok: false,
+        error: 'No video file provided. Use field name "video"',
+      });
+    }
+    
+    const filePath = path.join(UPLOAD_DIR, req.file.filename);
+    
+    console.log(`[Upload] Saved: ${req.file.filename} (${req.file.size} bytes)`);
+    
+    res.json({
+      ok: true,
+      path: filePath,
+      filename: req.file.filename,
+      size: req.file.size,
+      mimetype: req.file.mimetype,
     });
-    req.on('error', reject);
   });
-}
+});
 
-/**
- * Send JSON response
- */
-function sendJSON(res, statusCode, data) {
-  res.writeHead(statusCode, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(data));
-}
+// ============================================
+// FFMPEG EXECUTION
+// ============================================
 
-/**
- * Execute FFmpeg command with timeout
- */
 function executeFFmpeg(args, outputPath, timeoutSec = MAX_DURATION) {
   return new Promise((resolve, reject) => {
     console.log(`[FFmpeg] Starting: ffmpeg ${args.join(' ')}`);
@@ -85,7 +185,6 @@ function executeFFmpeg(args, outputPath, timeoutSec = MAX_DURATION) {
       if (killed) return;
 
       if (code === 0) {
-        // Verify output exists
         if (fs.existsSync(outputPath)) {
           const stats = fs.statSync(outputPath);
           resolve({
@@ -108,16 +207,10 @@ function executeFFmpeg(args, outputPath, timeoutSec = MAX_DURATION) {
   });
 }
 
-/**
- * Build FFmpeg arguments from execution plan
- */
 function buildFFmpegArgs(plan) {
-  const args = ['-y']; // Overwrite output
-
-  // Input file
+  const args = ['-y'];
   args.push('-i', plan.sourcePath);
 
-  // Trim
   if (plan.trim) {
     if (plan.trim.start > 0) {
       args.push('-ss', String(plan.trim.start));
@@ -127,7 +220,6 @@ function buildFFmpegArgs(plan) {
     }
   }
 
-  // Speed change
   if (plan.speed && plan.speed !== 1.0) {
     const videoFilter = `setpts=${1/plan.speed}*PTS`;
     const audioFilter = `atempo=${plan.speed}`;
@@ -135,12 +227,10 @@ function buildFFmpegArgs(plan) {
     args.push('-map', '[v]', '-map', '[a]');
   }
 
-  // Resize
   if (plan.resize) {
     args.push('-vf', `scale=${plan.resize.width}:${plan.resize.height}`);
   }
 
-  // Output format
   args.push('-c:v', 'libx264');
   args.push('-c:a', 'aac');
   args.push('-preset', 'fast');
@@ -150,40 +240,42 @@ function buildFFmpegArgs(plan) {
   return args;
 }
 
-/**
- * Handle POST /api/execute
- */
-async function handleExecute(req, res) {
+// ============================================
+// EXECUTE ENDPOINT
+// ============================================
+
+app.post('/api/execute', async (req, res) => {
   try {
-    const body = await parseBody(req);
+    const body = req.body;
 
-    // Validate required fields
     if (!body.sourcePath) {
-      return sendJSON(res, 400, { error: 'sourcePath is required' });
+      return res.status(400).json({ error: 'sourcePath is required' });
     }
 
-    // Verify source file exists
+    // Security: Validate path is within allowed directories
+    const normalizedPath = path.normalize(body.sourcePath);
+    if (!normalizedPath.startsWith(UPLOAD_DIR) && !normalizedPath.startsWith('/var/www/flowscale')) {
+      return res.status(400).json({ error: 'Invalid source path' });
+    }
+
     if (!fs.existsSync(body.sourcePath)) {
-      return sendJSON(res, 400, { error: `Source file not found: ${body.sourcePath}` });
+      return res.status(400).json({ error: `Source file not found: ${body.sourcePath}` });
     }
 
-    // Generate output filename
     const jobId = body.outputName || `job-${Date.now()}`;
     const outputFilename = `${jobId}.mp4`;
     const outputPath = path.join(OUTPUT_DIR, outputFilename);
 
-    // Build FFmpeg command
     const args = buildFFmpegArgs(body);
     args.push(outputPath);
 
-    // Execute FFmpeg
     const startTime = Date.now();
     const result = await executeFFmpeg(args, outputPath);
     const processingTime = Date.now() - startTime;
 
     console.log(`[FFmpeg] Complete: ${outputFilename} (${result.size} bytes, ${processingTime}ms)`);
 
-    sendJSON(res, 200, {
+    res.json({
       success: true,
       jobId,
       outputPath: `/outputs/${outputFilename}`,
@@ -194,59 +286,56 @@ async function handleExecute(req, res) {
 
   } catch (error) {
     console.error('[FFmpeg] Error:', error.message);
-    sendJSON(res, 500, {
+    res.status(500).json({
       success: false,
       error: error.message,
     });
   }
-}
+});
 
-/**
- * Handle POST /api/execute-plan (Full ExecutionPlan support)
- */
-async function handleExecutePlan(req, res) {
+// ============================================
+// EXECUTE PLAN ENDPOINT (Full ExecutionPlan)
+// ============================================
+
+app.post('/api/execute-plan', async (req, res) => {
   try {
-    const body = await parseBody(req);
-    const { plan, sourceVideoUrl, outputName } = body;
+    const { plan, sourceVideoUrl, outputName } = req.body;
 
     if (!plan || !sourceVideoUrl) {
-      return sendJSON(res, 400, { error: 'plan and sourceVideoUrl are required' });
+      return res.status(400).json({ error: 'plan and sourceVideoUrl are required' });
     }
 
-    // Download source video if URL
-    let sourcePath = sourceVideoUrl;
-    if (sourceVideoUrl.startsWith('http')) {
-      // For URLs, we'd need to download first
-      // For now, expect local paths
-      return sendJSON(res, 400, { error: 'Remote URLs not yet supported. Use local paths.' });
+    // Security: Validate path
+    const normalizedPath = path.normalize(sourceVideoUrl);
+    if (!normalizedPath.startsWith(UPLOAD_DIR) && !normalizedPath.startsWith('/var/www/flowscale')) {
+      return res.status(400).json({ error: 'Invalid source path' });
+    }
+
+    if (!fs.existsSync(sourceVideoUrl)) {
+      return res.status(400).json({ error: `Source file not found: ${sourceVideoUrl}` });
     }
 
     const jobId = outputName || `plan-${Date.now()}`;
     const outputFilename = `${jobId}.mp4`;
     const outputPath = path.join(OUTPUT_DIR, outputFilename);
 
-    // Build complex FFmpeg filter from ExecutionPlan
-    const args = ['-y', '-i', sourcePath];
-
-    // Build filter complex from timeline
+    const args = ['-y', '-i', sourceVideoUrl];
     const filters = [];
+
     if (plan.timeline && plan.timeline.length > 0) {
       const segment = plan.timeline[0];
       
-      // Trim
       if (segment.trim_start_ms > 0 || segment.trim_end_ms < segment.source_duration_ms) {
         const startSec = segment.trim_start_ms / 1000;
         const endSec = segment.trim_end_ms / 1000;
         args.splice(1, 0, '-ss', String(startSec), '-t', String(endSec - startSec));
       }
 
-      // Speed
       if (segment.speed_multiplier !== 1.0) {
         filters.push(`setpts=${1/segment.speed_multiplier}*PTS`);
       }
     }
 
-    // Resize if needed
     if (plan.output_format) {
       const { width, height } = plan.output_format;
       if (width && height) {
@@ -265,7 +354,7 @@ async function handleExecutePlan(req, res) {
     const result = await executeFFmpeg(args, outputPath);
     const processingTime = Date.now() - startTime;
 
-    sendJSON(res, 200, {
+    res.json({
       success: true,
       status: 'success',
       engine_used: 'server_ffmpeg',
@@ -278,88 +367,69 @@ async function handleExecutePlan(req, res) {
 
   } catch (error) {
     console.error('[ExecutePlan] Error:', error.message);
-    sendJSON(res, 500, {
+    res.status(500).json({
       success: false,
       status: 'failed',
       error: error.message,
     });
   }
-}
+});
 
-/**
- * Health check
- */
-function handleHealth(req, res) {
-  // Check FFmpeg availability
+// ============================================
+// HEALTH CHECK
+// ============================================
+
+app.get('/api/health', (req, res) => {
   const ffprobe = spawn('ffmpeg', ['-version']);
+  
   ffprobe.on('close', (code) => {
     if (code === 0) {
-      sendJSON(res, 200, { 
+      res.json({ 
         status: 'healthy', 
         ffmpeg: 'available',
+        uploadDir: UPLOAD_DIR,
         outputDir: OUTPUT_DIR,
+        maxFileSize: `${MAX_FILE_SIZE / (1024 * 1024)}MB`,
         timestamp: new Date().toISOString(),
       });
     } else {
-      sendJSON(res, 500, { 
+      res.status(500).json({ 
         status: 'unhealthy', 
         ffmpeg: 'not available',
       });
     }
   });
+  
   ffprobe.on('error', () => {
-    sendJSON(res, 500, { 
+    res.status(500).json({ 
       status: 'unhealthy', 
       ffmpeg: 'not installed',
     });
   });
-}
-
-/**
- * Request router
- */
-const server = http.createServer(async (req, res) => {
-  const parsedUrl = url.parse(req.url, true);
-  const pathname = parsedUrl.pathname;
-
-  // CORS headers (not needed behind Nginx, but safe)
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    return res.end();
-  }
-
-  console.log(`[${new Date().toISOString()}] ${req.method} ${pathname}`);
-
-  try {
-    if (pathname === '/api/execute' && req.method === 'POST') {
-      await handleExecute(req, res);
-    } else if (pathname === '/api/execute-plan' && req.method === 'POST') {
-      await handleExecutePlan(req, res);
-    } else if (pathname === '/api/health' && req.method === 'GET') {
-      handleHealth(req, res);
-    } else {
-      sendJSON(res, 404, { error: 'Not found' });
-    }
-  } catch (error) {
-    console.error('[Server] Unhandled error:', error);
-    sendJSON(res, 500, { error: 'Internal server error' });
-  }
 });
 
-server.listen(PORT, HOST, () => {
+// ============================================
+// ERROR HANDLER
+// ============================================
+
+app.use((err, req, res, next) => {
+  console.error('[Server] Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+// ============================================
+// START SERVER
+// ============================================
+
+app.listen(PORT, HOST, () => {
   console.log(`[FlowScale API] Server running at http://${HOST}:${PORT}`);
+  console.log(`[FlowScale API] Upload directory: ${UPLOAD_DIR}`);
   console.log(`[FlowScale API] Output directory: ${OUTPUT_DIR}`);
-  console.log(`[FlowScale API] Max duration: ${MAX_DURATION}s`);
+  console.log(`[FlowScale API] Max file size: ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('[FlowScale API] Shutting down...');
-  server.close(() => {
-    process.exit(0);
-  });
+  process.exit(0);
 });
