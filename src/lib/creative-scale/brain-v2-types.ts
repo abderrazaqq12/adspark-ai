@@ -1,14 +1,20 @@
 /**
  * AI Brain v2 - Type Definitions
  * Multi-layer decision engine for Creative Scale
- * NO raw video, NO transcripts, NO marketing copy
+ * 
+ * RULES (NON-NEGOTIABLE):
+ * - Never default to AIDA
+ * - Never choose more than ONE primary framework
+ * - Hormozi Value Equation is an EVALUATOR, NOT a framework
+ * - Every decision must be explainable
+ * - Output MUST be structured JSON
  */
 
 // ============================================
 // INPUT CONTRACT (Strict)
 // ============================================
 
-export type OptimizationGoal = 'retention' | 'ctr' | 'cpa';
+export type OptimizationGoal = 'retention' | 'ctr' | 'conversions';
 export type RiskTolerance = 'low' | 'medium' | 'high';
 
 export interface UserConstraints {
@@ -28,15 +34,112 @@ export interface HistoricalContext {
   past_strategies: StrategyOutcome[];
 }
 
+export interface AudienceContext {
+  market: 'GCC' | 'Europe' | 'LATAM' | 'USA' | 'APAC';
+  language: string;
+  age_range?: string;
+  gender?: 'male' | 'female' | 'all';
+  awareness_level?: 'unaware' | 'problem_aware' | 'solution_aware' | 'product_aware' | 'most_aware';
+}
+
 export interface BrainInput {
   video_analysis: VideoAnalysisSignals;
   optimization_goal: OptimizationGoal;
+  audience_context?: AudienceContext;
   user_constraints?: UserConstraints;
   historical_context?: HistoricalContext;
 }
 
 // ============================================
-// LAYER 1: PROBLEM DETECTION
+// SIGNAL TYPES (What Brain Extracts)
+// ============================================
+
+export type SignalType = 'hook' | 'proof' | 'pacing' | 'objections' | 'cta' | 'benefit' | 'problem';
+
+export interface ExtractedSignals {
+  hook_strength: number; // 0-1
+  proof_quality: number; // 0-1
+  pacing_score: number; // 0-1
+  objection_handling: number; // 0-1
+  cta_clarity: number; // 0-1
+  benefit_communication: number; // 0-1
+  problem_agitation: number; // 0-1
+}
+
+// ============================================
+// FRAMEWORK TYPES (PRIMARY - ONLY ONE ALLOWED)
+// ============================================
+
+export type FrameworkType = 
+  | 'AIDA'           // Attention-Interest-Desire-Action
+  | 'PAS'            // Problem-Agitate-Solution
+  | 'BAB'            // Before-After-Bridge
+  | '4Ps'            // Promise-Picture-Proof-Push
+  | 'HOOK_BENEFIT_CTA'; // Hook → Benefit → CTA (simple/direct)
+
+// ============================================
+// STYLE OVERLAYS (OPTIONAL - MAX ONE)
+// ============================================
+
+export type StyleOverlay = 
+  | 'UGC'  // User Generated Content style (authentic, casual, relatable)
+  | 'ACC'  // Authority/Credibility/Charisma (polished, expert, persuasive)
+  | null;  // No overlay - framework only
+
+// ============================================
+// HORMOZI VALUE EQUATION (EVALUATOR ONLY)
+// ============================================
+
+export interface HormoziValueScore {
+  dream_outcome: number;      // 0-1: How clearly is the ideal result communicated?
+  perceived_likelihood: number; // 0-1: How achievable does it seem?
+  time_delay: number;         // 0-1: How quickly will results come? (inverse)
+  effort_sacrifice: number;   // 0-1: How easy does it appear? (inverse)
+  total_value_score: number;  // Calculated: (DO × PL) / (TD × ES)
+}
+
+// ============================================
+// FRAMEWORK DECISION OUTPUT (STRICT FORMAT)
+// ============================================
+
+export interface FrameworkDecision {
+  primary_framework: FrameworkType;
+  style_overlay: StyleOverlay;
+  confidence: number; // 0-1
+}
+
+export interface DecisionExplanation {
+  why_chosen: string[];
+  why_others_rejected: Array<{
+    framework: FrameworkType;
+    reason: string;
+  }>;
+}
+
+export type OptimizationFocus = 'hook' | 'proof' | 'pacing' | 'objection' | 'cta';
+
+export interface OptimizationPlan {
+  focus: OptimizationFocus[];
+  expected_lift: 'low' | 'medium' | 'high';
+  specific_changes: string[];
+}
+
+// ============================================
+// BRAIN V2 OUTPUT (MANDATORY FORMAT)
+// ============================================
+
+export interface BrainV2Decision {
+  framework_decision: FrameworkDecision;
+  explanation: DecisionExplanation;
+  optimization_plan: OptimizationPlan;
+  hormozi_evaluation: HormoziValueScore;
+  // Metadata
+  input_signals: ExtractedSignals;
+  decision_timestamp: string;
+}
+
+// ============================================
+// PROBLEM DETECTION
 // ============================================
 
 export type ProblemType = 
@@ -47,6 +150,7 @@ export type ProblemType =
   | 'CLARITY_LOW'
   | 'PACING_INCONSISTENT'
   | 'BENEFIT_UNCLEAR'
+  | 'OBJECTION_UNHANDLED'
   | 'ATTENTION_DROP_EARLY'
   | 'ATTENTION_DROP_LATE'
   | 'DURATION_TOO_LONG'
@@ -66,18 +170,8 @@ export interface ProblemDetectionOutput {
 }
 
 // ============================================
-// LAYER 2: STRATEGY CANDIDATES
+// ACTION TYPES
 // ============================================
-
-export type FrameworkType = 
-  | 'AIDA'
-  | 'PAS'
-  | 'HOOK_DEMO_CTA'
-  | 'PATTERN_INTERRUPT'
-  | 'PROOF_FIRST'
-  | 'SPEED_ONLY'
-  | 'FAB'
-  | 'BAB';
 
 export type ActionType = 
   | 'compress_segment'
@@ -91,22 +185,22 @@ export interface StrategyAction {
   action: ActionType;
   target_segment_id: string;
   target_segment_type: string;
-  factor?: number; // For compress: speed multiplier
+  factor?: number;
   intent: string;
 }
+
+// ============================================
+// LEGACY TYPES (for backward compatibility)
+// ============================================
 
 export interface StrategyCandidate {
   strategy_id: string;
   framework: FrameworkType;
   solves: ProblemType[];
-  cost: number; // 0-1: execution complexity
-  risk: number; // 0-1: chance of harming performance
+  cost: number;
+  risk: number;
   actions: StrategyAction[];
 }
-
-// ============================================
-// LAYER 3: SCORING ENGINE
-// ============================================
 
 export interface ScoringWeights {
   impact_weight: number;
@@ -131,10 +225,6 @@ export interface ScoredStrategy {
   };
 }
 
-// ============================================
-// LAYER 4: SELECTION & DIVERSIFICATION
-// ============================================
-
 export interface SelectionResult {
   selected_strategy: StrategyCandidate;
   selection_reason: string;
@@ -145,10 +235,6 @@ export interface SelectionResult {
   }>;
 }
 
-// ============================================
-// LAYER 5: EXPLAINABILITY
-// ============================================
-
 export interface ExplanationBlock {
   why_this_strategy: string;
   why_not_others: string[];
@@ -156,24 +242,21 @@ export interface ExplanationBlock {
   confidence_level: 'low' | 'medium' | 'high';
 }
 
-// ============================================
-// BRAIN OUTPUT (Final Contract)
-// ============================================
-
 export interface CreativeBlueprintV2 {
   variation_id: string;
   framework: FrameworkType;
+  style_overlay?: StyleOverlay;
   intent: string;
   expected_lift_pct: number;
   risk: RiskTolerance;
   actions: StrategyAction[];
   explanation: ExplanationBlock;
+  decision: BrainV2Decision;
   learning_hooks: {
     framework_used: FrameworkType;
     problems_solved: ProblemType[];
     confidence: number;
   };
-  // Metadata
   detected_problems: DetectedProblem[];
   all_candidates: StrategyCandidate[];
   scoring_details: ScoredStrategy[];
@@ -217,11 +300,17 @@ export interface VideoAnalysisSignals {
     product_demo: boolean;
     proof_present: boolean;
     clarity_score: number; // 0-100
-    attention_curve: number[]; // Attention over time
+    attention_curve: number[];
+    // New signals for better routing
+    objection_handling?: number; // 0-1
+    benefit_clarity?: number; // 0-1
+    problem_agitation?: number; // 0-1
+    authenticity_score?: number; // 0-1 for UGC detection
+    authority_score?: number; // 0-1 for ACC detection
   };
   segments: Array<{
     id: string;
-    type: 'hook' | 'body' | 'cta' | 'problem' | 'solution' | 'benefit' | 'proof' | 'filler';
+    type: 'hook' | 'body' | 'cta' | 'problem' | 'solution' | 'benefit' | 'proof' | 'filler' | 'objection' | 'promise' | 'picture';
     start_ms: number;
     end_ms: number;
     attention_score?: number;

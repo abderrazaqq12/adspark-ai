@@ -1,18 +1,25 @@
 /**
- * AI Brain v2 - Multi-Layer Decision Engine
- * 5-Layer Architecture: Problem → Candidates → Scoring → Selection → Explainability
+ * AI Brain v2 - Framework Decision Engine
  * 
- * LLM is allowed ONLY in:
- * - Problem interpretation
- * - Explanation generation
+ * RULES (NON-NEGOTIABLE):
+ * 1. Never default to AIDA
+ * 2. Never choose more than ONE primary framework
+ * 3. Hormozi Value Equation is an EVALUATOR, NOT a framework
+ * 4. Every decision must be explainable
+ * 5. Output MUST be structured JSON
  * 
- * All scoring, selection, and constraints are CODE-CONTROLLED
+ * PROCESS (STRICT ORDER):
+ * 1. Extract signals (hook, proof, pacing, objections)
+ * 2. Route to ONE framework (AIDA, PAS, BAB, 4Ps, Hook→Benefit→CTA)
+ * 3. Optionally apply ONE style overlay (UGC, ACC)
+ * 4. Evaluate using Hormozi Value Equation
+ * 5. Decide what to change (not how to write it)
  */
 
 import type {
   BrainInput,
   BrainOutput,
-  BrainFailureOutput,
+  BrainV2Decision,
   DetectedProblem,
   ProblemDetectionOutput,
   ProblemType,
@@ -23,73 +30,113 @@ import type {
   CreativeBlueprintV2,
   ExplanationBlock,
   FrameworkType,
+  StyleOverlay,
   OptimizationGoal,
   RiskTolerance,
   ScoringWeights,
-  VideoAnalysisSignals
+  VideoAnalysisSignals,
+  ExtractedSignals,
+  FrameworkDecision,
+  DecisionExplanation,
+  OptimizationPlan,
+  OptimizationFocus,
+  HormoziValueScore,
+  AudienceContext
 } from './brain-v2-types';
 
 // ============================================
-// CONSTANTS & THRESHOLDS
+// FRAMEWORK ROUTING RULES (STRICT)
 // ============================================
 
-const PROBLEM_SEVERITY_THRESHOLD = 0.4; // Below this = not a real problem
-const NO_ACTION_THRESHOLD = 0.3; // If max severity below this, recommend no action
-const RISK_THRESHOLD_BY_TOLERANCE: Record<RiskTolerance, number> = {
-  low: 0.3,
-  medium: 0.5,
-  high: 0.8
-};
+/**
+ * Framework selection is based on detected problems, NOT defaults.
+ * AIDA is explicitly DE-PRIORITIZED unless signals strongly support it.
+ */
 
-// Goal-specific weights for scoring
-const GOAL_WEIGHTS: Record<OptimizationGoal, ScoringWeights> = {
-  retention: { impact_weight: 1.2, risk_penalty: 0.8, cost_penalty: 0.3, trust_bonus: 0.2 },
-  ctr: { impact_weight: 1.0, risk_penalty: 0.6, cost_penalty: 0.4, trust_bonus: 0.3 },
-  cpa: { impact_weight: 0.8, risk_penalty: 1.0, cost_penalty: 0.6, trust_bonus: 0.4 }
-};
+interface FrameworkRouteRule {
+  framework: FrameworkType;
+  triggers: ProblemType[];
+  requires: Array<keyof ExtractedSignals>;
+  contraindications: ProblemType[];
+  priority: number; // Lower = higher priority (AIDA has lowest priority = 5)
+}
 
-// Framework → Problem type mappings
-const FRAMEWORK_SOLVES: Record<FrameworkType, ProblemType[]> = {
-  AIDA: ['ATTENTION_DROP_EARLY', 'CTA_WEAK', 'BENEFIT_UNCLEAR'],
-  PAS: ['MID_PACING_DROP', 'CLARITY_LOW', 'PROOF_MISSING'],
-  HOOK_DEMO_CTA: ['HOOK_WEAK', 'PROOF_MISSING', 'CTA_WEAK'],
-  PATTERN_INTERRUPT: ['HOOK_WEAK', 'ATTENTION_DROP_EARLY'],
-  PROOF_FIRST: ['PROOF_MISSING', 'CTA_WEAK'],
-  SPEED_ONLY: ['PACING_INCONSISTENT', 'DURATION_TOO_LONG', 'MID_PACING_DROP'],
-  FAB: ['BENEFIT_UNCLEAR', 'PROOF_MISSING'],
-  BAB: ['CLARITY_LOW', 'BENEFIT_UNCLEAR']
-};
+const FRAMEWORK_ROUTING_RULES: FrameworkRouteRule[] = [
+  {
+    // PAS: Best when problem is clear but solution isn't emphasized
+    framework: 'PAS',
+    triggers: ['MID_PACING_DROP', 'CLARITY_LOW', 'BENEFIT_UNCLEAR'],
+    requires: ['problem_agitation'],
+    contraindications: ['DURATION_TOO_SHORT'],
+    priority: 1
+  },
+  {
+    // BAB: Best when transformation story is key
+    framework: 'BAB',
+    triggers: ['PROOF_MISSING', 'BENEFIT_UNCLEAR', 'OBJECTION_UNHANDLED'],
+    requires: ['benefit_communication'],
+    contraindications: ['DURATION_TOO_SHORT'],
+    priority: 2
+  },
+  {
+    // 4Ps: Best for high-ticket or complex offers
+    framework: '4Ps',
+    triggers: ['PROOF_MISSING', 'CTA_WEAK', 'OBJECTION_UNHANDLED'],
+    requires: ['proof_quality'],
+    contraindications: ['DURATION_TOO_LONG'],
+    priority: 2
+  },
+  {
+    // Hook→Benefit→CTA: Best for short, direct ads
+    framework: 'HOOK_BENEFIT_CTA',
+    triggers: ['HOOK_WEAK', 'CTA_WEAK', 'PACING_INCONSISTENT'],
+    requires: ['hook_strength', 'cta_clarity'],
+    contraindications: ['PROOF_MISSING'],
+    priority: 1
+  },
+  {
+    // AIDA: Generic fallback - LOWEST PRIORITY
+    // Only use when other frameworks don't match
+    framework: 'AIDA',
+    triggers: ['ATTENTION_DROP_EARLY', 'ATTENTION_DROP_LATE', 'CTA_WEAK'],
+    requires: [],
+    contraindications: [],
+    priority: 5 // Lowest priority - never default to AIDA
+  }
+];
 
-// Framework characteristics
-const FRAMEWORK_RISK: Record<FrameworkType, number> = {
-  SPEED_ONLY: 0.1, // Low risk - just pacing
-  AIDA: 0.2,
-  FAB: 0.25,
-  BAB: 0.3,
-  PAS: 0.35,
-  HOOK_DEMO_CTA: 0.4,
-  PROOF_FIRST: 0.45,
-  PATTERN_INTERRUPT: 0.6 // High risk - major restructure
-};
-
-const FRAMEWORK_COST: Record<FrameworkType, number> = {
-  SPEED_ONLY: 0.1,
-  AIDA: 0.4,
-  FAB: 0.35,
-  BAB: 0.45,
-  PAS: 0.5,
-  HOOK_DEMO_CTA: 0.55,
-  PROOF_FIRST: 0.5,
-  PATTERN_INTERRUPT: 0.7
+// Style overlay detection thresholds
+const STYLE_THRESHOLDS = {
+  UGC: 0.6, // If authenticity_score > 0.6, suggest UGC overlay
+  ACC: 0.6  // If authority_score > 0.6, suggest ACC overlay
 };
 
 // ============================================
-// LAYER 1: PROBLEM DETECTION (Code-controlled)
+// SIGNAL EXTRACTION
 // ============================================
 
-export function detectProblems(
-  signals: VideoAnalysisSignals
-): ProblemDetectionOutput {
+export function extractSignals(analysis: VideoAnalysisSignals): ExtractedSignals {
+  const { signals } = analysis;
+  
+  return {
+    hook_strength: signals.hook_score / 100,
+    proof_quality: signals.proof_present ? 0.7 : 0.2,
+    pacing_score: signals.pacing_drop_mid ? 0.4 : 0.8,
+    objection_handling: signals.objection_handling ?? 0.5,
+    cta_clarity: signals.cta_strength,
+    benefit_communication: signals.benefit_clarity ?? (signals.clarity_score / 100),
+    problem_agitation: signals.problem_agitation ?? 0.5
+  };
+}
+
+// ============================================
+// PROBLEM DETECTION
+// ============================================
+
+const PROBLEM_SEVERITY_THRESHOLD = 0.4;
+const NO_ACTION_THRESHOLD = 0.3;
+
+export function detectProblems(signals: VideoAnalysisSignals): ProblemDetectionOutput {
   const problems: DetectedProblem[] = [];
   const { signals: s, segments, technical } = signals;
 
@@ -141,6 +188,25 @@ export function detectProblems(
     });
   }
 
+  // Benefit unclear
+  if ((s.benefit_clarity ?? 0.5) < 0.5) {
+    problems.push({
+      type: 'BENEFIT_UNCLEAR',
+      severity: 0.6,
+      segment_id: segments.find(seg => seg.type === 'benefit')?.id,
+      details: 'Core benefit is not clearly communicated'
+    });
+  }
+
+  // Objection unhandled
+  if ((s.objection_handling ?? 0.5) < 0.4) {
+    problems.push({
+      type: 'OBJECTION_UNHANDLED',
+      severity: 0.5,
+      details: 'Common objections are not addressed'
+    });
+  }
+
   // Attention curve analysis
   if (s.attention_curve && s.attention_curve.length >= 3) {
     const early = s.attention_curve[0];
@@ -163,7 +229,6 @@ export function detectProblems(
       });
     }
 
-    // Check for pacing inconsistency
     const variance = calculateVariance(s.attention_curve);
     if (variance > 0.15) {
       problems.push({
@@ -190,10 +255,8 @@ export function detectProblems(
     });
   }
 
-  // Sort by severity
   problems.sort((a, b) => b.severity - a.severity);
 
-  // Check if we should recommend no action
   const maxSeverity = problems.length > 0 ? problems[0].severity : 0;
   
   if (maxSeverity < NO_ACTION_THRESHOLD) {
@@ -204,44 +267,361 @@ export function detectProblems(
     };
   }
 
-  // Filter to significant problems only
   const significantProblems = problems.filter(p => p.severity >= PROBLEM_SEVERITY_THRESHOLD);
 
   return {
-    problems: significantProblems.slice(0, 4), // Max 4 problems to address
+    problems: significantProblems.slice(0, 4),
     no_action_recommended: false
   };
 }
 
 // ============================================
-// LAYER 2: STRATEGY CANDIDATES (Code-controlled)
+// FRAMEWORK ROUTING (NEVER DEFAULT TO AIDA)
 // ============================================
+
+interface FrameworkScore {
+  framework: FrameworkType;
+  score: number;
+  matchedTriggers: ProblemType[];
+  reasons: string[];
+}
+
+export function routeToFramework(
+  problems: DetectedProblem[],
+  signals: ExtractedSignals,
+  audienceContext?: AudienceContext
+): FrameworkScore[] {
+  const problemTypes = problems.map(p => p.type);
+  const scores: FrameworkScore[] = [];
+
+  for (const rule of FRAMEWORK_ROUTING_RULES) {
+    // Check for contraindications (disqualifying factors)
+    const hasContraindication = rule.contraindications.some(c => problemTypes.includes(c));
+    if (hasContraindication) {
+      scores.push({
+        framework: rule.framework,
+        score: 0,
+        matchedTriggers: [],
+        reasons: [`Disqualified: contraindication present`]
+      });
+      continue;
+    }
+
+    // Calculate trigger match score
+    const matchedTriggers = rule.triggers.filter(t => problemTypes.includes(t));
+    const triggerScore = matchedTriggers.length / rule.triggers.length;
+
+    // Calculate required signal score
+    let signalScore = 1;
+    const signalReasons: string[] = [];
+    for (const req of rule.requires) {
+      const signalValue = signals[req];
+      if (signalValue < 0.5) {
+        signalScore *= 0.5;
+        signalReasons.push(`Low ${req}: ${Math.round(signalValue * 100)}%`);
+      } else {
+        signalReasons.push(`Strong ${req}: ${Math.round(signalValue * 100)}%`);
+      }
+    }
+
+    // Apply priority penalty (AIDA gets -0.4 penalty as priority 5)
+    const priorityPenalty = (rule.priority - 1) * 0.1;
+
+    // Calculate final score
+    const finalScore = (triggerScore * 0.6 + signalScore * 0.4) - priorityPenalty;
+
+    const reasons = [
+      `Matched ${matchedTriggers.length}/${rule.triggers.length} triggers`,
+      ...signalReasons
+    ];
+
+    if (rule.framework === 'AIDA') {
+      reasons.push('Priority penalty applied (-0.4) - AIDA is not default');
+    }
+
+    scores.push({
+      framework: rule.framework,
+      score: Math.max(0, finalScore),
+      matchedTriggers,
+      reasons
+    });
+  }
+
+  // Sort by score (highest first), but AIDA is never first unless truly best
+  scores.sort((a, b) => {
+    if (a.score === b.score) {
+      // Tie-breaker: prefer non-AIDA
+      if (a.framework === 'AIDA') return 1;
+      if (b.framework === 'AIDA') return -1;
+    }
+    return b.score - a.score;
+  });
+
+  return scores;
+}
+
+// ============================================
+// STYLE OVERLAY DETECTION
+// ============================================
+
+export function detectStyleOverlay(signals: VideoAnalysisSignals): StyleOverlay {
+  const { signals: s } = signals;
+  
+  const authenticity = s.authenticity_score ?? 0.5;
+  const authority = s.authority_score ?? 0.5;
+
+  // Only apply overlay if score clearly indicates style
+  if (authenticity >= STYLE_THRESHOLDS.UGC && authenticity > authority) {
+    return 'UGC';
+  }
+  
+  if (authority >= STYLE_THRESHOLDS.ACC && authority > authenticity) {
+    return 'ACC';
+  }
+
+  return null;
+}
+
+// ============================================
+// HORMOZI VALUE EQUATION (EVALUATOR ONLY)
+// ============================================
+
+/**
+ * Hormozi Value Equation: Value = (Dream Outcome × Perceived Likelihood) / (Time Delay × Effort & Sacrifice)
+ * 
+ * This is an EVALUATOR, not a framework. It assesses the current ad's value proposition.
+ */
+
+export function evaluateHormoziValue(
+  analysis: VideoAnalysisSignals,
+  signals: ExtractedSignals
+): HormoziValueScore {
+  const { signals: s, segments } = analysis;
+
+  // Dream Outcome: How clearly is the ideal result communicated?
+  const dreamOutcome = signals.benefit_communication * 0.6 + (s.clarity_score / 100) * 0.4;
+
+  // Perceived Likelihood: How achievable does it seem?
+  const perceivedLikelihood = (s.proof_present ? 0.7 : 0.3) + signals.proof_quality * 0.3;
+
+  // Time Delay: How quickly will results come? (lower is better, we invert)
+  // If urgency/speed is emphasized in segments, time delay perception is lower
+  const hasUrgency = segments.some(seg => 
+    seg.type === 'cta' && (seg.attention_score ?? 0.5) > 0.6
+  );
+  const timeDelay = hasUrgency ? 0.3 : 0.6;
+
+  // Effort & Sacrifice: How easy does it appear? (lower is better, we invert)
+  const effortSacrifice = 1 - (signals.objection_handling * 0.5 + signals.cta_clarity * 0.5);
+
+  // Calculate total value score (avoid division by zero)
+  const denominator = Math.max(0.1, timeDelay * Math.max(0.1, effortSacrifice));
+  const totalValueScore = (dreamOutcome * perceivedLikelihood) / denominator;
+
+  return {
+    dream_outcome: Math.round(dreamOutcome * 100) / 100,
+    perceived_likelihood: Math.round(perceivedLikelihood * 100) / 100,
+    time_delay: Math.round(timeDelay * 100) / 100,
+    effort_sacrifice: Math.round(effortSacrifice * 100) / 100,
+    total_value_score: Math.round(totalValueScore * 100) / 100
+  };
+}
+
+// ============================================
+// OPTIMIZATION PLAN GENERATION
+// ============================================
+
+export function generateOptimizationPlan(
+  framework: FrameworkType,
+  problems: DetectedProblem[],
+  hormoziScore: HormoziValueScore
+): OptimizationPlan {
+  const focus: OptimizationFocus[] = [];
+  const specificChanges: string[] = [];
+
+  // Determine focus areas based on problems
+  for (const problem of problems.slice(0, 3)) {
+    switch (problem.type) {
+      case 'HOOK_WEAK':
+      case 'ATTENTION_DROP_EARLY':
+        if (!focus.includes('hook')) {
+          focus.push('hook');
+          specificChanges.push('Strengthen opening hook to capture attention within 1-2 seconds');
+        }
+        break;
+      case 'PROOF_MISSING':
+        if (!focus.includes('proof')) {
+          focus.push('proof');
+          specificChanges.push('Add social proof or testimonial element');
+        }
+        break;
+      case 'MID_PACING_DROP':
+      case 'PACING_INCONSISTENT':
+        if (!focus.includes('pacing')) {
+          focus.push('pacing');
+          specificChanges.push('Tighten pacing in middle section to maintain momentum');
+        }
+        break;
+      case 'OBJECTION_UNHANDLED':
+        if (!focus.includes('objection')) {
+          focus.push('objection');
+          specificChanges.push('Address common objections before CTA');
+        }
+        break;
+      case 'CTA_WEAK':
+      case 'ATTENTION_DROP_LATE':
+        if (!focus.includes('cta')) {
+          focus.push('cta');
+          specificChanges.push('Make call-to-action clearer and more compelling');
+        }
+        break;
+    }
+  }
+
+  // Add Hormozi-based recommendations
+  if (hormoziScore.dream_outcome < 0.5) {
+    specificChanges.push('Clarify the transformation/outcome the viewer will achieve');
+  }
+  if (hormoziScore.perceived_likelihood < 0.5) {
+    specificChanges.push('Increase believability with proof, specifics, or guarantees');
+  }
+  if (hormoziScore.effort_sacrifice > 0.6) {
+    specificChanges.push('Make the solution appear easier/more accessible');
+  }
+
+  // Determine expected lift based on problem severity and Hormozi score
+  const avgSeverity = problems.reduce((sum, p) => sum + p.severity, 0) / Math.max(1, problems.length);
+  const valuePotential = 1 - hormoziScore.total_value_score / 5; // Higher if current value is low
+
+  let expectedLift: 'low' | 'medium' | 'high';
+  if (avgSeverity > 0.7 || valuePotential > 0.6) {
+    expectedLift = 'high';
+  } else if (avgSeverity > 0.5 || valuePotential > 0.4) {
+    expectedLift = 'medium';
+  } else {
+    expectedLift = 'low';
+  }
+
+  return {
+    focus: focus.length > 0 ? focus : ['hook', 'cta'],
+    expected_lift: expectedLift,
+    specific_changes: specificChanges
+  };
+}
+
+// ============================================
+// MAIN BRAIN V2 DECISION FUNCTION
+// ============================================
+
+export function makeBrainV2Decision(
+  analysis: VideoAnalysisSignals,
+  goal: OptimizationGoal,
+  audienceContext?: AudienceContext
+): BrainV2Decision {
+  // Step 1: Extract signals
+  const signals = extractSignals(analysis);
+
+  // Step 2: Detect problems
+  const problemOutput = detectProblems(analysis);
+  const problems = problemOutput.problems;
+
+  // Step 3: Route to ONE framework (NEVER default to AIDA)
+  const frameworkScores = routeToFramework(problems, signals, audienceContext);
+  const bestFramework = frameworkScores[0];
+
+  // Step 4: Optionally apply ONE style overlay
+  const styleOverlay = detectStyleOverlay(analysis);
+
+  // Step 5: Evaluate using Hormozi Value Equation
+  const hormoziScore = evaluateHormoziValue(analysis, signals);
+
+  // Step 6: Generate optimization plan (what to change, NOT how to write it)
+  const optimizationPlan = generateOptimizationPlan(
+    bestFramework.framework,
+    problems,
+    hormoziScore
+  );
+
+  // Build explanation
+  const whyChosen: string[] = [
+    `Best match for detected problems: ${bestFramework.matchedTriggers.join(', ') || 'general optimization'}`,
+    ...bestFramework.reasons
+  ];
+
+  if (styleOverlay) {
+    whyChosen.push(`${styleOverlay} style detected - overlay applied for authenticity`);
+  }
+
+  const whyOthersRejected = frameworkScores
+    .slice(1)
+    .filter(f => f.score < bestFramework.score)
+    .map(f => ({
+      framework: f.framework,
+      reason: f.score === 0 
+        ? 'Disqualified by contraindication' 
+        : `Lower match score (${Math.round(f.score * 100)}% vs ${Math.round(bestFramework.score * 100)}%)`
+    }));
+
+  // Calculate confidence
+  const confidence = Math.min(0.95, bestFramework.score * 0.8 + (problems.length > 0 ? 0.2 : 0));
+
+  return {
+    framework_decision: {
+      primary_framework: bestFramework.framework,
+      style_overlay: styleOverlay,
+      confidence: Math.round(confidence * 100) / 100
+    },
+    explanation: {
+      why_chosen: whyChosen,
+      why_others_rejected: whyOthersRejected
+    },
+    optimization_plan: optimizationPlan,
+    hormozi_evaluation: hormoziScore,
+    input_signals: signals,
+    decision_timestamp: new Date().toISOString()
+  };
+}
+
+// ============================================
+// LEGACY SUPPORT: Strategy Candidates & Actions
+// ============================================
+
+const FRAMEWORK_COST: Record<FrameworkType, number> = {
+  HOOK_BENEFIT_CTA: 0.2,
+  PAS: 0.4,
+  BAB: 0.4,
+  '4Ps': 0.5,
+  AIDA: 0.4
+};
+
+const FRAMEWORK_RISK: Record<FrameworkType, number> = {
+  HOOK_BENEFIT_CTA: 0.2,
+  PAS: 0.35,
+  BAB: 0.3,
+  '4Ps': 0.4,
+  AIDA: 0.25
+};
 
 export function generateStrategyCandidates(
   problems: DetectedProblem[],
   signals: VideoAnalysisSignals,
   userConstraints?: BrainInput['user_constraints']
 ): StrategyCandidate[] {
+  const extractedSignals = extractSignals(signals);
+  const frameworkScores = routeToFramework(problems, extractedSignals);
   const candidates: StrategyCandidate[] = [];
-  const forbiddenActions = userConstraints?.forbidden_actions || [];
-  const problemTypes = problems.map(p => p.type);
 
-  // Generate candidates for each framework that could help
-  for (const [framework, solvableProblems] of Object.entries(FRAMEWORK_SOLVES) as [FrameworkType, ProblemType[]][]) {
-    const solves = solvableProblems.filter(p => problemTypes.includes(p));
-    
-    if (solves.length === 0) continue;
-
-    const actions = generateActionsForFramework(framework, problems, signals, forbiddenActions);
+  for (const scored of frameworkScores.filter(f => f.score > 0)) {
+    const actions = generateActionsForFramework(scored.framework, problems, signals, userConstraints?.forbidden_actions || []);
     
     if (actions.length === 0) continue;
 
     candidates.push({
-      strategy_id: `strategy_${framework.toLowerCase()}_${Date.now()}`,
-      framework,
-      solves,
-      cost: FRAMEWORK_COST[framework],
-      risk: FRAMEWORK_RISK[framework],
+      strategy_id: `strategy_${scored.framework.toLowerCase()}_${Date.now()}`,
+      framework: scored.framework,
+      solves: scored.matchedTriggers,
+      cost: FRAMEWORK_COST[scored.framework],
+      risk: FRAMEWORK_RISK[scored.framework],
       actions
     });
   }
@@ -259,37 +639,42 @@ function generateActionsForFramework(
   const segments = signals.segments;
 
   switch (framework) {
-    case 'SPEED_ONLY':
-      // Just compress slow segments
-      if (!forbiddenActions.includes('compress_segment')) {
-        const bodySegment = segments.find(s => s.type === 'body');
-        if (bodySegment) {
-          actions.push({
-            action: 'compress_segment',
-            target_segment_id: bodySegment.id,
-            target_segment_type: bodySegment.type,
-            factor: 1.3, // Speed up by 30%
-            intent: 'Speed up mid-section to maintain momentum'
-          });
-        }
-      }
-      break;
-
-    case 'PATTERN_INTERRUPT':
-      // Emphasize hook, reorder for impact
-      const hookSegment = segments.find(s => s.type === 'hook');
-      if (hookSegment && !forbiddenActions.includes('emphasize_segment')) {
+    case 'HOOK_BENEFIT_CTA':
+      // Simple three-part structure
+      const hook = segments.find(s => s.type === 'hook');
+      const benefit = segments.find(s => s.type === 'benefit');
+      const cta = segments.find(s => s.type === 'cta');
+      
+      if (hook && !forbiddenActions.includes('emphasize_segment')) {
         actions.push({
           action: 'emphasize_segment',
-          target_segment_id: hookSegment.id,
-          target_segment_type: hookSegment.type,
-          intent: 'Make hook more impactful with pattern interrupt'
+          target_segment_id: hook.id,
+          target_segment_type: hook.type,
+          intent: 'Strengthen hook for immediate attention'
+        });
+      }
+      
+      if (benefit && !forbiddenActions.includes('emphasize_segment')) {
+        actions.push({
+          action: 'emphasize_segment',
+          target_segment_id: benefit.id,
+          target_segment_type: benefit.type,
+          intent: 'Clarify core benefit'
+        });
+      }
+      
+      if (cta && !forbiddenActions.includes('emphasize_segment')) {
+        actions.push({
+          action: 'emphasize_segment',
+          target_segment_id: cta.id,
+          target_segment_type: cta.type,
+          intent: 'Make CTA compelling and clear'
         });
       }
       break;
 
     case 'PAS':
-      // Problem-Agitate-Solution: reorder and compress
+      // Problem-Agitate-Solution
       const problemSeg = segments.find(s => s.type === 'problem');
       const solutionSeg = segments.find(s => s.type === 'solution');
       
@@ -313,61 +698,59 @@ function generateActionsForFramework(
       }
       break;
 
-    case 'PROOF_FIRST':
-      // Lead with proof segment
-      const proofSegment = segments.find(s => s.type === 'proof');
-      if (proofSegment && !forbiddenActions.includes('reorder_segments')) {
+    case 'BAB':
+      // Before-After-Bridge
+      const beforeSeg = segments.find(s => s.type === 'problem');
+      const afterSeg = segments.find(s => s.type === 'benefit');
+      
+      if (beforeSeg && afterSeg && !forbiddenActions.includes('reorder_segments')) {
         actions.push({
           action: 'reorder_segments',
-          target_segment_id: proofSegment.id,
-          target_segment_type: proofSegment.type,
-          intent: 'Move proof to beginning for credibility'
+          target_segment_id: beforeSeg.id,
+          target_segment_type: beforeSeg.type,
+          intent: 'Structure as clear before/after transformation'
         });
       }
       break;
 
-    case 'HOOK_DEMO_CTA':
-      // Three-part structure
-      const hook = segments.find(s => s.type === 'hook');
-      const cta = segments.find(s => s.type === 'cta');
-      const fillers = segments.filter(s => s.type === 'filler');
+    case '4Ps':
+      // Promise-Picture-Proof-Push
+      const promiseSeg = segments.find(s => s.type === 'hook' || s.type === 'promise');
+      const proofSeg = segments.find(s => s.type === 'proof');
+      const ctaSeg = segments.find(s => s.type === 'cta');
       
-      if (hook && !forbiddenActions.includes('emphasize_segment')) {
+      if (promiseSeg && !forbiddenActions.includes('emphasize_segment')) {
         actions.push({
           action: 'emphasize_segment',
-          target_segment_id: hook.id,
-          target_segment_type: hook.type,
-          intent: 'Strengthen hook'
+          target_segment_id: promiseSeg.id,
+          target_segment_type: promiseSeg.type,
+          intent: 'Make promise bold and specific'
         });
       }
       
-      if (cta && !forbiddenActions.includes('emphasize_segment')) {
+      if (proofSeg && !forbiddenActions.includes('emphasize_segment')) {
         actions.push({
           action: 'emphasize_segment',
-          target_segment_id: cta.id,
-          target_segment_type: cta.type,
-          intent: 'Make CTA more compelling'
+          target_segment_id: proofSeg.id,
+          target_segment_type: proofSeg.type,
+          intent: 'Strengthen proof elements'
         });
       }
       
-      // Remove fillers
-      for (const filler of fillers.slice(0, 2)) {
-        if (!forbiddenActions.includes('remove_segment')) {
-          actions.push({
-            action: 'remove_segment',
-            target_segment_id: filler.id,
-            target_segment_type: filler.type,
-            intent: 'Remove non-essential content'
-          });
-        }
+      if (ctaSeg && !forbiddenActions.includes('emphasize_segment')) {
+        actions.push({
+          action: 'emphasize_segment',
+          target_segment_id: ctaSeg.id,
+          target_segment_type: ctaSeg.type,
+          intent: 'Push with urgency and clarity'
+        });
       }
       break;
 
     case 'AIDA':
-      // Attention-Interest-Desire-Action
+      // Attention-Interest-Desire-Action (lowest priority)
       const hookSeg = segments.find(s => s.type === 'hook');
       const benefitSeg = segments.find(s => s.type === 'benefit');
-      const ctaSeg = segments.find(s => s.type === 'cta');
       
       if (hookSeg && !forbiddenActions.includes('emphasize_segment')) {
         actions.push({
@@ -387,28 +770,33 @@ function generateActionsForFramework(
         });
       }
       break;
+  }
 
-    case 'FAB':
-    case 'BAB':
-      // Features/Benefits focused
-      const benefitSegment = segments.find(s => s.type === 'benefit');
-      if (benefitSegment && !forbiddenActions.includes('emphasize_segment')) {
-        actions.push({
-          action: 'emphasize_segment',
-          target_segment_id: benefitSegment.id,
-          target_segment_type: benefitSegment.type,
-          intent: 'Highlight key benefits'
-        });
-      }
-      break;
+  // Remove fillers for all frameworks
+  const fillers = segments.filter(s => s.type === 'filler');
+  for (const filler of fillers.slice(0, 2)) {
+    if (!forbiddenActions.includes('remove_segment')) {
+      actions.push({
+        action: 'remove_segment',
+        target_segment_id: filler.id,
+        target_segment_type: filler.type,
+        intent: 'Remove non-essential content'
+      });
+    }
   }
 
   return actions;
 }
 
 // ============================================
-// LAYER 3: SCORING ENGINE (Code-controlled)
+// SCORING ENGINE
 // ============================================
+
+const GOAL_WEIGHTS: Record<OptimizationGoal, ScoringWeights> = {
+  retention: { impact_weight: 1.2, risk_penalty: 0.8, cost_penalty: 0.3, trust_bonus: 0.2 },
+  ctr: { impact_weight: 1.0, risk_penalty: 0.6, cost_penalty: 0.4, trust_bonus: 0.3 },
+  conversions: { impact_weight: 0.9, risk_penalty: 0.9, cost_penalty: 0.5, trust_bonus: 0.4 }
+};
 
 export function scoreStrategies(
   candidates: StrategyCandidate[],
@@ -420,12 +808,10 @@ export function scoreStrategies(
   const scoredStrategies: ScoredStrategy[] = [];
 
   for (const candidate of candidates) {
-    // Calculate impact based on problem severity solved
     const solvedProblems = problems.filter(p => candidate.solves.includes(p.type));
     const impact = solvedProblems.reduce((sum, p) => sum + p.severity, 0) / Math.max(1, problems.length);
 
-    // Get historical confidence
-    let confidence = 0.5; // Base confidence
+    let confidence = 0.5;
     if (historicalContext?.past_strategies) {
       const pastUsage = historicalContext.past_strategies.filter(
         s => s.framework === candidate.framework
@@ -436,9 +822,14 @@ export function scoreStrategies(
       }
     }
 
-    // Calculate final score
+    // Apply AIDA penalty
+    let aidaPenalty = 0;
+    if (candidate.framework === 'AIDA') {
+      aidaPenalty = 0.15; // Explicit penalty for AIDA
+    }
+
     const impact_contribution = impact * weights.impact_weight;
-    const risk_penalty = candidate.risk * weights.risk_penalty;
+    const risk_penalty = (candidate.risk * weights.risk_penalty) + aidaPenalty;
     const cost_penalty = candidate.cost * weights.cost_penalty;
     const trust_bonus = confidence * weights.trust_bonus;
 
@@ -461,15 +852,20 @@ export function scoreStrategies(
     });
   }
 
-  // Sort by final score
   scoredStrategies.sort((a, b) => b.final_score - a.final_score);
 
   return scoredStrategies;
 }
 
 // ============================================
-// LAYER 4: SELECTION & DIVERSIFICATION (Code-controlled)
+// SELECTION & DIVERSIFICATION
 // ============================================
+
+const RISK_THRESHOLD_BY_TOLERANCE: Record<RiskTolerance, number> = {
+  low: 0.3,
+  medium: 0.5,
+  high: 0.8
+};
 
 export function selectStrategies(
   candidates: StrategyCandidate[],
@@ -481,8 +877,6 @@ export function selectStrategies(
   const results: SelectionResult[] = [];
   const usedFrameworks = new Set<FrameworkType>();
   const riskThreshold = RISK_THRESHOLD_BY_TOLERANCE[userConstraints?.risk_tolerance || 'medium'];
-
-  // Get last used framework to avoid repetition
   const lastFramework = historicalContext?.past_strategies?.[0]?.framework;
 
   for (const scored of scoredStrategies) {
@@ -491,30 +885,30 @@ export function selectStrategies(
     const candidate = candidates.find(c => c.strategy_id === scored.strategy_id);
     if (!candidate) continue;
 
-    // Check risk tolerance
-    if (candidate.risk > riskThreshold) {
-      continue;
+    if (candidate.risk > riskThreshold) continue;
+
+    // Strong preference against repeating AIDA
+    if (candidate.framework === 'AIDA' && results.length === 0) {
+      const alternative = scoredStrategies.find(s => 
+        s.strategy_id !== scored.strategy_id && 
+        candidates.find(c => c.strategy_id === s.strategy_id)?.framework !== 'AIDA' &&
+        scored.final_score - s.final_score < 0.2
+      );
+      if (alternative) continue;
     }
 
-    // Avoid repetition (unless it's clearly the best)
+    // Avoid repetition from last session
     if (candidate.framework === lastFramework && results.length === 0) {
-      // If it's the best option and same as last time, allow it but note
-      // Otherwise, prefer diversity
       const secondBest = scoredStrategies.find(s => 
         s.strategy_id !== scored.strategy_id && 
         candidates.find(c => c.strategy_id === s.strategy_id)?.framework !== lastFramework
       );
-      
       if (secondBest && scored.final_score - secondBest.final_score < 0.15) {
-        // Scores are close, prefer diversity
         continue;
       }
     }
 
-    // Avoid duplicate frameworks
-    if (usedFrameworks.has(candidate.framework)) {
-      continue;
-    }
+    if (usedFrameworks.has(candidate.framework)) continue;
 
     usedFrameworks.add(candidate.framework);
 
@@ -545,6 +939,9 @@ function getRejectReason(
 ): string {
   if (rejected.risk > riskThreshold) {
     return `Risk level ${Math.round(rejected.risk * 100)}% exceeds tolerance`;
+  }
+  if (rejected.framework === 'AIDA') {
+    return 'AIDA deprioritized - prefer problem-specific frameworks';
   }
   if (rejected.framework === lastFramework) {
     return 'Avoiding repetition from previous session';
@@ -580,7 +977,7 @@ function generateSelectionReason(
 }
 
 // ============================================
-// LAYER 5: EXPLAINABILITY (Can use LLM)
+// EXPLANATION GENERATION
 // ============================================
 
 export function generateExplanation(
@@ -590,26 +987,24 @@ export function generateExplanation(
   rejectedStrategies: Array<{ framework: FrameworkType; rejection_reason: string }>
 ): ExplanationBlock {
   const solvedProblems = problems.filter(p => selected.solves.includes(p.type));
-  
-  // Generate human-readable explanation (no LLM needed for basic version)
   const problemDescriptions = solvedProblems.map(p => p.details).join('. ');
   
   let why_this_strategy: string;
   switch (selected.framework) {
-    case 'SPEED_ONLY':
-      why_this_strategy = `The video has pacing issues. ${problemDescriptions}. Optimizing speed will restore momentum without risky structural changes.`;
+    case 'HOOK_BENEFIT_CTA':
+      why_this_strategy = `${problemDescriptions}. Hook→Benefit→CTA provides a direct, efficient structure that maximizes impact in minimal time.`;
       break;
     case 'PAS':
-      why_this_strategy = `${problemDescriptions}. The Problem-Agitate-Solution framework emphasizes pain points to create urgency before revealing the solution.`;
+      why_this_strategy = `${problemDescriptions}. Problem-Agitate-Solution emphasizes pain points to create urgency before revealing the solution.`;
       break;
-    case 'PATTERN_INTERRUPT':
-      why_this_strategy = `${problemDescriptions}. Pattern Interrupt uses unexpected elements to recapture wandering attention immediately.`;
+    case 'BAB':
+      why_this_strategy = `${problemDescriptions}. Before-After-Bridge shows transformation clearly, building desire through contrast.`;
       break;
-    case 'PROOF_FIRST':
-      why_this_strategy = `${problemDescriptions}. Leading with proof builds credibility before asking for action.`;
+    case '4Ps':
+      why_this_strategy = `${problemDescriptions}. Promise-Picture-Proof-Push provides a complete persuasion arc with strong credibility.`;
       break;
-    case 'HOOK_DEMO_CTA':
-      why_this_strategy = `${problemDescriptions}. A tight Hook-Demo-CTA structure maximizes impact in minimal time.`;
+    case 'AIDA':
+      why_this_strategy = `${problemDescriptions}. AIDA selected as no other framework matched the problem pattern better.`;
       break;
     default:
       why_this_strategy = `${problemDescriptions}. The ${selected.framework} framework best addresses these issues.`;
@@ -637,13 +1032,20 @@ export function generateExplanation(
 }
 
 // ============================================
-// MAIN BRAIN FUNCTION
+// MAIN BRAIN FUNCTION (FULL PIPELINE)
 // ============================================
 
 export function runBrainV2(
   input: BrainInput,
   variationCount: number = 3
 ): BrainOutput {
+  // Get brain decision first
+  const decision = makeBrainV2Decision(
+    input.video_analysis,
+    input.optimization_goal,
+    input.audience_context
+  );
+
   // Layer 1: Problem Detection
   const problemOutput = detectProblems(input.video_analysis);
 
@@ -699,12 +1101,12 @@ export function runBrainV2(
       failure: {
         mode: 'SAFE_OPTIMIZATION_ONLY',
         reason: 'All strategies exceed risk threshold',
-        fallback_suggestion: 'Consider \\"medium\\" risk tolerance for more options'
+        fallback_suggestion: 'Consider "medium" risk tolerance for more options'
       }
     };
   }
 
-  // Layer 5: Generate Explanations & Build Blueprints
+  // Layer 5: Generate Blueprints with Decision
   const blueprints: CreativeBlueprintV2[] = selections.map((selection, index) => {
     const scored = scoredStrategies.find(s => s.strategy_id === selection.selected_strategy.strategy_id)!;
     const explanation = generateExplanation(
@@ -717,11 +1119,13 @@ export function runBrainV2(
     return {
       variation_id: `var_${index}_${Date.now()}`,
       framework: selection.selected_strategy.framework,
+      style_overlay: decision.framework_decision.style_overlay,
       intent: selection.selection_reason,
       expected_lift_pct: Math.round(scored.impact_score * 25),
       risk: scored.risk_score < 0.3 ? 'low' : scored.risk_score < 0.6 ? 'medium' : 'high',
       actions: selection.selected_strategy.actions,
       explanation,
+      decision,
       learning_hooks: {
         framework_used: selection.selected_strategy.framework,
         problems_solved: selection.selected_strategy.solves,
@@ -750,7 +1154,6 @@ function calculateVariance(arr: number[]): number {
   return squaredDiffs.reduce((a, b) => a + b, 0) / arr.length;
 }
 
-// Convert VideoAnalysis to VideoAnalysisSignals
 export function convertToSignals(analysis: any): VideoAnalysisSignals {
   return {
     source_id: analysis.id || analysis.source_video_id,
@@ -767,7 +1170,12 @@ export function convertToSignals(analysis: any): VideoAnalysisSignals {
       product_demo: analysis.segments?.some((s: any) => s.visual_tags?.includes('demo')) || false,
       proof_present: analysis.segments?.some((s: any) => s.type === 'proof') || false,
       clarity_score: Math.round((analysis.overall_scores?.message_clarity || 0.7) * 100),
-      attention_curve: analysis.segments?.map((s: any) => s.attention_score || 0.7) || [0.8, 0.6, 0.7]
+      attention_curve: analysis.segments?.map((s: any) => s.attention_score || 0.7) || [0.8, 0.6, 0.7],
+      objection_handling: analysis.overall_scores?.objection_handling,
+      benefit_clarity: analysis.overall_scores?.benefit_clarity,
+      problem_agitation: analysis.overall_scores?.problem_agitation,
+      authenticity_score: analysis.style_scores?.authenticity,
+      authority_score: analysis.style_scores?.authority
     },
     segments: analysis.segments?.map((s: any) => ({
       id: s.id,
