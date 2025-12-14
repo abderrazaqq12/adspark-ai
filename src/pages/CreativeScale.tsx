@@ -112,9 +112,6 @@ export default function CreativeScale() {
     saveUIState({ currentStep, completedSteps });
   }, [currentStep, completedSteps]);
 
-  // FFmpeg environment
-  const ffmpegEnv = checkFFmpegEnvironment();
-
   // ============================================
   // STEP NAVIGATION
   // ============================================
@@ -369,7 +366,6 @@ export default function CreativeScale() {
       totalVariations: currentPlans.length,
       currentEngine: null,
       engines: [
-        { engine: 'webcodecs', status: 'pending', progress: 0, message: '' },
         { engine: 'cloudinary', status: 'pending', progress: 0, message: '' },
         { engine: 'server_ffmpeg', status: 'pending', progress: 0, message: '' },
         { engine: 'plan_export', status: 'pending', progress: 0, message: '' },
@@ -388,7 +384,6 @@ export default function CreativeScale() {
         variationIndex: i,
         currentEngine: null,
         engines: [
-          { engine: 'webcodecs', status: 'pending', progress: 0, message: '' },
           { engine: 'cloudinary', status: 'pending', progress: 0, message: '' },
           { engine: 'server_ffmpeg', status: 'pending', progress: 0, message: '' },
           { engine: 'plan_export', status: 'pending', progress: 0, message: '' },
@@ -572,7 +567,7 @@ export default function CreativeScale() {
               blueprint={currentBlueprint}
               executionProgress={executionProgress}
               isExecuting={isRouting || executionProgress.status === 'executing'}
-              ffmpegReady={ffmpegEnv.ready}
+              ffmpegReady={true}
               onExecute={handleExecute}
               onDownloadPlans={downloadAllPlans}
               onContinue={handleExecuteContinue}

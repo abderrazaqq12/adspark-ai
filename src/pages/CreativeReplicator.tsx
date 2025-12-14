@@ -565,8 +565,6 @@ const CreativeReplicator = () => {
           </CardContent>
         </Card>
 
-        {/* Debug: Single Video FFMPEG Test */}
-        <DebugFFmpegTest />
       </div>
     </div>
   );
