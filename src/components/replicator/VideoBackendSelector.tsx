@@ -1,11 +1,13 @@
-// Video Backend Strategy Selector
+/**
+ * Video Backend Strategy Selector
+ * SERVER-ONLY ARCHITECTURE - No browser options
+ */
 
-import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Monitor, Cloud, Code, Sparkles, Zap, DollarSign } from 'lucide-react';
+import { Server, Cloud, Sparkles } from 'lucide-react';
 import { ProcessingBackend, EngineTier } from '@/lib/video-processing/types';
 import { getTierInfo, getEnginesByTier } from '@/lib/video-processing/engine-registry';
 
@@ -16,11 +18,9 @@ interface VideoBackendSelectorProps {
   onTierChange: (tier: EngineTier) => void;
 }
 
-const BACKEND_OPTIONS: { value: ProcessingBackend; label: string; description: string; icon: typeof Monitor }[] = [
-  { value: 'browser', label: 'Browser', description: 'FFmpeg.wasm + WebCodecs (No server)', icon: Monitor },
-  { value: 'remotion', label: 'Code-Based', description: 'Remotion React templates', icon: Code },
-  { value: 'cloud-api', label: 'Cloud APIs', description: 'Cloudinary, Mux, fal.ai', icon: Cloud },
-  { value: 'auto', label: 'Auto', description: 'AI selects best option', icon: Sparkles },
+const BACKEND_OPTIONS: { value: ProcessingBackend; label: string; description: string; icon: typeof Server }[] = [
+  { value: 'vps', label: 'VPS Server', description: 'Native FFmpeg on your server', icon: Server },
+  { value: 'cloud-api', label: 'Cloud APIs', description: 'Cloudinary, Mux, AI engines', icon: Cloud },
 ];
 
 const TIER_OPTIONS: EngineTier[] = ['free', 'low', 'medium', 'premium', 'ai-chooses'];
@@ -59,6 +59,14 @@ export function VideoBackendSelector({
               </CardContent>
             </Card>
           ))}
+        </div>
+        
+        {/* Server-only info */}
+        <div className="mt-2 p-2 bg-muted/50 rounded-md border border-border/50">
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <Sparkles className="w-3 h-3" />
+            All video processing runs server-side. No browser resources used.
+          </p>
         </div>
       </div>
 

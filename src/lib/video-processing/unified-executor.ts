@@ -1,30 +1,60 @@
-// Unified Video Processing Executor
+/**
+ * Unified Video Processing Executor
+ * SERVER-ONLY ARCHITECTURE
+ * 
+ * All video processing routes through VPS API.
+ * No browser-side processing. No fallbacks to client-side.
+ * If VPS is unreachable, FAIL LOUDLY.
+ */
 
 import { 
   VideoCreationInput, 
   VideoCreationOutput, 
-  ProcessingBackend,
+  VideoProcessingError,
   AISceneDefinition,
-  VideoProcessingError
+  ExecutionPlan
 } from './types';
-import { selectBestEngine, getEngineById } from './engine-registry';
+import { selectBestEngine, getDefaultServerEngine } from './engine-registry';
 import { generateSceneStructure } from './ai-scene-intelligence';
-import { createVideoFromImages, detectCapabilities } from './browser-processor';
-import { supabase } from '@/integrations/supabase/client';
+import { checkServerHealth } from '@/lib/vps-render-service';
 
-// Main execution function
+/**
+ * Main execution function - SERVER ONLY
+ * No browser processing, no fallbacks
+ */
 export async function executeVideoCreation(
   input: VideoCreationInput,
   onProgress?: (progress: number, message: string) => void
 ): Promise<VideoCreationOutput[]> {
-  const outputs: VideoCreationOutput[] = [];
   
-  // Generate scene structure
+  // Step 1: Verify VPS is available FIRST - fail fast if not
+  onProgress?.(0.02, 'Checking VPS server status...');
+  const healthCheck = await checkServerHealth();
+  
+  if (!healthCheck.healthy) {
+    throw createError(
+      'VPS_UNREACHABLE',
+      `VPS server is not available: ${healthCheck.error || 'Connection failed'}`,
+      'validation',
+      true
+    );
+  }
+  
+  if (healthCheck.ffmpeg !== 'available') {
+    throw createError(
+      'FFMPEG_UNAVAILABLE',
+      `FFmpeg is not available on VPS: ${healthCheck.ffmpeg}`,
+      'validation',
+      false
+    );
+  }
+
+  // Step 2: Generate scene structure
   onProgress?.(0.05, 'Generating scene structure...');
   
   const sceneStructure = await generateSceneStructure({
     script: input.script,
-    voiceoverDuration: 30, // Default, would be calculated from voiceover
+    voiceoverDuration: 30,
     sourceImages: input.sourceImages,
     videoType: input.videoType,
     market: input.market,
@@ -33,52 +63,60 @@ export async function executeVideoCreation(
     aiAutoMode: input.aiAutoMode,
   });
 
-  // Determine best backend
-  const backend = determineBackend(input);
-  onProgress?.(0.1, `Using ${backend} backend...`);
-
-  // Select engine
-  const engine = selectBestEngine(
-    input.tier,
-    backend,
-    input.sourceImages?.length ? ['image-to-video'] : ['video-processing'],
-    input.maxDuration
-  );
+  // Step 3: Select engine (always server-side)
+  const engine = input.backend === 'vps' 
+    ? getDefaultServerEngine()
+    : selectBestEngine(
+        input.tier,
+        input.backend,
+        input.sourceImages?.length ? ['image-to-video'] : ['video-processing'],
+        input.maxDuration
+      );
 
   if (!engine) {
-    throw new Error('No suitable engine found for the given requirements');
+    throw createError(
+      'INVALID_INPUT',
+      'No suitable engine found for the given requirements',
+      'validation',
+      false
+    );
   }
 
-  // Generate variations
+  onProgress?.(0.1, `Using ${engine.name}...`);
+
+  // Step 4: Generate variations
+  const outputs: VideoCreationOutput[] = [];
+  
   for (let i = 0; i < input.variationCount; i++) {
     const progress = 0.1 + (i / input.variationCount) * 0.8;
     onProgress?.(progress, `Generating variation ${i + 1}/${input.variationCount}...`);
 
     try {
-      const output = await generateSingleVariation(
+      const output = await generateVariationOnServer(
         input,
         sceneStructure.scenes,
         engine.id,
-        backend,
         i,
         (p) => onProgress?.(progress + p * (0.8 / input.variationCount), `Processing variation ${i + 1}...`)
       );
       outputs.push(output);
     } catch (err) {
       console.error(`[unified-executor] Variation ${i + 1} failed:`, err);
+      
+      const error = err instanceof Error ? err : new Error('Unknown error');
       outputs.push({
         id: `error-${Date.now()}-${i}`,
         status: 'failed',
         aspectRatio: input.aspectRatios[0] || '9:16',
         engine: engine.id,
-        backend,
+        backend: 'vps',
         estimatedCost: 0,
-        error: {
-          code: 'GENERATION_FAILED',
-          message: err instanceof Error ? err.message : 'Unknown error',
-          stage: 'generation',
-          retryable: true,
-        },
+        error: createError(
+          'EXECUTION_FAILED',
+          error.message,
+          'execution',
+          true
+        ),
       });
     }
   }
@@ -87,70 +125,131 @@ export async function executeVideoCreation(
   return outputs;
 }
 
-// Determine the best backend based on input and capabilities
-function determineBackend(input: VideoCreationInput): ProcessingBackend {
-  // If user specified, respect their choice
-  if (input.backend !== 'auto') {
-    return input.backend;
-  }
-
-  // Check browser capabilities
-  const capabilities = detectCapabilities();
-
-  // Free tier always uses browser
-  const freeTiers: string[] = ['free'];
-  if (freeTiers.includes(input.tier)) {
-    return 'browser';
-  }
-
-  // If only images and free/low tier, use browser
-  if (input.sourceImages?.length && !input.sourceVideos?.length) {
-    const browserTiers: string[] = ['free', 'low'];
-    if (browserTiers.includes(input.tier)) {
-      return 'browser';
-    }
-  }
-
-  // For higher tiers or complex processing, use cloud
-  if (input.tier === 'medium' || input.tier === 'premium') {
-    return 'cloud-api';
-  }
-
-  // Default to browser if supported
-  return capabilities.supportsWasm ? 'browser' : 'cloud-api';
-}
-
-// Generate a single variation
-async function generateSingleVariation(
+/**
+ * Generate a single variation on VPS
+ */
+async function generateVariationOnServer(
   input: VideoCreationInput,
   scenes: AISceneDefinition[],
   engineId: string,
-  backend: ProcessingBackend,
   variationIndex: number,
   onProgress?: (progress: number) => void
 ): Promise<VideoCreationOutput> {
   const aspectRatio = input.aspectRatios[variationIndex % input.aspectRatios.length] || '9:16';
   const dimensions = getAspectRatioDimensions(aspectRatio);
-
-  // Randomize scenes slightly for variation
   const variedScenes = randomizeScenes(scenes, variationIndex);
 
-  switch (backend) {
-    case 'browser':
-      return await generateWithBrowser(input, variedScenes, dimensions, aspectRatio, engineId, onProgress);
+  // Validate we have source content
+  if (!input.sourceVideos?.length && !input.sourceImages?.length) {
+    throw createError(
+      'INVALID_INPUT',
+      'No source videos or images provided',
+      'validation',
+      false
+    );
+  }
+
+  onProgress?.(0.2);
+  
+  // Execute on VPS
+  const result = await executeOnVPS(
+    input.sourceVideos?.[0] || '',
+    {
+      sourcePath: input.sourceVideos?.[0] || '',
+      resize: dimensions,
+      aspectRatio,
+    },
+    onProgress
+  );
+
+  onProgress?.(1);
+
+  return {
+    id: result.jobId || `vps-${Date.now()}`,
+    status: result.success ? 'completed' : 'failed',
+    videoUrl: result.outputUrl,
+    aspectRatio,
+    engine: engineId,
+    backend: 'vps',
+    scenes: variedScenes,
+    duration: variedScenes.reduce((sum, s) => sum + s.duration, 0),
+    estimatedCost: 0,
+    actualCost: 0,
+    error: result.success ? undefined : createError(
+      'EXECUTION_FAILED',
+      result.error || 'VPS execution failed',
+      'execution',
+      true
+    ),
+  };
+}
+
+interface VPSExecuteResult {
+  success: boolean;
+  jobId?: string;
+  outputUrl?: string;
+  error?: string;
+}
+
+/**
+ * Execute plan on VPS server
+ */
+async function executeOnVPS(
+  sourceUrl: string,
+  plan: ExecutionPlan,
+  onProgress?: (progress: number) => void
+): Promise<VPSExecuteResult> {
+  try {
+    const baseUrl = localStorage.getItem('vps_api_url') || '';
     
-    case 'cloud-api':
-      return await generateWithCloudAPI(input, variedScenes, dimensions, aspectRatio, engineId, onProgress);
+    const response = await fetch(`${baseUrl}/api/execute-plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sourceVideoUrl: sourceUrl,
+        plan: {
+          trim: plan.trim,
+          speed: plan.speed,
+          resize: plan.resize,
+        },
+        outputName: plan.outputName,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+      return {
+        success: false,
+        error: errorData.message || `HTTP ${response.status}`,
+      };
+    }
+
+    const data = await response.json();
     
-    case 'remotion':
-      return await generateWithRemotion(input, variedScenes, dimensions, aspectRatio, engineId, onProgress);
-    
-    default:
-      throw new Error(`Unknown backend: ${backend}`);
+    if (!data.ok) {
+      return {
+        success: false,
+        error: data.message || 'Execution failed',
+      };
+    }
+
+    return {
+      success: true,
+      outputUrl: data.outputUrl,
+      jobId: data.jobId,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Network error';
+    return {
+      success: false,
+      error: message,
+    };
   }
 }
 
-// Get dimensions for aspect ratio
+/**
+ * Get dimensions for aspect ratio
+ */
 function getAspectRatioDimensions(ratio: string): { width: number; height: number } {
   const dims: Record<string, { width: number; height: number }> = {
     '9:16': { width: 1080, height: 1920 },
@@ -161,13 +260,12 @@ function getAspectRatioDimensions(ratio: string): { width: number; height: numbe
   return dims[ratio] || dims['9:16'];
 }
 
-// Randomize scenes for variation
+/**
+ * Randomize scenes for variation
+ */
 function randomizeScenes(scenes: AISceneDefinition[], seed: number): AISceneDefinition[] {
   return scenes.map((scene, i) => {
-    // Slightly vary duration
     const durationVariation = 1 + ((seed * (i + 1)) % 10 - 5) / 100;
-    
-    // Possibly change motion style
     const motionStyles: AISceneDefinition['motionStyle'][] = ['ken-burns', 'parallax', 'zoom-in', 'pan'];
     const motionIndex = (seed + i) % motionStyles.length;
     
@@ -181,166 +279,35 @@ function randomizeScenes(scenes: AISceneDefinition[], seed: number): AISceneDefi
   });
 }
 
-// Browser-based generation
-async function generateWithBrowser(
-  input: VideoCreationInput,
-  scenes: AISceneDefinition[],
-  dimensions: { width: number; height: number },
-  aspectRatio: string,
-  engineId: string,
-  onProgress?: (progress: number) => void
-): Promise<VideoCreationOutput> {
-  const images = input.sourceImages || [];
-  
-  if (images.length === 0) {
-    throw new Error('Browser backend requires source images');
-  }
-
-  const videoBlob = await createVideoFromImages(images, scenes, {
-    width: dimensions.width,
-    height: dimensions.height,
-    fps: 30,
-    onProgress,
-  });
-
-  if (!videoBlob) {
-    throw new Error('Failed to create video');
-  }
-
-  // Upload to storage
-  const { data: userData } = await supabase.auth.getUser();
-  const userId = userData?.user?.id || 'anonymous';
-  const fileName = `browser-${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
-  const storagePath = `${userId}/${fileName}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from('videos')
-    .upload(storagePath, videoBlob, {
-      contentType: 'video/webm',
-      upsert: true,
-    });
-
-  if (uploadError) {
-    throw new Error(`Upload failed: ${uploadError.message}`);
-  }
-
-  const { data: urlData } = supabase.storage
-    .from('videos')
-    .getPublicUrl(storagePath);
-
+/**
+ * Create structured error - always JSON, never HTML
+ */
+function createError(
+  code: VideoProcessingError['code'],
+  message: string,
+  stage: VideoProcessingError['stage'],
+  retryable: boolean
+): VideoProcessingError {
   return {
-    id: `browser-${Date.now()}`,
-    status: 'completed',
-    videoUrl: urlData.publicUrl,
-    aspectRatio,
-    engine: engineId,
-    backend: 'browser',
-    scenes,
-    duration: scenes.reduce((sum, s) => sum + s.duration, 0),
-    estimatedCost: 0,
-    actualCost: 0,
+    ok: false,
+    code,
+    message,
+    stage,
+    retryable,
   };
 }
 
-// Cloud API generation
-async function generateWithCloudAPI(
-  input: VideoCreationInput,
-  scenes: AISceneDefinition[],
-  dimensions: { width: number; height: number },
-  aspectRatio: string,
-  engineId: string,
-  onProgress?: (progress: number) => void
-): Promise<VideoCreationOutput> {
-  onProgress?.(0.1);
-
-  // Call the video generation edge function
-  const { data, error } = await supabase.functions.invoke('ffmpeg-creative-engine', {
-    body: {
-      task: {
-        taskType: 'full-assembly',
-        inputVideos: input.sourceVideos,
-        inputImages: input.sourceImages,
-        outputRatio: aspectRatio,
-        transitions: input.transitions || ['cut', 'fade'],
-        pacing: input.pacing || 'medium',
-        maxDuration: input.maxDuration,
-        removesSilence: true,
-        motionEffects: ['ken-burns', 'parallax', 'zoom-pan'],
-      },
-      config: {
-        sourceVideos: input.sourceVideos,
-        variations: 1,
-        hookStyles: input.hookStyles || ['story'],
-        pacing: input.pacing || 'medium',
-        transitions: input.transitions || ['cut'],
-        ratios: [aspectRatio],
-        voiceSettings: { language: input.language, tone: 'emotional' },
-        market: input.market,
-        language: input.language,
-      },
-      engineId,
-    },
-  });
-
-  onProgress?.(0.9);
-
-  if (error) {
-    // Check for FFmpeg blocked error
-    if (error.message?.includes('not available') || error.message?.includes('blocked')) {
-      // Fallback to browser processing
-      console.warn('[unified-executor] Cloud FFmpeg blocked, falling back to browser');
-      return await generateWithBrowser(input, scenes, dimensions, aspectRatio, 'ffmpeg-wasm', onProgress);
-    }
-    throw error;
-  }
-
-  const engine = getEngineById(engineId);
-
-  return {
-    id: data?.jobId || `cloud-${Date.now()}`,
-    status: data?.success ? 'completed' : 'processing',
-    videoUrl: data?.videos?.[0]?.url,
-    aspectRatio,
-    engine: engineId,
-    backend: 'cloud-api',
-    scenes,
-    duration: data?.videos?.[0]?.duration || scenes.reduce((sum, s) => sum + s.duration, 0),
-    estimatedCost: (engine?.costPerSecond || 0) * input.maxDuration,
-    processingLog: data?.ffmpegAvailable === false ? ['FFmpeg not available, used simulation'] : undefined,
-  };
-}
-
-// Remotion-based generation (placeholder for future implementation)
-async function generateWithRemotion(
-  input: VideoCreationInput,
-  scenes: AISceneDefinition[],
-  dimensions: { width: number; height: number },
-  aspectRatio: string,
-  engineId: string,
-  onProgress?: (progress: number) => void
-): Promise<VideoCreationOutput> {
-  // Remotion integration would go here
-  // For now, fall back to browser processing
-  console.warn('[unified-executor] Remotion not yet implemented, falling back to browser');
-  return await generateWithBrowser(input, scenes, dimensions, aspectRatio, 'ffmpeg-wasm', onProgress);
-}
-
-// Retry a failed video
+/**
+ * Retry a failed video - only retries on server
+ */
 export async function retryVideoGeneration(
   output: VideoCreationOutput,
   input: VideoCreationInput
 ): Promise<VideoCreationOutput> {
-  // Determine fallback backend
-  let fallbackBackend: ProcessingBackend = output.backend;
-  
-  if (output.error?.code === 'FFMPEG_BLOCKED' || output.backend === 'cloud-api') {
-    fallbackBackend = 'browser';
-  }
-
-  // Regenerate with fallback
+  // Always retry on server - no browser fallback
   const results = await executeVideoCreation({
     ...input,
-    backend: fallbackBackend,
+    backend: 'vps',
     variationCount: 1,
   });
 

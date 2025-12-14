@@ -11,7 +11,7 @@ import { ExecutionPlan } from './compiler-types';
 // ENGINE REGISTRY TYPES
 // ============================================
 
-export type ProcessingLocation = 'browser' | 'server' | 'cloud';
+export type ProcessingLocation = 'server' | 'cloud';
 export type CostProfile = 'free' | 'low' | 'medium' | 'high';
 export type Resolution = '480p' | '720p' | '1080p' | '4k';
 
