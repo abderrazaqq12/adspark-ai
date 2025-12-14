@@ -10,7 +10,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useCreativeScale } from '@/hooks/useCreativeScale';
-import { executeWithFallback, ExecutionResult, EngineId } from '@/lib/creative-scale/execution-engine';
+import { executeWithFallback, ExecutionResult, EngineId, executionDebugLogger } from '@/lib/creative-scale/execution-engine';
 import { validateVideoFile, sanitizeFilename, LIMITS } from '@/lib/creative-scale/validation';
 import { createInitialProgressState, ExecutionProgressState } from '@/components/creative-scale/ExecutionProgressPanel';
 import { StepSidebar, StepId } from '@/components/creative-scale/StepSidebar';
@@ -361,6 +361,10 @@ export default function CreativeScale() {
   const handleExecute = useCallback(async () => {
     if (!currentAnalysis || !currentBlueprint || currentPlans.length === 0) return;
     
+    // Start debug session
+    const sessionId = executionDebugLogger.startSession(currentPlans.length);
+    console.log('[CreativeScale] Starting execution session:', sessionId);
+    
     setExecutionProgress({
       variationIndex: 0,
       totalVariations: currentPlans.length,
@@ -447,6 +451,9 @@ export default function CreativeScale() {
       status: successCount > 0 ? 'complete' : 'partial',
       currentEngine: null
     }));
+    
+    // Complete debug session
+    executionDebugLogger.completeSession();
     
     toast.success(`${successCount} of ${currentPlans.length} videos completed`);
   }, [currentAnalysis, currentBlueprint, currentPlans]);
