@@ -88,20 +88,39 @@ export function VPSServerStatus({ className }: VPSServerStatusProps) {
       </CardHeader>
       <CardContent className="space-y-6">
         {/* API URL Configuration */}
-        <div className="space-y-2">
-          <Label htmlFor="api-url" className="text-sm font-medium">VPS API URL</Label>
+        <div className="space-y-3">
+          <Label htmlFor="api-url" className="text-sm font-medium">VPS Server URL</Label>
           <div className="flex gap-2">
             <Input
               id="api-url"
               value={apiBaseUrl}
               onChange={(e) => setApiBaseUrl(e.target.value)}
-              placeholder="https://your-vps.com or leave empty for same-origin"
+              placeholder="https://yourdomain.com"
               className="flex-1"
             />
+            <Button 
+              variant="secondary" 
+              size="sm"
+              onClick={() => {
+                localStorage.setItem('vps_api_url', apiBaseUrl);
+              }}
+            >
+              Save
+            </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Leave empty to use same-origin API (when frontend and backend share the same domain)
-          </p>
+          <div className="p-3 rounded-lg bg-muted/50 border border-border text-xs space-y-2">
+            <p className="font-medium text-foreground">Setup Requirements:</p>
+            <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+              <li>Deploy <code className="bg-muted px-1 rounded">server/api.js</code> to your Hostinger VPS</li>
+              <li>Install FFmpeg: <code className="bg-muted px-1 rounded">sudo apt install ffmpeg</code></li>
+              <li>Run with PM2: <code className="bg-muted px-1 rounded">pm2 start server/api.js</code></li>
+              <li>Configure Nginx to proxy <code className="bg-muted px-1 rounded">/api/*</code> to port 3000</li>
+              <li>Enter your VPS domain URL above (e.g., <code className="bg-muted px-1 rounded">https://flowscale.yourdomain.com</code>)</li>
+            </ol>
+            <p className="text-muted-foreground mt-2">
+              <strong>Note:</strong> This is NOT an API key. It's your VPS server URL where the backend is running.
+            </p>
+          </div>
         </div>
 
         {/* Status Indicators */}
