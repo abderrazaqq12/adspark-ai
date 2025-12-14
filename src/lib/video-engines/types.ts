@@ -32,7 +32,8 @@ export interface EngineResult {
 
 export interface IVideoEngine {
     name: string;
-    tier: "free" | "low" | "medium" | "premium";
+    tier: "free" | "low" | "medium" | "premium" | "server";
     initialize(): Promise<void>;
     process(task: EngineTask): Promise<EngineResult>;
+    isReady?(): boolean;
 }

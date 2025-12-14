@@ -9,7 +9,6 @@ import { GenerationProgress } from "@/components/replicator/GenerationProgress";
 import { EnhancedResultsGallery } from "@/components/replicator/EnhancedResultsGallery";
 import { ProcessingTimeline } from "@/components/replicator/ProcessingTimeline";
 import { PipelineProgressPanel } from "@/components/replicator/PipelineProgressPanel";
-import { DebugFFmpegTest } from "@/components/replicator/DebugFFmpegTest";
 import { BackendModeSelector } from "@/components/BackendModeSelector";
 import { useBackendMode } from "@/hooks/useBackendMode";
 import { toast } from "sonner";

@@ -1,6 +1,7 @@
 /**
  * Creative Scale - Refactored UI
  * Vertical step sidebar with strict progressive disclosure
+ * SERVER-ONLY RENDERING - No browser FFmpeg
  * 
  * Steps: 1.Upload → 2.Analyze → 3.Strategy → 4.Execute → 5.Results
  */
@@ -11,7 +12,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useCreativeScale } from '@/hooks/useCreativeScale';
 import { executeWithFallback, ExecutionResult, EngineId } from '@/lib/creative-scale/execution-engine';
 import { validateVideoFile, sanitizeFilename, LIMITS } from '@/lib/creative-scale/validation';
-import { checkFFmpegEnvironment } from '@/lib/creative-scale/ffmpeg-adapter';
 import { createInitialProgressState, ExecutionProgressState } from '@/components/creative-scale/ExecutionProgressPanel';
 import { StepSidebar, StepId } from '@/components/creative-scale/StepSidebar';
 import { UploadStep } from '@/components/creative-scale/steps/UploadStep';
