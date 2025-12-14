@@ -15,7 +15,7 @@ import type {
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
 import type { 
   RouterResult, 
-  EngineScore, 
+  EngineEntry, 
   CostProfile, 
   ProcessingLocation,
   RouterEvent 
@@ -196,7 +196,7 @@ interface UseCreativeScaleReturn {
   ) => Promise<ExecutionPlan[]>;
   
   // Phase B: Router Actions
-  getCompatibleEnginesForPlan: (plan: ExecutionPlan) => EngineScore[];
+  getCompatibleEnginesForPlan: (plan: ExecutionPlan) => EngineEntry[];
   
   routePlan: (
     plan: ExecutionPlan,
@@ -604,7 +604,7 @@ export function useCreativeScale(): UseCreativeScaleReturn {
   // PHASE B: ROUTER
   // ============================================
 
-  const getCompatibleEnginesForPlan = useCallback((plan: ExecutionPlan): EngineScore[] => {
+  const getCompatibleEnginesForPlan = useCallback((plan: ExecutionPlan): EngineEntry[] => {
     return getCompatibleEngines(plan);
   }, []);
 

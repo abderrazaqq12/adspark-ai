@@ -442,11 +442,14 @@ export async function routeExecution(
     });
     
     return {
-      status: 'success',
+      status: 'completed',
       job_id: jobId,
-      engine_used: 'server_ffmpeg',
+      engine_id: 'server_ffmpeg',
       video_url: result.video_url,
+      output_video_url: result.video_url,
       processing_time_ms: Date.now() - startTime,
+      degradation_level: 0,
+      warnings: [],
     } satisfies RouteSuccessResult;
   }
   
