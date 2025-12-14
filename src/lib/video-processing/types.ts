@@ -1,21 +1,53 @@
-// Unified Video Processing Types
+/**
+ * Video Processing Types
+ * SERVER-ONLY ARCHITECTURE - No browser processing
+ */
 
-export type ProcessingBackend = 'browser' | 'remotion' | 'cloud-api' | 'auto';
+// Backend options - server only
+export type ProcessingBackend = 'vps' | 'cloud-api';
 export type EngineTier = 'free' | 'low' | 'medium' | 'premium' | 'ai-chooses';
 
-export interface ProcessingCapabilities {
-  supportsFFmpeg: boolean;
-  supportsWebCodecs: boolean;
-  supportsWasm: boolean;
-  maxFileSizeMB: number;
-  maxDurationSec: number;
+// Error codes for structured error handling
+export type VideoErrorCode = 
+  | 'VPS_UNREACHABLE'
+  | 'FFMPEG_UNAVAILABLE'
+  | 'UPLOAD_FAILED'
+  | 'EXECUTION_FAILED'
+  | 'TIMEOUT'
+  | 'INVALID_INPUT'
+  | 'FILE_TOO_LARGE'
+  | 'UNSUPPORTED_FORMAT'
+  | 'STORAGE_ERROR'
+  | 'UNKNOWN';
+
+// Structured error response - always JSON, never HTML
+export interface VideoProcessingError {
+  ok: false;
+  code: VideoErrorCode;
+  message: string;
+  stage: 'upload' | 'validation' | 'execution' | 'storage' | 'unknown';
+  retryable: boolean;
+  details?: Record<string, unknown>;
 }
 
-export interface VideoProcessingConfig {
-  backend: ProcessingBackend;
-  tier: EngineTier;
-  fallbackEnabled: boolean;
-  maxRetries: number;
+// Success response
+export interface VideoProcessingSuccess<T = unknown> {
+  ok: true;
+  data: T;
+}
+
+export type VideoProcessingResult<T = unknown> = 
+  | VideoProcessingSuccess<T> 
+  | VideoProcessingError;
+
+// VPS Health Check Response
+export interface VPSHealthResponse {
+  ok: boolean;
+  ffmpeg: 'available' | 'unavailable' | string;
+  uploadDir?: string;
+  outputDir?: string;
+  version?: string;
+  error?: string;
 }
 
 // Scene intelligence types
@@ -103,47 +135,23 @@ export interface VideoCreationOutput {
   error?: VideoProcessingError;
 }
 
-export interface VideoProcessingError {
-  code: string;
-  message: string;
-  stage: string;
-  retryable: boolean;
-  suggestedFix?: string;
+// VPS Execution Plan
+export interface ExecutionPlan {
+  sourcePath: string;
+  outputName?: string;
+  trim?: { start: number; end: number };
+  speed?: number;
+  resize?: { width: number; height: number };
+  aspectRatio?: string;
+  filters?: string[];
 }
 
-// Browser processing specific
-export interface BrowserProcessingJob {
-  id: string;
-  type: 'trim' | 'merge' | 'transcode' | 'effects' | 'assembly';
-  inputs: Blob[];
-  config: Record<string, any>;
-  progress: number;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-}
-
-// Cloud API specific
-export interface CloudAPIConfig {
-  provider: 'cloudinary' | 'mux' | 'fal' | 'replicate';
-  apiKey?: string;
-  webhookUrl?: string;
-}
-
-// Remotion specific
-export interface RemotionConfig {
-  compositionId: string;
-  durationInFrames: number;
-  fps: number;
-  width: number;
-  height: number;
-  props: Record<string, any>;
-}
-
-// Engine registry
+// Engine registry types
 export interface VideoProcessingEngine {
   id: string;
   name: string;
   tier: EngineTier;
-  backends: ProcessingBackend[];
+  location: 'server' | 'cloud';
   capabilities: string[];
   costPerSecond: number;
   maxDuration: number;
