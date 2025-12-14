@@ -21,6 +21,7 @@ import {
   BlueprintV2Card,
   BrainStatus 
 } from '@/components/creative-scale/BrainV2Display';
+import { BrainV2DecisionCard } from '@/components/creative-scale/BrainV2DecisionCard';
 import { VariationCard } from '@/components/creative-scale/VariationCard';
 import type { VideoAnalysis, CreativeBlueprint } from '@/lib/creative-scale/types';
 import type { OptimizationGoal, RiskTolerance, CreativeBlueprintV2, DetectedProblem } from '@/lib/creative-scale/brain-v2-types';
@@ -177,6 +178,14 @@ export function StrategyStep({
                 <div>
                   <h4 className="text-sm font-medium mb-2">Detected Issues</h4>
                   <ProblemDisplay problems={brainV2State.detectedProblems} />
+                </div>
+              )}
+
+              {/* Brain V2 Decision Card - Framework, Hormozi, Optimization Plan */}
+              {brainV2State.blueprintsV2.length > 0 && brainV2State.blueprintsV2[0]?.decision && (
+                <div className="space-y-4">
+                  <h4 className="text-sm font-medium">AI Brain v2 Decision</h4>
+                  <BrainV2DecisionCard decision={brainV2State.blueprintsV2[0].decision} />
                 </div>
               )}
 
