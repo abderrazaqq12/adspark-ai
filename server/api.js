@@ -1,19 +1,16 @@
 /**
- * FlowScale Server API - Production VPS Backend
+ * FlowScale VPS Render Gateway API
  * Server-Only FFmpeg Rendering with In-Memory Job Queue
  * 
+ * All endpoints return JSON only (never HTML).
+ * Phase-2 ready for Redis/BullMQ migration.
+ * 
  * Endpoints:
+ *   GET  /api/health      - Health check with FFmpeg status
  *   POST /api/upload      - Upload video files
  *   POST /api/execute     - Queue FFmpeg job (returns immediately)
  *   POST /api/execute-plan - Queue ExecutionPlan job
- *   GET  /api/job/:jobId  - Check job status
- *   GET  /api/health      - Health check (JSON only)
- * 
- * Architecture:
- *   - Single concurrent FFmpeg job
- *   - In-memory queue for pending jobs
- *   - All responses are JSON (never HTML)
- *   - Ready for future Redis/BullMQ migration
+ *   GET  /api/jobs/:id    - Check job status
  */
 
 const express = require('express');
@@ -21,7 +18,7 @@ const multer = require('multer');
 const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 
 const app = express();
 
@@ -36,7 +33,7 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR || '/var/www/flowscale/uploads';
 const MAX_RENDER_TIME = parseInt(process.env.MAX_RENDER_TIME) || 600; // 10 min
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE) || 500 * 1024 * 1024; // 500MB
 
-// Allowed MIME types
+// Allowed MIME types (whitelist)
 const ALLOWED_MIME_TYPES = [
   'video/mp4',
   'video/webm',
@@ -72,7 +69,6 @@ function detectFFmpeg() {
     const match = version.match(/ffmpeg version (\S+)/);
     ffmpegVersion = match ? match[1] : 'unknown';
     
-    // Get path
     try {
       ffmpegPath = execSync('which ffmpeg').toString().trim();
     } catch {
@@ -90,7 +86,7 @@ function detectFFmpeg() {
 const FFMPEG_AVAILABLE = detectFFmpeg();
 
 // ============================================
-// IN-MEMORY JOB QUEUE
+// IN-MEMORY JOB QUEUE (Phase-2 Ready)
 // ============================================
 
 const jobs = new Map(); // jobId -> JobState
@@ -98,12 +94,20 @@ const pendingQueue = []; // Array of jobIds waiting to run
 let currentJob = null; // Currently executing jobId
 
 /**
- * Job states:
+ * Job statuses (compatible with frontend contract):
  * - queued: Waiting in queue
- * - processing: Currently executing FFmpeg
- * - completed: Finished successfully
- * - failed: Failed with error
+ * - running: Currently executing FFmpeg
+ * - done: Finished successfully
+ * - error: Failed with error
  */
+
+function generateJobId() {
+  return `job_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+}
+
+function generateFileId() {
+  return crypto.randomBytes(8).toString('hex');
+}
 
 function createJob(jobId, type, input) {
   const job = {
@@ -111,7 +115,8 @@ function createJob(jobId, type, input) {
     type,
     input,
     status: 'queued',
-    progress: 0,
+    progressPct: 0,
+    logsTail: '',
     createdAt: new Date().toISOString(),
     startedAt: null,
     completedAt: null,
@@ -133,6 +138,13 @@ function updateJob(jobId, updates) {
     jobs.set(jobId, job);
   }
   return job;
+}
+
+function appendLog(jobId, message) {
+  const job = jobs.get(jobId);
+  if (job) {
+    job.logsTail = (job.logsTail + '\n' + message).slice(-2000);
+  }
 }
 
 // Clean old jobs (keep last 100)
@@ -166,31 +178,33 @@ async function processNextJob() {
 
   currentJob = jobId;
   updateJob(jobId, { 
-    status: 'processing', 
+    status: 'running', 
     startedAt: new Date().toISOString() 
   });
+  appendLog(jobId, `[${new Date().toISOString()}] Job started`);
 
   try {
     const result = await executeFFmpegJob(job);
     updateJob(jobId, {
-      status: 'completed',
+      status: 'done',
       completedAt: new Date().toISOString(),
       output: result,
-      progress: 100,
+      progressPct: 100,
     });
+    appendLog(jobId, `[${new Date().toISOString()}] Job completed successfully`);
   } catch (err) {
     updateJob(jobId, {
-      status: 'failed',
+      status: 'error',
       completedAt: new Date().toISOString(),
       error: {
         code: err.code || 'FFMPEG_ERROR',
         message: err.message,
       },
     });
+    appendLog(jobId, `[${new Date().toISOString()}] Job failed: ${err.message}`);
   } finally {
     currentJob = null;
     cleanOldJobs();
-    // Process next job in queue
     setImmediate(processNextJob);
   }
 }
@@ -217,7 +231,7 @@ async function executeFFmpegJob(job) {
   }
 
   return new Promise((resolve, reject) => {
-    console.log(`[Job ${job.id}] Starting FFmpeg: ${args.join(' ')}`);
+    appendLog(job.id, `FFmpeg command: ffmpeg ${args.join(' ')}`);
     
     const ffmpeg = spawn('ffmpeg', args, {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -230,17 +244,22 @@ async function executeFFmpegJob(job) {
       killed = true;
       ffmpeg.kill('SIGKILL');
       const err = new Error(`FFmpeg timeout after ${MAX_RENDER_TIME}s`);
-      err.code = 'TIMEOUT';
+      err.code = 'TIMEOUT_ERROR';
       reject(err);
     }, MAX_RENDER_TIME * 1000);
 
     ffmpeg.stderr.on('data', (data) => {
-      stderr += data.toString();
-      // Parse progress from FFmpeg output
-      const timeMatch = stderr.match(/time=(\d+:\d+:\d+\.\d+)/);
+      const chunk = data.toString();
+      stderr += chunk;
+      
+      // Parse progress
+      const timeMatch = stderr.match(/time=(\d+):(\d+):(\d+\.\d+)/);
       if (timeMatch) {
-        updateJob(job.id, { progress: 50 }); // Simplified progress
+        updateJob(job.id, { progressPct: 50 });
       }
+      
+      // Keep last 2000 chars of logs
+      appendLog(job.id, chunk.trim());
     });
 
     ffmpeg.on('close', (code) => {
@@ -254,8 +273,8 @@ async function executeFFmpegJob(job) {
           resolve({
             outputPath,
             outputUrl: `/outputs/${outputFilename}`,
-            size: stats.size,
-            duration: parseFloat(input.duration) || null,
+            outputSize: stats.size,
+            durationMs: Date.now() - new Date(job.startedAt).getTime(),
           });
         } else {
           const err = new Error('FFmpeg completed but output file not found');
@@ -263,7 +282,7 @@ async function executeFFmpegJob(job) {
           reject(err);
         }
       } else {
-        const err = new Error(`FFmpeg exited with code ${code}: ${stderr.slice(-500)}`);
+        const err = new Error(`FFmpeg exited with code ${code}`);
         err.code = 'FFMPEG_EXIT_ERROR';
         reject(err);
       }
@@ -278,13 +297,13 @@ async function executeFFmpegJob(job) {
 }
 
 // ============================================
-// FFMPEG ARGUMENT BUILDERS
+// FFMPEG ARGUMENT BUILDERS (Whitelist-based)
 // ============================================
 
 function buildFFmpegArgs(input, outputPath) {
-  const args = ['-y'];
+  const args = ['-y']; // Overwrite output
   
-  // Validate source path
+  // Validate source path (SECURITY CRITICAL)
   const sourcePath = sanitizePath(input.sourcePath);
   if (!sourcePath) {
     throw new Error('Invalid source path');
@@ -292,29 +311,50 @@ function buildFFmpegArgs(input, outputPath) {
   
   args.push('-i', sourcePath);
 
-  if (input.trim) {
-    if (input.trim.start > 0) {
-      args.push('-ss', String(input.trim.start));
+  // Trim (optional)
+  if (input.trim && typeof input.trim === 'object') {
+    const start = parseFloat(input.trim.start);
+    const end = parseFloat(input.trim.end);
+    if (!isNaN(start) && start >= 0) {
+      args.push('-ss', String(start));
     }
-    if (input.trim.end) {
-      args.push('-t', String(input.trim.end - (input.trim.start || 0)));
+    if (!isNaN(end) && end > start) {
+      args.push('-t', String(end - start));
     }
   }
 
   const filters = [];
   
-  if (input.speed && input.speed !== 1.0) {
-    filters.push(`setpts=${1/input.speed}*PTS`);
+  // Speed adjustment (whitelist: 0.25-4.0)
+  if (input.speed && typeof input.speed === 'number') {
+    const speed = Math.max(0.25, Math.min(4.0, input.speed));
+    filters.push(`setpts=${1/speed}*PTS`);
   }
 
-  if (input.resize) {
-    filters.push(`scale=${input.resize.width}:${input.resize.height}`);
+  // Resize (whitelist: 100-4096 pixels)
+  if (input.resize && typeof input.resize === 'object') {
+    const w = Math.max(100, Math.min(4096, parseInt(input.resize.width) || 0));
+    const h = Math.max(100, Math.min(4096, parseInt(input.resize.height) || 0));
+    if (w && h) {
+      filters.push(`scale=${w}:${h}`);
+    }
   }
 
   if (filters.length > 0) {
     args.push('-vf', filters.join(','));
   }
 
+  // Audio options
+  if (input.audio) {
+    if (input.audio.mute) {
+      args.push('-an');
+    } else if (input.audio.volume !== undefined) {
+      const vol = Math.max(0, Math.min(2, parseFloat(input.audio.volume) || 1));
+      args.push('-af', `volume=${vol}`);
+    }
+  }
+
+  // Output codec (whitelist)
   args.push('-c:v', 'libx264');
   args.push('-c:a', 'aac');
   args.push('-preset', 'fast');
@@ -336,24 +376,30 @@ function buildPlanArgs(input, outputPath) {
   const args = ['-y', '-i', sourcePath];
   const filters = [];
 
-  if (plan.timeline && plan.timeline.length > 0) {
+  // Process timeline segments
+  if (plan.timeline && Array.isArray(plan.timeline) && plan.timeline.length > 0) {
     const segment = plan.timeline[0];
     
-    if (segment.trim_start_ms > 0 || segment.trim_end_ms < segment.source_duration_ms) {
-      const startSec = segment.trim_start_ms / 1000;
-      const endSec = segment.trim_end_ms / 1000;
+    // Trim
+    if (segment.trim_start_ms !== undefined && segment.trim_end_ms !== undefined) {
+      const startSec = Math.max(0, segment.trim_start_ms / 1000);
+      const endSec = Math.max(startSec, segment.trim_end_ms / 1000);
       args.splice(1, 0, '-ss', String(startSec), '-t', String(endSec - startSec));
     }
 
-    if (segment.speed_multiplier && segment.speed_multiplier !== 1.0) {
-      filters.push(`setpts=${1/segment.speed_multiplier}*PTS`);
+    // Speed (whitelist: 0.25-4.0)
+    if (segment.speed_multiplier && typeof segment.speed_multiplier === 'number') {
+      const speed = Math.max(0.25, Math.min(4.0, segment.speed_multiplier));
+      filters.push(`setpts=${1/speed}*PTS`);
     }
   }
 
-  if (plan.output_format) {
-    const { width, height } = plan.output_format;
-    if (width && height) {
-      filters.push(`scale=${width}:${height}`);
+  // Output format
+  if (plan.output_format && typeof plan.output_format === 'object') {
+    const w = Math.max(100, Math.min(4096, parseInt(plan.output_format.width) || 0));
+    const h = Math.max(100, Math.min(4096, parseInt(plan.output_format.height) || 0));
+    if (w && h) {
+      filters.push(`scale=${w}:${h}`);
     }
   }
 
@@ -399,29 +445,50 @@ function sanitizePath(inputPath) {
   return normalized;
 }
 
+function jsonError(res, status, code, message, details = null) {
+  const response = {
+    ok: false,
+    error: { code, message }
+  };
+  if (details) {
+    response.error.details = details;
+  }
+  return res.status(status).json(response);
+}
+
 // ============================================
 // MULTER CONFIGURATION
 // ============================================
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, UPLOAD_DIR);
+    const projectId = req.body.projectId;
+    let uploadPath = UPLOAD_DIR;
+    
+    // Optional project subdirectory
+    if (projectId && /^[a-zA-Z0-9_-]+$/.test(projectId)) {
+      uploadPath = path.join(UPLOAD_DIR, projectId);
+      if (!fs.existsSync(uploadPath)) {
+        fs.mkdirSync(uploadPath, { recursive: true });
+      }
+    }
+    
+    cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
-    const timestamp = Date.now();
-    const uniqueId = uuidv4().split('-')[0];
-    const ext = path.extname(file.originalname).toLowerCase() || '.mp4';
-    const safeExt = ext.replace(/[^a-z0-9.]/gi, '');
-    const filename = `upload_${timestamp}_${uniqueId}${safeExt}`;
+    const fileId = generateFileId();
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/gi, '') || '.mp4';
+    const filename = `${fileId}${ext}`;
     cb(null, filename);
   },
 });
 
 const fileFilter = (req, file, cb) => {
   if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-    return cb(new Error(`Invalid file type: ${file.mimetype}`), false);
+    return cb(new Error(`Invalid file type: ${file.mimetype}. Allowed: ${ALLOWED_MIME_TYPES.join(', ')}`), false);
   }
   
+  // Block path traversal in filename
   if (file.originalname.includes('..') || file.originalname.includes('/') || file.originalname.includes('\\')) {
     return cb(new Error('Invalid filename'), false);
   }
@@ -450,27 +517,42 @@ app.use((req, res, next) => {
   next();
 });
 
-// Ensure all responses are JSON
+// Force JSON Content-Type for all responses
 app.use((req, res, next) => {
   res.setHeader('Content-Type', 'application/json');
   next();
 });
 
+// CORS for API routes
+app.use('/api', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  next();
+});
+
 // ============================================
-// HEALTH ENDPOINT
+// GET /api/health
 // ============================================
 
 app.get('/api/health', (req, res) => {
   const health = {
     ok: FFMPEG_AVAILABLE,
-    ffmpeg: FFMPEG_AVAILABLE ? 'ready' : 'unavailable',
-    ffmpegPath: ffmpegPath || null,
-    ffmpegVersion: ffmpegVersion || null,
-    mode: 'server-only',
+    ffmpeg: {
+      available: FFMPEG_AVAILABLE,
+      path: ffmpegPath || null,
+      version: ffmpegVersion || null,
+    },
+    outputsDir: OUTPUT_DIR,
+    uploadsDir: UPLOAD_DIR,
     queueLength: pendingQueue.length,
     currentJob: currentJob || null,
     uptime: process.uptime(),
-    timestamp: new Date().toISOString(),
+    time: new Date().toISOString(),
   };
 
   if (!FFMPEG_AVAILABLE) {
@@ -482,49 +564,37 @@ app.get('/api/health', (req, res) => {
 });
 
 // ============================================
-// UPLOAD ENDPOINT
+// POST /api/upload
 // ============================================
 
 app.post('/api/upload', (req, res) => {
-  upload.single('video')(req, res, (err) => {
+  upload.single('file')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(413).json({
-          ok: false,
-          code: 'FILE_TOO_LARGE',
-          error: `File too large. Maximum: ${MAX_FILE_SIZE / (1024 * 1024)}MB`,
-        });
+        return jsonError(res, 413, 'FILE_TOO_LARGE', 
+          `File too large. Maximum: ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
       }
-      return res.status(400).json({
-        ok: false,
-        code: 'UPLOAD_ERROR',
-        error: err.message,
-      });
+      return jsonError(res, 400, 'UPLOAD_ERROR', err.message);
     }
     
     if (err) {
-      return res.status(400).json({
-        ok: false,
-        code: 'UPLOAD_ERROR',
-        error: err.message,
-      });
+      return jsonError(res, 400, 'UPLOAD_ERROR', err.message);
     }
     
     if (!req.file) {
-      return res.status(400).json({
-        ok: false,
-        code: 'NO_FILE',
-        error: 'No file provided. Use field name "video"',
-      });
+      return jsonError(res, 400, 'NO_FILE', 'No file provided. Use field name "file"');
     }
     
-    const filePath = path.join(UPLOAD_DIR, req.file.filename);
+    const filePath = path.join(req.file.destination, req.file.filename);
+    const publicUrl = `/uploads/${req.body.projectId ? req.body.projectId + '/' : ''}${req.file.filename}`;
     
     console.log(`[Upload] Saved: ${req.file.filename} (${req.file.size} bytes)`);
     
     res.json({
       ok: true,
-      path: filePath,
+      fileId: req.file.filename.split('.')[0],
+      filePath: filePath,
+      publicUrl: publicUrl,
       filename: req.file.filename,
       size: req.file.size,
       mimetype: req.file.mimetype,
@@ -533,45 +603,32 @@ app.post('/api/upload', (req, res) => {
 });
 
 // ============================================
-// EXECUTE ENDPOINT (Queued)
+// POST /api/execute
 // ============================================
 
 app.post('/api/execute', (req, res) => {
   if (!FFMPEG_AVAILABLE) {
-    return res.status(503).json({
-      ok: false,
-      code: 'FFMPEG_UNAVAILABLE',
-      error: 'FFmpeg binary not available on server',
-    });
+    return jsonError(res, 503, 'FFMPEG_UNAVAILABLE', 'FFmpeg binary not available on server');
   }
 
-  const { sourcePath } = req.body;
+  const { sourcePath, projectId, outputName } = req.body;
 
   if (!sourcePath) {
-    return res.status(400).json({
-      ok: false,
-      code: 'MISSING_SOURCE',
-      error: 'sourcePath is required',
-    });
+    return jsonError(res, 400, 'MISSING_SOURCE', 'sourcePath is required');
   }
 
   const validPath = sanitizePath(sourcePath);
   if (!validPath) {
-    return res.status(400).json({
-      ok: false,
-      code: 'INVALID_PATH',
-      error: 'Invalid or inaccessible source path',
-    });
+    return jsonError(res, 400, 'INVALID_PATH', 'Invalid or inaccessible source path');
   }
 
-  const jobId = req.body.outputName || `job_${Date.now()}_${uuidv4().split('-')[0]}`;
+  const jobId = outputName || generateJobId();
   
   createJob(jobId, 'execute', { ...req.body, sourcePath: validPath });
   pendingQueue.push(jobId);
   
   console.log(`[Queue] Job ${jobId} queued (queue length: ${pendingQueue.length})`);
   
-  // Start processing if not already running
   setImmediate(processNextJob);
 
   res.status(202).json({
@@ -579,43 +636,31 @@ app.post('/api/execute', (req, res) => {
     jobId,
     status: 'queued',
     queuePosition: pendingQueue.length,
-    statusUrl: `/api/job/${jobId}`,
+    statusUrl: `/api/jobs/${jobId}`,
   });
 });
 
 // ============================================
-// EXECUTE PLAN ENDPOINT (Queued)
+// POST /api/execute-plan
 // ============================================
 
 app.post('/api/execute-plan', (req, res) => {
   if (!FFMPEG_AVAILABLE) {
-    return res.status(503).json({
-      ok: false,
-      code: 'FFMPEG_UNAVAILABLE',
-      error: 'FFmpeg binary not available on server',
-    });
+    return jsonError(res, 503, 'FFMPEG_UNAVAILABLE', 'FFmpeg binary not available on server');
   }
 
-  const { plan, sourceVideoUrl, outputName } = req.body;
+  const { plan, sourceVideoUrl, projectId, outputName } = req.body;
 
   if (!plan || !sourceVideoUrl) {
-    return res.status(400).json({
-      ok: false,
-      code: 'MISSING_PARAMS',
-      error: 'plan and sourceVideoUrl are required',
-    });
+    return jsonError(res, 400, 'MISSING_PARAMS', 'plan and sourceVideoUrl are required');
   }
 
   const validPath = sanitizePath(sourceVideoUrl);
   if (!validPath) {
-    return res.status(400).json({
-      ok: false,
-      code: 'INVALID_PATH',
-      error: 'Invalid or inaccessible source path',
-    });
+    return jsonError(res, 400, 'INVALID_PATH', 'Invalid or inaccessible source path');
   }
 
-  const jobId = outputName || `plan_${Date.now()}_${uuidv4().split('-')[0]}`;
+  const jobId = outputName || generateJobId();
   
   createJob(jobId, 'execute-plan', { plan, sourceVideoUrl: validPath });
   pendingQueue.push(jobId);
@@ -629,72 +674,66 @@ app.post('/api/execute-plan', (req, res) => {
     jobId,
     status: 'queued',
     queuePosition: pendingQueue.length,
-    statusUrl: `/api/job/${jobId}`,
+    statusUrl: `/api/jobs/${jobId}`,
   });
 });
 
 // ============================================
-// JOB STATUS ENDPOINT
+// GET /api/jobs/:id
 // ============================================
 
-app.get('/api/job/:jobId', (req, res) => {
+app.get('/api/jobs/:jobId', (req, res) => {
   const job = getJob(req.params.jobId);
   
   if (!job) {
-    return res.status(404).json({
-      ok: false,
-      code: 'JOB_NOT_FOUND',
-      error: `Job ${req.params.jobId} not found`,
-    });
+    return jsonError(res, 404, 'JOB_NOT_FOUND', `Job ${req.params.jobId} not found`);
   }
 
   const response = {
     ok: true,
     jobId: job.id,
     status: job.status,
-    progress: job.progress,
+    progressPct: job.progressPct,
+    logsTail: job.logsTail,
     createdAt: job.createdAt,
-    startedAt: job.startedAt,
-    completedAt: job.completedAt,
   };
 
-  if (job.status === 'completed' && job.output) {
-    response.output = job.output;
-    response.outputUrl = job.output.outputUrl;
-    response.success = true;
+  if (job.startedAt) {
+    response.startedAt = job.startedAt;
   }
 
-  if (job.status === 'failed' && job.error) {
+  if (job.completedAt) {
+    response.completedAt = job.completedAt;
+  }
+
+  if (job.status === 'done' && job.output) {
+    response.outputUrl = job.output.outputUrl;
+    response.outputSize = job.output.outputSize;
+    response.durationMs = job.output.durationMs;
+  }
+
+  if (job.status === 'error' && job.error) {
     response.error = job.error;
-    response.success = false;
   }
 
   res.json(response);
 });
 
 // ============================================
-// 404 HANDLER (JSON)
+// 404 HANDLER (JSON only)
 // ============================================
 
 app.use((req, res) => {
-  res.status(404).json({
-    ok: false,
-    code: 'NOT_FOUND',
-    error: `Endpoint ${req.method} ${req.path} not found`,
-  });
+  jsonError(res, 404, 'NOT_FOUND', `Endpoint ${req.method} ${req.path} not found`);
 });
 
 // ============================================
-// ERROR HANDLER (JSON)
+// ERROR HANDLER (JSON only)
 // ============================================
 
 app.use((err, req, res, next) => {
   console.error('[Server] Unhandled error:', err);
-  res.status(500).json({
-    ok: false,
-    code: 'INTERNAL_ERROR',
-    error: err.message || 'Internal server error',
-  });
+  jsonError(res, 500, 'INTERNAL_ERROR', err.message || 'Internal server error');
 });
 
 // ============================================
@@ -702,11 +741,17 @@ app.use((err, req, res, next) => {
 // ============================================
 
 app.listen(PORT, HOST, () => {
-  console.log(`[FlowScale API] Server running at http://${HOST}:${PORT}`);
-  console.log(`[FlowScale API] Mode: server-only`);
-  console.log(`[FlowScale API] FFmpeg: ${FFMPEG_AVAILABLE ? `ready (${ffmpegPath})` : 'NOT AVAILABLE'}`);
-  console.log(`[FlowScale API] Upload dir: ${UPLOAD_DIR}`);
-  console.log(`[FlowScale API] Output dir: ${OUTPUT_DIR}`);
+  console.log('═══════════════════════════════════════════════════');
+  console.log(`  FlowScale Render Gateway API`);
+  console.log('═══════════════════════════════════════════════════');
+  console.log(`  URL:        http://${HOST}:${PORT}`);
+  console.log(`  Mode:       server-only (no browser FFmpeg)`);
+  console.log(`  FFmpeg:     ${FFMPEG_AVAILABLE ? `✓ ${ffmpegPath}` : '✗ NOT AVAILABLE'}`);
+  console.log(`  Uploads:    ${UPLOAD_DIR}`);
+  console.log(`  Outputs:    ${OUTPUT_DIR}`);
+  console.log(`  Max File:   ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
+  console.log(`  Timeout:    ${MAX_RENDER_TIME}s`);
+  console.log('═══════════════════════════════════════════════════');
 });
 
 // ============================================
