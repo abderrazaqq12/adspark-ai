@@ -14,7 +14,13 @@ import {
   ArrowRight,
   CheckCircle2,
   Brain,
-  Sparkles
+  Sparkles,
+  Smartphone,
+  Video,
+  Youtube,
+  MessageCircle,
+  Users,
+  LayoutGrid
 } from 'lucide-react';
 import { 
   ProblemDisplay, 
@@ -67,6 +73,8 @@ function deriveHormoziScore(): HormoziValueScore {
   };
 }
 
+type PlatformType = 'tiktok' | 'reels' | 'snapchat' | 'youtube' | 'facebook' | 'general';
+
 interface StrategyStepProps {
   analysis: VideoAnalysis;
   blueprint: CreativeBlueprint | null;
@@ -74,6 +82,7 @@ interface StrategyStepProps {
   brainV2State: {
     optimizationGoal: OptimizationGoal;
     riskTolerance: RiskTolerance;
+    platform: PlatformType;
     detectedProblems: DetectedProblem[];
     blueprintsV2: CreativeBlueprintV2[];
   };
@@ -81,6 +90,7 @@ interface StrategyStepProps {
   isGenerating: boolean;
   onSetGoal: (goal: OptimizationGoal) => void;
   onSetRisk: (risk: RiskTolerance) => void;
+  onSetPlatform: (platform: PlatformType) => void;
   onSetVariationCount: (count: number) => void;
   onGenerate: () => void;
   onContinue: () => void;
@@ -95,6 +105,7 @@ export function StrategyStep({
   isGenerating,
   onSetGoal,
   onSetRisk,
+  onSetPlatform,
   onSetVariationCount,
   onGenerate,
   onContinue
@@ -175,6 +186,57 @@ export function StrategyStep({
               <SelectItem value="low">Low</SelectItem>
               <SelectItem value="medium">Medium</SelectItem>
               <SelectItem value="high">High</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Platform Selector */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Platform:</span>
+          <Select 
+            value={brainV2State.platform} 
+            onValueChange={(value: PlatformType) => onSetPlatform(value)}
+          >
+            <SelectTrigger className="w-[120px] h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="tiktok">
+                <div className="flex items-center gap-2">
+                  <Smartphone className="w-3 h-3" />
+                  TikTok
+                </div>
+              </SelectItem>
+              <SelectItem value="reels">
+                <div className="flex items-center gap-2">
+                  <Video className="w-3 h-3" />
+                  Reels
+                </div>
+              </SelectItem>
+              <SelectItem value="youtube">
+                <div className="flex items-center gap-2">
+                  <Youtube className="w-3 h-3" />
+                  YouTube
+                </div>
+              </SelectItem>
+              <SelectItem value="facebook">
+                <div className="flex items-center gap-2">
+                  <Users className="w-3 h-3" />
+                  Facebook
+                </div>
+              </SelectItem>
+              <SelectItem value="snapchat">
+                <div className="flex items-center gap-2">
+                  <MessageCircle className="w-3 h-3" />
+                  Snapchat
+                </div>
+              </SelectItem>
+              <SelectItem value="general">
+                <div className="flex items-center gap-2">
+                  <LayoutGrid className="w-3 h-3" />
+                  General
+                </div>
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
