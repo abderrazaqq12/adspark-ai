@@ -27,6 +27,7 @@ import { VariationCard } from '@/components/creative-scale/VariationCard';
 import { AdDirectorPanel } from '@/components/creative-scale/AdDirectorPanel';
 import { PredictiveMetrics } from '@/components/creative-scale/PredictiveMetrics';
 import { FrameworkComparisonView } from '@/components/creative-scale/FrameworkComparisonView';
+import { FrameworkExplainerCard } from '@/components/creative-scale/FrameworkExplainerCard';
 import { generateAdDirectorReview } from '@/lib/creative-scale/ad-director';
 import type { VideoAnalysis, CreativeBlueprint } from '@/lib/creative-scale/types';
 import type { OptimizationGoal, RiskTolerance, CreativeBlueprintV2, DetectedProblem, ExtractedSignals, HormoziValueScore } from '@/lib/creative-scale/brain-v2-types';
@@ -255,6 +256,18 @@ export function StrategyStep({
                   <h4 className="text-sm font-medium mb-2">Detected Issues</h4>
                   <ProblemDisplay problems={brainV2State.detectedProblems} />
                 </div>
+              )}
+
+              {/* Framework Explainer Card - Why this framework was chosen */}
+              {brainV2State.blueprintsV2.length > 0 && brainV2State.blueprintsV2[0]?.decision && (
+                <FrameworkExplainerCard
+                  selectedFramework={brainV2State.blueprintsV2[0].decision.framework_decision.primary_framework}
+                  reasoning={brainV2State.blueprintsV2[0].decision.explanation.why_chosen}
+                  rejectedFrameworks={brainV2State.blueprintsV2[0].decision.explanation.why_others_rejected}
+                  confidence={brainV2State.blueprintsV2[0].decision.framework_decision.confidence}
+                  goal={brainV2State.optimizationGoal}
+                  detectedProblems={brainV2State.detectedProblems.map(p => p.type)}
+                />
               )}
 
               {/* Brain V2 Decision Card - Framework, Hormozi, Optimization Plan */}
