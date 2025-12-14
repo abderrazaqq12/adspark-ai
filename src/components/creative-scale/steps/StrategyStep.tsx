@@ -1,8 +1,9 @@
 /**
  * Step 3: Strategy
- * Brain V2 planning and variation configuration
+ * Brain V2 planning and variation configuration with Ad Director insights
  */
 
+import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -23,9 +24,46 @@ import {
 } from '@/components/creative-scale/BrainV2Display';
 import { BrainV2DecisionCard } from '@/components/creative-scale/BrainV2DecisionCard';
 import { VariationCard } from '@/components/creative-scale/VariationCard';
+import { AdDirectorPanel } from '@/components/creative-scale/AdDirectorPanel';
+import { PredictiveMetrics } from '@/components/creative-scale/PredictiveMetrics';
+import { generateAdDirectorReview } from '@/lib/creative-scale/ad-director';
 import type { VideoAnalysis, CreativeBlueprint } from '@/lib/creative-scale/types';
-import type { OptimizationGoal, RiskTolerance, CreativeBlueprintV2, DetectedProblem } from '@/lib/creative-scale/brain-v2-types';
+import type { OptimizationGoal, RiskTolerance, CreativeBlueprintV2, DetectedProblem, ExtractedSignals, HormoziValueScore } from '@/lib/creative-scale/brain-v2-types';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
+
+// Helper to derive signals from analysis
+function deriveSignalsFromAnalysis(analysis: VideoAnalysis): ExtractedSignals {
+  const hookSegment = analysis.segments.find(s => s.type === 'hook');
+  const ctaSegment = analysis.segments.find(s => s.type === 'cta');
+  const benefitSegment = analysis.segments.find(s => s.type === 'benefit');
+  const problemSegment = analysis.segments.find(s => s.type === 'problem');
+  
+  // Calculate average pacing from segments
+  const avgPacing = analysis.segments.length > 0
+    ? analysis.segments.reduce((sum, s) => sum + s.pacing_score, 0) / analysis.segments.length
+    : 0.6;
+  
+  return {
+    hook_strength: hookSegment?.attention_score ?? analysis.overall_scores.hook_strength ?? 0.5,
+    pacing_score: avgPacing,
+    cta_clarity: ctaSegment?.clarity_score ?? analysis.overall_scores.cta_effectiveness ?? 0.5,
+    benefit_communication: benefitSegment?.clarity_score ?? 0.6,
+    problem_agitation: problemSegment?.attention_score ?? 0.5,
+    proof_quality: analysis.segments.some(s => s.type === 'proof') ? 0.7 : 0.3,
+    objection_handling: 0.5 // Default, not directly detectable from basic analysis
+  };
+}
+
+// Helper to derive Hormozi score
+function deriveHormoziScore(): HormoziValueScore {
+  return {
+    dream_outcome: 0.6,
+    perceived_likelihood: 0.5,
+    time_delay: 0.5,
+    effort_sacrifice: 0.5,
+    total_value_score: 2.4
+  };
+}
 
 interface StrategyStepProps {
   analysis: VideoAnalysis;
@@ -60,6 +98,33 @@ export function StrategyStep({
   onContinue
 }: StrategyStepProps) {
   const hasStrategy = blueprint && plans.length > 0;
+
+  // Generate Ad Director review from analysis
+  const adDirectorReview = useMemo(() => {
+    if (!analysis) return null;
+    
+    const signals = deriveSignalsFromAnalysis(analysis);
+    const hormoziScore = deriveHormoziScore();
+    
+    return generateAdDirectorReview(
+      analysis,
+      signals,
+      brainV2State.detectedProblems,
+      hormoziScore,
+      brainV2State.optimizationGoal
+    );
+  }, [analysis, brainV2State.detectedProblems, brainV2State.optimizationGoal]);
+
+  // Derive predictive metrics
+  const predictiveMetrics = useMemo(() => {
+    if (!adDirectorReview) return null;
+    return {
+      hookStrength: adDirectorReview.hookStrength,
+      ctrPotential: adDirectorReview.ctrPotential,
+      dropOffRisk: adDirectorReview.dropOffRisk,
+      ctaPressure: adDirectorReview.ctaPressure
+    };
+  }, [adDirectorReview]);
 
   return (
     <div className="h-full flex flex-col">
@@ -173,6 +238,11 @@ export function StrategyStep({
                 </span>
               </div>
 
+              {/* Predictive Metrics */}
+              {predictiveMetrics && (
+                <PredictiveMetrics metrics={predictiveMetrics} />
+              )}
+
               {/* Problems if any */}
               {brainV2State.detectedProblems.length > 0 && (
                 <div>
@@ -187,6 +257,11 @@ export function StrategyStep({
                   <h4 className="text-sm font-medium">AI Brain v2 Decision</h4>
                   <BrainV2DecisionCard decision={brainV2State.blueprintsV2[0].decision} />
                 </div>
+              )}
+
+              {/* Ad Director Marketing Suggestions */}
+              {adDirectorReview && (
+                <AdDirectorPanel review={adDirectorReview} />
               )}
 
               {/* Brain V2 Blueprints */}
