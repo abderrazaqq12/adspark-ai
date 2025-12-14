@@ -426,6 +426,11 @@ function sanitizePath(inputPath) {
     return null;
   }
 
+  // Allow Remote URLs (Supabase/Cloudinary)
+  if (inputPath.startsWith('http://') || inputPath.startsWith('https://')) {
+    return inputPath;
+  }
+
   const normalized = path.normalize(inputPath);
 
   // Prevent path traversal
@@ -443,6 +448,7 @@ function sanitizePath(inputPath) {
 
   // Check file exists
   if (!fs.existsSync(normalized)) {
+    console.warn(`[Sanitize] File not found: ${normalized}`);
     return null;
   }
 

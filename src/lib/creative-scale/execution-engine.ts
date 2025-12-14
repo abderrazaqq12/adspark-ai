@@ -209,7 +209,7 @@ async function executeServerFFmpeg(
 ): Promise<{ success: boolean; video_url?: string; error?: string; duration_ms: number }> {
   const start = Date.now();
   const requestSentAt = new Date().toISOString();
-  const endpoint = '/api/execute';
+  const endpoint = '/api/execute-plan';
 
   ctx.onProgress?.('server_ffmpeg', 0, 'Sending to VPS server...');
 
@@ -238,9 +238,10 @@ async function executeServerFFmpeg(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        execution_plan: ctx.plan,
-        user_id: ctx.userId,
-        variation_index: ctx.variationIndex,
+        plan: ctx.plan,
+        sourceVideoUrl: ctx.plan.timeline[0]?.asset_url,
+        projectId: ctx.userId,
+        variationIndex: ctx.variationIndex,
       }),
     });
 
