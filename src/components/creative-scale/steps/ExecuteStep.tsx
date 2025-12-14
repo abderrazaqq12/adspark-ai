@@ -1,6 +1,7 @@
 /**
  * Step 4: Execute
  * Video rendering with capability-based engine routing
+ * WITH Deep Debug Panel
  */
 
 import { Button } from '@/components/ui/button';
@@ -12,12 +13,12 @@ import {
   Zap,
   Cloud,
   Download,
-  Monitor,
   Server
 } from 'lucide-react';
 import { ExecutionProgressPanel, ExecutionProgressState } from '@/components/creative-scale/ExecutionProgressPanel';
 import { ExecutionExplainer } from '@/components/creative-scale/ExecutionExplainer';
 import { CapabilityIndicators } from '@/components/creative-scale/CapabilityIndicators';
+import { RenderDebugPanel } from '@/components/creative-scale/RenderDebugPanel';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
 import type { CreativeBlueprint } from '@/lib/creative-scale/types';
 
@@ -59,11 +60,6 @@ export function ExecuteStep({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <Monitor className="w-4 h-4 text-emerald-500" />
-              <span className="text-xs">WebCodecs</span>
-            </div>
-            <span className="text-muted-foreground">→</span>
-            <div className="flex items-center gap-2">
               <Cloud className="w-4 h-4 text-purple-500" />
               <span className="text-xs">Cloudinary</span>
             </div>
@@ -78,7 +74,7 @@ export function ExecuteStep({
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground mt-2">
-          Each variation routes to the simplest engine that satisfies its requirements.
+          Each variation routes to the simplest engine that satisfies its requirements. Server-only rendering.
         </p>
       </div>
 
@@ -131,6 +127,9 @@ export function ExecuteStep({
             <div className="space-y-6">
               {/* Progress Panel */}
               <ExecutionProgressPanel state={executionProgress} />
+
+              {/* Debug Panel */}
+              <RenderDebugPanel />
 
               {/* Plan Preview */}
               {plans[executionProgress.variationIndex] && blueprint && (

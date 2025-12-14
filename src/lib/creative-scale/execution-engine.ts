@@ -1,6 +1,7 @@
 /**
  * Creative Scale - Capability-Based Execution Engine
  * SERVER-ONLY RENDERING - No browser FFmpeg
+ * WITH DEEP EXECUTION DEBUGGING
  * 
  * Execution Order:
  * 1. Cloudinary - basic transformations
@@ -17,7 +18,12 @@ import {
   extractRequiredCapabilities,
   CapabilityRouterResult,
   Capability,
+  ENGINE_CAPABILITIES,
 } from './capability-router';
+import { 
+  executionDebugLogger, 
+  EngineEvaluation 
+} from './execution-debug';
 
 // ============================================
 // EXECUTION RESULT CONTRACT
@@ -58,6 +64,42 @@ export interface ExecutionContext {
 }
 
 // ============================================
+// ENGINE EVALUATION FOR DEBUG
+// ============================================
+
+function evaluateEngines(
+  requiredCapabilities: Set<Capability>,
+  selectedEngineId: EngineId
+): EngineEvaluation[] {
+  return ENGINE_CAPABILITIES.map(engine => {
+    const unsatisfied: Capability[] = [];
+    for (const cap of requiredCapabilities) {
+      if (!engine.capabilities.has(cap)) {
+        unsatisfied.push(cap);
+      }
+    }
+    
+    const canHandle = unsatisfied.length === 0 && engine.id !== 'plan_export';
+    
+    let rejectionReason: string | undefined;
+    if (!canHandle && engine.id !== 'plan_export') {
+      if (unsatisfied.length > 0) {
+        rejectionReason = `Missing capabilities: ${unsatisfied.join(', ')}`;
+      }
+    }
+
+    return {
+      engineId: engine.id,
+      engineName: engine.name,
+      evaluated: true,
+      canHandle,
+      rejectionReason,
+      priority: engine.priority,
+    };
+  });
+}
+
+// ============================================
 // ENGINE 1: CLOUDINARY
 // ============================================
 
@@ -65,8 +107,24 @@ async function executeCloudinary(
   ctx: ExecutionContext
 ): Promise<{ success: boolean; video_url?: string; error?: string; duration_ms: number }> {
   const start = Date.now();
+  const requestSentAt = new Date().toISOString();
   
   ctx.onProgress?.('cloudinary', 0, 'Sending to Cloudinary...');
+
+  // Log dispatch
+  executionDebugLogger.logEngineDispatch(
+    ctx.variationIndex ?? 0,
+    'cloudinary',
+    'supabase.functions.invoke(cloudinary-video-render)',
+    'POST',
+    {
+      hasExecutionPlan: !!ctx.plan,
+      inputFileUrl: ctx.plan.timeline[0]?.asset_url || 'N/A',
+      timelineSegments: ctx.plan.timeline.length,
+      audioTracks: ctx.plan.audio_tracks.length,
+      outputFormat: ctx.plan.output_format.container,
+    }
+  );
 
   try {
     const { data, error } = await supabase.functions.invoke('cloudinary-video-render', {
@@ -77,11 +135,29 @@ async function executeCloudinary(
       },
     });
 
+    const durationMs = Date.now() - start;
+
+    // Log network response
+    executionDebugLogger.logNetworkResponse(
+      ctx.variationIndex ?? 0,
+      'cloudinary',
+      {
+        endpoint: 'cloudinary-video-render',
+        method: 'POST',
+        requestSentAt,
+        httpStatus: error ? 500 : 200,
+        contentType: 'application/json',
+        rawResponseBody: JSON.stringify(data || error),
+        durationMs,
+        connectionError: error?.message,
+      }
+    );
+
     if (error) {
       return {
         success: false,
         error: `Cloudinary error: ${error.message}`,
-        duration_ms: Date.now() - start,
+        duration_ms: durationMs,
       };
     }
 
@@ -90,20 +166,35 @@ async function executeCloudinary(
       return {
         success: true,
         video_url: data.video_url,
-        duration_ms: Date.now() - start,
+        duration_ms: durationMs,
       };
     }
 
     return {
       success: false,
       error: data?.error || 'Cloudinary returned no video',
-      duration_ms: Date.now() - start,
+      duration_ms: durationMs,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const durationMs = Date.now() - start;
+    const errorMessage = err instanceof Error ? err.message : 'Cloudinary request failed';
+    
+    executionDebugLogger.logNetworkResponse(
+      ctx.variationIndex ?? 0,
+      'cloudinary',
+      {
+        endpoint: 'cloudinary-video-render',
+        method: 'POST',
+        requestSentAt,
+        durationMs,
+        connectionError: errorMessage,
+      }
+    );
+
     return {
       success: false,
-      error: err.message || 'Cloudinary request failed',
-      duration_ms: Date.now() - start,
+      error: errorMessage,
+      duration_ms: durationMs,
     };
   }
 }
@@ -117,12 +208,30 @@ async function executeServerFFmpeg(
   ctx: ExecutionContext
 ): Promise<{ success: boolean; video_url?: string; error?: string; duration_ms: number }> {
   const start = Date.now();
+  const requestSentAt = new Date().toISOString();
+  const endpoint = '/api/execute';
   
   ctx.onProgress?.('server_ffmpeg', 0, 'Sending to VPS server...');
 
+  // Log dispatch with full details
+  executionDebugLogger.logEngineDispatch(
+    ctx.variationIndex ?? 0,
+    'server_ffmpeg',
+    endpoint,
+    'POST',
+    {
+      hasExecutionPlan: !!ctx.plan,
+      inputFileUrl: ctx.plan.timeline[0]?.asset_url || 'N/A',
+      timelineSegments: ctx.plan.timeline.length,
+      audioTracks: ctx.plan.audio_tracks.length,
+      outputFormat: ctx.plan.output_format.container,
+    },
+    30000 // 30s timeout
+  );
+
   try {
     // VPS API ONLY - No cloud fallback allowed
-    const vpsResponse = await fetch('/api/execute', {
+    const vpsResponse = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -132,58 +241,109 @@ async function executeServerFFmpeg(
       }),
     });
 
-    // Check for non-JSON response (Nginx misconfiguration)
+    const durationMs = Date.now() - start;
     const contentType = vpsResponse.headers.get('content-type') || '';
+    
+    // Get raw response text for debugging
+    let rawResponseBody = '';
+    let parsedData: Record<string, unknown> | null = null;
+    let jsonParseError: string | undefined;
+
+    try {
+      rawResponseBody = await vpsResponse.text();
+      if (contentType.includes('application/json') && rawResponseBody) {
+        parsedData = JSON.parse(rawResponseBody);
+      }
+    } catch (e) {
+      jsonParseError = e instanceof Error ? e.message : 'Failed to parse response';
+    }
+
+    // Log detailed network response
+    executionDebugLogger.logNetworkResponse(
+      ctx.variationIndex ?? 0,
+      'server_ffmpeg',
+      {
+        endpoint,
+        method: 'POST',
+        requestSentAt,
+        httpStatus: vpsResponse.status,
+        httpStatusText: vpsResponse.statusText,
+        contentType,
+        rawResponseBody,
+        jsonParseError: !contentType.includes('application/json') ? 'Response is not JSON' : jsonParseError,
+        durationMs,
+      }
+    );
+
+    // Check for non-JSON response (Nginx misconfiguration)
     if (!contentType.includes('application/json')) {
       console.error('[ServerFFmpeg] Non-JSON response - check Nginx /api proxy');
+      console.error('[ServerFFmpeg] Content-Type:', contentType);
+      console.error('[ServerFFmpeg] Response preview:', rawResponseBody.substring(0, 200));
+      
       return {
         success: false,
-        error: 'API routing misconfigured. Check Nginx /api proxy.',
-        duration_ms: Date.now() - start,
+        error: `Server returned ${contentType || 'text/html'} instead of JSON (HTTP ${vpsResponse.status}). API endpoint misconfigured.`,
+        duration_ms: durationMs,
       };
     }
-
-    const data = await vpsResponse.json();
 
     if (!vpsResponse.ok) {
-      console.error('[ServerFFmpeg] VPS API error:', data);
+      console.error('[ServerFFmpeg] VPS API error:', parsedData);
+      const errorMsg = parsedData?.error as Record<string, string> | string | undefined;
       return {
         success: false,
-        error: data?.error?.message || data?.error || `VPS API returned ${vpsResponse.status}`,
-        duration_ms: Date.now() - start,
+        error: (typeof errorMsg === 'object' ? errorMsg?.message : errorMsg) || `VPS API returned HTTP ${vpsResponse.status}`,
+        duration_ms: durationMs,
       };
     }
 
-    if (data.ok && (data.jobId || data.outputPath || data.outputUrl)) {
+    if (parsedData?.ok && (parsedData?.jobId || parsedData?.outputPath || parsedData?.outputUrl)) {
       ctx.onProgress?.('server_ffmpeg', 100, 'VPS rendering complete');
       return {
         success: true,
-        video_url: data.outputUrl || data.outputPath || `/outputs/${data.jobId}`,
-        duration_ms: Date.now() - start,
+        video_url: (parsedData.outputUrl || parsedData.outputPath || `/outputs/${parsedData.jobId}`) as string,
+        duration_ms: durationMs,
       };
     }
 
     // Check legacy response format
-    if (data.success && data.outputPath) {
+    if (parsedData?.success && parsedData?.outputPath) {
       ctx.onProgress?.('server_ffmpeg', 100, 'VPS rendering complete');
       return {
         success: true,
-        video_url: data.outputPath,
-        duration_ms: Date.now() - start,
+        video_url: parsedData.outputPath as string,
+        duration_ms: durationMs,
       };
     }
 
     return {
       success: false,
-      error: data?.error || 'VPS FFmpeg returned no output',
-      duration_ms: Date.now() - start,
+      error: (parsedData?.error as string) || 'VPS FFmpeg returned no output',
+      duration_ms: durationMs,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const durationMs = Date.now() - start;
+    const errorMessage = err instanceof Error ? err.message : 'VPS server request failed';
+    
     console.error('[ServerFFmpeg] Exception:', err);
+
+    executionDebugLogger.logNetworkResponse(
+      ctx.variationIndex ?? 0,
+      'server_ffmpeg',
+      {
+        endpoint,
+        method: 'POST',
+        requestSentAt,
+        durationMs,
+        connectionError: errorMessage,
+      }
+    );
+
     return {
       success: false,
-      error: err.message || 'VPS server request failed',
-      duration_ms: Date.now() - start,
+      error: errorMessage,
+      duration_ms: durationMs,
     };
   }
 }
@@ -208,12 +368,20 @@ function executePlanExport(
   const requiredCaps = [...routingDecision.requiredCapabilities.capabilities];
   const capabilityList = requiredCaps.length > 0 ? requiredCaps.join(', ') : 'standard';
 
+  // Build specific failure reason from fallback chain
+  const lastAttempt = fallbackChain[fallbackChain.length - 1];
+  let specificReason = `Requires advanced rendering (${capabilityList}). Exported as plan.`;
+  
+  if (lastAttempt?.error) {
+    specificReason = lastAttempt.error;
+  }
+
   return {
     status: 'plan_only',
     engine_used: 'plan_export',
     execution_plan_json: JSON.stringify(ctx.plan, null, 2),
     ffmpeg_command: ffmpegCommand,
-    reason: `This variation requires advanced rendering (${capabilityList}). Exported as plan for server execution.`,
+    reason: specificReason,
     processing_time_ms: fallbackChain.reduce((sum, a) => sum + a.duration_ms, 0),
     fallbackChain,
     routingDecision,
@@ -227,6 +395,7 @@ function executePlanExport(
 export async function executeWithFallback(ctx: ExecutionContext): Promise<ExecutionResult> {
   const fallbackChain: EngineAttempt[] = [];
   const totalStart = Date.now();
+  const variationIndex = ctx.variationIndex ?? 0;
 
   if (!ctx.plan || ctx.plan.status !== 'compilable') {
     const routingDecision = routePlan(ctx.plan);
@@ -244,6 +413,17 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
   const routingDecision = routePlan(ctx.plan);
   const { selection, executionPath, requiredCapabilities } = routingDecision;
 
+  // Evaluate all engines for debug info
+  const engineEvaluations = evaluateEngines(requiredCapabilities.capabilities, selection.selectedEngineId);
+
+  // Log routing decision
+  executionDebugLogger.logRouting(
+    variationIndex,
+    ctx.plan.plan_id,
+    routingDecision,
+    engineEvaluations
+  );
+
   console.log('[CapabilityRouter] Required capabilities:', [...requiredCapabilities.capabilities]);
   console.log('[CapabilityRouter] Selected engine:', selection.selectedEngineId);
   console.log('[CapabilityRouter] Execution path:', executionPath);
@@ -251,7 +431,16 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
   if (!selection.canExecute) {
     ctx.onEngineSwitch?.(null, 'plan_export', selection.reason);
     ctx.onProgress?.('plan_export', 100, 'Generating downloadable execution plan...');
-    return executePlanExport(ctx, fallbackChain, routingDecision);
+    
+    const result = executePlanExport(ctx, fallbackChain, routingDecision);
+    
+    executionDebugLogger.logVariationComplete(variationIndex, {
+      status: 'plan_only',
+      engineUsed: 'plan_export',
+      errorReason: selection.reason,
+    });
+    
+    return result;
   }
 
   for (const engineId of executionPath) {
@@ -288,6 +477,12 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
     });
 
     if (result.success && result.video_url) {
+      executionDebugLogger.logVariationComplete(variationIndex, {
+        status: 'success',
+        engineUsed: engineId,
+        videoUrl: result.video_url,
+      });
+
       return {
         status: 'success',
         engine_used: engineId,
@@ -302,18 +497,27 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
     console.log(`[ExecutionEngine] ${engineId} failed:`, result.error);
   }
 
+  // Build specific failure reason
+  const lastError = fallbackChain[fallbackChain.length - 1]?.error || 'All engines failed';
+  
   ctx.onEngineSwitch?.(
     fallbackChain[fallbackChain.length - 1]?.engine || null,
     'plan_export',
-    'All server engines exhausted'
+    lastError
   );
   ctx.onProgress?.('plan_export', 100, 'Generating downloadable execution plan...');
+
+  executionDebugLogger.logVariationComplete(variationIndex, {
+    status: 'failed',
+    engineUsed: 'plan_export',
+    errorReason: lastError,
+  });
 
   return executePlanExport(ctx, fallbackChain, routingDecision);
 }
 
 // ============================================
-// BATCH EXECUTION
+// BATCH EXECUTION WITH DEBUG SESSION
 // ============================================
 
 export async function executeBatch(
@@ -321,6 +525,9 @@ export async function executeBatch(
   onVariationComplete?: (index: number, result: ExecutionResult) => void
 ): Promise<ExecutionResult[]> {
   const results: ExecutionResult[] = [];
+
+  // Start debug session
+  executionDebugLogger.startSession(contexts.length);
 
   for (let i = 0; i < contexts.length; i++) {
     const ctx = contexts[i];
@@ -332,8 +539,12 @@ export async function executeBatch(
     onVariationComplete?.(i, result);
   }
 
+  // Complete debug session
+  executionDebugLogger.completeSession();
+
   return results;
 }
 
 export type { EngineId, Capability, CapabilityRouterResult };
 export { extractRequiredCapabilities, routePlan } from './capability-router';
+export { executionDebugLogger } from './execution-debug';
