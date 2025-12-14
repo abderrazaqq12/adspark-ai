@@ -13,12 +13,16 @@
  *   GET  /api/jobs/:id    - Check job status
  */
 
-const express = require('express');
-const multer = require('multer');
-const { spawn, execSync } = require('child_process');
-const path = require('path');
-const fs = require('fs');
-const crypto = require('crypto');
+import express from 'express';
+import multer from 'multer';
+import { spawn, execSync } from 'child_process';
+import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -28,10 +32,10 @@ const app = express();
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
-const OUTPUT_DIR = process.env.OUTPUT_DIR || '/var/www/flowscale/outputs';
-const UPLOAD_DIR = process.env.UPLOAD_DIR || '/var/www/flowscale/uploads';
-const MAX_RENDER_TIME = parseInt(process.env.MAX_RENDER_TIME) || 600; // 10 min
-const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE) || 500 * 1024 * 1024; // 500MB
+const OUTPUT_DIR = process.env.OUTPUT_DIR || path.join(__dirname, '../outputs');
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
+const MAX_RENDER_TIME = parseInt(process.env.MAX_RENDER_TIME || '600'); // 10 min
+const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || String(500 * 1024 * 1024)); // 500MB
 
 // Allowed MIME types (whitelist)
 const ALLOWED_MIME_TYPES = [
@@ -68,13 +72,13 @@ function detectFFmpeg() {
     const version = execSync('ffmpeg -version 2>&1').toString();
     const match = version.match(/ffmpeg version (\S+)/);
     ffmpegVersion = match ? match[1] : 'unknown';
-    
+
     try {
       ffmpegPath = execSync('which ffmpeg').toString().trim();
     } catch {
       ffmpegPath = '/usr/bin/ffmpeg';
     }
-    
+
     console.log(`[FFmpeg] Found: ${ffmpegPath} (version ${ffmpegVersion})`);
     return true;
   } catch (err) {
@@ -152,7 +156,7 @@ function cleanOldJobs() {
   if (jobs.size > 100) {
     const sortedJobs = Array.from(jobs.entries())
       .sort((a, b) => new Date(b[1].createdAt) - new Date(a[1].createdAt));
-    
+
     sortedJobs.slice(100).forEach(([jobId]) => {
       jobs.delete(jobId);
     });
@@ -170,16 +174,16 @@ async function processNextJob() {
 
   const jobId = pendingQueue.shift();
   const job = getJob(jobId);
-  
+
   if (!job) {
     processNextJob();
     return;
   }
 
   currentJob = jobId;
-  updateJob(jobId, { 
-    status: 'running', 
-    startedAt: new Date().toISOString() 
+  updateJob(jobId, {
+    status: 'running',
+    startedAt: new Date().toISOString()
   });
   appendLog(jobId, `[${new Date().toISOString()}] Job started`);
 
@@ -211,7 +215,7 @@ async function processNextJob() {
 
 async function executeFFmpegJob(job) {
   const { type, input } = job;
-  
+
   if (!FFMPEG_AVAILABLE) {
     const err = new Error('FFmpeg binary not available on server');
     err.code = 'FFMPEG_UNAVAILABLE';
@@ -220,7 +224,7 @@ async function executeFFmpegJob(job) {
 
   const outputFilename = `${job.id}.mp4`;
   const outputPath = path.join(OUTPUT_DIR, outputFilename);
-  
+
   let args;
   if (type === 'execute') {
     args = buildFFmpegArgs(input, outputPath);
@@ -232,7 +236,7 @@ async function executeFFmpegJob(job) {
 
   return new Promise((resolve, reject) => {
     appendLog(job.id, `FFmpeg command: ffmpeg ${args.join(' ')}`);
-    
+
     const ffmpeg = spawn('ffmpeg', args, {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -251,20 +255,20 @@ async function executeFFmpegJob(job) {
     ffmpeg.stderr.on('data', (data) => {
       const chunk = data.toString();
       stderr += chunk;
-      
+
       // Parse progress
       const timeMatch = stderr.match(/time=(\d+):(\d+):(\d+\.\d+)/);
       if (timeMatch) {
         updateJob(job.id, { progressPct: 50 });
       }
-      
+
       // Keep last 2000 chars of logs
       appendLog(job.id, chunk.trim());
     });
 
     ffmpeg.on('close', (code) => {
       clearTimeout(timeout);
-      
+
       if (killed) return;
 
       if (code === 0) {
@@ -302,13 +306,13 @@ async function executeFFmpegJob(job) {
 
 function buildFFmpegArgs(input, outputPath) {
   const args = ['-y']; // Overwrite output
-  
+
   // Validate source path (SECURITY CRITICAL)
   const sourcePath = sanitizePath(input.sourcePath);
   if (!sourcePath) {
     throw new Error('Invalid source path');
   }
-  
+
   args.push('-i', sourcePath);
 
   // Trim (optional)
@@ -324,11 +328,11 @@ function buildFFmpegArgs(input, outputPath) {
   }
 
   const filters = [];
-  
+
   // Speed adjustment (whitelist: 0.25-4.0)
   if (input.speed && typeof input.speed === 'number') {
     const speed = Math.max(0.25, Math.min(4.0, input.speed));
-    filters.push(`setpts=${1/speed}*PTS`);
+    filters.push(`setpts=${1 / speed}*PTS`);
   }
 
   // Resize (whitelist: 100-4096 pixels)
@@ -367,7 +371,7 @@ function buildFFmpegArgs(input, outputPath) {
 
 function buildPlanArgs(input, outputPath) {
   const { plan, sourceVideoUrl } = input;
-  
+
   const sourcePath = sanitizePath(sourceVideoUrl);
   if (!sourcePath) {
     throw new Error('Invalid source path');
@@ -379,7 +383,7 @@ function buildPlanArgs(input, outputPath) {
   // Process timeline segments
   if (plan.timeline && Array.isArray(plan.timeline) && plan.timeline.length > 0) {
     const segment = plan.timeline[0];
-    
+
     // Trim
     if (segment.trim_start_ms !== undefined && segment.trim_end_ms !== undefined) {
       const startSec = Math.max(0, segment.trim_start_ms / 1000);
@@ -390,7 +394,7 @@ function buildPlanArgs(input, outputPath) {
     // Speed (whitelist: 0.25-4.0)
     if (segment.speed_multiplier && typeof segment.speed_multiplier === 'number') {
       const speed = Math.max(0.25, Math.min(4.0, segment.speed_multiplier));
-      filters.push(`setpts=${1/speed}*PTS`);
+      filters.push(`setpts=${1 / speed}*PTS`);
     }
   }
 
@@ -421,27 +425,27 @@ function sanitizePath(inputPath) {
   if (!inputPath || typeof inputPath !== 'string') {
     return null;
   }
-  
+
   const normalized = path.normalize(inputPath);
-  
+
   // Prevent path traversal
   if (normalized.includes('..')) {
     return null;
   }
-  
+
   // Only allow paths within allowed directories
-  const allowedPrefixes = [UPLOAD_DIR, OUTPUT_DIR, '/var/www/flowscale'];
+  const allowedPrefixes = [UPLOAD_DIR, OUTPUT_DIR, '/var/www/flowscale', process.cwd()];
   const isAllowed = allowedPrefixes.some(prefix => normalized.startsWith(prefix));
-  
+
   if (!isAllowed) {
     return null;
   }
-  
+
   // Check file exists
   if (!fs.existsSync(normalized)) {
     return null;
   }
-  
+
   return normalized;
 }
 
@@ -464,7 +468,7 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const projectId = req.body.projectId;
     let uploadPath = UPLOAD_DIR;
-    
+
     // Optional project subdirectory
     if (projectId && /^[a-zA-Z0-9_-]+$/.test(projectId)) {
       uploadPath = path.join(UPLOAD_DIR, projectId);
@@ -472,7 +476,7 @@ const storage = multer.diskStorage({
         fs.mkdirSync(uploadPath, { recursive: true });
       }
     }
-    
+
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
@@ -487,12 +491,12 @@ const fileFilter = (req, file, cb) => {
   if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
     return cb(new Error(`Invalid file type: ${file.mimetype}. Allowed: ${ALLOWED_MIME_TYPES.join(', ')}`), false);
   }
-  
+
   // Block path traversal in filename
   if (file.originalname.includes('..') || file.originalname.includes('/') || file.originalname.includes('\\')) {
     return cb(new Error('Invalid filename'), false);
   }
-  
+
   cb(null, true);
 };
 
@@ -528,7 +532,7 @@ app.use('/api', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
+
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
@@ -571,25 +575,25 @@ app.post('/api/upload', (req, res) => {
   upload.single('file')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return jsonError(res, 413, 'FILE_TOO_LARGE', 
+        return jsonError(res, 413, 'FILE_TOO_LARGE',
           `File too large. Maximum: ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
       }
       return jsonError(res, 400, 'UPLOAD_ERROR', err.message);
     }
-    
+
     if (err) {
       return jsonError(res, 400, 'UPLOAD_ERROR', err.message);
     }
-    
+
     if (!req.file) {
       return jsonError(res, 400, 'NO_FILE', 'No file provided. Use field name "file"');
     }
-    
+
     const filePath = path.join(req.file.destination, req.file.filename);
     const publicUrl = `/uploads/${req.body.projectId ? req.body.projectId + '/' : ''}${req.file.filename}`;
-    
+
     console.log(`[Upload] Saved: ${req.file.filename} (${req.file.size} bytes)`);
-    
+
     res.json({
       ok: true,
       fileId: req.file.filename.split('.')[0],
@@ -623,12 +627,12 @@ app.post('/api/execute', (req, res) => {
   }
 
   const jobId = outputName || generateJobId();
-  
+
   createJob(jobId, 'execute', { ...req.body, sourcePath: validPath });
   pendingQueue.push(jobId);
-  
+
   console.log(`[Queue] Job ${jobId} queued (queue length: ${pendingQueue.length})`);
-  
+
   setImmediate(processNextJob);
 
   res.status(202).json({
@@ -661,12 +665,12 @@ app.post('/api/execute-plan', (req, res) => {
   }
 
   const jobId = outputName || generateJobId();
-  
+
   createJob(jobId, 'execute-plan', { plan, sourceVideoUrl: validPath });
   pendingQueue.push(jobId);
-  
+
   console.log(`[Queue] Plan job ${jobId} queued (queue length: ${pendingQueue.length})`);
-  
+
   setImmediate(processNextJob);
 
   res.status(202).json({
@@ -684,7 +688,7 @@ app.post('/api/execute-plan', (req, res) => {
 
 app.get('/api/jobs/:jobId', (req, res) => {
   const job = getJob(req.params.jobId);
-  
+
   if (!job) {
     return jsonError(res, 404, 'JOB_NOT_FOUND', `Job ${req.params.jobId} not found`);
   }

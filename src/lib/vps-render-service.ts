@@ -30,15 +30,25 @@ function getApiBaseUrl(): string {
   if (typeof window !== 'undefined' && window.location.hostname === 'flowscale.cloud') {
     return ''; // Always relative paths on production domain
   }
-  
-  // Check localStorage for custom URL (dev/testing only)
+
+  // DEVELOPMENT SECURITY: Force relative path to use Vite Proxy
+  // This prevents accidentally connecting to external APIs or stale localStorage values
+  if (import.meta.env.DEV) {
+    console.log('[VPS] Dev mode detected: forcing Vite proxy for /api');
+    return '';
+  }
+
+  // Check localStorage for custom URL (dev/testing bypass ONLY if explicitly needed)
+  // Commented out to enforce hard isolation for now
+  /*
   const stored = localStorage.getItem('vps_api_url');
   if (stored && stored.trim()) return stored.trim();
-  
+  */
+
   // Check environment variables
   if (import.meta.env.VITE_VPS_API_URL) return import.meta.env.VITE_VPS_API_URL;
   if (import.meta.env.VITE_API_BASE_URL) return import.meta.env.VITE_API_BASE_URL;
-  
+
   // Default to relative paths (same origin)
   return '';
 }
@@ -121,13 +131,13 @@ export interface VPSHealthStatus {
 
 export async function checkServerHealth(): Promise<VPSHealthStatus> {
   const apiBase = getApiBaseUrl();
-  
+
   try {
     const response = await fetch(`${apiBase}/api/health`, {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
     });
-    
+
     // Check for HTML response (nginx error page)
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
@@ -141,7 +151,7 @@ export async function checkServerHealth(): Promise<VPSHealthStatus> {
     }
 
     const data = await response.json() as HealthResponse;
-    
+
     return {
       ok: data.ok === true,
       ffmpeg: data.ffmpeg?.available ? 'ready' : 'unavailable',
@@ -183,7 +193,7 @@ export async function uploadVideo(
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    
+
     xhr.upload.addEventListener('progress', (e) => {
       if (e.lengthComputable && onProgress) {
         const percent = Math.round((e.loaded / e.total) * 100);
@@ -249,10 +259,10 @@ export async function queueFFmpegJob(
   options: ExecuteOptions = {}
 ): Promise<QueuedJob> {
   const apiBase = getApiBaseUrl();
-  
+
   const response = await fetch(`${apiBase}/api/execute`, {
     method: 'POST',
-    headers: { 
+    headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     },
@@ -280,10 +290,10 @@ export async function queuePlanJob(
   outputName?: string
 ): Promise<QueuedJob> {
   const apiBase = getApiBaseUrl();
-  
+
   const response = await fetch(`${apiBase}/api/execute-plan`, {
     method: 'POST',
-    headers: { 
+    headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     },
@@ -307,7 +317,7 @@ export async function queuePlanJob(
 
 export async function getJobStatus(jobId: string): Promise<JobStatus> {
   const apiBase = getApiBaseUrl();
-  
+
   const response = await fetch(`${apiBase}/api/jobs/${jobId}`, {
     headers: { 'Accept': 'application/json' },
   });
@@ -377,8 +387,8 @@ export async function waitForJob(
     onProgress?.({
       stage: status.status === 'running' ? 'processing' : 'queued',
       progress: status.progress || (status.status === 'queued' ? 10 : 50),
-      message: status.status === 'queued' 
-        ? 'Waiting in queue...' 
+      message: status.status === 'queued'
+        ? 'Waiting in queue...'
         : 'Processing with FFmpeg...',
       jobId,
     });
