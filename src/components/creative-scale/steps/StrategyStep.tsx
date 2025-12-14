@@ -344,6 +344,26 @@ export function StrategyStep({
         {hasStrategy && !isGenerating && (
           <ScrollArea className="h-[calc(100vh-420px)] min-h-[250px]">
             <div className="space-y-6">
+              {/* Compliance Status Card */}
+              {complianceResult && (
+                <ComplianceStatusCard result={complianceResult} />
+              )}
+
+              {/* Auto Framework Selection Card */}
+              {autoFrameworkResult && (
+                <AutoFrameworkCard 
+                  result={autoFrameworkResult} 
+                  context={{
+                    platform: mapToAdPlatform(brainV2State.platform),
+                    videoLengthSec: (analysis.metadata?.duration_ms || 15000) / 1000,
+                    riskLevel: complianceResult?.overallRisk || 'safe',
+                    funnelStage: 'cold' as FunnelStage,
+                    hasProofElements: analysis.segments.some(s => s.type === 'proof'),
+                    hookStrength: analysis.overall_scores?.hook_strength || 0.5
+                  }}
+                />
+              )}
+
               {/* Strategy Complete Badge */}
               <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
                 <CheckCircle2 className="w-5 h-5 text-green-500" />
