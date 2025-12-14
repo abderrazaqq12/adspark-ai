@@ -26,6 +26,7 @@ import { BrainV2DecisionCard } from '@/components/creative-scale/BrainV2Decision
 import { VariationCard } from '@/components/creative-scale/VariationCard';
 import { AdDirectorPanel } from '@/components/creative-scale/AdDirectorPanel';
 import { PredictiveMetrics } from '@/components/creative-scale/PredictiveMetrics';
+import { FrameworkComparisonView } from '@/components/creative-scale/FrameworkComparisonView';
 import { generateAdDirectorReview } from '@/lib/creative-scale/ad-director';
 import type { VideoAnalysis, CreativeBlueprint } from '@/lib/creative-scale/types';
 import type { OptimizationGoal, RiskTolerance, CreativeBlueprintV2, DetectedProblem, ExtractedSignals, HormoziValueScore } from '@/lib/creative-scale/brain-v2-types';
@@ -192,6 +193,11 @@ export function StrategyStep({
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        {/* Framework Comparison */}
+        <div className="ml-auto">
+          <FrameworkComparisonView compact />
         </div>
       </div>
 
