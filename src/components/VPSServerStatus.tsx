@@ -30,7 +30,12 @@ interface VPSServerStatusProps {
 export function VPSServerStatus({ className }: VPSServerStatusProps) {
   const [health, setHealth] = useState<VPSHealthStatus | null>(null);
   const [checking, setChecking] = useState(false);
+  
+  // In production on flowscale.cloud, always use relative paths
+  const isProduction = typeof window !== 'undefined' && window.location.hostname === 'flowscale.cloud';
+  
   const [apiBaseUrl, setApiBaseUrl] = useState(() => {
+    if (isProduction) return ''; // Production uses relative paths
     return localStorage.getItem('vps_api_url') || 
            import.meta.env.VITE_VPS_API_URL || 
            import.meta.env.VITE_API_BASE_URL || 
@@ -107,30 +112,41 @@ export function VPSServerStatus({ className }: VPSServerStatusProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* API URL Configuration */}
-        <div className="space-y-3">
-          <Label htmlFor="api-url" className="text-sm font-medium">VPS Server URL</Label>
-          <div className="flex gap-2">
-            <Input
-              id="api-url"
-              value={apiBaseUrl}
-              onChange={(e) => setApiBaseUrl(e.target.value)}
-              placeholder="https://flowscale.cloud"
-              className="flex-1 font-mono text-sm"
-            />
-            <Button 
-              variant={saved ? "default" : "secondary"}
-              size="sm"
-              onClick={handleSaveUrl}
-            >
-              {saved ? <CheckCircle2 className="w-4 h-4" /> : 'Save'}
-            </Button>
+        {/* API URL Configuration - Only show in dev/testing */}
+        {!isProduction && (
+          <div className="space-y-3">
+            <Label htmlFor="api-url" className="text-sm font-medium">VPS Server URL (Dev/Testing)</Label>
+            <div className="flex gap-2">
+              <Input
+                id="api-url"
+                value={apiBaseUrl}
+                onChange={(e) => setApiBaseUrl(e.target.value)}
+                placeholder="Leave empty for relative paths"
+                className="flex-1 font-mono text-sm"
+              />
+              <Button 
+                variant={saved ? "default" : "secondary"}
+                size="sm"
+                onClick={handleSaveUrl}
+              >
+                {saved ? <CheckCircle2 className="w-4 h-4" /> : 'Save'}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Leave empty to use relative paths (/api/*). Only set if testing against external VPS.
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Enter your VPS domain (e.g., https://flowscale.cloud). Nginx proxies /api/* to Node.js.
-          </p>
-        </div>
+        )}
 
+        {/* Production Mode Notice */}
+        {isProduction && (
+          <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+            <p className="text-sm text-green-600 dark:text-green-400">
+              <CheckCircle2 className="w-4 h-4 inline mr-2" />
+              Production mode: Using relative paths (/api/*)
+            </p>
+          </div>
+        )}
         {/* Status Indicators */}
         <div className="grid grid-cols-2 gap-4">
           {/* Connection Status */}
@@ -165,7 +181,7 @@ export function VPSServerStatus({ className }: VPSServerStatusProps) {
                 <p className={`text-lg font-bold ${
                   health?.ffmpeg === 'ready' ? 'text-green-500' : 'text-amber-500'
                 }`}>
-                  {health?.ffmpeg === 'ready' ? 'Ready' : 'Unavailable'}
+                  {health?.ffmpeg === 'ready' ? 'Available' : 'Unavailable'}
                 </p>
               </div>
             </div>

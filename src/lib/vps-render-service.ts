@@ -20,16 +20,26 @@ import {
 // API BASE URL
 // ============================================
 
+/**
+ * Get the API base URL for VPS calls.
+ * In production (same origin), this returns empty string for relative paths.
+ * For development/testing with external VPS, check localStorage or env vars.
+ */
 function getApiBaseUrl(): string {
-  // Check localStorage first (user-configured)
-  const stored = localStorage.getItem('vps_api_url');
-  if (stored) return stored;
+  // In production on same origin, always use relative paths
+  if (typeof window !== 'undefined' && window.location.hostname === 'flowscale.cloud') {
+    return ''; // Always relative paths on production domain
+  }
   
-  // Then environment variables
+  // Check localStorage for custom URL (dev/testing only)
+  const stored = localStorage.getItem('vps_api_url');
+  if (stored && stored.trim()) return stored.trim();
+  
+  // Check environment variables
   if (import.meta.env.VITE_VPS_API_URL) return import.meta.env.VITE_VPS_API_URL;
   if (import.meta.env.VITE_API_BASE_URL) return import.meta.env.VITE_API_BASE_URL;
   
-  // Default to same origin
+  // Default to relative paths (same origin)
   return '';
 }
 
