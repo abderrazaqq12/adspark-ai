@@ -21,7 +21,8 @@ import {
   Youtube,
   MessageCircle,
   Users,
-  LayoutGrid
+  LayoutGrid,
+  Thermometer
 } from 'lucide-react';
 import { 
   ProblemDisplay, 
@@ -80,7 +81,7 @@ function deriveHormoziScore(): HormoziValueScore {
 }
 
 type PlatformType = 'tiktok' | 'reels' | 'snapchat' | 'youtube' | 'facebook' | 'general';
-
+type FunnelStageType = 'cold' | 'warm' | 'retargeting';
 interface StrategyStepProps {
   analysis: VideoAnalysis;
   blueprint: CreativeBlueprint | null;
@@ -89,6 +90,7 @@ interface StrategyStepProps {
     optimizationGoal: OptimizationGoal;
     riskTolerance: RiskTolerance;
     platform: PlatformType;
+    funnelStage: FunnelStageType;
     detectedProblems: DetectedProblem[];
     blueprintsV2: CreativeBlueprintV2[];
   };
@@ -97,6 +99,7 @@ interface StrategyStepProps {
   onSetGoal: (goal: OptimizationGoal) => void;
   onSetRisk: (risk: RiskTolerance) => void;
   onSetPlatform: (platform: PlatformType) => void;
+  onSetFunnelStage: (stage: FunnelStageType) => void;
   onSetVariationCount: (count: number) => void;
   onGenerate: () => void;
   onContinue: () => void;
@@ -112,6 +115,7 @@ export function StrategyStep({
   onSetGoal,
   onSetRisk,
   onSetPlatform,
+  onSetFunnelStage,
   onSetVariationCount,
   onGenerate,
   onContinue
@@ -178,11 +182,11 @@ export function StrategyStep({
       platform: adPlatform,
       videoLengthSec: videoDuration,
       riskLevel: complianceResult?.overallRisk || 'safe',
-      funnelStage: 'cold' as FunnelStage,
+      funnelStage: brainV2State.funnelStage as FunnelStage,
       hasProofElements: hasProof,
       hookStrength: analysis.overall_scores?.hook_strength || 0.5
     });
-  }, [analysis, brainV2State.platform, complianceResult]);
+  }, [analysis, brainV2State.platform, brainV2State.funnelStage, complianceResult]);
 
   return (
     <div className="h-full flex flex-col">
@@ -285,6 +289,39 @@ export function StrategyStep({
             </SelectContent>
           </Select>
         </div>
+
+        {/* Funnel Stage Selector */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Funnel:</span>
+          <Select 
+            value={brainV2State.funnelStage} 
+            onValueChange={(value: FunnelStageType) => onSetFunnelStage(value)}
+          >
+            <SelectTrigger className="w-[120px] h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-popover border border-border">
+              <SelectItem value="cold">
+                <div className="flex items-center gap-2">
+                  <Thermometer className="w-3 h-3 text-blue-400" />
+                  Cold Traffic
+                </div>
+              </SelectItem>
+              <SelectItem value="warm">
+                <div className="flex items-center gap-2">
+                  <Thermometer className="w-3 h-3 text-amber-400" />
+                  Warm Audience
+                </div>
+              </SelectItem>
+              <SelectItem value="retargeting">
+                <div className="flex items-center gap-2">
+                  <Thermometer className="w-3 h-3 text-red-400" />
+                  Retargeting
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">Variations:</span>
@@ -357,7 +394,7 @@ export function StrategyStep({
                     platform: mapToAdPlatform(brainV2State.platform),
                     videoLengthSec: (analysis.metadata?.duration_ms || 15000) / 1000,
                     riskLevel: complianceResult?.overallRisk || 'safe',
-                    funnelStage: 'cold' as FunnelStage,
+                    funnelStage: brainV2State.funnelStage as FunnelStage,
                     hasProofElements: analysis.segments.some(s => s.type === 'proof'),
                     hookStrength: analysis.overall_scores?.hook_strength || 0.5
                   }}
