@@ -20,9 +20,9 @@ import {
   Capability,
   ENGINE_CAPABILITIES,
 } from './capability-router';
-import { 
-  executionDebugLogger, 
-  EngineEvaluation 
+import {
+  executionDebugLogger,
+  EngineEvaluation
 } from './execution-debug';
 
 // ============================================
@@ -78,9 +78,9 @@ function evaluateEngines(
         unsatisfied.push(cap);
       }
     }
-    
+
     const canHandle = unsatisfied.length === 0 && engine.id !== 'plan_export';
-    
+
     let rejectionReason: string | undefined;
     if (!canHandle && engine.id !== 'plan_export') {
       if (unsatisfied.length > 0) {
@@ -108,7 +108,7 @@ async function executeCloudinary(
 ): Promise<{ success: boolean; video_url?: string; error?: string; duration_ms: number }> {
   const start = Date.now();
   const requestSentAt = new Date().toISOString();
-  
+
   ctx.onProgress?.('cloudinary', 0, 'Sending to Cloudinary...');
 
   // Log dispatch
@@ -178,7 +178,7 @@ async function executeCloudinary(
   } catch (err: unknown) {
     const durationMs = Date.now() - start;
     const errorMessage = err instanceof Error ? err.message : 'Cloudinary request failed';
-    
+
     executionDebugLogger.logNetworkResponse(
       ctx.variationIndex ?? 0,
       'cloudinary',
@@ -210,7 +210,7 @@ async function executeServerFFmpeg(
   const start = Date.now();
   const requestSentAt = new Date().toISOString();
   const endpoint = '/api/execute';
-  
+
   ctx.onProgress?.('server_ffmpeg', 0, 'Sending to VPS server...');
 
   // Log dispatch with full details
@@ -229,6 +229,9 @@ async function executeServerFFmpeg(
     30000 // 30s timeout
   );
 
+  // HARD ISOLATION CHECK
+  console.log('[ServerFFmpeg] Executing with HARD ISOLATION. Target:', endpoint);
+
   try {
     // VPS API ONLY - No cloud fallback allowed
     const vpsResponse = await fetch(endpoint, {
@@ -243,7 +246,7 @@ async function executeServerFFmpeg(
 
     const durationMs = Date.now() - start;
     const contentType = vpsResponse.headers.get('content-type') || '';
-    
+
     // Get raw response text for debugging
     let rawResponseBody = '';
     let parsedData: Record<string, unknown> | null = null;
@@ -280,10 +283,10 @@ async function executeServerFFmpeg(
       console.error('[ServerFFmpeg] Non-JSON response - check Nginx /api proxy');
       console.error('[ServerFFmpeg] Content-Type:', contentType);
       console.error('[ServerFFmpeg] Response preview:', rawResponseBody.substring(0, 200));
-      
+
       return {
         success: false,
-        error: `Server returned ${contentType || 'text/html'} instead of JSON (HTTP ${vpsResponse.status}). API endpoint misconfigured.`,
+        error: `CRITICAL: Server returned ${contentType || 'text/html'} instead of JSON (HTTP ${vpsResponse.status}). Likely Nginx Proxy Error or Fal.ai misrouting. Raw: ${rawResponseBody.substring(0, 100)}`,
         duration_ms: durationMs,
       };
     }
@@ -325,7 +328,7 @@ async function executeServerFFmpeg(
   } catch (err: unknown) {
     const durationMs = Date.now() - start;
     const errorMessage = err instanceof Error ? err.message : 'VPS server request failed';
-    
+
     console.error('[ServerFFmpeg] Exception:', err);
 
     executionDebugLogger.logNetworkResponse(
@@ -371,7 +374,7 @@ function executePlanExport(
   // Build specific failure reason from fallback chain
   const lastAttempt = fallbackChain[fallbackChain.length - 1];
   let specificReason = `Requires advanced rendering (${capabilityList}). Exported as plan.`;
-  
+
   if (lastAttempt?.error) {
     specificReason = lastAttempt.error;
   }
@@ -431,15 +434,15 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
   if (!selection.canExecute) {
     ctx.onEngineSwitch?.(null, 'plan_export', selection.reason);
     ctx.onProgress?.('plan_export', 100, 'Generating downloadable execution plan...');
-    
+
     const result = executePlanExport(ctx, fallbackChain, routingDecision);
-    
+
     executionDebugLogger.logVariationComplete(variationIndex, {
       status: 'plan_only',
       engineUsed: 'plan_export',
       errorReason: selection.reason,
     });
-    
+
     return result;
   }
 
@@ -447,11 +450,11 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
     if (engineId === 'plan_export') continue;
 
     let result: { success: boolean; video_url?: string; error?: string; duration_ms: number };
-    
+
     ctx.onEngineSwitch?.(
       fallbackChain.length > 0 ? fallbackChain[fallbackChain.length - 1].engine : null,
       engineId,
-      fallbackChain.length === 0 
+      fallbackChain.length === 0
         ? `Selected based on capabilities: ${[...requiredCapabilities.capabilities].join(', ')}`
         : 'Trying next compatible engine'
     );
@@ -499,7 +502,7 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
 
   // Build specific failure reason
   const lastError = fallbackChain[fallbackChain.length - 1]?.error || 'All engines failed';
-  
+
   ctx.onEngineSwitch?.(
     fallbackChain[fallbackChain.length - 1]?.engine || null,
     'plan_export',
@@ -532,10 +535,10 @@ export async function executeBatch(
   for (let i = 0; i < contexts.length; i++) {
     const ctx = contexts[i];
     ctx.variationIndex = i;
-    
+
     const result = await executeWithFallback(ctx);
     results.push(result);
-    
+
     onVariationComplete?.(i, result);
   }
 

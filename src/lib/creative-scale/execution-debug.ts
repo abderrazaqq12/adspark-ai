@@ -161,7 +161,7 @@ class ExecutionDebugLogger {
 
   startSession(variationsCount: number): string {
     const sessionId = `debug_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-    
+
     this.state = {
       sessionId,
       startedAt: new Date().toISOString(),
@@ -278,8 +278,8 @@ class ExecutionDebugLogger {
 
     // Check for misrouting (fal.ai or browser FFmpeg)
     const isMisrouting = endpoint.includes('fal.ai') || endpoint.includes('fal.run') ||
-                         endpoint.includes('wasm') || endpoint.includes('ffmpeg-core');
-    
+      endpoint.includes('wasm') || endpoint.includes('ffmpeg-core');
+
     if (engineId === 'server_ffmpeg') {
       variation.serverFFmpeg.status = 'dispatched';
       variation.serverFFmpeg.endpoint = endpoint;
@@ -301,20 +301,20 @@ class ExecutionDebugLogger {
         timeoutMs,
         retryCount: 0,
         isMisrouting,
-        misroutingError: isMisrouting 
+        misroutingError: isMisrouting
           ? `CRITICAL MISROUTING: External engine called while ${engineId} selected. Endpoint: ${endpoint}`
           : undefined,
       },
     };
 
     this.state.events.push(event);
-    
+
     if (isMisrouting) {
       console.error('[ExecutionDebug] CRITICAL MISROUTING:', event.data);
     } else {
       console.log('[ExecutionDebug] Engine dispatch:', event.data);
     }
-    
+
     this.notifyListeners();
   }
 
@@ -347,7 +347,7 @@ class ExecutionDebugLogger {
       variation.serverFFmpeg.contentType = details.contentType || null;
       variation.serverFFmpeg.responsePreview = responsePreview;
       variation.serverFFmpeg.durationMs = details.durationMs;
-      
+
       if (details.connectionError || details.jsonParseError || (details.httpStatus && details.httpStatus >= 400)) {
         variation.serverFFmpeg.status = 'error';
         variation.serverFFmpeg.errorReason = this.formatErrorReason(details);
@@ -393,12 +393,13 @@ class ExecutionDebugLogger {
     contentType?: string;
     jsonParseError?: string;
     connectionError?: string;
+    rawResponseBody?: string;
   }): string {
     if (details.connectionError) {
       return `Connection failed: ${details.connectionError}`;
     }
     if (details.jsonParseError) {
-      return `Non-JSON response (${details.contentType || 'unknown'}): ${details.jsonParseError}`;
+      return `CRITICAL: Misconfigured Backend/Proxy. Received ${details.contentType || 'unknown'} instead of JSON. Raw: ${details.rawResponseBody?.substring(0, 50)}`;
     }
     if (details.httpStatus === 502) {
       return `502 Bad Gateway - Server unreachable or Nginx proxy misconfigured`;
@@ -458,11 +459,11 @@ class ExecutionDebugLogger {
     const successful = this.state.variations
       .filter(v => v.finalResult.status === 'success')
       .map(v => v.variationIndex);
-    
+
     const failed = this.state.variations
       .filter(v => v.finalResult.status === 'failed')
       .map(v => v.variationIndex);
-    
+
     const partial = this.state.variations
       .filter(v => v.finalResult.status === 'partial')
       .map(v => v.variationIndex);
@@ -471,7 +472,7 @@ class ExecutionDebugLogger {
     const firstFailure = this.state.variations.find(v => v.finalResult.status === 'failed');
     let rootCause = 'Unknown';
     let nextAction = 'Check server logs';
-    
+
     if (firstFailure) {
       if (firstFailure.serverFFmpeg.errorReason) {
         rootCause = firstFailure.serverFFmpeg.errorReason;
@@ -495,7 +496,7 @@ class ExecutionDebugLogger {
       rootCause,
       nextAction,
       totalDurationMs: Date.now() - new Date(this.state.startedAt).getTime(),
-      fallbackChainSummary: this.state.variations.map(v => 
+      fallbackChainSummary: this.state.variations.map(v =>
         `Var ${v.variationIndex + 1}: ${v.routing.executionPath.join(' → ')} → ${v.finalResult.status}`
       ),
     };

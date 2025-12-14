@@ -174,7 +174,7 @@ export function selectEngine(
         unsatisfiedCapabilities: [],
         reason: 'Server FFmpeg (VPS) selected for advanced capabilities - VPS only, no cloud fallback',
         alternativeEngines: [],
-        allowCloudFallback: false, // CRITICAL: No fal.ai allowed
+        allowCloudFallback: false, // CRITICAL: No fal.ai allowed. This prevents fallback to engine adapters.
       };
     }
   }
