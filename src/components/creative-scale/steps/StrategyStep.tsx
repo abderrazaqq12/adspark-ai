@@ -1,6 +1,7 @@
 /**
  * Step 3: Strategy
  * Brain V2 planning and variation configuration with Ad Director insights
+ * + Advertising Policy Compliance Layer
  */
 
 import { useMemo } from 'react';
@@ -34,7 +35,12 @@ import { AdDirectorPanel } from '@/components/creative-scale/AdDirectorPanel';
 import { PredictiveMetrics } from '@/components/creative-scale/PredictiveMetrics';
 import { FrameworkComparisonView } from '@/components/creative-scale/FrameworkComparisonView';
 import { FrameworkExplainerCard } from '@/components/creative-scale/FrameworkExplainerCard';
+import { ComplianceStatusCard } from '@/components/creative-scale/ComplianceStatusCard';
+import { AutoFrameworkCard } from '@/components/creative-scale/AutoFrameworkCard';
 import { generateAdDirectorReview } from '@/lib/creative-scale/ad-director';
+import { scanVideoAnalysis, scanBlueprint, generateComplianceResult } from '@/lib/creative-scale/compliance-engine';
+import { selectFrameworkAutomatically } from '@/lib/creative-scale/auto-framework-selector';
+import type { AdPlatform, FunnelStage } from '@/lib/creative-scale/compliance-types';
 import type { VideoAnalysis, CreativeBlueprint } from '@/lib/creative-scale/types';
 import type { OptimizationGoal, RiskTolerance, CreativeBlueprintV2, DetectedProblem, ExtractedSignals, HormoziValueScore } from '@/lib/creative-scale/brain-v2-types';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
@@ -138,6 +144,45 @@ export function StrategyStep({
       ctaPressure: adDirectorReview.ctaPressure
     };
   }, [adDirectorReview]);
+
+  // Map platform type to AdPlatform for compliance
+  const mapToAdPlatform = (platform: PlatformType): AdPlatform => {
+    const mapping: Record<string, AdPlatform> = {
+      'tiktok': 'tiktok',
+      'snapchat': 'snapchat',
+      'facebook': 'meta',
+      'reels': 'meta',
+      'youtube': 'google',
+      'general': 'general'
+    };
+    return mapping[platform] || 'general';
+  };
+
+  // Compliance scanning
+  const complianceResult = useMemo(() => {
+    if (!analysis) return null;
+    const adPlatform = mapToAdPlatform(brainV2State.platform);
+    const analysisViolations = scanVideoAnalysis(analysis, adPlatform);
+    const blueprintViolations = blueprint ? scanBlueprint(blueprint, adPlatform) : [];
+    return generateComplianceResult(adPlatform, analysisViolations, blueprintViolations);
+  }, [analysis, blueprint, brainV2State.platform]);
+
+  // Auto framework selection
+  const autoFrameworkResult = useMemo(() => {
+    if (!analysis) return null;
+    const videoDuration = (analysis.metadata?.duration_ms || 15000) / 1000;
+    const adPlatform = mapToAdPlatform(brainV2State.platform);
+    const hasProof = analysis.segments.some(s => s.type === 'proof');
+    
+    return selectFrameworkAutomatically({
+      platform: adPlatform,
+      videoLengthSec: videoDuration,
+      riskLevel: complianceResult?.overallRisk || 'safe',
+      funnelStage: 'cold' as FunnelStage,
+      hasProofElements: hasProof,
+      hookStrength: analysis.overall_scores?.hook_strength || 0.5
+    });
+  }, [analysis, brainV2State.platform, complianceResult]);
 
   return (
     <div className="h-full flex flex-col">
