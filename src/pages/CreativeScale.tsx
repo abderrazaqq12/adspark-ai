@@ -555,6 +555,7 @@ export default function CreativeScale() {
               isGenerating={isGeneratingBlueprint || isCompiling}
               onSetGoal={(goal) => setBrainV2Options({ goal })}
               onSetRisk={(risk) => setBrainV2Options({ risk })}
+              onSetPlatform={(platform) => setBrainV2Options({ platform })}
               onSetVariationCount={setVariationCount}
               onGenerate={handleGenerateStrategy}
               onContinue={handleStrategyContinue}

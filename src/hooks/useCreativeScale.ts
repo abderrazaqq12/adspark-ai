@@ -131,12 +131,15 @@ interface FullPipelineOutput extends PhaseAOutput {
 }
 
 // Brain V2 state
+export type PlatformType = 'tiktok' | 'reels' | 'snapchat' | 'youtube' | 'facebook' | 'general';
+
 interface BrainV2State {
   detectedProblems: DetectedProblem[];
   blueprintsV2: CreativeBlueprintV2[];
   brainOutput: BrainOutput | null;
   optimizationGoal: OptimizationGoal;
   riskTolerance: RiskTolerance;
+  platform: PlatformType;
 }
 
 interface UseCreativeScaleReturn {
@@ -156,7 +159,7 @@ interface UseCreativeScaleReturn {
   
   // Brain V2 State
   brainV2State: BrainV2State;
-  setBrainV2Options: (options: { goal?: OptimizationGoal; risk?: RiskTolerance }) => void;
+  setBrainV2Options: (options: { goal?: OptimizationGoal; risk?: RiskTolerance; platform?: PlatformType }) => void;
   
   // Phase A Actions
   analyzeVideo: (videoUrl: string, videoId: string, options?: {
@@ -239,18 +242,20 @@ export function useCreativeScale(): UseCreativeScaleReturn {
     blueprintsV2: [],
     brainOutput: null,
     optimizationGoal: 'retention',
-    riskTolerance: 'medium'
+    riskTolerance: 'medium',
+    platform: 'general'
   });
 
   // ============================================
   // BRAIN V2 OPTIONS
   // ============================================
 
-  const setBrainV2Options = useCallback((options: { goal?: OptimizationGoal; risk?: RiskTolerance }) => {
+  const setBrainV2Options = useCallback((options: { goal?: OptimizationGoal; risk?: RiskTolerance; platform?: PlatformType }) => {
     setBrainV2State(prev => ({
       ...prev,
       optimizationGoal: options.goal ?? prev.optimizationGoal,
-      riskTolerance: options.risk ?? prev.riskTolerance
+      riskTolerance: options.risk ?? prev.riskTolerance,
+      platform: options.platform ?? prev.platform
     }));
   }, []);
 
@@ -686,7 +691,8 @@ export function useCreativeScale(): UseCreativeScaleReturn {
       blueprintsV2: [],
       brainOutput: null,
       optimizationGoal: 'retention',
-      riskTolerance: 'medium'
+      riskTolerance: 'medium',
+      platform: 'general'
     });
     clearSession();
   }, []);
