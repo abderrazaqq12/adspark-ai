@@ -200,7 +200,9 @@ async function executeOnVPS(
   onProgress?: (progress: number) => void
 ): Promise<VPSExecuteResult> {
   try {
-    const baseUrl = localStorage.getItem('vps_api_url') || '';
+    // In production on flowscale.cloud, always use relative paths
+    const isProduction = typeof window !== 'undefined' && window.location.hostname === 'flowscale.cloud';
+    const baseUrl = isProduction ? '' : (localStorage.getItem('vps_api_url') || '');
     
     const response = await fetch(`${baseUrl}/api/execute-plan`, {
       method: 'POST',
