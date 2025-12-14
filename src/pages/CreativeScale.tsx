@@ -517,6 +517,7 @@ export default function CreativeScale() {
         currentStep={currentStep}
         completedSteps={completedSteps}
         onStepClick={goToStep}
+        onClearHistory={handleReset}
       />
 
       {/* Main Content Area */}

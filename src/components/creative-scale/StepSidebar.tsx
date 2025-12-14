@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Lock
 } from 'lucide-react';
+import { ClearHistoryButton } from './ClearHistoryButton';
 
 export type StepId = 1 | 2 | 3 | 4 | 5;
 
@@ -33,9 +34,10 @@ interface StepSidebarProps {
   currentStep: StepId;
   completedSteps: StepId[];
   onStepClick?: (step: StepId) => void;
+  onClearHistory?: () => void;
 }
 
-export function StepSidebar({ currentStep, completedSteps, onStepClick }: StepSidebarProps) {
+export function StepSidebar({ currentStep, completedSteps, onStepClick, onClearHistory }: StepSidebarProps) {
   return (
     <div className="w-64 min-h-screen bg-card border-r border-border flex flex-col">
       {/* Header */}
@@ -106,17 +108,20 @@ export function StepSidebar({ currentStep, completedSteps, onStepClick }: StepSi
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-border">
+      {/* Footer with Clear History */}
+      <div className="p-4 border-t border-border space-y-3">
         <div className="text-xs text-muted-foreground">
           <span className="font-medium">{completedSteps.length}</span> of 5 steps complete
         </div>
-        <div className="w-full h-1.5 bg-muted rounded-full mt-2 overflow-hidden">
+        <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
           <div 
             className="h-full bg-primary transition-all duration-300"
             style={{ width: `${(completedSteps.length / 5) * 100}%` }}
           />
         </div>
+        {onClearHistory && (
+          <ClearHistoryButton onClear={onClearHistory} variant="sidebar" />
+        )}
       </div>
     </div>
   );
