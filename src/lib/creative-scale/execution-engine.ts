@@ -1,14 +1,11 @@
 /**
  * Creative Scale - Capability-Based Execution Engine
- * Routes to engines based on required capabilities
+ * SERVER-ONLY RENDERING - No browser FFmpeg
  * 
- * Execution Order (MANDATORY):
- * 1. WebCodecs (browser-native) - trim, speed_change only
- * 2. Cloudinary - trim, resize, format only  
- * 3. Server FFmpeg - advanced capabilities
- * 4. Plan Export - always available
- * 
- * NEVER attempts an engine that cannot satisfy the plan.
+ * Execution Order:
+ * 1. Cloudinary - basic transformations
+ * 2. Server FFmpeg (VPS) - advanced capabilities
+ * 3. Plan Export - always available
  */
 
 import { ExecutionPlan } from './compiler-types';
@@ -23,7 +20,7 @@ import {
 } from './capability-router';
 
 // ============================================
-// EXECUTION RESULT CONTRACT (Updated)
+// EXECUTION RESULT CONTRACT
 // ============================================
 
 export type ExecutionStatus = 'success' | 'partial' | 'plan_only' | 'failed';
@@ -47,7 +44,7 @@ export interface EngineAttempt {
   success: boolean;
   error?: string;
   duration_ms: number;
-  wasAppropriate: boolean; // Did capabilities match?
+  wasAppropriate: boolean;
 }
 
 export interface ExecutionContext {
@@ -61,61 +58,7 @@ export interface ExecutionContext {
 }
 
 // ============================================
-// ENGINE 1: WEBCODECS (Browser Native)
-// ============================================
-
-async function executeWebCodecs(
-  ctx: ExecutionContext
-): Promise<{ success: boolean; video_url?: string; error?: string; duration_ms: number }> {
-  const start = Date.now();
-  
-  ctx.onProgress?.('webcodecs', 0, 'Checking WebCodecs support...');
-
-  // Check browser support
-  if (!('VideoEncoder' in window) || !('VideoDecoder' in window)) {
-    return {
-      success: false,
-      error: 'WebCodecs API not supported in this browser',
-      duration_ms: Date.now() - start,
-    };
-  }
-
-  ctx.onProgress?.('webcodecs', 20, 'WebCodecs available, processing...');
-
-  try {
-    // WebCodecs is complex - for simple operations, we pass through
-    // For now, return the source video for simple trim/speed operations
-    const mainSegments = ctx.plan.timeline.filter(s => s.track === 'video');
-    const sourceUrl = mainSegments[0]?.asset_url;
-
-    if (!sourceUrl) {
-      return {
-        success: false,
-        error: 'No source video URL found',
-        duration_ms: Date.now() - start,
-      };
-    }
-
-    // For demo/MVP: WebCodecs passthrough for simple operations
-    // In production, this would use VideoEncoder/VideoDecoder APIs
-    ctx.onProgress?.('webcodecs', 100, 'WebCodecs processing complete');
-    
-    return {
-      success: true,
-      video_url: sourceUrl, // Passthrough for now
-      duration_ms: Date.now() - start,
-    };
-  } catch (err: any) {
-    return {
-      success: false,
-      error: err.message || 'WebCodecs processing failed',
-      duration_ms: Date.now() - start,
-    };
-  }
-}
-
-// ============================================
-// ENGINE 2: CLOUDINARY
+// ENGINE 1: CLOUDINARY
 // ============================================
 
 async function executeCloudinary(
@@ -166,7 +109,7 @@ async function executeCloudinary(
 }
 
 // ============================================
-// ENGINE 3: SERVER FFMPEG (Advanced)
+// ENGINE 2: SERVER FFMPEG (VPS)
 // ============================================
 
 async function executeServerFFmpeg(
@@ -174,9 +117,33 @@ async function executeServerFFmpeg(
 ): Promise<{ success: boolean; video_url?: string; error?: string; duration_ms: number }> {
   const start = Date.now();
   
-  ctx.onProgress?.('server_ffmpeg', 0, 'Sending to server FFmpeg...');
+  ctx.onProgress?.('server_ffmpeg', 0, 'Sending to VPS server...');
 
   try {
+    // Try VPS API first
+    const vpsResponse = await fetch('/api/execute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        execution_plan: ctx.plan,
+        user_id: ctx.userId,
+        variation_index: ctx.variationIndex,
+      }),
+    });
+
+    if (vpsResponse.ok) {
+      const data = await vpsResponse.json();
+      if (data.success && data.outputPath) {
+        ctx.onProgress?.('server_ffmpeg', 100, 'VPS rendering complete');
+        return {
+          success: true,
+          video_url: data.outputPath,
+          duration_ms: Date.now() - start,
+        };
+      }
+    }
+
+    // Fallback to edge function
     const { data, error } = await supabase.functions.invoke('cloud-ffmpeg-render', {
       body: {
         execution_plan: ctx.plan,
@@ -217,7 +184,7 @@ async function executeServerFFmpeg(
 }
 
 // ============================================
-// ENGINE 4: PLAN EXPORT (Always Available)
+// ENGINE 3: PLAN EXPORT (Always Available)
 // ============================================
 
 function executePlanExport(
@@ -241,7 +208,7 @@ function executePlanExport(
     engine_used: 'plan_export',
     execution_plan_json: JSON.stringify(ctx.plan, null, 2),
     ffmpeg_command: ffmpegCommand,
-    reason: `This variation requires advanced rendering (${capabilityList}). Exported as plan for manual execution.`,
+    reason: `This variation requires advanced rendering (${capabilityList}). Exported as plan for server execution.`,
     processing_time_ms: fallbackChain.reduce((sum, a) => sum + a.duration_ms, 0),
     fallbackChain,
     routingDecision,
@@ -256,7 +223,6 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
   const fallbackChain: EngineAttempt[] = [];
   const totalStart = Date.now();
 
-  // Validate plan
   if (!ctx.plan || ctx.plan.status !== 'compilable') {
     const routingDecision = routePlan(ctx.plan);
     return {
@@ -270,7 +236,6 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
     };
   }
 
-  // Route based on capabilities
   const routingDecision = routePlan(ctx.plan);
   const { selection, executionPath, requiredCapabilities } = routingDecision;
 
@@ -278,16 +243,14 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
   console.log('[CapabilityRouter] Selected engine:', selection.selectedEngineId);
   console.log('[CapabilityRouter] Execution path:', executionPath);
 
-  // If no engine can execute, go straight to plan export
   if (!selection.canExecute) {
     ctx.onEngineSwitch?.(null, 'plan_export', selection.reason);
     ctx.onProgress?.('plan_export', 100, 'Generating downloadable execution plan...');
     return executePlanExport(ctx, fallbackChain, routingDecision);
   }
 
-  // Execute engines in capability-appropriate order
   for (const engineId of executionPath) {
-    if (engineId === 'plan_export') continue; // Handle separately at end
+    if (engineId === 'plan_export') continue;
 
     let result: { success: boolean; video_url?: string; error?: string; duration_ms: number };
     
@@ -300,9 +263,6 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
     );
 
     switch (engineId) {
-      case 'webcodecs':
-        result = await executeWebCodecs(ctx);
-        break;
       case 'cloudinary':
         result = await executeCloudinary(ctx);
         break;
@@ -319,7 +279,7 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
       success: result.success,
       error: result.error,
       duration_ms: result.duration_ms,
-      wasAppropriate: true, // Always appropriate because router selected it
+      wasAppropriate: true,
     });
 
     if (result.success && result.video_url) {
@@ -337,11 +297,10 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
     console.log(`[ExecutionEngine] ${engineId} failed:`, result.error);
   }
 
-  // All engines in path failed - export plan
   ctx.onEngineSwitch?.(
     fallbackChain[fallbackChain.length - 1]?.engine || null,
     'plan_export',
-    'All compatible engines exhausted'
+    'All server engines exhausted'
   );
   ctx.onProgress?.('plan_export', 100, 'Generating downloadable execution plan...');
 
@@ -371,6 +330,5 @@ export async function executeBatch(
   return results;
 }
 
-// Re-export types for backward compatibility
 export type { EngineId, Capability, CapabilityRouterResult };
 export { extractRequiredCapabilities, routePlan } from './capability-router';

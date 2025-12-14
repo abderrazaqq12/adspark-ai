@@ -1,8 +1,6 @@
 /**
  * Creative Scale - Phase B Step 5: Engine Router
- * Capability-based routing with graceful degradation
- * NEVER returns error - ALWAYS provides value
- * NOW WITH: Real FFmpeg WASM execution
+ * SERVER-ONLY RENDERING - No browser FFmpeg
  */
 
 import { ExecutionPlan, OutputFormat } from './compiler-types';
@@ -27,7 +25,6 @@ import {
   CostProfile,
 } from './router-types';
 import { ENGINE_REGISTRY, getAvailableEngines } from './engine-registry';
-import { getFFmpegAdapter, checkFFmpegEnvironment } from './ffmpeg-adapter';
 import { supabase } from '@/integrations/supabase/client';
 
 // Cloud fallback execution response type
@@ -42,15 +39,34 @@ interface CloudFallbackResponse {
   download_available?: boolean;
 }
 
-// Cloud fallback execution
+// Cloud fallback execution - calls VPS server
 async function executeCloudFallback(
   plan: ExecutionPlan,
   userId?: string,
   variationIndex?: number
 ): Promise<CloudFallbackResponse> {
-  console.log('[Router] Attempting cloud fallback execution...');
+  console.log('[Router] Sending to VPS server for rendering...');
   
   try {
+    // First try VPS API directly
+    const vpsResponse = await fetch('/api/execute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        execution_plan: plan,
+        user_id: userId,
+        variation_index: variationIndex,
+      }),
+    });
+
+    if (vpsResponse.ok) {
+      const data = await vpsResponse.json();
+      if (data.success && data.outputPath) {
+        return { success: true, video_url: data.outputPath };
+      }
+    }
+
+    // Fallback to Supabase edge function
     const { data, error } = await supabase.functions.invoke('creative-scale-render', {
       body: {
         execution_plan: plan,
@@ -60,19 +76,15 @@ async function executeCloudFallback(
     });
 
     if (error) {
-      console.error('[Router] Cloud fallback error:', error);
+      console.error('[Router] Edge function error:', error);
       return { success: false, error: error.message };
     }
 
-    // Check for full success
     if (data?.success && data?.video_url) {
-      console.log('[Router] Cloud fallback success:', data.video_url);
       return { success: true, video_url: data.video_url };
     }
 
-    // Check for partial success (FFmpeg unavailable in cloud)
     if (data?.partial_success && data?.download_available) {
-      console.log('[Router] Cloud returned partial success - FFmpeg command available');
       return {
         success: false,
         partial_success: true,
@@ -84,9 +96,9 @@ async function executeCloudFallback(
       };
     }
 
-    return { success: false, error: data?.error || 'Cloud rendering failed' };
+    return { success: false, error: data?.error || 'Server rendering failed' };
   } catch (err: any) {
-    console.error('[Router] Cloud fallback exception:', err);
+    console.error('[Router] Exception:', err);
     return { success: false, error: err.message };
   }
 }
@@ -121,17 +133,17 @@ export function extractRequiredCapabilities(plan: ExecutionPlan): RequiredCapabi
   return {
     resolution,
     duration_sec: durationSec,
-    needs_filters: false, // Could be extended based on plan data
+    needs_filters: false,
     needs_audio_tracks: hasAudioTracks,
     needs_speed_change: hasSpeedChange,
-    needs_ai_generation: false, // ExecutionPlan is for post-processing
+    needs_ai_generation: false,
     needs_overlays: hasOverlays,
     needs_transitions: plan.timeline.length > 1,
   };
 }
 
 // ============================================
-// ENGINE SCORING ALGORITHM
+// ENGINE SCORING (Server-only)
 // ============================================
 
 function canHandleResolution(engine: EngineEntry, required: Resolution): boolean {
@@ -191,7 +203,6 @@ export function scoreEngines(
   const scores: EngineScore[] = [];
   
   for (const engine of engines) {
-    // Apply hard constraints
     if (constraints?.excludeEngines?.includes(engine.engine_id)) {
       continue;
     }
@@ -208,7 +219,6 @@ export function scoreEngines(
       }
     }
     
-    // Check capability match
     const capabilityCheck = meetsCapabilityRequirements(engine, required);
     
     if (!capabilityCheck.meets) {
@@ -224,12 +234,10 @@ export function scoreEngines(
       continue;
     }
     
-    // Calculate scores (all 0-100)
-    const capabilityScore = 100; // Meets all requirements
+    const capabilityScore = 100;
     const reliabilityScore = engine.reliability_score * 100;
-    const costScore = (4 - COST_ORDER.indexOf(engine.cost_profile)) * 25; // free=100, high=25
+    const costScore = (4 - COST_ORDER.indexOf(engine.cost_profile)) * 25;
     
-    // Weighted total (reliability prioritized)
     const totalScore = 
       capabilityScore * 0.4 +
       reliabilityScore * 0.4 +
@@ -245,7 +253,6 @@ export function scoreEngines(
     });
   }
   
-  // Sort by total score descending
   return scores.sort((a, b) => b.total_score - a.total_score);
 }
 
@@ -266,27 +273,23 @@ export function selectBestEngine(
 }
 
 // ============================================
-// PLAN SIMPLIFICATION (Degradation Level 2)
+// PLAN SIMPLIFICATION
 // ============================================
 
 export function simplifyPlan(plan: ExecutionPlan): SimplifiedPlan {
   const removedFeatures: string[] = [];
   const simplifiedPlan = JSON.parse(JSON.stringify(plan)) as ExecutionPlan;
   
-  // Remove overlays
   const originalOverlays = simplifiedPlan.timeline.filter(s => s.track === 'overlay');
   if (originalOverlays.length > 0) {
     simplifiedPlan.timeline = simplifiedPlan.timeline.filter(s => s.track !== 'overlay');
     removedFeatures.push(`Removed ${originalOverlays.length} overlay(s)`);
   }
   
-  // Reset speed multipliers to 1.0
   const speedChanges = simplifiedPlan.timeline.filter(s => s.speed_multiplier !== 1.0);
   if (speedChanges.length > 0) {
     simplifiedPlan.timeline.forEach(s => {
       if (s.speed_multiplier !== 1.0) {
-        // Adjust timeline durations accordingly
-        const originalDuration = s.output_duration_ms;
         s.speed_multiplier = 1.0;
         s.output_duration_ms = s.source_duration_ms;
         s.timeline_end_ms = s.timeline_start_ms + s.output_duration_ms;
@@ -295,7 +298,6 @@ export function simplifyPlan(plan: ExecutionPlan): SimplifiedPlan {
     removedFeatures.push(`Reset ${speedChanges.length} speed change(s)`);
   }
   
-  // Reduce resolution if 4k or 1080p
   let resolutionDowngrade: Resolution | undefined;
   if (simplifiedPlan.output_format.width > 1280 || simplifiedPlan.output_format.height > 1280) {
     const aspectRatio = simplifiedPlan.output_format.width / simplifiedPlan.output_format.height;
@@ -310,7 +312,6 @@ export function simplifyPlan(plan: ExecutionPlan): SimplifiedPlan {
     removedFeatures.push('Reduced resolution to 720p');
   }
   
-  // Remove audio fades
   simplifiedPlan.audio_tracks.forEach(a => {
     if (a.fade_in_ms > 0 || a.fade_out_ms > 0) {
       a.fade_in_ms = 0;
@@ -321,7 +322,6 @@ export function simplifyPlan(plan: ExecutionPlan): SimplifiedPlan {
     removedFeatures.push('Removed audio fades');
   }
   
-  // Recalculate validation
   const totalDuration = simplifiedPlan.timeline.reduce(
     (max, s) => Math.max(max, s.timeline_end_ms),
     0
@@ -373,7 +373,7 @@ export function transitionState(
 }
 
 // ============================================
-// MAIN ROUTER
+// MAIN ROUTER (Server-Only)
 // ============================================
 
 export interface RouterOptions {
@@ -392,7 +392,6 @@ export async function routeExecution(
   const attemptedEngines: string[] = [];
   const emitEvent = options.emitEvent || (() => {});
   
-  // Emit initial event
   emitEvent({
     event_id: `evt_${Date.now()}`,
     job_id: jobId,
@@ -401,7 +400,6 @@ export async function routeExecution(
     payload: { from: 'none', to: 'pending' },
   });
   
-  // Transition to routing
   context = transitionState(context, 'routing');
   emitEvent({
     event_id: `evt_${Date.now()}`,
@@ -411,375 +409,81 @@ export async function routeExecution(
     payload: { from: 'pending', to: 'routing' },
   });
   
-  // Extract required capabilities
   const required = extractRequiredCapabilities(request.execution_plan);
-  
-  // Current plan (may be simplified during degradation)
   let currentPlan = request.execution_plan;
   
-  // Degradation loop
-  while (context.degradation_level <= 4) {
-    const degradation = DEGRADATION_LADDER[context.degradation_level];
-    
-    // Level 4: Partial Success (always succeeds)
-    if (context.degradation_level === 4) {
-      context = transitionState(context, 'partial_success');
-      emitEvent({
-        event_id: `evt_${Date.now()}`,
-        job_id: jobId,
-        timestamp: new Date().toISOString(),
-        event_type: 'partial_success',
-        payload: { 
-          reason: 'All engines exhausted or unavailable',
-          attempted_engines: attemptedEngines,
-        },
-      });
-      
-      return {
-        status: 'partial_success',
-        job_id: jobId,
-        reason: 'Video rendering could not be completed with available resources',
-        artifacts: {
-          analysis: request.analysis,
-          blueprint: request.blueprint,
-          execution_plan: currentPlan,
-        },
-        attempted_engines: attemptedEngines,
-        human_readable_message: 
-          'Your device or available engines could not render the video, but here is ' +
-          'your optimized creative plan ready for export or manual editing in professional software.',
-      } satisfies PartialSuccessResult;
-    }
-    
-    // Level 2: Simplify plan
-    if (context.degradation_level === 2) {
-      const simplified = simplifyPlan(currentPlan);
-      currentPlan = simplified.simplified_plan;
-      
-      emitEvent({
-        event_id: `evt_${Date.now()}`,
-        job_id: jobId,
-        timestamp: new Date().toISOString(),
-        event_type: 'degradation_applied',
-        payload: { 
-          level: 2,
-          removed_features: simplified.removed_features,
-        },
-      });
-    }
-    
-    // Select engine (excluding already tried ones at level 3+)
-    const constraints = {
-      maxCostProfile: request.max_cost_profile,
-      forceLocation: request.force_location,
-      excludeEngines: context.degradation_level >= 3 ? attemptedEngines : undefined,
-    };
-    
-    // Prefer user-specified engine if provided and not yet tried
-    let selectedEngine: EngineEntry | null = null;
-    if (request.preferred_engine_id && !attemptedEngines.includes(request.preferred_engine_id)) {
-      const preferred = ENGINE_REGISTRY.find(e => e.engine_id === request.preferred_engine_id);
-      if (preferred && preferred.available) {
-        const capCheck = meetsCapabilityRequirements(preferred, extractRequiredCapabilities(currentPlan));
-        if (capCheck.meets) {
-          selectedEngine = preferred;
-        }
-      }
-    }
-    
-    if (!selectedEngine) {
-      selectedEngine = selectBestEngine(extractRequiredCapabilities(currentPlan), constraints);
-    }
-    
-    if (!selectedEngine) {
-      // No compatible engine found, escalate degradation
-      context = {
-        ...context,
-        degradation_level: (context.degradation_level + 1) as DegradationLevel,
-      };
-      continue;
-    }
-    
-    attemptedEngines.push(selectedEngine.engine_id);
+  // Try server execution
+  context = transitionState(context, 'executing');
+  emitEvent({
+    event_id: `evt_${Date.now()}`,
+    job_id: jobId,
+    timestamp: new Date().toISOString(),
+    event_type: 'state_change',
+    payload: { from: 'routing', to: 'executing', engine: 'server_ffmpeg' },
+  });
+  
+  attemptedEngines.push('server_ffmpeg');
+  
+  const result = await executeCloudFallback(
+    currentPlan,
+    request.user_id,
+    0
+  );
+  
+  if (result.success && result.video_url) {
+    context = transitionState(context, 'completed');
     
     emitEvent({
       event_id: `evt_${Date.now()}`,
       job_id: jobId,
       timestamp: new Date().toISOString(),
-      event_type: 'engine_selected',
-      payload: { 
-        engine_id: selectedEngine.engine_id,
-        degradation_level: context.degradation_level,
-      },
+      event_type: 'execution_complete',
+      payload: { video_url: result.video_url },
     });
     
-    // Transition to executing
-    context = transitionState(context, 'executing', { engine_id: selectedEngine.engine_id });
-    emitEvent({
-      event_id: `evt_${Date.now()}`,
+    return {
+      status: 'success',
       job_id: jobId,
-      timestamp: new Date().toISOString(),
-      event_type: 'execution_start',
-      payload: { engine_id: selectedEngine.engine_id },
-    });
-    
-      // Execute using FFmpeg adapter (real execution)
-      try {
-        // Check if FFmpeg is available for browser engines
-        if (selectedEngine.location === 'browser') {
-          const envCheck = checkFFmpegEnvironment();
-          
-          // If browser FFmpeg unavailable, try cloud fallback
-          if (!envCheck.ready) {
-            console.log('[Router] Browser FFmpeg unavailable, trying cloud fallback...');
-            
-            emitEvent({
-              event_id: `evt_${Date.now()}`,
-              job_id: jobId,
-              timestamp: new Date().toISOString(),
-              event_type: 'cloud_fallback',
-              payload: { reason: envCheck.reason },
-            });
-            
-            const cloudResult = await executeCloudFallback(currentPlan, request.user_id);
-            
-            if (cloudResult.success && cloudResult.video_url) {
-              context = transitionState(context, 'completed', { engine_id: 'cloud-ffmpeg' });
-              
-              emitEvent({
-                event_id: `evt_${Date.now()}`,
-                job_id: jobId,
-                timestamp: new Date().toISOString(),
-                event_type: 'execution_complete',
-                payload: { 
-                  engine_id: 'cloud-ffmpeg',
-                  fallback: true,
-                },
-              });
-              
-              return {
-                status: 'completed',
-                job_id: jobId,
-                engine_id: 'cloud-ffmpeg',
-                video_url: cloudResult.video_url,
-                processing_time_ms: Date.now() - startTime,
-                degradation_level: context.degradation_level,
-                warnings: [...currentPlan.validation.warnings, 'Used cloud fallback (browser FFmpeg unavailable)'],
-                output_video_url: cloudResult.video_url,
-              } satisfies RouteSuccessResult;
-            }
-            
-            // Handle cloud partial success (FFmpeg unavailable in Supabase Edge Runtime)
-            if (cloudResult.partial_success && cloudResult.download_available) {
-              context = transitionState(context, 'partial_success');
-              
-              emitEvent({
-                event_id: `evt_${Date.now()}`,
-                job_id: jobId,
-                timestamp: new Date().toISOString(),
-                event_type: 'partial_success',
-                payload: { 
-                  reason: 'cloud_ffmpeg_unavailable',
-                  ffmpeg_command_available: true,
-                },
-              });
-              
-              return {
-                status: 'partial_success',
-                job_id: jobId,
-                reason: 'Video rendering requires FFmpeg which is not available in the current environment. Download the execution plan and FFmpeg command to render locally.',
-                artifacts: {
-                  analysis: request.analysis,
-                  blueprint: request.blueprint,
-                  execution_plan: currentPlan,
-                  ffmpeg_command: cloudResult.ffmpeg_command,
-                },
-                attempted_engines: attemptedEngines,
-                human_readable_message: 
-                  'Your video optimization plan is ready! To render the video, download the execution plan ' +
-                  'and use the provided FFmpeg command on your computer or a cloud render service.',
-              } satisfies PartialSuccessResult;
-            }
-            
-            throw new Error(`Cloud fallback failed: ${cloudResult.error}`);
-          }
-          
-          // Log plan details for debugging
-          console.log('[Router] Executing plan:', currentPlan.plan_id);
-          console.log('[Router] Timeline segments:', currentPlan.timeline.length);
-          console.log('[Router] First segment asset_url:', currentPlan.timeline[0]?.asset_url?.substring(0, 60) || 'MISSING');
-
-          const adapter = getFFmpegAdapter();
-          
-          emitEvent({
-            event_id: `evt_${Date.now()}`,
-            job_id: jobId,
-            timestamp: new Date().toISOString(),
-            event_type: 'ffmpeg_init',
-            payload: { engine_id: selectedEngine.engine_id },
-          });
-
-          const result = await adapter.execute(currentPlan, {
-          onProgress: (progress) => {
-            emitEvent({
-              event_id: `evt_${Date.now()}`,
-              job_id: jobId,
-              timestamp: new Date().toISOString(),
-              event_type: 'progress',
-              payload: { progress, engine_id: selectedEngine.engine_id },
-            });
-          },
-          onLog: (message) => {
-            emitEvent({
-              event_id: `evt_${Date.now()}`,
-              job_id: jobId,
-              timestamp: new Date().toISOString(),
-              event_type: 'log',
-              payload: { message },
-            });
-          },
-          timeoutMs: options.timeoutMs || 300000, // 5 min default
-        });
-
-        if (result.success && result.video_url) {
-          context = transitionState(context, 'validating', { engine_id: selectedEngine.engine_id });
-          
-          // Validation: check blob exists
-          if (!result.video_blob || result.video_blob.size < 1000) {
-            throw new Error('Output video is too small or invalid');
-          }
-
-          context = transitionState(context, 'completed', { engine_id: selectedEngine.engine_id });
-          
-          emitEvent({
-            event_id: `evt_${Date.now()}`,
-            job_id: jobId,
-            timestamp: new Date().toISOString(),
-            event_type: 'execution_complete',
-            payload: { 
-              engine_id: selectedEngine.engine_id,
-              processing_time_ms: result.processing_time_ms,
-              video_size_bytes: result.video_blob.size,
-            },
-          });
-          
-          return {
-            status: 'completed',
-            job_id: jobId,
-            engine_id: selectedEngine.engine_id,
-            video_url: result.video_url,
-            processing_time_ms: result.processing_time_ms,
-            degradation_level: context.degradation_level,
-            warnings: [...currentPlan.validation.warnings, ...result.logs.slice(-5)],
-            output_video_url: result.video_url,
-          } satisfies RouteSuccessResult;
-        }
-        
-        // Execution failed, try cloud fallback
-        console.log('[Router] Browser FFmpeg failed, trying cloud fallback...');
-        const cloudResult = await executeCloudFallback(currentPlan, request.user_id);
-        
-        if (cloudResult.success && cloudResult.video_url) {
-          context = transitionState(context, 'completed', { engine_id: 'cloud-ffmpeg' });
-          return {
-            status: 'completed',
-            job_id: jobId,
-            engine_id: 'cloud-ffmpeg',
-            video_url: cloudResult.video_url,
-            processing_time_ms: Date.now() - startTime,
-            degradation_level: context.degradation_level,
-            warnings: [...currentPlan.validation.warnings, 'Used cloud fallback after browser failure'],
-            output_video_url: cloudResult.video_url,
-          } satisfies RouteSuccessResult;
-        }
-        
-        throw new Error(result.error || cloudResult.error || 'FFmpeg execution failed');
-      } else if (selectedEngine.location === 'cloud') {
-        // Cloud engines - use cloud fallback directly
-        const cloudResult = await executeCloudFallback(currentPlan, request.user_id);
-        
-        if (cloudResult.success && cloudResult.video_url) {
-          context = transitionState(context, 'completed', { engine_id: selectedEngine.engine_id });
-          return {
-            status: 'completed',
-            job_id: jobId,
-            engine_id: selectedEngine.engine_id,
-            video_url: cloudResult.video_url,
-            processing_time_ms: Date.now() - startTime,
-            degradation_level: context.degradation_level,
-            warnings: currentPlan.validation.warnings,
-            output_video_url: cloudResult.video_url,
-          } satisfies RouteSuccessResult;
-        }
-        
-        throw new Error(cloudResult.error || 'Cloud execution failed');
-      } else {
-        throw new Error(`Engine location ${selectedEngine.location} not implemented`);
-      }
-      
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
-      context = transitionState(context, 'degraded', { 
-        engine_id: selectedEngine.engine_id,
-        error_code: 'EXECUTION_FAILED',
-        error_message: errorMessage,
-      });
-      
-      emitEvent({
-        event_id: `evt_${Date.now()}`,
-        job_id: jobId,
-        timestamp: new Date().toISOString(),
-        event_type: 'execution_failed',
-        payload: { 
-          engine_id: selectedEngine.engine_id,
-          error: errorMessage,
-          degradation_level: context.degradation_level,
-        },
-      });
-      
-      // Determine next degradation level
-      if (context.attempt_count < context.max_attempts - 1 && context.degradation_level === 0) {
-        // Level 1: Retry same engine
-        context = {
-          ...context,
-          attempt_count: context.attempt_count + 1,
-          degradation_level: 1,
-        };
-        attemptedEngines.pop(); // Allow retry with same engine
-      } else if (context.degradation_level < 2) {
-        // Level 2: Simplify plan
-        context = { ...context, degradation_level: 2 };
-      } else if (context.degradation_level < 3) {
-        // Level 3: Switch engine
-        context = { ...context, degradation_level: 3 };
-      } else {
-        // Level 4: Partial success (will exit loop)
-        context = { ...context, degradation_level: 4 };
-      }
-    }
+      engine_used: 'server_ffmpeg',
+      video_url: result.video_url,
+      processing_time_ms: Date.now() - startTime,
+    } satisfies RouteSuccessResult;
   }
   
-  // Should never reach here due to Level 4 always returning
+  // Partial success - return plan for manual execution
+  context = transitionState(context, 'partial_success');
+  
+  emitEvent({
+    event_id: `evt_${Date.now()}`,
+    job_id: jobId,
+    timestamp: new Date().toISOString(),
+    event_type: 'partial_success',
+    payload: { 
+      reason: result.error || 'Server rendering unavailable',
+      attempted_engines: attemptedEngines,
+    },
+  });
+  
   return {
     status: 'partial_success',
     job_id: jobId,
-    reason: 'Unexpected routing termination',
+    reason: result.error || 'Video rendering requires server configuration',
     artifacts: {
       analysis: request.analysis,
       blueprint: request.blueprint,
       execution_plan: currentPlan,
     },
     attempted_engines: attemptedEngines,
-    human_readable_message: 'An unexpected error occurred. Your creative plan has been preserved.',
-  };
+    human_readable_message: 
+      'Server rendering is not available. Your execution plan has been exported for manual processing.',
+  } satisfies PartialSuccessResult;
 }
 
-// ============================================
-// EXPORT ALL COMPATIBLE ENGINES FOR UI
-// ============================================
-
-export function getCompatibleEngines(plan: ExecutionPlan): EngineScore[] {
+export function getCompatibleEngines(plan: ExecutionPlan): EngineEntry[] {
   const required = extractRequiredCapabilities(plan);
-  return scoreEngines(required).filter(s => s.compatible);
+  const scores = scoreEngines(required);
+  return scores
+    .filter(s => s.compatible)
+    .map(s => ENGINE_REGISTRY.find(e => e.engine_id === s.engine_id)!)
+    .filter(Boolean);
 }

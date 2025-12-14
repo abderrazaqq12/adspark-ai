@@ -11,77 +11,48 @@ export type EngineCapability =
     | "concat"
     | "text_overlay"
     | "transition"
+    | "transitions"
     | "speed_control"
+    | "speed_change"
     | "zoom_pan"
     | "chroma_key"
-    | "ai_fill" // Generative fill
-    | "ai_extend" // Runway/Luma extension
+    | "ai_fill"
+    | "ai_extend"
     | "transcode"
-    | "react_render" // Remotion
-    | "subtitle_burn";
+    | "react_render"
+    | "subtitle_burn"
+    | "audio_mix"
+    | "resize";
 
 export interface EngineSpecs {
     id: string;
     name: string;
     location: ProcessingLocation;
     capabilities: EngineCapability[];
-    costPerMinute: number; // $0.00 for browser
+    costPerMinute: number;
     maxResolution: "720p" | "1080p" | "4k";
     maxDurationSec: number;
-    tier: "free" | "low" | "medium" | "premium"; // Minimum tier required to access
-    coldStartLatencyMs: number;
+    tier: "free" | "low" | "medium" | "premium";
+    coldStartLatencyMs?: number;
 }
 
 export const ENGINE_REGISTRY: Record<string, EngineSpecs> = {
-    "ffmpeg.wasm": {
-        id: "ffmpeg.wasm",
-        name: "FFmpeg (Browser WASM)",
-        location: "browser",
-        capabilities: ["trim", "merge", "concat", "text_overlay", "speed_control", "zoom_pan", "transcode"],
+    "server-ffmpeg": {
+        id: "server-ffmpeg",
+        name: "Server FFmpeg (VPS)",
+        location: "server",
+        capabilities: ["trim", "merge", "concat", "text_overlay", "transition", "transitions", "speed_control", "speed_change", "zoom_pan", "transcode", "audio_mix", "resize"],
         costPerMinute: 0,
-        maxResolution: "1080p",
-        maxDurationSec: 60,
-        tier: "free",
-        coldStartLatencyMs: 2000
-    },
-    "webcodecs": {
-        id: "webcodecs",
-        name: "WebCodecs API (Native)",
-        location: "browser-native",
-        capabilities: ["trim", "speed_control", "transcode"], // Very fast, limited features
-        costPerMinute: 0,
-        maxResolution: "4k", // Hardware accelerated
-        maxDurationSec: 300,
+        maxResolution: "4k",
+        maxDurationSec: 600,
         tier: "free",
         coldStartLatencyMs: 100
-    },
-    "remotion": {
-        id: "remotion",
-        name: "Remotion (Lambda)",
-        location: "server",
-        capabilities: ["react_render", "text_overlay", "transition", "trim", "merge"],
-        costPerMinute: 0.10, // Est
-        maxResolution: "4k",
-        maxDurationSec: 1200,
-        tier: "low",
-        coldStartLatencyMs: 5000
-    },
-    "fal-ai-video": {
-        id: "fal-ai-video",
-        name: "Fal.ai Fast Video",
-        location: "cloud-api",
-        capabilities: ["ai_fill", "ai_extend"],
-        costPerMinute: 0.50,
-        maxResolution: "1080p",
-        maxDurationSec: 10,
-        tier: "medium",
-        coldStartLatencyMs: 8000
     },
     "cloudinary": {
         id: "cloudinary",
         name: "Cloudinary Video",
         location: "cloud-api",
-        capabilities: ["transcode", "trim", "concat", "subtitle_burn"],
+        capabilities: ["transcode", "trim", "concat", "subtitle_burn", "resize"],
         costPerMinute: 0.05,
         maxResolution: "4k",
         maxDurationSec: 1800,
@@ -98,7 +69,7 @@ export interface SceneAction {
 
 export interface Scene {
     type: "HOOK" | "PROBLEM" | "AGITATION" | "SOLUTION" | "BENEFITS" | "USP" | "SOCIAL_PROOF" | "CTA" | "BEFORE_AFTER" | "Content";
-    start: number; // in seconds
+    start: number;
     end: number;
     actions?: SceneAction[];
     overlay?: string;
@@ -107,7 +78,7 @@ export interface Scene {
 
 export interface ScenePlan {
     scenes: Scene[];
-    requiredCapabilities: EngineCapability[]; // AI must explicitly list what is needed
+    requiredCapabilities: EngineCapability[];
     totalDuration: number;
     resolution: "1080p" | "9:16" | "1:1";
 }

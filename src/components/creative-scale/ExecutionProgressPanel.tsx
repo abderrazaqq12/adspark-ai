@@ -1,22 +1,20 @@
 /**
  * Execution Progress Panel
  * Shows real-time engine ladder progress during video rendering
- * Updated for capability-based routing
+ * SERVER-ONLY - No browser engines
  */
 
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
-  Cpu, 
   Cloud, 
   Server, 
   FileCode, 
   CheckCircle2, 
   XCircle, 
   Loader2,
-  ArrowRight,
-  Monitor
+  ArrowRight
 } from 'lucide-react';
 import type { EngineId } from '@/lib/creative-scale/execution-engine';
 
@@ -38,19 +36,13 @@ export interface ExecutionProgressState {
   status: 'idle' | 'executing' | 'complete' | 'partial';
 }
 
-// Engine configuration - updated for capability-based routing
+// Engine configuration (Server-only)
 const ENGINE_CONFIG: Record<EngineId, { 
   label: string; 
-  icon: typeof Cpu; 
+  icon: typeof Cloud; 
   color: string;
   description: string;
 }> = {
-  'webcodecs': {
-    label: 'WebCodecs',
-    icon: Monitor,
-    color: 'text-emerald-500',
-    description: 'Browser-native video processing'
-  },
   'cloudinary': {
     label: 'Cloudinary',
     icon: Cloud,
@@ -61,7 +53,7 @@ const ENGINE_CONFIG: Record<EngineId, {
     label: 'Server FFmpeg',
     icon: Server,
     color: 'text-blue-500',
-    description: 'Advanced server-side rendering'
+    description: 'VPS server-side rendering'
   },
   'plan_export': {
     label: 'Plan Export',
@@ -101,7 +93,6 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
         <Progress value={state.overallProgress} className="h-2 mt-2" />
       </CardHeader>
       <CardContent className="pt-0">
-        {/* Engine Ladder */}
         <div className="space-y-2">
           {state.engines.map((engine, idx) => {
             const config = ENGINE_CONFIG[engine.engine];
@@ -118,7 +109,6 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
                   engine.status === 'failed' ? 'bg-destructive/10' :
                   'bg-muted/30'
                 }`}>
-                  {/* Status Icon */}
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                     engine.status === 'attempting' ? 'bg-primary/20' :
                     engine.status === 'success' ? 'bg-green-500/20' :
@@ -138,7 +128,6 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
                     )}
                   </div>
 
-                  {/* Engine Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className={`text-sm font-medium ${
@@ -163,14 +152,12 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
                     )}
                   </div>
 
-                  {/* Progress for active engine */}
                   {engine.status === 'attempting' && engine.progress > 0 && (
                     <div className="w-16">
                       <Progress value={engine.progress} className="h-1.5" />
                     </div>
                   )}
 
-                  {/* Status Badge */}
                   <Badge 
                     variant={
                       engine.status === 'success' ? 'default' :
@@ -188,7 +175,6 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
                   </Badge>
                 </div>
 
-                {/* Arrow to next engine (if not last) */}
                 {idx < state.engines.length - 1 && engine.status === 'failed' && (
                   <div className="flex justify-center py-1">
                     <ArrowRight className="w-4 h-4 text-muted-foreground transform rotate-90" />
@@ -203,14 +189,13 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
   );
 }
 
-// Helper to create initial state - updated for new engine order
+// Helper to create initial state (Server-only engines)
 export function createInitialProgressState(totalVariations: number): ExecutionProgressState {
   return {
     variationIndex: 0,
     totalVariations,
     currentEngine: null,
     engines: [
-      { engine: 'webcodecs', status: 'pending', progress: 0, message: '' },
       { engine: 'cloudinary', status: 'pending', progress: 0, message: '' },
       { engine: 'server_ffmpeg', status: 'pending', progress: 0, message: '' },
       { engine: 'plan_export', status: 'pending', progress: 0, message: '' },

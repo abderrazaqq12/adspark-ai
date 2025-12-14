@@ -1,6 +1,7 @@
 /**
  * Capability Indicators Component
  * Shows required capabilities and selected engine for each variation
+ * SERVER-ONLY - No browser engines
  */
 
 import { Badge } from '@/components/ui/badge';
@@ -19,11 +20,9 @@ import {
   Wand2, 
   Move,
   FileVideo,
-  Monitor,
   Cloud,
   Server,
   FileCode,
-  CheckCircle2,
   ArrowRight
 } from 'lucide-react';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
@@ -109,21 +108,14 @@ const CAPABILITY_CONFIG: Record<Capability, {
   },
 };
 
-// Engine display configuration  
+// Engine display configuration (Server-only)
 const ENGINE_CONFIG: Record<EngineId, {
   label: string;
-  icon: typeof Monitor;
+  icon: typeof Cloud;
   color: string;
   bgColor: string;
   description: string;
 }> = {
-  'webcodecs': {
-    label: 'WebCodecs',
-    icon: Monitor,
-    color: 'text-emerald-600',
-    bgColor: 'bg-emerald-500/10 border-emerald-500/30',
-    description: 'Browser-native processing (fastest)'
-  },
   'cloudinary': {
     label: 'Cloudinary',
     icon: Cloud,
@@ -136,7 +128,7 @@ const ENGINE_CONFIG: Record<EngineId, {
     icon: Server,
     color: 'text-blue-600',
     bgColor: 'bg-blue-500/10 border-blue-500/30',
-    description: 'Advanced server-side rendering'
+    description: 'VPS server-side rendering'
   },
   'plan_export': {
     label: 'Plan Export',
@@ -164,7 +156,6 @@ function VariationCapabilities({ plan, index }: VariationCapabilitiesProps) {
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-medium">Variation {index + 1}</span>
         
-        {/* Selected Engine Badge */}
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -180,7 +171,6 @@ function VariationCapabilities({ plan, index }: VariationCapabilitiesProps) {
         </TooltipProvider>
       </div>
 
-      {/* Capability Pills */}
       <div className="flex flex-wrap gap-1.5">
         {capabilities.length === 0 ? (
           <span className="text-xs text-muted-foreground">No special capabilities required</span>
@@ -222,7 +212,6 @@ interface CapabilityIndicatorsProps {
 }
 
 export function CapabilityIndicators({ plans }: CapabilityIndicatorsProps) {
-  // Group by selected engine for summary
   const engineGroups = plans.reduce((acc, plan) => {
     const routing = routePlan(plan);
     const engine = routing.selection.selectedEngineId;

@@ -1,5 +1,6 @@
 /**
  * Creative Scale - Barrel Export
+ * Server-only rendering (no browser FFmpeg)
  */
 
 // Phase A Types
@@ -25,17 +26,6 @@ export {
   routeExecution,
   getCompatibleEngines,
 } from './router';
-
-// FFmpeg Adapter
-export {
-  FFmpegAdapter,
-  getFFmpegAdapter,
-  resetFFmpegAdapter,
-  checkFFmpegEnvironment,
-  type FFmpegAdapterResult,
-  type FFmpegAdapterOptions,
-  type EnvironmentCheck,
-} from './ffmpeg-adapter';
 
 // Validation & Safety
 export * from './validation';
