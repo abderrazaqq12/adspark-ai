@@ -556,6 +556,7 @@ export default function CreativeScale() {
               onSetGoal={(goal) => setBrainV2Options({ goal })}
               onSetRisk={(risk) => setBrainV2Options({ risk })}
               onSetPlatform={(platform) => setBrainV2Options({ platform })}
+              onSetFunnelStage={(funnelStage) => setBrainV2Options({ funnelStage })}
               onSetVariationCount={setVariationCount}
               onGenerate={handleGenerateStrategy}
               onContinue={handleStrategyContinue}

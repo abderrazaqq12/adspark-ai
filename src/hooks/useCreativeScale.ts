@@ -132,6 +132,7 @@ interface FullPipelineOutput extends PhaseAOutput {
 
 // Brain V2 state
 export type PlatformType = 'tiktok' | 'reels' | 'snapchat' | 'youtube' | 'facebook' | 'general';
+export type FunnelStageType = 'cold' | 'warm' | 'retargeting';
 
 interface BrainV2State {
   detectedProblems: DetectedProblem[];
@@ -140,6 +141,7 @@ interface BrainV2State {
   optimizationGoal: OptimizationGoal;
   riskTolerance: RiskTolerance;
   platform: PlatformType;
+  funnelStage: FunnelStageType;
 }
 
 interface UseCreativeScaleReturn {
@@ -159,7 +161,7 @@ interface UseCreativeScaleReturn {
   
   // Brain V2 State
   brainV2State: BrainV2State;
-  setBrainV2Options: (options: { goal?: OptimizationGoal; risk?: RiskTolerance; platform?: PlatformType }) => void;
+  setBrainV2Options: (options: { goal?: OptimizationGoal; risk?: RiskTolerance; platform?: PlatformType; funnelStage?: FunnelStageType }) => void;
   
   // Phase A Actions
   analyzeVideo: (videoUrl: string, videoId: string, options?: {
@@ -243,19 +245,21 @@ export function useCreativeScale(): UseCreativeScaleReturn {
     brainOutput: null,
     optimizationGoal: 'retention',
     riskTolerance: 'medium',
-    platform: 'general'
+    platform: 'general',
+    funnelStage: 'cold'
   });
 
   // ============================================
   // BRAIN V2 OPTIONS
   // ============================================
 
-  const setBrainV2Options = useCallback((options: { goal?: OptimizationGoal; risk?: RiskTolerance; platform?: PlatformType }) => {
+  const setBrainV2Options = useCallback((options: { goal?: OptimizationGoal; risk?: RiskTolerance; platform?: PlatformType; funnelStage?: FunnelStageType }) => {
     setBrainV2State(prev => ({
       ...prev,
       optimizationGoal: options.goal ?? prev.optimizationGoal,
       riskTolerance: options.risk ?? prev.riskTolerance,
-      platform: options.platform ?? prev.platform
+      platform: options.platform ?? prev.platform,
+      funnelStage: options.funnelStage ?? prev.funnelStage
     }));
   }, []);
 
@@ -692,7 +696,8 @@ export function useCreativeScale(): UseCreativeScaleReturn {
       brainOutput: null,
       optimizationGoal: 'retention',
       riskTolerance: 'medium',
-      platform: 'general'
+      platform: 'general',
+      funnelStage: 'cold'
     });
     clearSession();
   }, []);
