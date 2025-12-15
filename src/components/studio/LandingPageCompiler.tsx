@@ -9,6 +9,15 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
   Loader2,
   Sparkles,
   CheckCircle2,
@@ -21,7 +30,8 @@ import {
   RefreshCw,
   Settings2,
   ExternalLink,
-  ClipboardCopy
+  ClipboardCopy,
+  Upload
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePromptProfiles, PromptProfile } from '@/hooks/usePromptProfiles';
@@ -81,6 +91,10 @@ export const LandingPageCompiler = ({
   
   // Debug state
   const [lastResult, setLastResult] = useState<UnifiedOutput | null>(null);
+  
+  // Import dialog state
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importHtml, setImportHtml] = useState('');
 
   useEffect(() => {
     loadData();
@@ -244,6 +258,50 @@ Generate the complete HTML code now:`;
     });
   };
 
+  const handleImportHtml = async () => {
+    if (!importHtml.trim()) {
+      toast({
+        title: "Empty Input",
+        description: "Please paste HTML code to import",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Basic HTML validation
+    if (!importHtml.includes('<') || !importHtml.includes('>')) {
+      toast({
+        title: "Invalid HTML",
+        description: "The pasted content doesn't appear to be valid HTML",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Save to database
+      await saveLandingPageHtmlOutput(projectId, importHtml);
+
+      setHtmlOutput(importHtml);
+      setViewMode('preview');
+      setShowImportDialog(false);
+      setImportHtml('');
+
+      toast({
+        title: "HTML Imported",
+        description: "Landing page imported and saved successfully",
+      });
+
+      onGenerated?.(importHtml);
+    } catch (error: any) {
+      toast({
+        title: "Import Error",
+        description: error.message || "Failed to save imported HTML",
+        variant: "destructive",
+      });
+    }
+  };
+
   const hasAngles = !!(marketingAngles && (marketingAngles.problems?.length > 0 || marketingAngles.angles?.length > 0));
 
   return (
@@ -372,6 +430,43 @@ Generate the complete HTML code now:`;
           <ExternalLink className="w-4 h-4" />
           Open AI Studio
         </Button>
+
+        {/* Import HTML from AI Studio */}
+        <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-2">
+              <Upload className="w-4 h-4" />
+              Import HTML
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Import HTML from Google AI Studio</DialogTitle>
+              <DialogDescription>
+                Paste the HTML code generated from Google AI Studio below. The HTML will be saved and displayed in the preview.
+              </DialogDescription>
+            </DialogHeader>
+            <Textarea
+              value={importHtml}
+              onChange={(e) => setImportHtml(e.target.value)}
+              placeholder="<!DOCTYPE html>
+<html lang='ar' dir='rtl'>
+<head>...</head>
+<body>...</body>
+</html>"
+              className="min-h-[300px] font-mono text-xs"
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowImportDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleImportHtml} className="gap-2">
+                <Upload className="w-4 h-4" />
+                Import & Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         {htmlOutput && (
           <>
             <Button variant="ghost" size="icon" onClick={copyHtml} title="Copy HTML">
