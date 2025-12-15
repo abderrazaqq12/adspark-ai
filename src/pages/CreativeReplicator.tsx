@@ -15,8 +15,18 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { EngineRouter } from "@/lib/video-engines/EngineRouter";
 import { EngineTask } from "@/lib/video-engines/types";
-import { AdvancedEngineRouter, RoutingRequest } from "@/lib/video-engines/AdvancedRouter";
+import { AdvancedEngineRouter, RoutingRequest, RenderingMode } from "@/lib/video-engines/AdvancedRouter";
 import { ScenePlan } from "@/lib/video-engines/registry-types";
+import { RenderDebugPanel } from "@/components/replicator/RenderDebugPanel";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export interface UploadedAd {
   id: string;
@@ -135,6 +145,11 @@ const CreativeReplicator = () => {
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+
+  // Advanced Mode State
+  const [isAdvancedMode, setIsAdvancedMode] = useState(false);
+  const [renderingMode, setRenderingMode] = useState<RenderingMode>('auto');
+  const [debugInfo, setDebugInfo] = useState<any>(null);
 
   const { mode: backendMode } = useBackendMode();
 
@@ -301,11 +316,21 @@ const CreativeReplicator = () => {
         const routingReq: RoutingRequest = {
           plan,
           userTier: variationConfig.engineTier as any,
-          preferLocal: true
+          preferLocal: true,
+          renderingMode: renderingMode // User override
         };
 
         const engineSpec = AdvancedEngineRouter.selectEngine(routingReq);
         const engine = AdvancedEngineRouter.getEngineInstance(engineSpec.id);
+
+        // Update Debug Info
+        setDebugInfo({
+          engine: engineSpec.name,
+          executionPath: `Router(${renderingMode}) -> ${engineSpec.id}`,
+          status: 'pending',
+          logs: ['Selecting engine...', `Chosen: ${engineSpec.name}`],
+          payload: routingReq
+        });
 
         // Initialize if first time for this engine type
         await engine.initialize();
@@ -372,6 +397,13 @@ const CreativeReplicator = () => {
           // Process Client-Side
           toast.message(`Generating variation ${variationId}...`);
           const result = await engine.process(task);
+
+          setDebugInfo((prev: any) => ({
+            ...prev,
+            status: result.success ? 'success' : 'failed',
+            logs: [...(prev?.logs || []), ...(result.logs || [])],
+            serverJobId: result.jobId
+          }));
 
           if (result.success && result.videoUrl) {
             // UPLOAD RESULT TO STORAGE (Persist)
@@ -463,6 +495,31 @@ const CreativeReplicator = () => {
           </div>
           <div className="flex items-center gap-3">
             <BackendModeSelector compact />
+
+            <div className="flex items-center gap-4 bg-muted/50 p-2 rounded-lg border border-border/50">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="adv-mode"
+                  checked={isAdvancedMode}
+                  onCheckedChange={setIsAdvancedMode}
+                />
+                <Label htmlFor="adv-mode" className="text-xs cursor-pointer">Advanced</Label>
+              </div>
+
+              {isAdvancedMode && (
+                <Select value={renderingMode} onValueChange={(v: any) => setRenderingMode(v)}>
+                  <SelectTrigger className="h-8 w-[140px] text-xs">
+                    <SelectValue placeholder="Render Mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto (Smart)</SelectItem>
+                    <SelectItem value="server_only">Force Server</SelectItem>
+                    <SelectItem value="cloudinary_only">Cloudinary Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
             <Button
               onClick={handleStartGeneration}
               disabled={isGenerating || uploadedAds.length === 0}
@@ -564,6 +621,10 @@ const CreativeReplicator = () => {
             )}
           </CardContent>
         </Card>
+
+        {isAdvancedMode && (
+          <RenderDebugPanel debugInfo={debugInfo} isOpen={true} />
+        )}
 
       </div>
     </div>

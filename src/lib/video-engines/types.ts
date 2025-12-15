@@ -28,6 +28,7 @@ export interface EngineResult {
     error?: string;
     processingTimeMs?: number;
     logs?: string[];
+    jobId?: string; // Phase-2 Async Job ID
 }
 
 export interface IVideoEngine {

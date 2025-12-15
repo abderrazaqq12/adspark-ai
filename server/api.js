@@ -4,6 +4,7 @@
  * 
  * All endpoints return JSON only (never HTML).
  * Phase-2 ready for Redis/BullMQ migration.
+ * Phase-3: Automatic Source Resolution (Downloads Remote URLs)
  * 
  * Endpoints:
  *   GET  /api/health      - Health check with FFmpeg status
@@ -20,6 +21,8 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import { pipeline } from 'stream/promises';
+import { createWriteStream } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,6 +37,7 @@ const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
 const OUTPUT_DIR = process.env.OUTPUT_DIR || path.join(__dirname, '../outputs');
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
+const TEMP_DIR = path.join(UPLOAD_DIR, 'temp'); // Temp dir for downloaded assets
 const MAX_RENDER_TIME = parseInt(process.env.MAX_RENDER_TIME || '600'); // 10 min
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || String(500 * 1024 * 1024)); // 500MB
 
@@ -53,7 +57,7 @@ const ALLOWED_MIME_TYPES = [
 // DIRECTORY SETUP
 // ============================================
 
-[OUTPUT_DIR, UPLOAD_DIR].forEach(dir => {
+[OUTPUT_DIR, UPLOAD_DIR, TEMP_DIR].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
     console.log(`[Setup] Created directory: ${dir}`);
@@ -126,6 +130,7 @@ function createJob(jobId, type, input) {
     completedAt: null,
     output: null,
     error: null,
+    tempFiles: [], // Track temp files for cleanup
   };
   jobs.set(jobId, job);
   return job;
@@ -158,8 +163,44 @@ function cleanOldJobs() {
       .sort((a, b) => new Date(b[1].createdAt) - new Date(a[1].createdAt));
 
     sortedJobs.slice(100).forEach(([jobId]) => {
+      // NOTE: In a real system you'd clean up output files too
       jobs.delete(jobId);
     });
+  }
+}
+
+// ============================================
+// DOWNLOAD HELPER
+// ============================================
+
+async function downloadRemoteFile(url, jobId) {
+  try {
+    const ext = path.extname(new URL(url).pathname) || '.mp4';
+    const filename = `${jobId}_source${ext}`;
+    const destPath = path.join(TEMP_DIR, filename);
+
+    console.log(`[Download] Downloading ${url} to ${destPath}`);
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to download file: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('No response body from remote URL');
+    }
+
+    // Node 18+ global fetch returns a Web ReadableStream
+    // We can use fs.createWriteStream but need to convert the stream or use pipeline
+    const fileStream = createWriteStream(destPath);
+    // @ts-ignore - response.body is iterable in Node 18+, pipeline handles it
+    await pipeline(response.body, fileStream);
+
+    console.log(`[Download] Complete: ${destPath}`);
+    return destPath;
+  } catch (err) {
+    console.error(`[Download] Error:`, err);
+    throw err;
   }
 }
 
@@ -188,6 +229,9 @@ async function processNextJob() {
   appendLog(jobId, `[${new Date().toISOString()}] Job started`);
 
   try {
+    // Phase 3: Auto Source Resolution (Download first if needed)
+    await resolveJobSource(job);
+
     const result = await executeFFmpegJob(job);
     updateJob(jobId, {
       status: 'done',
@@ -201,15 +245,59 @@ async function processNextJob() {
       status: 'error',
       completedAt: new Date().toISOString(),
       error: {
-        code: err.code || 'FFMPEG_ERROR',
+        code: err.code || 'EXECUTION_ERROR',
         message: err.message,
       },
     });
     appendLog(jobId, `[${new Date().toISOString()}] Job failed: ${err.message}`);
   } finally {
+    // CLEANUP TEMP FILES
+    if (job.tempFiles && job.tempFiles.length > 0) {
+      job.tempFiles.forEach(file => {
+        try {
+          if (fs.existsSync(file)) {
+            fs.unlinkSync(file);
+            console.log(`[Cleanup] Deleted temp file: ${file}`);
+          }
+        } catch (e) {
+          console.error(`[Cleanup] Failed to delete ${file}:`, e);
+        }
+      });
+    }
+
     currentJob = null;
     cleanOldJobs();
     setImmediate(processNextJob);
+  }
+}
+
+async function resolveJobSource(job) {
+  const { input } = job;
+
+  // Decide which field holds the remote URL based on job type/payload
+  let remoteUrl = input.inputFileUrl || input.sourceVideoUrl;
+
+  // If we already have a valid local sourcePath, use it
+  if (input.sourcePath && fs.existsSync(input.sourcePath)) {
+    appendLog(job.id, `Using local source: ${input.sourcePath}`);
+    return;
+  }
+
+  if (remoteUrl) {
+    appendLog(job.id, `Resolving remote source: ${remoteUrl}`);
+    try {
+      const localPath = await downloadRemoteFile(remoteUrl, job.id);
+
+      // Update job input to point to local file
+      job.input.sourcePath = localPath;
+      job.tempFiles.push(localPath); // Mark for cleanup
+
+      appendLog(job.id, `Downloaded to: ${localPath}`);
+    } catch (err) {
+      throw new Error(`Failed to download source file: ${err.message}`);
+    }
+  } else {
+    throw new Error('No sourcePath or valid remote URL provided');
   }
 }
 
@@ -226,6 +314,11 @@ async function executeFFmpegJob(job) {
   const outputPath = path.join(OUTPUT_DIR, outputFilename);
 
   let args;
+  // Ensure sourcePath is set (by resolveJobSource)
+  if (!input.sourcePath) {
+    throw new Error('Internal Error: Source path not resolved before execution');
+  }
+
   if (type === 'execute') {
     args = buildFFmpegArgs(input, outputPath);
   } else if (type === 'execute-plan') {
@@ -307,13 +400,8 @@ async function executeFFmpegJob(job) {
 function buildFFmpegArgs(input, outputPath) {
   const args = ['-y']; // Overwrite output
 
-  // Validate source path (SECURITY CRITICAL)
-  const sourcePath = sanitizePath(input.sourcePath);
-  if (!sourcePath) {
-    throw new Error('Invalid source path');
-  }
-
-  args.push('-i', sourcePath);
+  // sourcePath is guaranteed to be local and valid by resolveJobSource
+  args.push('-i', input.sourcePath);
 
   // Trim (optional)
   if (input.trim && typeof input.trim === 'object') {
@@ -370,14 +458,10 @@ function buildFFmpegArgs(input, outputPath) {
 }
 
 function buildPlanArgs(input, outputPath) {
-  const { plan, sourceVideoUrl } = input;
+  const { plan } = input;
 
-  const sourcePath = sanitizePath(sourceVideoUrl);
-  if (!sourcePath) {
-    throw new Error('Invalid source path');
-  }
-
-  const args = ['-y', '-i', sourcePath];
+  // sourcePath is guaranteed to be local and valid by resolveJobSource
+  const args = ['-y', '-i', input.sourcePath];
   const filters = [];
 
   // Process timeline segments
@@ -426,11 +510,6 @@ function sanitizePath(inputPath) {
     return null;
   }
 
-  // Allow Remote URLs (Supabase/Cloudinary)
-  if (inputPath.startsWith('http://') || inputPath.startsWith('https://')) {
-    return inputPath;
-  }
-
   const normalized = path.normalize(inputPath);
 
   // Prevent path traversal
@@ -439,18 +518,15 @@ function sanitizePath(inputPath) {
   }
 
   // Only allow paths within allowed directories
-  const allowedPrefixes = [UPLOAD_DIR, OUTPUT_DIR, '/var/www/flowscale', process.cwd()];
+  const allowedPrefixes = [UPLOAD_DIR, OUTPUT_DIR, TEMP_DIR, '/var/www/flowscale', process.cwd()];
   const isAllowed = allowedPrefixes.some(prefix => normalized.startsWith(prefix));
 
   if (!isAllowed) {
     return null;
   }
 
-  // Check file exists
-  if (!fs.existsSync(normalized)) {
-    console.warn(`[Sanitize] File not found: ${normalized}`);
-    return null;
-  }
+  // Note: We don't verify fs.exists here anymore because
+  // the file might be downloaded LATER in the job processor.
 
   return normalized;
 }
@@ -559,6 +635,7 @@ app.get('/api/health', (req, res) => {
     },
     outputsDir: OUTPUT_DIR,
     uploadsDir: UPLOAD_DIR,
+    tempDir: TEMP_DIR,
     queueLength: pendingQueue.length,
     currentJob: currentJob || null,
     uptime: process.uptime(),
@@ -621,20 +698,35 @@ app.post('/api/execute', (req, res) => {
     return jsonError(res, 503, 'FFMPEG_UNAVAILABLE', 'FFmpeg binary not available on server');
   }
 
-  const { sourcePath, projectId, outputName } = req.body;
+  const { sourcePath, inputFileUrl, projectId, outputName, executionPlan, outputFormat } = req.body;
 
-  if (!sourcePath) {
-    return jsonError(res, 400, 'MISSING_SOURCE', 'sourcePath is required');
+  // STRICT CONTRACT: sourcePath OR inputFileUrl
+  if (!sourcePath && !inputFileUrl) {
+    return jsonError(res, 400, 'MISSING_SOURCE', 'Either sourcePath or inputFileUrl is required');
   }
 
-  const validPath = sanitizePath(sourcePath);
-  if (!validPath) {
-    return jsonError(res, 400, 'INVALID_PATH', 'Invalid or inaccessible source path');
+  // If local path provided, validate it strictly to prevent traversal
+  let validPath = null;
+  if (sourcePath) {
+    validPath = sanitizePath(sourcePath);
+    if (!validPath) {
+      console.warn(`[Execute] Attempted invalid source path: ${sourcePath}`);
+      return jsonError(res, 400, 'INVALID_PATH', 'Invalid or inaccessible source path');
+    }
   }
 
   const jobId = outputName || generateJobId();
 
-  createJob(jobId, 'execute', { ...req.body, sourcePath: validPath });
+  // Job Payload Strict Structure
+  const jobPayload = {
+    ...req.body,
+    sourcePath: validPath || null, // Will be resolved if null
+    inputFileUrl,
+    executionPlan: executionPlan || {}, // Ensure plan exists
+    outputFormat: outputFormat || { format: 'mp4' } // Default format
+  };
+
+  createJob(jobId, 'execute', jobPayload);
   pendingQueue.push(jobId);
 
   console.log(`[Queue] Job ${jobId} queued (queue length: ${pendingQueue.length})`);
@@ -647,6 +739,11 @@ app.post('/api/execute', (req, res) => {
     status: 'queued',
     queuePosition: pendingQueue.length,
     statusUrl: `/api/jobs/${jobId}`,
+    debug: {
+      engine: 'server_ffmpeg',
+      resolvedSource: validPath ? 'local' : 'remote_pending',
+      executionPlan: jobPayload.executionPlan
+    }
   });
 });
 
@@ -659,20 +756,32 @@ app.post('/api/execute-plan', (req, res) => {
     return jsonError(res, 503, 'FFMPEG_UNAVAILABLE', 'FFmpeg binary not available on server');
   }
 
-  const { plan, sourceVideoUrl, projectId, outputName } = req.body;
+  const { plan, sourceVideoUrl, sourcePath, projectId, outputName } = req.body;
 
-  if (!plan || !sourceVideoUrl) {
-    return jsonError(res, 400, 'MISSING_PARAMS', 'plan and sourceVideoUrl are required');
+  if (!plan) {
+    return jsonError(res, 400, 'MISSING_PARAMS', 'plan is required');
   }
 
-  const validPath = sanitizePath(sourceVideoUrl);
-  if (!validPath) {
-    return jsonError(res, 400, 'INVALID_PATH', 'Invalid or inaccessible source path');
+  if (!sourceVideoUrl && !sourcePath) {
+    return jsonError(res, 400, 'MISSING_SOURCE', 'Either sourceVideoUrl or sourcePath is required');
+  }
+
+  // Validate local path if provided
+  let validPath = null;
+  if (sourcePath) {
+    validPath = sanitizePath(sourcePath);
+    if (!validPath) {
+      return jsonError(res, 400, 'INVALID_PATH', 'Invalid or inaccessible source path');
+    }
   }
 
   const jobId = outputName || generateJobId();
 
-  createJob(jobId, 'execute-plan', { plan, sourceVideoUrl: validPath });
+  createJob(jobId, 'execute-plan', {
+    plan,
+    sourceVideoUrl,
+    sourcePath: validPath
+  });
   pendingQueue.push(jobId);
 
   console.log(`[Queue] Plan job ${jobId} queued (queue length: ${pendingQueue.length})`);
@@ -755,12 +864,11 @@ app.listen(PORT, HOST, () => {
   console.log(`  FlowScale Render Gateway API`);
   console.log('═══════════════════════════════════════════════════');
   console.log(`  URL:        http://${HOST}:${PORT}`);
-  console.log(`  Mode:       server-only (no browser FFmpeg)`);
+  console.log(`  Mode:       server-only (Auto Source Resolution active)`);
   console.log(`  FFmpeg:     ${FFMPEG_AVAILABLE ? `✓ ${ffmpegPath}` : '✗ NOT AVAILABLE'}`);
   console.log(`  Uploads:    ${UPLOAD_DIR}`);
+  console.log(`  Temp:       ${TEMP_DIR}`);
   console.log(`  Outputs:    ${OUTPUT_DIR}`);
-  console.log(`  Max File:   ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
-  console.log(`  Timeout:    ${MAX_RENDER_TIME}s`);
   console.log('═══════════════════════════════════════════════════');
 });
 
