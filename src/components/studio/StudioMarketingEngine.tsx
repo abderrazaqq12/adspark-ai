@@ -20,7 +20,9 @@ import {
   Zap,
   Webhook,
   AlertTriangle,
-  Settings
+  Settings,
+  Database,
+  RefreshCw
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -100,6 +102,8 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   const { projectId, createProject } = useProject();
   
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isSynced, setIsSynced] = useState(false);
   const [activeTab, setActiveTab] = useState('angles');
   const [generatedAngles, setGeneratedAngles] = useState<GeneratedAngles | null>(null);
   const [scripts, setScripts] = useState<GeneratedScript[]>([]);
@@ -121,6 +125,65 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   const [showAnglesPromptModal, setShowAnglesPromptModal] = useState(false);
   const [showLandingPromptModal, setShowLandingPromptModal] = useState(false);
   const [lastUsedPromptDebug, setLastUsedPromptDebug] = useState<{ id: string; hash: string; version: number } | null>(null);
+
+  // Sync existing angles to database manually
+  const syncAnglesToDatabase = async () => {
+    if (!generatedAngles) {
+      toast({
+        title: "No angles to sync",
+        description: "Generate marketing angles first before syncing.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSyncing(true);
+    try {
+      let currentProjectId = projectId;
+      if (!currentProjectId) {
+        currentProjectId = await createProject();
+      }
+      
+      if (!currentProjectId) {
+        throw new Error('Could not create or find project');
+      }
+
+      const structuredOutput: MarketingAnglesOutput = {
+        problems: generatedAngles.problemsSolved || [],
+        desires: generatedAngles.customerValue || [],
+        objections: [],
+        emotional_triggers: generatedAngles.marketingAngles?.slice(0, 3) || [],
+        angles: generatedAngles.marketingAngles?.map((a, i) => ({
+          angle_type: `angle_${i + 1}`,
+          hook: a.split(':')[0] || a,
+          promise: a.split(':')[1] || '',
+          audience_focus: audienceTargeting.audienceGender
+        })) || [],
+        generated_at: new Date().toISOString(),
+      };
+      
+      const success = await saveMarketingAnglesOutput(currentProjectId, structuredOutput);
+      
+      if (success) {
+        setIsSynced(true);
+        toast({
+          title: "Synced to Database",
+          description: "Marketing angles are now saved and available for Landing Page generation.",
+        });
+      } else {
+        throw new Error('Failed to save to database');
+      }
+    } catch (error: any) {
+      console.error('Sync error:', error);
+      toast({
+        title: "Sync Failed",
+        description: error.message || "Could not sync angles to database.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   useEffect(() => {
     loadProductInfo();
@@ -1084,6 +1147,37 @@ ${landingData.finalCta?.urgencyText || ''}`;
                       </li>
                     ))}
                   </ul>
+                </div>
+
+                {/* Sync to Database Button */}
+                <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50 border border-border">
+                  <div className="flex items-center gap-2">
+                    <Database className="w-5 h-5 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Sync to Database</p>
+                      <p className="text-xs text-muted-foreground">
+                        {isSynced 
+                          ? 'Angles synced - ready for Landing Page generation' 
+                          : 'Save angles to database for Landing Page Compiler'}
+                      </p>
+                    </div>
+                  </div>
+                  <Button 
+                    onClick={syncAnglesToDatabase} 
+                    disabled={isSyncing || isSynced}
+                    variant={isSynced ? "outline" : "default"}
+                    size="sm"
+                    className="gap-2"
+                  >
+                    {isSyncing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : isSynced ? (
+                      <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                    {isSyncing ? 'Syncing...' : isSynced ? 'Synced' : 'Sync Now'}
+                  </Button>
                 </div>
               </div>
             )}
