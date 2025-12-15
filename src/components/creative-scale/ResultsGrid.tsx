@@ -5,7 +5,7 @@
  * Updated for capability-based routing with in-app video playback
  */
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -128,6 +128,78 @@ function getEngineConfig(engineUsed: string) {
   };
 }
 
+/**
+ * Video Thumbnail with hover-to-play preview
+ */
+function VideoThumbnail({
+  videoUrl,
+  onPlay,
+  hasVideo
+}: {
+  videoUrl: string | null;
+  onPlay: () => void;
+  hasVideo: boolean;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isHovering, setIsHovering] = useState(false);
+
+  const handleMouseEnter = useCallback(() => {
+    setIsHovering(true);
+    if (videoRef.current && hasVideo) {
+      videoRef.current.currentTime = 0;
+      videoRef.current.play().catch(() => {
+        // Autoplay may be blocked, ignore
+      });
+    }
+  }, [hasVideo]);
+
+  const handleMouseLeave = useCallback(() => {
+    setIsHovering(false);
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
+    }
+  }, []);
+
+  if (!hasVideo || !videoUrl) return null;
+
+  return (
+    <div
+      className="w-full h-full relative cursor-pointer group"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onClick={onPlay}
+    >
+      <video
+        ref={videoRef}
+        src={videoUrl}
+        className="w-full h-full object-cover"
+        controls={false}
+        muted
+        loop
+        playsInline
+        preload="metadata"
+      />
+      {/* Play overlay - shows when not hovering */}
+      <div 
+        className={`absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity duration-200 ${
+          isHovering ? 'opacity-0' : 'opacity-100'
+        }`}
+      >
+        <div className="w-12 h-12 rounded-full bg-primary/90 flex items-center justify-center backdrop-blur-sm">
+          <Play className="w-6 h-6 text-primary-foreground ml-0.5" />
+        </div>
+      </div>
+      {/* Hover indicator */}
+      {isHovering && (
+        <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/60 rounded text-[10px] text-white font-medium backdrop-blur-sm">
+          Click to expand
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ResultsGrid({
   items,
   onDownloadVideo,
@@ -176,34 +248,22 @@ export function ResultsGrid({
                 'border-border'
               }`}
           >
-            {/* Thumbnail / Placeholder with Play Button */}
-            <div 
-              className={`aspect-video bg-muted rounded-lg mb-3 flex items-center justify-center overflow-hidden relative ${hasVideo ? 'cursor-pointer group' : ''}`}
-              onClick={() => {
-                if (hasVideo && videoUrl) {
-                  setPlayingVideo({
-                    url: videoUrl,
-                    title: `Variation ${item.variationIndex + 1}`,
-                    engine: engineConfig.label
-                  });
-                }
-              }}
-            >
+            {/* Thumbnail / Placeholder with Hover Preview */}
+            <div className="aspect-video bg-muted rounded-lg mb-3 flex items-center justify-center overflow-hidden relative">
               {hasVideo ? (
-                <>
-                  <video
-                    src={videoUrl}
-                    className="w-full h-full object-cover"
-                    controls={false}
-                    muted
-                  />
-                  {/* Play overlay on hover */}
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center">
-                      <Play className="w-6 h-6 text-primary-foreground ml-0.5" />
-                    </div>
-                  </div>
-                </>
+                <VideoThumbnail
+                  videoUrl={videoUrl}
+                  hasVideo={!!hasVideo}
+                  onPlay={() => {
+                    if (videoUrl) {
+                      setPlayingVideo({
+                        url: videoUrl,
+                        title: `Variation ${item.variationIndex + 1}`,
+                        engine: engineConfig.label
+                      });
+                    }
+                  }}
+                />
               ) : (
                 <div className="text-center p-4">
                   {isPlanOnly ? (
