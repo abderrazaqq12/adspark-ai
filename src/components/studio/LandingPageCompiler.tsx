@@ -19,7 +19,8 @@ import {
   Download,
   Bug,
   RefreshCw,
-  Settings2
+  Settings2,
+  ExternalLink
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePromptProfiles, PromptProfile } from '@/hooks/usePromptProfiles';
@@ -311,15 +312,26 @@ export const LandingPageCompiler = ({
           )}
         </Button>
 
+        {/* Google AI Studio Link */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => window.open('https://aistudio.google.com/prompts/new_chat', '_blank')}
+        >
+          <ExternalLink className="w-4 h-4" />
+          Open Google AI Studio
+        </Button>
+
         {htmlOutput && (
           <>
-            <Button variant="ghost" size="icon" onClick={copyHtml}>
+            <Button variant="ghost" size="icon" onClick={copyHtml} title="Copy HTML">
               <Copy className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={downloadHtml}>
+            <Button variant="ghost" size="icon" onClick={downloadHtml} title="Download HTML">
               <Download className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={generateHtml} disabled={isGenerating}>
+            <Button variant="ghost" size="icon" onClick={generateHtml} disabled={isGenerating} title="Regenerate">
               <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
             </Button>
             <Button
