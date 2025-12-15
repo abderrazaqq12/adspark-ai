@@ -7,12 +7,14 @@
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  Cloud, 
-  Server, 
-  FileCode, 
-  CheckCircle2, 
-  XCircle, 
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { useEffect, useState, useRef } from 'react';
+import {
+  Cloud,
+  Server,
+  FileCode,
+  CheckCircle2,
+  XCircle,
   Loader2,
   ArrowRight
 } from 'lucide-react';
@@ -25,6 +27,7 @@ export interface EngineProgress {
   message: string;
   error?: string;
   duration_ms?: number;
+  jobId?: string; // Capture jobId for logs
 }
 
 export interface ExecutionProgressState {
@@ -37,9 +40,9 @@ export interface ExecutionProgressState {
 }
 
 // Engine configuration (Server-only)
-const ENGINE_CONFIG: Record<EngineId, { 
-  label: string; 
-  icon: typeof Cloud; 
+const ENGINE_CONFIG: Record<EngineId, {
+  label: string;
+  icon: typeof Cloud;
   color: string;
   description: string;
 }> = {
@@ -97,24 +100,22 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
           {state.engines.map((engine, idx) => {
             const config = ENGINE_CONFIG[engine.engine];
             if (!config) return null;
-            
+
             const Icon = config.icon;
             const isActive = state.currentEngine === engine.engine;
-            
+
             return (
               <div key={engine.engine}>
-                <div className={`flex items-center gap-3 p-2 rounded-lg transition-all ${
-                  isActive ? 'bg-primary/10 border border-primary/30' : 
-                  engine.status === 'success' ? 'bg-green-500/10' :
-                  engine.status === 'failed' ? 'bg-destructive/10' :
-                  'bg-muted/30'
-                }`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    engine.status === 'attempting' ? 'bg-primary/20' :
-                    engine.status === 'success' ? 'bg-green-500/20' :
-                    engine.status === 'failed' ? 'bg-destructive/20' :
-                    'bg-muted'
+                <div className={`flex items-center gap-3 p-2 rounded-lg transition-all ${isActive ? 'bg-primary/10 border border-primary/30' :
+                    engine.status === 'success' ? 'bg-green-500/10' :
+                      engine.status === 'failed' ? 'bg-destructive/10' :
+                        'bg-muted/30'
                   }`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${engine.status === 'attempting' ? 'bg-primary/20' :
+                      engine.status === 'success' ? 'bg-green-500/20' :
+                        engine.status === 'failed' ? 'bg-destructive/20' :
+                          'bg-muted'
+                    }`}>
                     {engine.status === 'attempting' ? (
                       <Loader2 className="w-4 h-4 animate-spin text-primary" />
                     ) : engine.status === 'success' ? (
@@ -130,10 +131,9 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className={`text-sm font-medium ${
-                        isActive ? 'text-primary' : 
-                        engine.status === 'pending' ? 'text-muted-foreground' : ''
-                      }`}>
+                      <span className={`text-sm font-medium ${isActive ? 'text-primary' :
+                          engine.status === 'pending' ? 'text-muted-foreground' : ''
+                        }`}>
                         {config.label}
                       </span>
                       {engine.duration_ms && (
@@ -158,20 +158,20 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
                     </div>
                   )}
 
-                  <Badge 
+                  <Badge
                     variant={
                       engine.status === 'success' ? 'default' :
-                      engine.status === 'failed' ? 'destructive' :
-                      engine.status === 'attempting' ? 'secondary' :
-                      'outline'
+                        engine.status === 'failed' ? 'destructive' :
+                          engine.status === 'attempting' ? 'secondary' :
+                            'outline'
                     }
                     className="text-xs shrink-0"
                   >
                     {engine.status === 'attempting' ? 'Trying...' :
-                     engine.status === 'success' ? 'Done' :
-                     engine.status === 'failed' ? 'Failed' :
-                     engine.status === 'skipped' ? 'Skipped' :
-                     'Waiting'}
+                      engine.status === 'success' ? 'Done' :
+                        engine.status === 'failed' ? 'Failed' :
+                          engine.status === 'skipped' ? 'Skipped' :
+                            'Waiting'}
                   </Badge>
                 </div>
 
@@ -184,8 +184,75 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
             );
           })}
         </div>
-      </CardContent>
-    </Card>
+          })}
+      </div>
+
+      {/* Live Execution Console */}
+      {state.engines.map(engine => {
+        if (engine.engine === 'server_ffmpeg' && engine.jobId) {
+          return <ExecutionConsole key={engine.jobId} jobId={engine.jobId} />;
+        }
+        return null;
+      })}
+
+    </CardContent>
+    </Card >
+  );
+}
+
+function ExecutionConsole({ jobId }: { jobId: string }) {
+  const [logs, setLogs] = useState<string[]>([]);
+  const [command, setCommand] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/jobs/${jobId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            setLogs(data.fullLogs || []);
+            setCommand(data.command || null);
+          }
+          if (data.status === 'done' || data.status === 'error') return; // Stop polling
+        }
+      } catch (e) {
+        console.error('Log poll error', e);
+      }
+      if (isMounted) setTimeout(poll, 1000);
+    };
+    poll();
+    return () => { isMounted = false; };
+  }, [jobId]);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [logs]);
+
+  return (
+    <div className="mt-4 border rounded-md bg-black text-xs font-mono">
+      <div className="px-3 py-1 border-b border-gray-800 flex justify-between items-center bg-gray-900/50">
+        <span className="text-gray-400">Execution Console ({jobId})</span>
+      </div>
+      <div
+        ref={scrollRef}
+        className="h-48 overflow-y-auto p-3 space-y-1 text-green-400"
+      >
+        {command && (
+          <div className="text-yellow-400 mb-2 pb-2 border-b border-gray-800">
+            $ {command}
+          </div>
+        )}
+        {logs.map((log, i) => (
+          <div key={i} className="whitespace-pre-wrap break-all">{log}</div>
+        ))}
+        {logs.length === 0 && <div className="text-gray-600 italic">Waiting for logs...</div>}
+      </div>
+    </div>
   );
 }
 

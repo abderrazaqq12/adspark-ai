@@ -63,7 +63,7 @@ export interface ExecutionContext {
   userId?: string;
   variationIndex?: number;
   renderingMode?: RenderingMode; // Support overrides
-  onProgress?: (engine: EngineId, progress: number, message: string) => void;
+  onProgress?: (engine: EngineId, progress: number, message: string, metadata?: any) => void;
   onEngineSwitch?: (from: EngineId | null, to: EngineId, reason: string) => void;
 }
 
@@ -308,7 +308,7 @@ async function executeServerFFmpeg(
 
     if (vpsResponse.status === 202 && parsedData?.jobId) {
       const jobId = parsedData.jobId as string;
-      ctx.onProgress?.('server_ffmpeg', 10, `Job queued: ${jobId}. Waiting for render...`);
+      ctx.onProgress?.('server_ffmpeg', 10, `Job queued: ${jobId}. Waiting for render...`, { jobId });
       console.log(`[ServerFFmpeg] Job Queued: ${jobId}. Starting Poll Loop...`);
 
       // POLL LOOP

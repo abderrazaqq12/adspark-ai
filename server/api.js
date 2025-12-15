@@ -148,7 +148,10 @@ function createJob(jobId, type, input) {
     input,
     status: 'queued',
     progressPct: 0,
+    progressPct: 0,
     logsTail: '',
+    fullLogs: [], // Capture full logs for streaming
+    command: null, // Capture FFmpeg command
     createdAt: new Date().toISOString(),
     startedAt: null,
     completedAt: null,
@@ -177,6 +180,9 @@ function appendLog(jobId, message) {
   const job = jobs.get(jobId);
   if (job) {
     job.logsTail = (job.logsTail + '\n' + message).slice(-2000);
+    // Keep full history for debug console
+    if (!job.fullLogs) job.fullLogs = [];
+    job.fullLogs.push(message);
   }
 }
 
@@ -403,9 +409,13 @@ async function executeFFmpegJob(job, encoder = bestEncoder) {
         updateJob(job.id, { progressPct: 50 });
       }
 
-      // Keep last 2000 chars of logs
+      // Keep full logs
       appendLog(job.id, chunk.trim());
     });
+
+    // Capture Command
+    updateJob(job.id, { command: `ffmpeg ${args.join(' ')}` });
+    appendLog(job.id, `[Command] ffmpeg ${args.join(' ')}`);
 
     ffmpeg.on('close', (code) => {
       clearTimeout(timeout);

@@ -413,13 +413,13 @@ export default function CreativeScale() {
         blueprint: currentBlueprint,
         variationIndex: i,
         renderingMode, // Pass override
-        onProgress: (engine: EngineId, progress: number, message: string) => {
+        onProgress: (engine: EngineId, progress: number, message: string, metadata?: any) => {
           setExecutionProgress(prev => ({
             ...prev,
             currentEngine: engine,
             engines: prev.engines.map(e =>
               e.engine === engine
-                ? { ...e, status: 'attempting' as const, progress, message }
+                ? { ...e, status: 'attempting' as const, progress, message, jobId: metadata?.jobId }
                 : e
             )
           }));
