@@ -24,11 +24,14 @@ export interface EngineTask {
 
 export interface EngineResult {
     success: boolean;
+    status: 'success' | 'failed'; // Normalized status
+    outputType: 'video' | 'plan' | 'job'; // Output type normalization
     videoUrl?: string;
     error?: string;
     processingTimeMs?: number;
     logs?: string[];
-    jobId?: string; // Phase-2 Async Job ID
+    jobId?: string;
+    executionPlan?: any; // For 'plan' output type
 }
 
 export interface IVideoEngine {

@@ -38,6 +38,63 @@ class CloudinaryPlanner {
 }
 
 /**
+ * Cloudinary Engine (Planner/Optimizer)
+ * - Returns a Plan if complex
+ * - Returns a Video URL if simple
+ * - Falls back to Server FFmpeg if configured
+ */
+class CloudinaryEngine implements IVideoEngine {
+  name = "Cloudinary (Gen-AI)";
+  tier = "free" as const;
+
+  async initialize(): Promise<void> { console.log("Cloudinary Engine Ready"); }
+
+  async process(task: EngineTask): Promise<EngineResult> {
+    console.log(`[Cloudinary] Analzying plan...`);
+
+    // 1. Check Feasibility
+    const feasibility = CloudinaryPlanner.validatePlan({
+      scenes: task.config.scenes as any,
+      requiredCapabilities: ['trim'],
+      totalDuration: 0, // Placeholder
+      resolution: '1080p'
+    });
+
+    // 2. If Not Feasible -> Fallback to Server (Handover)
+    if (!feasibility.feasible) {
+      console.warn(`[Cloudinary] Cannot render final output: ${feasibility.reason}. Handoff to Server FFmpeg...`);
+
+      // AUTOMATIC HANDOFF
+      return AdvancedEngineRouter.getEngineInstance('server-ffmpeg').process({
+        ...task,
+        config: {
+          ...task.config,
+          // strategies: "cloudinary_failed_fallback"
+        }
+      });
+    }
+
+    // 3. If Feasible -> Return Compilation Plan (Not final video)
+    // The user requirement says: "Cloudinary must be treated as Plan compiler... NOT a final renderer unless explicitly configured"
+    // But if we are in "Cloudinary Only" mode, we might try.
+    // For "Auto" mode, if we selected Cloudinary, we likely want a fast preview or Plan.
+
+    return {
+      success: true,
+      status: 'success',
+      outputType: 'plan', // Important: It's a PLAN, not a VIDEO
+      videoUrl: "", // No video yet
+      executionPlan: {
+        provider: "cloudinary",
+        transformations: ["c_fill", "w_1080", "h_1920"],
+        segments: task.config.scenes.length
+      },
+      logs: ["Cloudinary compilation successful", "Ready for final execution"]
+    };
+  }
+}
+
+/**
  * Server-Only FFmpegEngine
  * All processing happens on VPS
  */
@@ -51,6 +108,7 @@ class ServerFFmpegEngine implements IVideoEngine {
 
   async process(task: EngineTask): Promise<EngineResult> {
     console.log('[ServerFFmpeg] Processing via VPS API...');
+    let currentJobId: string | null = null;
 
     try {
       const response = await fetch('/api/execute', {
@@ -82,36 +140,71 @@ class ServerFFmpegEngine implements IVideoEngine {
 
       const data = await response.json();
 
-      // Handle both 'success' and 'ok' properties just in case
+      // 1. Check for Immediate Success (Sync)
       if ((data.header?.ok || data.ok) && (data.outputUrl || data.outputPath)) {
         return {
           success: true,
-          videoUrl: data.outputUrl || data.outputPath, // Favor URL if available
-          logs: data.logs || ['Server FFmpeg processing complete']
+          status: 'success',
+          outputType: 'video',
+          videoUrl: data.outputUrl || data.outputPath,
+          logs: data.logs || ['Server FFmpeg processing complete (Sync)']
         };
       }
 
-      // Immediate 202 handling (Async Queue)
-      if (response.status === 202) {
-        return {
-          success: true,
-          videoUrl: "", // Async job started
-          jobId: data.jobId,
-          logs: ['Job queued on server']
-        };
+      // 2. Handle Async Job (202 Accepted)
+      if (response.status === 202 && data.jobId) {
+        currentJobId = data.jobId;
+        console.log(`[ServerFFmpeg] Job Queued: ${currentJobId}. Starting Poll Loop...`);
+
+        // POLL LOOP
+        const maxAttempts = 120; // 4 minutes (2s interval)
+        let attempts = 0;
+
+        while (attempts < maxAttempts) {
+          attempts++;
+          await new Promise(r => setTimeout(r, 2000)); // Wait 2s
+
+          try {
+            const pollRes = await fetch(`/api/jobs/${currentJobId}`);
+            if (!pollRes.ok) continue;
+
+            const jobData = await pollRes.json();
+            console.log(`[ServerFFmpeg] Poll ${currentJobId}: ${jobData.status}`);
+
+            if (jobData.status === 'done' && jobData.output) {
+              return {
+                success: true,
+                status: 'success',
+                outputType: 'video',
+                videoUrl: jobData.output.outputUrl || jobData.output.outputPath,
+                jobId: currentJobId,
+                logs: ['Job completed successfully', ...(jobData.logs || [])]
+              };
+            }
+
+            if (jobData.status === 'error') {
+              throw new Error(jobData.error?.message || 'Job failed on server');
+            }
+          } catch (pollErr) {
+            console.warn(`[ServerFFmpeg] Poll error:`, pollErr);
+            // Don't throw immediately, allow retries for network glitches
+          }
+        }
+
+        throw new Error('Server rendering timed out (polling limit reached)');
       }
 
-      return {
-        success: false,
-        error: data.error?.message || 'Server processing failed',
-        logs: data.logs || []
-      };
+      throw new Error('Server returned unexpected response type');
+
     } catch (err: any) {
       console.error('[ServerFFmpeg] Error:', err);
       return {
         success: false,
+        status: 'failed',
+        outputType: 'job', // Failed job
         error: err.message || 'Server connection failed',
-        logs: []
+        jobId: currentJobId || undefined,
+        logs: [`Error: ${err.message}`]
       };
     }
   }
@@ -154,10 +247,23 @@ export class AdvancedEngineRouter {
         return this.getServerSpec(`Cloudinary Incompatible: ${planningResult.reason}`);
       }
 
-      // If Cloudinary is feasible, check if we PREFER server capabilities or quality
-      // For "Enterprise/Pro" usage (as described in prompt), Server FFmpeg is the authority.
-      // We defaults to Server FFmpeg for everything that matters to ensure consistency.
+      // If Cloudinary IS feasible, we check preferences.
+      // Generally we prefer Server for quality, but we can return Cloudinary if the user wanted a "Light" render
+      // For now, based on "Server is Final Authority", we still default to Server.
       return this.getServerSpec("Auto-Default to Server Authority");
+    }
+
+    if (mode === 'cloudinary_only') {
+      return {
+        id: 'cloudinary', // Matches getEngineInstance check
+        name: 'Cloudinary (Plan/Preview)',
+        tier: 'free',
+        location: 'cloud',
+        maxResolution: '1080p',
+        maxDurationSec: 60,
+        costPerMinute: 0,
+        capabilities: ['trim', 'resize']
+      };
     }
 
     return this.getServerSpec("Default Fallback");
@@ -179,7 +285,11 @@ export class AdvancedEngineRouter {
   /**
    * Always returns server engine instance
    */
-  static getEngineInstance(_specId: string): IVideoEngine {
+  static getEngineInstance(specId: string): IVideoEngine {
+    if (specId === 'cloudinary') {
+      return new CloudinaryEngine();
+    }
+    // Default to Server
     if (!this.serverEngine) {
       this.serverEngine = new ServerFFmpegEngine();
     }

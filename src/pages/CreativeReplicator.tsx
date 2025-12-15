@@ -402,10 +402,12 @@ const CreativeReplicator = () => {
             ...prev,
             status: result.success ? 'success' : 'failed',
             logs: [...(prev?.logs || []), ...(result.logs || [])],
-            serverJobId: result.jobId
+            serverJobId: result.jobId,
+            outputType: result.outputType
           }));
 
-          if (result.success && result.videoUrl) {
+          // NORMALIZE: Only treat 'video' output as completion
+          if (result.success && result.outputType === 'video' && result.videoUrl) {
             // UPLOAD RESULT TO STORAGE (Persist)
             const blob = await fetch(result.videoUrl).then(r => r.blob());
             const fileName = `${userId}/${jobId}_${variationId}.mp4`;
@@ -438,7 +440,7 @@ const CreativeReplicator = () => {
               thumbnail: publicUrl,
               hookStyle,
               pacing: "medium",
-              engine: engine.name,
+              engine: engine.name, // "Server FFmpeg (VPS)" or "Cloudinary..."
               ratio,
               duration: currentAd.duration,
               status: "completed"
@@ -446,6 +448,18 @@ const CreativeReplicator = () => {
 
             setGeneratedVideos(prev => [...prev, ...newGeneratedVideos]);
             setGenerationProgress(((i + 1) / variationConfig.count) * 100);
+
+          } else if (result.success && result.outputType === 'plan') {
+            // HANDLE PLAN ONLY
+            toast.info(`Variation ${variationId}: Plan compiled (No Video)`);
+            await supabase
+              .from('video_variations')
+              .update({
+                status: 'failed', // Technically not a video, so 'failed' for gallery purposes or maybe we need a new status?
+                // For now, let's just log error_message so user knows why
+                error_message: "Plan compiled but video rendering skipped (Cloudinary Mode)"
+              })
+              .eq('id', insertedVideo.id);
 
           } else {
             // Handle Failure
