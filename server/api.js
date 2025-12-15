@@ -941,6 +941,68 @@ app.get('/api/jobs/:jobId', (req, res) => {
 });
 
 // ============================================
+// GET /api/jobs/:id/logs - Full execution logs
+// ============================================
+
+app.get('/api/jobs/:jobId/logs', (req, res) => {
+  const job = getJob(req.params.jobId);
+
+  if (!job) {
+    return jsonError(res, 404, 'JOB_NOT_FOUND', `Job ${req.params.jobId} not found`);
+  }
+
+  // Return complete execution log for debugging
+  const response = {
+    ok: true,
+    jobId: job.id,
+    status: job.status,
+    progressPct: job.progressPct,
+    command: job.command || null,
+    fullLogs: job.fullLogs || [],
+    logsTail: job.logsTail,
+    createdAt: job.createdAt,
+    startedAt: job.startedAt || null,
+    completedAt: job.completedAt || null,
+    // Execution metadata
+    execution: {
+      engine: 'server_ffmpeg',
+      encoderUsed: job.encoderUsed || null,
+      exitCode: job.status === 'done' ? 0 : (job.status === 'error' ? 1 : null),
+      outputPath: job.output?.outputPath || null,
+      outputExists: job.output?.outputPath ? fs.existsSync(job.output.outputPath) : false,
+      outputSize: job.output?.outputSize || null,
+      durationMs: job.output?.durationMs || null,
+    },
+    error: job.error || null,
+  };
+
+  res.json(response);
+});
+
+// ============================================
+// GET /api/jobs/:id/state - Job state for polling
+// ============================================
+
+app.get('/api/jobs/:jobId/state', (req, res) => {
+  const job = getJob(req.params.jobId);
+
+  if (!job) {
+    return jsonError(res, 404, 'JOB_NOT_FOUND', `Job ${req.params.jobId} not found`);
+  }
+
+  // Minimal state for efficient polling
+  res.json({
+    ok: true,
+    jobId: job.id,
+    status: job.status,
+    progressPct: job.progressPct,
+    lastLogLine: job.fullLogs?.slice(-1)[0] || null,
+    logsCount: job.fullLogs?.length || 0,
+    isComplete: job.status === 'done' || job.status === 'error',
+  });
+});
+
+// ============================================
 // 404 HANDLER (JSON only)
 // ============================================
 

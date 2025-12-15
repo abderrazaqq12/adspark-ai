@@ -1,6 +1,7 @@
 /**
  * Render Debug Panel (Developer Mode)
  * Deep visibility into Creative Scale rendering pipeline
+ * WITH Live Execution Console
  */
 
 import { useState, useEffect } from 'react';
@@ -8,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Bug,
@@ -30,6 +32,7 @@ import {
   ExecutionDebugState,
   VariationDebugState 
 } from '@/lib/creative-scale/execution-debug';
+import { MultiExecutionConsole } from './ExecutionConsole';
 
 interface RenderDebugPanelProps {
   className?: string;
@@ -38,6 +41,7 @@ interface RenderDebugPanelProps {
 export function RenderDebugPanel({ className }: RenderDebugPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [debugState, setDebugState] = useState<ExecutionDebugState | null>(null);
+  const [activeTab, setActiveTab] = useState<'routing' | 'console'>('console');
 
   useEffect(() => {
     const unsubscribe = executionDebugLogger.subscribe(setDebugState);
@@ -62,6 +66,8 @@ export function RenderDebugPanel({ className }: RenderDebugPanelProps) {
   if (!debugState) {
     return null;
   }
+
+  const activeJobs = executionDebugLogger.getActiveJobs();
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -111,6 +117,11 @@ export function RenderDebugPanel({ className }: RenderDebugPanelProps) {
                 </CardTitle>
               </div>
               <div className="flex items-center gap-2">
+                {activeJobs.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    {activeJobs.length} job{activeJobs.length !== 1 ? 's' : ''} active
+                  </Badge>
+                )}
                 {debugState.isComplete && debugState.summary && (
                   <Badge 
                     variant={debugState.summary.failedVariations.length > 0 ? 'destructive' : 'default'}
@@ -136,14 +147,45 @@ export function RenderDebugPanel({ className }: RenderDebugPanelProps) {
               </Button>
             </div>
 
-            {/* Variation Debug States */}
-            <ScrollArea className="h-[300px]">
-              <div className="space-y-3">
-                {debugState.variations.map((variation) => (
-                  <VariationDebugCard key={variation.variationIndex} variation={variation} />
-                ))}
-              </div>
-            </ScrollArea>
+            {/* Tabs for Routing vs Console */}
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+              <TabsList className="grid w-full grid-cols-2 h-8">
+                <TabsTrigger value="console" className="text-xs">
+                  <Terminal className="w-3 h-3 mr-1" />
+                  Execution Console
+                </TabsTrigger>
+                <TabsTrigger value="routing" className="text-xs">
+                  <Server className="w-3 h-3 mr-1" />
+                  Routing Details
+                </TabsTrigger>
+              </TabsList>
+
+              {/* Live Execution Console */}
+              <TabsContent value="console" className="mt-3">
+                <ScrollArea className="h-[400px]">
+                  {activeJobs.length > 0 ? (
+                    <MultiExecutionConsole jobs={activeJobs} />
+                  ) : (
+                    <div className="p-4 text-center text-muted-foreground text-sm">
+                      <Terminal className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      <p>No active jobs.</p>
+                      <p className="text-xs mt-1">Click "Generate" to start rendering and see live logs.</p>
+                    </div>
+                  )}
+                </ScrollArea>
+              </TabsContent>
+
+              {/* Routing Details */}
+              <TabsContent value="routing" className="mt-3">
+                <ScrollArea className="h-[300px]">
+                  <div className="space-y-3">
+                    {debugState.variations.map((variation) => (
+                      <VariationDebugCard key={variation.variationIndex} variation={variation} />
+                    ))}
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
 
             {/* Summary (if complete) */}
             {debugState.isComplete && debugState.summary && (
