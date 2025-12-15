@@ -308,6 +308,10 @@ async function executeServerFFmpeg(
 
     if (vpsResponse.status === 202 && parsedData?.jobId) {
       const jobId = parsedData.jobId as string;
+      
+      // Track job ID for live console polling
+      executionDebugLogger.setJobId(ctx.variationIndex ?? 0, jobId);
+      
       ctx.onProgress?.('server_ffmpeg', 10, `Job queued: ${jobId}. Waiting for render...`, { jobId });
       console.log(`[ServerFFmpeg] Job Queued: ${jobId}. Starting Poll Loop...`);
 

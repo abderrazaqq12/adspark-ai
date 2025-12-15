@@ -112,6 +112,7 @@ export interface ExecutionSummaryEvent extends ExecutionTraceEvent {
 export interface VariationDebugState {
   variationIndex: number;
   planId: string;
+  jobId: string | null; // Server job ID for log polling
   routing: {
     status: 'pending' | 'success' | 'error';
     requiredCapabilities: Capability[];
@@ -127,6 +128,7 @@ export interface VariationDebugState {
     responsePreview: string | null;
     errorReason: string | null;
     durationMs: number | null;
+    jobId: string | null; // Backend job ID for this variation
   };
   cloudinary: {
     status: 'pending' | 'dispatched' | 'success' | 'error' | 'skipped';
@@ -194,6 +196,7 @@ class ExecutionDebugLogger {
     return {
       variationIndex: index,
       planId: '',
+      jobId: null,
       routing: {
         status: 'pending',
         requiredCapabilities: [],
@@ -209,6 +212,7 @@ class ExecutionDebugLogger {
         responsePreview: null,
         errorReason: null,
         durationMs: null,
+        jobId: null,
       },
       cloudinary: {
         status: 'pending',
@@ -222,6 +226,27 @@ class ExecutionDebugLogger {
         errorReason: null,
       },
     };
+  }
+
+  // Track job ID for a variation (for log polling)
+  setJobId(variationIndex: number, jobId: string): void {
+    if (!this.state) return;
+    const variation = this.state.variations[variationIndex];
+    if (!variation) return;
+    
+    variation.jobId = jobId;
+    variation.serverFFmpeg.jobId = jobId;
+    
+    console.log(`[ExecutionDebug] Var ${variationIndex + 1} assigned jobId: ${jobId}`);
+    this.notifyListeners();
+  }
+
+  // Get all active job IDs for console polling
+  getActiveJobs(): Array<{ jobId: string; variationIndex: number }> {
+    if (!this.state) return [];
+    return this.state.variations
+      .filter(v => v.jobId !== null)
+      .map(v => ({ jobId: v.jobId!, variationIndex: v.variationIndex }));
   }
 
   logRouting(
