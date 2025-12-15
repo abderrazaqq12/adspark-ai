@@ -85,14 +85,16 @@ export const LandingPageCompiler = ({
   const [promptProfile, setPromptProfile] = useState<PromptProfile | null>(null);
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  
+
   // Execution mode state
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('agent');
   const [webhookUrl, setWebhookUrl] = useState('');
-  
+
   // Debug state
   const [lastResult, setLastResult] = useState<UnifiedOutput | null>(null);
-  
+  const [lastPromptData, setLastPromptData] = useState<{ system: string; user: string } | null>(null);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
+
   // Import dialog state
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [importHtml, setImportHtml] = useState('');
@@ -162,6 +164,16 @@ export const LandingPageCompiler = ({
         webhookUrl: executionMode === 'n8n' ? webhookUrl : undefined
       };
 
+      // Capture prompt data for debug panel
+      const anglesText = input.marketingAngles && input.marketingAngles.length > 0
+        ? input.marketingAngles.join('\n- ')
+        : 'No specific angles provided.';
+
+      const systemPrompt = `You are a senior Arabic eCommerce conversion expert. Generate production-ready landing pages in JSON format only.`;
+      const userPrompt = customPrompt || `Generate landing page for ${productInfo.name}. Description: ${productInfo.description}. Marketing Angles:\n- ${anglesText}`;
+
+      setLastPromptData({ system: systemPrompt, user: userPrompt });
+
       if (debugMode) {
         console.log('[LandingPageCompiler] Unified input:', input);
         console.log('[LandingPageCompiler] Execution mode:', executionMode);
@@ -186,7 +198,7 @@ export const LandingPageCompiler = ({
         prompt_id: input.promptId,
         prompt_hash: output.meta.promptVersion.toString()
       });
-      
+
       setHtmlOutput(output.html);
       setSectionsOutput(output.sections);
       setViewMode('preview');
@@ -253,9 +265,9 @@ ${marketingAngles?.angles?.map((a, i) => `${i + 1}. Hook: ${a.hook}\n   Promise:
 Generate the complete HTML code now:`;
 
     navigator.clipboard.writeText(prompt);
-    toast({ 
-      title: "Prompt Copied", 
-      description: "Paste this prompt into Google AI Studio to generate your landing page" 
+    toast({
+      title: "Prompt Copied",
+      description: "Paste this prompt into Google AI Studio to generate your landing page"
     });
   };
 
@@ -314,7 +326,7 @@ Generate the complete HTML code now:`;
           </div>
           <div>
             <h3 className="font-semibold">Landing Page Compiler</h3>
-            <p className="text-xs text-muted-foreground">Unified generation with multiple execution modes</p>
+            <p className="text-xs text-muted-foreground">Generate production-ready HTML from Marketing Angles</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -324,28 +336,60 @@ Generate the complete HTML code now:`;
             compact
           />
           <Badge variant="outline" className="text-primary border-primary/50">
-            {executionMode === 'agent' ? 'AI Agent' : executionMode === 'n8n' ? 'n8n' : 'Edge API'}
+            {executionMode === 'agent' ? 'AI Agent' : executionMode === 'n8n' ? 'n8n' : executionMode === 'gemini' ? 'Google AI (Gemini API)' : 'Edge API'}
           </Badge>
         </div>
       </div>
 
-      {/* Data Source Status */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
-          {hasAngles ? (
-            <CheckCircle2 className="w-4 h-4 text-green-500" />
-          ) : (
-            <AlertTriangle className="w-4 h-4 text-destructive" />
-          )}
-          <span className="text-xs">
-            Marketing Angles: {hasAngles ? 'Ready' : 'Missing (Required)'}
-          </span>
+      {/* Data Pipeline Status */}
+      <div className="space-y-3">
+        <p className="text-xs font-medium text-muted-foreground">Data Pipeline:</p>
+        <div className="grid grid-cols-3 gap-2">
+          {/* Marketing Angles */}
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border border-border">
+            {hasAngles ? (
+              <CheckCircle2 className="w-4 h-4 text-green-500" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-destructive" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium truncate">Marketing Angles</p>
+              <p className="text-[10px] text-muted-foreground">
+                {hasAngles ? `${marketingAngles?.angles?.length || 0} angles` : 'Required'}
+              </p>
+            </div>
+          </div>
+
+          {/* Product Info */}
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border border-border">
+            {productInfo.name ? (
+              <CheckCircle2 className="w-4 h-4 text-green-500" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-destructive" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium truncate">Product Info</p>
+              <p className="text-[10px] text-muted-foreground truncate">
+                {productInfo.name || 'Missing'}
+              </p>
+            </div>
+          </div>
+
+          {/* Prompt */}
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border border-border cursor-pointer hover:bg-muted/50" onClick={() => setShowPromptModal(true)}>
+            {promptProfile ? (
+              <CheckCircle2 className="w-4 h-4 text-green-500" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium truncate">Custom Prompt</p>
+              <p className="text-[10px] text-muted-foreground">
+                {promptProfile ? 'Configured' : 'Using default'}
+              </p>
+            </div>
+          </div>
         </div>
-        <PromptIndicator
-          prompt={promptProfile}
-          onClick={() => setShowPromptModal(true)}
-          label="Compiler Prompt"
-        />
       </div>
 
       {/* Settings Panel */}
@@ -373,19 +417,101 @@ Generate the complete HTML code now:`;
         </CollapsibleContent>
       </Collapsible>
 
-      {/* Debug Panel */}
+      {/* Enhanced Debug Panel */}
       {debugMode && lastResult && (
-        <div className="p-3 rounded-lg bg-slate-900/50 border border-border space-y-2">
-          <p className="text-xs font-mono text-muted-foreground">
-            Engine: {lastResult.meta.engine} | Latency: {lastResult.meta.latencyMs}ms | v{lastResult.meta.promptVersion}
-          </p>
-          {lastResult.marketingAngles && (
-            <p className="text-xs text-muted-foreground">
-              Pain Points: {lastResult.marketingAngles.painPoints.length} | 
-              Desires: {lastResult.marketingAngles.desires.length}
-            </p>
-          )}
-        </div>
+        <Collapsible open={showDebugPanel} onOpenChange={setShowDebugPanel}>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="w-full justify-between">
+              <span className="flex items-center gap-2">
+                <Bug className="w-4 h-4" />
+                Debug Information
+              </span>
+              <Badge variant="secondary" className="text-xs">
+                {lastResult.meta.engine} | {lastResult.meta.latencyMs}ms
+              </Badge>
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-3">
+            <div className="p-4 rounded-lg bg-slate-900/50 border border-border space-y-3">
+              {/* Generation Metadata */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-2">Generation Metadata</p>
+                <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                  <div>
+                    <span className="text-muted-foreground">Engine:</span>
+                    <span className="ml-2 text-primary">{lastResult.meta.engine}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Latency:</span>
+                    <span className="ml-2 text-green-500">{lastResult.meta.latencyMs}ms</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Version:</span>
+                    <span className="ml-2">{lastResult.meta.promptVersion}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Generated:</span>
+                    <span className="ml-2">{new Date(lastResult.meta.generatedAt).toLocaleTimeString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Marketing Angles Data */}
+              {lastResult.marketingAngles && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Included Marketing Data</p>
+                  <div className="text-xs space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px]">Pain Points</Badge>
+                      <span className="text-muted-foreground">{lastResult.marketingAngles.painPoints.length} items</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px]">Desires</Badge>
+                      <span className="text-muted-foreground">{lastResult.marketingAngles.desires.length} items</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px]">Emotional Hooks</Badge>
+                      <span className="text-muted-foreground">{lastResult.marketingAngles.emotionalHooks.length} items</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Prompt Preview */}
+              {lastPromptData && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Prompt Sent to AI</p>
+                  <div className="space-y-2">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-1">System Prompt:</p>
+                      <pre className="text-[10px] bg-background/50 p-2 rounded border border-border overflow-auto max-h-20">
+                        {lastPromptData.system}
+                      </pre>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-1">User Prompt (first 200 chars):</p>
+                      <pre className="text-[10px] bg-background/50 p-2 rounded border border-border overflow-auto max-h-20">
+                        {lastPromptData.user.substring(0, 200)}...
+                      </pre>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-xs"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`System:\n${lastPromptData.system}\n\nUser:\n${lastPromptData.user}`);
+                        toast({ title: "Copied", description: "Full prompt copied to clipboard" });
+                      }}
+                    >
+                      <Copy className="w-3 h-3 mr-1" />
+                      Copy Full Prompt
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       )}
 
       {/* Actions */}
@@ -482,12 +608,31 @@ Generate the complete HTML code now:`;
         </Dialog>
         {htmlOutput && (
           <>
-            <Button variant="ghost" size="icon" onClick={copyHtml} title="Copy HTML">
-              <Copy className="w-4 h-4" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={downloadHtml} title="Download HTML">
-              <Download className="w-4 h-4" />
-            </Button>
+            <div className="flex items-center gap-1 border border-border rounded-lg p-1">
+              <Button variant="ghost" size="sm" onClick={copyHtml} title="Copy HTML to clipboard" className="gap-1">
+                <Copy className="w-3 h-3" />
+                Copy
+              </Button>
+              <Button variant="ghost" size="sm" onClick={downloadHtml} title="Download as .html file" className="gap-1">
+                <Download className="w-3 h-3" />
+                Download
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  const blob = new Blob([htmlOutput], { type: 'text/html' });
+                  const url = URL.createObjectURL(blob);
+                  window.open(url, '_blank');
+                  setTimeout(() => URL.revokeObjectURL(url), 100);
+                }}
+                title="Open preview in new tab"
+                className="gap-1"
+              >
+                <ExternalLink className="w-3 h-3" />
+                Preview
+              </Button>
+            </div>
             <Button variant="ghost" size="icon" onClick={generateHtml} disabled={isGenerating} title="Regenerate">
               <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
             </Button>
@@ -509,22 +654,20 @@ Generate the complete HTML code now:`;
         <div className="flex items-center bg-muted/30 rounded-lg p-1 border border-border w-fit">
           <button
             onClick={() => setViewMode('code')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-              viewMode === 'code'
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'code'
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+              }`}
           >
             <Code className="w-4 h-4" />
             Code
           </button>
           <button
             onClick={() => setViewMode('preview')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-              viewMode === 'preview'
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'preview'
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+              }`}
           >
             <Eye className="w-4 h-4" />
             Preview
@@ -553,10 +696,11 @@ Generate the complete HTML code now:`;
       )}
 
       {!htmlOutput && !isGenerating && (
-        <div className="flex flex-col items-center justify-center min-h-[200px] text-muted-foreground">
+        <div className="flex flex-col items-center justify-center min-h-[200px] text-muted-foreground text-center">
           <Sparkles className="w-10 h-10 mb-3 text-primary/30" />
-          <p className="text-sm">Click "Generate Landing Page" to compile HTML</p>
-          <p className="text-xs mt-1">Requires Marketing Angles from previous stage</p>
+          <p className="text-sm font-medium">Ready to Generate</p>
+          <p className="text-xs mt-1">Click "Generate Landing Page" above to create HTML</p>
+          <p className="text-xs mt-2 text-muted-foreground/70">The generated HTML is your final output - you can download it or copy the code</p>
         </div>
       )}
 
