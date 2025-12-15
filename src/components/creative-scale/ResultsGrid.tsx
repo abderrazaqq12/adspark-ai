@@ -2,9 +2,10 @@
  * Results Grid Component
  * PRD-aligned: Shows variation results with download buttons (only if video exists)
  * Includes engine badges showing which engine rendered each variation
- * Updated for capability-based routing
+ * Updated for capability-based routing with in-app video playback
  */
 
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,6 +28,7 @@ import {
   FileCode,
   Monitor
 } from 'lucide-react';
+import VideoPreviewPlayer from '@/components/VideoPreviewPlayer';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
 import type { RouterResult } from '@/lib/creative-scale/router-types';
 
@@ -133,16 +135,38 @@ export function ResultsGrid({
   onDuplicate,
   onRetry
 }: ResultsGridProps) {
+  const [playingVideo, setPlayingVideo] = useState<{
+    url: string;
+    title: string;
+    engine: string;
+  } | null>(null);
+
   return (
-    <div className="grid grid-cols-2 gap-4">
-      {items.map((item) => {
-        const hasVideo = ((item.result as any)?.status === 'completed' || (item.result as any)?.status === 'success') &&
-          item.result && 'output_video_url' in item.result &&
-          item.result.output_video_url;
-        const isPlanOnly = item.engineUsed === 'plan_export' || item.engineUsed === 'no-render';
-        const failed = item.result?.status === 'partial_success' || !item.result;
-        const engineConfig = getEngineConfig(item.engineUsed);
-        const EngineIcon = engineConfig.icon;
+    <>
+      {/* Video Player Modal */}
+      <VideoPreviewPlayer
+        open={!!playingVideo}
+        onOpenChange={(open) => !open && setPlayingVideo(null)}
+        videoUrl={playingVideo?.url || ''}
+        title={playingVideo?.title}
+        engineName={playingVideo?.engine}
+        onDownload={() => {
+          if (playingVideo?.url) {
+            window.open(playingVideo.url, '_blank');
+          }
+        }}
+      />
+
+      <div className="grid grid-cols-2 gap-4">
+        {items.map((item) => {
+          const hasVideo = ((item.result as any)?.status === 'completed' || (item.result as any)?.status === 'success') &&
+            item.result && 'output_video_url' in item.result &&
+            item.result.output_video_url;
+          const videoUrl = hasVideo ? (item.result as any).output_video_url : null;
+          const isPlanOnly = item.engineUsed === 'plan_export' || item.engineUsed === 'no-render';
+          const failed = item.result?.status === 'partial_success' || !item.result;
+          const engineConfig = getEngineConfig(item.engineUsed);
+          const EngineIcon = engineConfig.icon;
 
         return (
           <div
@@ -152,14 +176,34 @@ export function ResultsGrid({
                 'border-border'
               }`}
           >
-            {/* Thumbnail / Placeholder */}
-            <div className="aspect-video bg-muted rounded-lg mb-3 flex items-center justify-center overflow-hidden relative">
+            {/* Thumbnail / Placeholder with Play Button */}
+            <div 
+              className={`aspect-video bg-muted rounded-lg mb-3 flex items-center justify-center overflow-hidden relative ${hasVideo ? 'cursor-pointer group' : ''}`}
+              onClick={() => {
+                if (hasVideo && videoUrl) {
+                  setPlayingVideo({
+                    url: videoUrl,
+                    title: `Variation ${item.variationIndex + 1}`,
+                    engine: engineConfig.label
+                  });
+                }
+              }}
+            >
               {hasVideo ? (
-                <video
-                  src={(item.result as any).output_video_url}
-                  className="w-full h-full object-cover"
-                  controls={false}
-                />
+                <>
+                  <video
+                    src={videoUrl}
+                    className="w-full h-full object-cover"
+                    controls={false}
+                    muted
+                  />
+                  {/* Play overlay on hover */}
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center">
+                      <Play className="w-6 h-6 text-primary-foreground ml-0.5" />
+                    </div>
+                  </div>
+                </>
               ) : (
                 <div className="text-center p-4">
                   {isPlanOnly ? (
@@ -229,16 +273,35 @@ export function ResultsGrid({
 
               {/* Actions */}
               <div className="flex gap-2 pt-2">
-                {/* Download Video - ONLY if exists */}
-                {hasVideo && onDownloadVideo && (
+                {/* Play Video - ONLY if exists */}
+                {hasVideo && (
                   <Button
                     size="sm"
                     variant="default"
                     className="flex-1"
+                    onClick={() => {
+                      if (videoUrl) {
+                        setPlayingVideo({
+                          url: videoUrl,
+                          title: `Variation ${item.variationIndex + 1}`,
+                          engine: engineConfig.label
+                        });
+                      }
+                    }}
+                  >
+                    <Play className="w-3 h-3 mr-1" />
+                    Play
+                  </Button>
+                )}
+
+                {/* Download Video - ONLY if exists */}
+                {hasVideo && onDownloadVideo && (
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={() => onDownloadVideo(item)}
                   >
-                    <Download className="w-3 h-3 mr-1" />
-                    Video
+                    <Download className="w-3 h-3" />
                   </Button>
                 )}
 
@@ -246,7 +309,7 @@ export function ResultsGrid({
                 <Button
                   size="sm"
                   variant={isPlanOnly ? 'default' : 'outline'}
-                  className="flex-1"
+                  className={hasVideo ? '' : 'flex-1'}
                   onClick={() => onDownloadPlan(item)}
                 >
                   <FileJson className="w-3 h-3 mr-1" />
@@ -279,7 +342,8 @@ export function ResultsGrid({
             </div>
           </div>
         );
-      })}
-    </div>
+        })}
+      </div>
+    </>
   );
 }

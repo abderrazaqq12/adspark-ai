@@ -43,6 +43,8 @@ class ServerFFmpegEngine implements IVideoEngine {
       if (data.success && data.outputPath) {
         return {
           success: true,
+          status: 'success' as const,
+          outputType: 'video' as const,
           videoUrl: data.outputPath,
           logs: data.logs || ['Server FFmpeg processing complete']
         };
@@ -50,12 +52,16 @@ class ServerFFmpegEngine implements IVideoEngine {
 
       return {
         success: false,
+        status: 'failed' as const,
+        outputType: 'video' as const,
         error: data.error || 'Server processing failed',
         logs: data.logs || []
       };
     } catch (err: any) {
       return {
         success: false,
+        status: 'failed' as const,
+        outputType: 'video' as const,
         error: err.message || 'Server connection failed',
         logs: []
       };
