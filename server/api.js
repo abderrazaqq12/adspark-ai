@@ -281,8 +281,12 @@ async function processNextJob() {
       completedAt: new Date().toISOString(),
       output: result,
       progressPct: 100,
-      encoderUsed: finalEncoder
+      output: result,
+      progressPct: 100,
+      encoderUsed: finalEncoder,
+      artifacts: result.artifacts || [] // Persist artifacts at top level
     });
+    console.log(`[Job ${jobId}] Artifacts registered:`, JSON.stringify(result.artifacts));
     appendLog(jobId, `[${new Date().toISOString()}] Job completed successfully (Encoder: ${finalEncoder})`);
   } catch (err) {
     updateJob(jobId, {
@@ -413,11 +417,22 @@ async function executeFFmpegJob(job, encoder = bestEncoder) {
           const stats = fs.statSync(outputPath);
 
           if (stats.size > 0) {
+            const artifact = {
+              type: 'video',
+              mime: 'video/mp4',
+              engine: 'server_ffmpeg',
+              path: `/outputs/${outputFilename}`,
+              url: `/outputs/${outputFilename}`,
+              durationMs: Date.now() - new Date(job.startedAt).getTime(),
+              sizeBytes: stats.size
+            };
+
             resolve({
               outputPath,
-              outputUrl: `/outputs/${outputFilename}`,
+              outputUrl: artifact.url,
               outputSize: stats.size,
-              durationMs: Date.now() - new Date(job.startedAt).getTime(),
+              durationMs: artifact.durationMs,
+              artifacts: [artifact]
             });
           } else {
             const err = new Error('FFmpeg completed but output file is empty (0 bytes)');

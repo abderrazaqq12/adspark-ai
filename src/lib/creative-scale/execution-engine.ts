@@ -329,15 +329,12 @@ async function executeServerFFmpeg(
           ctx.onProgress?.('server_ffmpeg', progress, `Rendering... (${jobData.status})`);
 
           if (jobData.status === 'done') {
-            const finalUrl = jobData.output?.outputUrl || jobData.output?.outputPath || jobData.outputUrl || jobData.outputPath || jobData.videoUrl;
+            // 5. Strict Success Criteria (MANDATORY)
+            const artifacts = jobData.artifacts || jobData.output?.artifacts || [];
+            const videoArtifact = artifacts.find((a: any) => a.type === 'video');
 
-            // Log the actual structure for debugging if URL is missing
-            if (!finalUrl) {
-              console.warn('[ServerFFmpeg] Job done but no URL found. Response:', JSON.stringify(jobData));
-            }
-
-            if (finalUrl) {
-              ctx.onProgress?.('server_ffmpeg', 100, 'Rendering complete');
+            if (videoArtifact && videoArtifact.url) {
+              ctx.onProgress?.('server_ffmpeg', 100, 'Rendering complete (Artifact Verified)');
 
               // Log final network response for debug panel
               executionDebugLogger.logNetworkResponse(
@@ -357,12 +354,14 @@ async function executeServerFFmpeg(
                 success: true,
                 status: 'success',
                 outputType: 'video',
-                video_url: finalUrl,
+                video_url: videoArtifact.url,
                 duration_ms: Date.now() - start,
               };
             } else {
-              // Throw explicit error with payload to debug
-              throw new Error(`Job marked done but no output URL found. Data: ${JSON.stringify(jobData)}`);
+              // Throw explicit error if artifact is missing despite "done" status
+              const warning = 'Job marked done but no video artifact found.';
+              console.error(`[ServerFFmpeg] ${warning}`, jobData);
+              throw new Error(`${warning} Data: ${JSON.stringify(jobData)}`);
             }
           }
 
