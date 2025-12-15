@@ -256,15 +256,34 @@ async function processNextJob() {
     // Phase 3: Auto Source Resolution (Download first if needed)
     await resolveJobSource(job);
 
-    const result = await executeFFmpegJob(job);
+    // Try with best detected encoder first
+    let finalEncoder = bestEncoder;
+    let result;
+
+    try {
+      result = await executeFFmpegJob(job, finalEncoder);
+    } catch (err) {
+      // Automatic Fallback Logic
+      if (finalEncoder !== 'libx264') {
+        console.warn(`[Job ${jobId}] GPU render failed (${err.message}). Falling back to CPU.`);
+        appendLog(jobId, `[Warning] GPU render failed: ${err.message}`);
+        appendLog(jobId, `[Fallback] Retrying with CPU (libx264)...`);
+
+        finalEncoder = 'libx264';
+        result = await executeFFmpegJob(job, finalEncoder);
+      } else {
+        throw err; // It was already CPU or critical failure
+      }
+    }
+
     updateJob(jobId, {
       status: 'done',
       completedAt: new Date().toISOString(),
       output: result,
       progressPct: 100,
-      encoderUsed: bestEncoder // Store metadata
+      encoderUsed: finalEncoder
     });
-    appendLog(jobId, `[${new Date().toISOString()}] Job completed successfully (Encoder: ${bestEncoder})`);
+    appendLog(jobId, `[${new Date().toISOString()}] Job completed successfully (Encoder: ${finalEncoder})`);
   } catch (err) {
     updateJob(jobId, {
       status: 'error',
@@ -326,7 +345,7 @@ async function resolveJobSource(job) {
   }
 }
 
-async function executeFFmpegJob(job) {
+async function executeFFmpegJob(job, encoder = bestEncoder) {
   const { type, input } = job;
 
   if (!FFMPEG_AVAILABLE) {
@@ -345,9 +364,9 @@ async function executeFFmpegJob(job) {
   }
 
   if (type === 'execute') {
-    args = buildFFmpegArgs(input, outputPath);
+    args = buildFFmpegArgs(input, outputPath, encoder);
   } else if (type === 'execute-plan') {
-    args = buildPlanArgs(input, outputPath);
+    args = buildPlanArgs(input, outputPath, encoder);
   } else {
     throw new Error(`Unknown job type: ${type}`);
   }
@@ -429,7 +448,7 @@ async function executeFFmpegJob(job) {
 // FFMPEG ARGUMENT BUILDERS (Whitelist-based)
 // ============================================
 
-function buildFFmpegArgs(input, outputPath) {
+function buildFFmpegArgs(input, outputPath, encoder = 'libx264') {
   const args = ['-y']; // Overwrite output
 
   // sourcePath is guaranteed to be local and valid by resolveJobSource
@@ -479,11 +498,11 @@ function buildFFmpegArgs(input, outputPath) {
   }
 
   // Output codec (Dynamic Selection)
-  if (bestEncoder === 'h264_nvenc') {
+  if (encoder === 'h264_nvenc') {
     args.push('-c:v', 'h264_nvenc');
     args.push('-preset', 'p4'); // NVENC preset (p1-p7)
     args.push('-rc', 'vbr');
-  } else if (bestEncoder === 'h264_vaapi') {
+  } else if (encoder === 'h264_vaapi') {
     args.push('-vaapi_device', '/dev/dri/renderD128');
     args.push('-vf', 'format=nv12,hwupload'); // Required for VAAPI
     args.push('-c:v', 'h264_vaapi');
@@ -494,7 +513,7 @@ function buildFFmpegArgs(input, outputPath) {
   }
 
   args.push('-c:a', 'aac');
-  if (bestEncoder === 'libx264') {
+  if (encoder === 'libx264') {
     // these flags might conflict with hw encoders depending on version
     args.push('-movflags', '+faststart');
   }
@@ -503,7 +522,7 @@ function buildFFmpegArgs(input, outputPath) {
   return args;
 }
 
-function buildPlanArgs(input, outputPath) {
+function buildPlanArgs(input, outputPath, encoder = 'libx264') {
   const { plan } = input;
 
   // sourcePath is guaranteed to be local and valid by resolveJobSource
@@ -541,11 +560,11 @@ function buildPlanArgs(input, outputPath) {
     args.push('-vf', filters.join(','));
   }
 
-  args.push('-c:v', bestEncoder);
+  args.push('-c:v', encoder);
 
-  if (bestEncoder === 'h264_nvenc') {
+  if (encoder === 'h264_nvenc') {
     args.push('-preset', 'p4');
-  } else if (bestEncoder === 'libx264') {
+  } else if (encoder === 'libx264') {
     args.push('-preset', 'fast', '-crf', '23');
   }
 
