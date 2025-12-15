@@ -258,7 +258,7 @@ export class AdvancedEngineRouter {
         id: 'cloudinary', // Matches getEngineInstance check
         name: 'Cloudinary (Plan/Preview)',
         tier: 'free',
-        location: 'cloud',
+        location: 'server',
         maxResolution: '1080p',
         maxDurationSec: 60,
         costPerMinute: 0,

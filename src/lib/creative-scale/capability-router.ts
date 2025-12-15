@@ -14,7 +14,7 @@ import { ExecutionPlan } from './compiler-types';
 // CAPABILITY DEFINITIONS
 // ============================================
 
-export type Capability = 
+export type Capability =
   | 'trim'
   | 'speed_change'
   | 'resize'
@@ -155,16 +155,62 @@ export interface EngineSelectionResult {
   allowCloudFallback: boolean; // Explicit flag - false for server_ffmpeg
 }
 
+// ============================================
+// RENDERING MODES
+// ============================================
+
+export type RenderingMode = 'auto' | 'server_only' | 'cloudinary_only';
+
 export function selectEngine(
   requiredCapabilities: RequiredCapabilities,
-  skipEngines: EngineId[] = []
+  skipEngines: EngineId[] = [],
+  mode: RenderingMode = 'auto'
 ): EngineSelectionResult {
   const required = requiredCapabilities.capabilities;
-  
+
+  // FORCE MODES
+  if (mode === 'server_only') {
+    const serverFFmpeg = ENGINE_CAPABILITIES.find(e => e.id === 'server_ffmpeg');
+    if (serverFFmpeg) {
+      return {
+        selectedEngine: serverFFmpeg,
+        selectedEngineId: 'server_ffmpeg',
+        canExecute: true,
+        unsatisfiedCapabilities: [],
+        reason: 'Forced by User (Server Only) - VPS Execution',
+        alternativeEngines: [],
+        allowCloudFallback: false
+      };
+    }
+  }
+
+  if (mode === 'cloudinary_only') {
+    const cloudinary = ENGINE_CAPABILITIES.find(e => e.id === 'cloudinary');
+    if (cloudinary) {
+      // Warning: if capabilities missing, it might fail, but user forced it.
+      // We will check capabilities but soft-warn? Or just force it.
+      // Let's force it but providing unsatisfied info.
+      const unsatisfied: Capability[] = [];
+      for (const cap of required) {
+        if (!cloudinary.capabilities.has(cap)) unsatisfied.push(cap);
+      }
+
+      return {
+        selectedEngine: cloudinary,
+        selectedEngineId: 'cloudinary',
+        canExecute: true, // Attempt it
+        unsatisfiedCapabilities: unsatisfied,
+        reason: unsatisfied.length > 0 ? `Forced Cloudinary (Missing: ${unsatisfied.join(', ')})` : 'Forced by User (Cloudinary Only)',
+        alternativeEngines: [],
+        allowCloudFallback: true
+      };
+    }
+  }
+
   // HARD RULE: If native_ffmpeg capability is required, use server_ffmpeg ONLY
   // No cloud fallback allowed for this engine
-  if (required.has('advanced_filters') || required.has('segment_replace') || 
-      required.has('audio_fade') || required.has('overlay') || required.has('transition')) {
+  if (required.has('advanced_filters') || required.has('segment_replace') ||
+    required.has('audio_fade') || required.has('overlay') || required.has('transition')) {
     const serverFFmpeg = ENGINE_CAPABILITIES.find(e => e.id === 'server_ffmpeg');
     if (serverFFmpeg && !skipEngines.includes('server_ffmpeg')) {
       return {
@@ -178,14 +224,14 @@ export function selectEngine(
       };
     }
   }
-  
+
   const sortedEngines = [...ENGINE_CAPABILITIES]
     .filter(e => !skipEngines.includes(e.id))
     .sort((a, b) => a.priority - b.priority);
 
   for (const engine of sortedEngines) {
     if (engine.id === 'plan_export') continue;
-    
+
     const unsatisfied: Capability[] = [];
     for (const cap of required) {
       if (!engine.capabilities.has(cap)) {
@@ -229,12 +275,12 @@ export interface CapabilityRouterResult {
   executionPath: EngineId[];
 }
 
-export function routePlan(plan: ExecutionPlan): CapabilityRouterResult {
+export function routePlan(plan: ExecutionPlan, mode: RenderingMode = 'auto'): CapabilityRouterResult {
   const requiredCapabilities = extractRequiredCapabilities(plan);
-  const selection = selectEngine(requiredCapabilities);
+  const selection = selectEngine(requiredCapabilities, [], mode);
 
   const executionPath: EngineId[] = [];
-  
+
   if (selection.canExecute) {
     executionPath.push(selection.selectedEngineId);
     for (const alt of selection.alternativeEngines) {
@@ -243,7 +289,7 @@ export function routePlan(plan: ExecutionPlan): CapabilityRouterResult {
       }
     }
   }
-  
+
   executionPath.push('plan_export');
 
   return {

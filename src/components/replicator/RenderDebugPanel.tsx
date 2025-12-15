@@ -6,7 +6,7 @@ import { Terminal, CheckCircle2, AlertCircle, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
-interface RenderDebugInfo {
+export interface RenderDebugInfo {
     engine: string;
     executionPath: string;
     serverJobId?: string;

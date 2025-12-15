@@ -53,12 +53,15 @@ export interface EngineAttempt {
   wasAppropriate: boolean;
 }
 
+import { RenderingMode } from './capability-router';
+
 export interface ExecutionContext {
   plan: ExecutionPlan;
   analysis: VideoAnalysis;
   blueprint: CreativeBlueprint;
   userId?: string;
   variationIndex?: number;
+  renderingMode?: RenderingMode; // Support overrides
   onProgress?: (engine: EngineId, progress: number, message: string) => void;
   onEngineSwitch?: (from: EngineId | null, to: EngineId, reason: string) => void;
 }
@@ -400,9 +403,10 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
   const fallbackChain: EngineAttempt[] = [];
   const totalStart = Date.now();
   const variationIndex = ctx.variationIndex ?? 0;
+  const mode = ctx.renderingMode || 'auto';
 
   if (!ctx.plan || ctx.plan.status !== 'compilable') {
-    const routingDecision = routePlan(ctx.plan);
+    const routingDecision = routePlan(ctx.plan, mode);
     return {
       status: 'failed',
       engine_used: 'plan_export',
@@ -414,7 +418,7 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
     };
   }
 
-  const routingDecision = routePlan(ctx.plan);
+  const routingDecision = routePlan(ctx.plan, mode);
   const { selection, executionPath, requiredCapabilities } = routingDecision;
 
   // Evaluate all engines for debug info
