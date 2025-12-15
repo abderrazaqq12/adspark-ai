@@ -621,6 +621,10 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+// Serve static files
+app.use('/uploads', express.static(UPLOAD_DIR));
+app.use('/outputs', express.static(OUTPUT_DIR));
+
 // ============================================
 // GET /api/health
 // ============================================
