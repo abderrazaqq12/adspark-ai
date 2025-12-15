@@ -27,7 +27,9 @@ export interface EngineProgress {
   message: string;
   error?: string;
   duration_ms?: number;
+  duration_ms?: number;
   jobId?: string; // Capture jobId for logs
+  etaSec?: number; // ETA in seconds
 }
 
 export interface ExecutionProgressState {
@@ -107,14 +109,14 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
             return (
               <div key={engine.engine}>
                 <div className={`flex items-center gap-3 p-2 rounded-lg transition-all ${isActive ? 'bg-primary/10 border border-primary/30' :
-                    engine.status === 'success' ? 'bg-green-500/10' :
-                      engine.status === 'failed' ? 'bg-destructive/10' :
-                        'bg-muted/30'
+                  engine.status === 'success' ? 'bg-green-500/10' :
+                    engine.status === 'failed' ? 'bg-destructive/10' :
+                      'bg-muted/30'
                   }`}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${engine.status === 'attempting' ? 'bg-primary/20' :
-                      engine.status === 'success' ? 'bg-green-500/20' :
-                        engine.status === 'failed' ? 'bg-destructive/20' :
-                          'bg-muted'
+                    engine.status === 'success' ? 'bg-green-500/20' :
+                      engine.status === 'failed' ? 'bg-destructive/20' :
+                        'bg-muted'
                     }`}>
                     {engine.status === 'attempting' ? (
                       <Loader2 className="w-4 h-4 animate-spin text-primary" />
@@ -132,10 +134,20 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className={`text-sm font-medium ${isActive ? 'text-primary' :
-                          engine.status === 'pending' ? 'text-muted-foreground' : ''
+                        engine.status === 'pending' ? 'text-muted-foreground' : ''
                         }`}>
                         {config.label}
                       </span>
+                      {engine.status === 'attempting' && (
+                        <span className="text-secondary-foreground font-mono text-xs">
+                          {Math.round(engine.progress)}%
+                          {engine.etaSec !== undefined && engine.etaSec !== null && engine.progress < 100 && (
+                            <span className="ml-2 text-muted-foreground">
+                              (~{engine.etaSec.toFixed(1)}s left)
+                            </span>
+                          )}
+                        </span>
+                      )}
                       {engine.duration_ms && (
                         <span className="text-xs text-muted-foreground">
                           ({(engine.duration_ms / 1000).toFixed(1)}s)
@@ -186,14 +198,14 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
         </div>
 
         {/* Live Execution Console */}
-      {state.engines.map(engine => {
-        if (engine.engine === 'server_ffmpeg' && engine.jobId) {
-          return <ExecutionConsole key={engine.jobId} jobId={engine.jobId} />;
-        }
-        return null;
-      })}
+        {state.engines.map(engine => {
+          if (engine.engine === 'server_ffmpeg' && engine.jobId) {
+            return <ExecutionConsole key={engine.jobId} jobId={engine.jobId} />;
+          }
+          return null;
+        })}
 
-    </CardContent>
+      </CardContent>
     </Card >
   );
 }

@@ -419,7 +419,7 @@ export default function CreativeScale() {
             currentEngine: engine,
             engines: prev.engines.map(e =>
               e.engine === engine
-                ? { ...e, status: 'attempting' as const, progress, message, jobId: metadata?.jobId }
+                ? { ...e, status: 'attempting' as const, progress, message, jobId: metadata?.jobId, etaSec: metadata?.etaSec }
                 : e
             )
           }));

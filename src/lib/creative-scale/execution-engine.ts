@@ -308,10 +308,10 @@ async function executeServerFFmpeg(
 
     if (vpsResponse.status === 202 && parsedData?.jobId) {
       const jobId = parsedData.jobId as string;
-      
+
       // Track job ID for live console polling
       executionDebugLogger.setJobId(ctx.variationIndex ?? 0, jobId);
-      
+
       ctx.onProgress?.('server_ffmpeg', 10, `Job queued: ${jobId}. Waiting for render...`, { jobId });
       console.log(`[ServerFFmpeg] Job Queued: ${jobId}. Starting Poll Loop...`);
 
@@ -329,8 +329,11 @@ async function executeServerFFmpeg(
           if (!pollRes.ok) continue;
 
           const jobData = await pollRes.json();
-          const progress = 10 + Math.min(80, Math.floor((attempts / maxAttempts) * 80));
-          ctx.onProgress?.('server_ffmpeg', progress, `Rendering... (${jobData.status})`);
+          // Use real progress from server, fallback to 10%
+          const progress = jobData.progressPct || 10;
+          const etaSec = jobData.etaSec;
+
+          ctx.onProgress?.('server_ffmpeg', progress, `Rendering... (${jobData.status})`, { jobId, etaSec });
 
           if (jobData.status === 'done') {
             // 5. Strict Success Criteria (MANDATORY)
@@ -379,7 +382,19 @@ async function executeServerFFmpeg(
         }
       }
 
-      throw new Error(`Server rendering timed out (polling limit reached for ${jobId})`);
+      // TIMEOUT HANDLING - DO NOT FAIL
+      console.warn(`[ServerFFmpeg] Polling timed out for ${jobId}. Returning disconnected state.`);
+      ctx.onProgress?.('server_ffmpeg', 100, 'Connection timeout. Job continuing on server...');
+
+      return {
+        success: true, // It WAS successful in starting
+        status: 'timeout',
+        outputType: 'job',
+        video_url: undefined, // No video yet
+        duration_ms: Date.now() - start,
+        // Pass extra metadata if possible (requires interface update or casting)
+        ...({ jobId } as any)
+      };
     }
 
     if (parsedData?.ok && (parsedData?.outputPath || parsedData?.outputUrl)) {
@@ -563,23 +578,48 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
       wasAppropriate: true,
     });
 
-    if (result.success && result.video_url) {
-      executionDebugLogger.logVariationComplete(variationIndex, {
-        status: 'success',
-        engineUsed: engineId,
-        videoUrl: result.video_url,
-      });
+    if (result.success) {
+      // Case 1: Video Ready
+      if (result.video_url) {
+        executionDebugLogger.logVariationComplete(variationIndex, {
+          status: 'success',
+          engineUsed: engineId,
+          videoUrl: result.video_url,
+        });
 
-      return {
-        status: 'success',
-        engine_used: engineId,
-        output_type: (result as any).outputType || 'video',
-        output_video_url: result.video_url,
-        execution_plan_json: JSON.stringify(ctx.plan, null, 2),
-        processing_time_ms: Date.now() - totalStart,
-        fallbackChain,
-        routingDecision,
-      };
+        return {
+          status: 'success',
+          engine_used: engineId,
+          output_type: (result as any).outputType || 'video',
+          output_video_url: result.video_url,
+          execution_plan_json: JSON.stringify(ctx.plan, null, 2),
+          processing_time_ms: Date.now() - totalStart,
+          fallbackChain,
+          routingDecision,
+        };
+      }
+
+      // Case 2: Job Submitted but disconnected/timeout (Late Reconciliation)
+      if ((result as any).status === 'timeout' || (result as any).status === 'disconnected') {
+        executionDebugLogger.logVariationComplete(variationIndex, {
+          status: 'partial',
+          engineUsed: engineId,
+          errorReason: 'Polling timed out, but job is running.'
+        });
+
+        return {
+          status: 'partial', // Mark as partial/submitted
+          engine_used: engineId,
+          output_type: 'job', // It's a running job, not a video yet
+          execution_plan_json: JSON.stringify(ctx.plan, null, 2),
+          processing_time_ms: Date.now() - totalStart,
+          fallbackChain,
+          routingDecision,
+          reason: 'Job submitted successfully. Tracking lost (timeout). Check console for late updates.',
+          // Pass jobId if available in result (needs casting or interface update)
+          ...(result as any)
+        };
+      }
     }
 
     console.log(`[ExecutionEngine] ${engineId} failed:`, result.error);

@@ -425,7 +425,34 @@ async function executeFFmpegJob(job, encoder = bestEncoder) {
       // Parse progress
       const timeMatch = stderr.match(/time=(\d+):(\d+):(\d+\.\d+)/);
       if (timeMatch) {
-        updateJob(job.id, { progressPct: 50 });
+        const hours = parseInt(timeMatch[1]);
+        const mins = parseInt(timeMatch[2]);
+        const secs = parseFloat(timeMatch[3]);
+        const currentSec = (hours * 3600) + (mins * 60) + secs;
+
+        // Calculate Total Duration
+        let totalDurationSec = 30; // Default fallback
+        if (job.type === 'execute-plan' && job.input.plan?.validation?.total_duration_ms) {
+          totalDurationSec = job.input.plan.validation.total_duration_ms / 1000;
+        } else if (job.input.trim && job.input.trim.end > 0) {
+          // Approximation for simple execute jobs
+          totalDurationSec = job.input.trim.end - (job.input.trim.start || 0);
+        }
+
+        const progressPct = Math.min(99, Math.round((currentSec / totalDurationSec) * 100));
+
+        // Calculate ETA
+        let etaSec = null;
+        if (progressPct > 5 && job.startedAt) {
+          const elapsed = (Date.now() - new Date(job.startedAt).getTime()) / 1000;
+          if (elapsed > 0) {
+            const rate = currentSec / elapsed; // video seconds per real second
+            const remaining = (totalDurationSec - currentSec) / rate;
+            etaSec = remaining > 0 ? remaining : 0;
+          }
+        }
+
+        updateJob(job.id, { progressPct, etaSec });
       }
 
       // Keep full logs
@@ -976,6 +1003,7 @@ app.get('/api/jobs/:jobId/logs', (req, res) => {
     jobId: job.id,
     status: job.status,
     progressPct: job.progressPct,
+    etaSec: job.etaSec || null,
     command: job.command || null,
     fullLogs: job.fullLogs || [],
     logsTail: job.logsTail,
@@ -1015,6 +1043,7 @@ app.get('/api/jobs/:jobId/state', (req, res) => {
     jobId: job.id,
     status: job.status,
     progressPct: job.progressPct,
+    etaSec: job.etaSec || null, // Added ETA
     lastLogLine: job.fullLogs?.slice(-1)[0] || null,
     logsCount: job.fullLogs?.length || 0,
     isComplete: job.status === 'done' || job.status === 'error',
