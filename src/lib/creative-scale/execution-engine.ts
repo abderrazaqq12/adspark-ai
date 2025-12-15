@@ -209,7 +209,7 @@ async function executeCloudinary(
 
 async function executeServerFFmpeg(
   ctx: ExecutionContext
-): Promise<{ success: boolean; video_url?: string; error?: string; duration_ms: number }> {
+): Promise<{ success: boolean; video_url?: string; error?: string; duration_ms: number; status?: string; outputType?: string }> {
   const start = Date.now();
   const requestSentAt = new Date().toISOString();
   const endpoint = '/api/execute-plan';
@@ -354,6 +354,8 @@ async function executeServerFFmpeg(
 
               return {
                 success: true,
+                status: 'success',
+                outputType: 'video',
                 video_url: finalUrl,
                 duration_ms: Date.now() - start,
               };
@@ -380,6 +382,8 @@ async function executeServerFFmpeg(
       ctx.onProgress?.('server_ffmpeg', 100, 'VPS rendering complete');
       return {
         success: true,
+        status: 'success',
+        outputType: 'video',
         video_url: (parsedData.outputUrl || parsedData.outputPath) as string,
         duration_ms: durationMs,
       };
