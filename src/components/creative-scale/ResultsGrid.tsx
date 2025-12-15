@@ -129,7 +129,7 @@ function getEngineConfig(engineUsed: string) {
 }
 
 /**
- * Video Thumbnail with hover-to-play preview
+ * Video Thumbnail with hover-to-play preview and duration overlay
  */
 function VideoThumbnail({
   videoUrl,
@@ -142,6 +142,19 @@ function VideoThumbnail({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isHovering, setIsHovering] = useState(false);
+  const [duration, setDuration] = useState<number | null>(null);
+
+  const formatDuration = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleLoadedMetadata = useCallback(() => {
+    if (videoRef.current && videoRef.current.duration) {
+      setDuration(videoRef.current.duration);
+    }
+  }, []);
 
   const handleMouseEnter = useCallback(() => {
     setIsHovering(true);
@@ -179,6 +192,7 @@ function VideoThumbnail({
         loop
         playsInline
         preload="metadata"
+        onLoadedMetadata={handleLoadedMetadata}
       />
       {/* Play overlay - shows when not hovering */}
       <div 
@@ -190,7 +204,13 @@ function VideoThumbnail({
           <Play className="w-6 h-6 text-primary-foreground ml-0.5" />
         </div>
       </div>
-      {/* Hover indicator */}
+      {/* Duration overlay - bottom right */}
+      {duration !== null && (
+        <div className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-black/70 rounded text-[11px] text-white font-medium tabular-nums">
+          {formatDuration(duration)}
+        </div>
+      )}
+      {/* Hover indicator - bottom left */}
       {isHovering && (
         <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/60 rounded text-[10px] text-white font-medium backdrop-blur-sm">
           Click to expand
