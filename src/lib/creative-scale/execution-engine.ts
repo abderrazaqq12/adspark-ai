@@ -327,29 +327,40 @@ async function executeServerFFmpeg(
           const progress = 10 + Math.min(80, Math.floor((attempts / maxAttempts) * 80));
           ctx.onProgress?.('server_ffmpeg', progress, `Rendering... (${jobData.status})`);
 
-          if (jobData.status === 'done' && jobData.output) {
-            const finalUrl = jobData.output.outputUrl || jobData.output.outputPath;
-            ctx.onProgress?.('server_ffmpeg', 100, 'Rendering complete');
+          if (jobData.status === 'done') {
+            const finalUrl = jobData.output?.outputUrl || jobData.output?.outputPath || jobData.outputUrl || jobData.outputPath || jobData.videoUrl;
 
-            // Log final network response for debug panel
-            executionDebugLogger.logNetworkResponse(
-              ctx.variationIndex ?? 0,
-              'server_ffmpeg',
-              {
-                endpoint: `/api/jobs/${jobId}`,
-                method: 'GET',
-                requestSentAt: new Date().toISOString(),
-                durationMs: Date.now() - start,
-                rawResponseBody: JSON.stringify(jobData),
-                httpStatus: 200
-              }
-            );
+            // Log the actual structure for debugging if URL is missing
+            if (!finalUrl) {
+              console.warn('[ServerFFmpeg] Job done but no URL found. Response:', JSON.stringify(jobData));
+            }
 
-            return {
-              success: true,
-              video_url: finalUrl,
-              duration_ms: Date.now() - start,
-            };
+            if (finalUrl) {
+              ctx.onProgress?.('server_ffmpeg', 100, 'Rendering complete');
+
+              // Log final network response for debug panel
+              executionDebugLogger.logNetworkResponse(
+                ctx.variationIndex ?? 0,
+                'server_ffmpeg',
+                {
+                  endpoint: `/api/jobs/${jobId}`,
+                  method: 'GET',
+                  requestSentAt: new Date().toISOString(),
+                  durationMs: Date.now() - start,
+                  rawResponseBody: JSON.stringify(jobData),
+                  httpStatus: 200
+                }
+              );
+
+              return {
+                success: true,
+                video_url: finalUrl,
+                duration_ms: Date.now() - start,
+              };
+            } else {
+              // Throw explicit error with payload to debug
+              throw new Error(`Job marked done but no output URL found. Data: ${JSON.stringify(jobData)}`);
+            }
           }
 
           if (jobData.status === 'error') {
