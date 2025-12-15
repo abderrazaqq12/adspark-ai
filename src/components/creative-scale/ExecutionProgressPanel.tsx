@@ -184,10 +184,8 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
             );
           })}
         </div>
-          })}
-      </div>
 
-      {/* Live Execution Console */}
+        {/* Live Execution Console */}
       {state.engines.map(engine => {
         if (engine.engine === 'server_ffmpeg' && engine.jobId) {
           return <ExecutionConsole key={engine.jobId} jobId={engine.jobId} />;
