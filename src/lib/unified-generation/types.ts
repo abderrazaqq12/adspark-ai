@@ -3,7 +3,7 @@
  * ONE intelligence, MULTIPLE execution adapters
  */
 
-export type ExecutionMode = 'agent' | 'n8n' | 'edge';
+export type ExecutionMode = 'agent' | 'n8n' | 'edge' | 'gemini';
 
 export interface UnifiedInput {
   product: {

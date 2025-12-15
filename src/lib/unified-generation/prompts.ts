@@ -20,11 +20,14 @@ Product Title:
 Product Description:
 {{product_description}}
 
+Marketing Angles & Hooks:
+{{marketing_angles}}
+
 Target Market:
 Saudi Arabia (KSA)
 
 Language:
-Saudi Arabic dialect
+{{locale}}
 
 Direction:
 RTL (dir="rtl")
@@ -33,12 +36,10 @@ RTL (dir="rtl")
 INTERNAL STEPS (DO NOT SKIP)
 ────────────────────────
 
-STEP 1: Generate Marketing Angles
-- Identify pain points
-- Emotional triggers
-- Lifestyle desires
-- Objections
-- Trust elements
+STEP 1: Analyze Marketing Data
+- Review provided marketing angles
+- Select best hooks for conversion
+- Plan logic flow
 
 STEP 2: Generate Landing Page Text Content
 Follow this structure strictly:
@@ -101,10 +102,15 @@ DO NOT add comments outside JSON.`;
 
 export function buildPrompt(input: UnifiedInput, customPrompt?: string): string {
   const basePrompt = customPrompt || UNIFIED_LANDING_PAGE_PROMPT;
-  
+
+  const anglesText = input.marketingAngles && input.marketingAngles.length > 0
+    ? input.marketingAngles.join('\n- ')
+    : 'No specific angles provided. Generate best angles for this product.';
+
   return basePrompt
     .replace('{{product_title}}', input.product.title)
     .replace('{{product_description}}', input.product.description)
+    .replace('{{marketing_angles}}', anglesText)
     .replace('{{locale}}', input.locale || 'ar-SA');
 }
 
@@ -113,8 +119,8 @@ export function getPromptForExecution(input: UnifiedInput, customPrompt?: string
   userPrompt: string;
 } {
   const systemPrompt = `You are a senior Arabic eCommerce conversion expert. Generate production-ready landing pages in JSON format only.`;
-  
+
   const userPrompt = buildPrompt(input, customPrompt);
-  
+
   return { systemPrompt, userPrompt };
 }
