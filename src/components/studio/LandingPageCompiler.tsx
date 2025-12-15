@@ -4,6 +4,7 @@
  * Uses unified generation system with execution mode selector
  */
 import { useState, useEffect } from 'react';
+import CodeEditor from '@uiw/react-textarea-code-editor';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -446,16 +447,28 @@ Generate the complete HTML code now:`;
                 Paste the HTML code generated from Google AI Studio below. The HTML will be saved and displayed in the preview.
               </DialogDescription>
             </DialogHeader>
-            <Textarea
-              value={importHtml}
-              onChange={(e) => setImportHtml(e.target.value)}
-              placeholder="<!DOCTYPE html>
+            <div className="rounded-lg border border-border overflow-hidden">
+              <CodeEditor
+                value={importHtml}
+                language="html"
+                placeholder="<!DOCTYPE html>
 <html lang='ar' dir='rtl'>
 <head>...</head>
 <body>...</body>
 </html>"
-              className="min-h-[300px] font-mono text-xs"
-            />
+                onChange={(e) => setImportHtml(e.target.value)}
+                padding={16}
+                style={{
+                  fontSize: 12,
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                  backgroundColor: 'hsl(var(--muted) / 0.3)',
+                  minHeight: 300,
+                  maxHeight: 400,
+                  overflow: 'auto',
+                }}
+                data-color-mode="dark"
+              />
+            </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowImportDialog(false)}>
                 Cancel
