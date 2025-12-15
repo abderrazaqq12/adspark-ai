@@ -6,12 +6,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  ArrowRight, 
-  Loader2, 
-  Lightbulb, 
-  FileText, 
-  Layout, 
+import {
+  ArrowRight,
+  Loader2,
+  Lightbulb,
+  FileText,
+  Layout,
   Sparkles,
   Copy,
   CheckCircle2,
@@ -100,7 +100,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   const { getActivePrompt, getPromptForExecution, debugMode, setDebugMode } = usePromptProfiles();
   const { saveMarketingAnglesOutput } = usePipelineOutputs();
   const { projectId, createProject } = useProject();
-  
+
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSynced, setIsSynced] = useState(false);
@@ -118,7 +118,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
     audienceAge: '25-34',
     audienceGender: 'both',
   });
-  
+
   // Prompt profiles state
   const [anglesPromptProfile, setAnglesPromptProfile] = useState<PromptProfile | null>(null);
   const [landingPromptProfile, setLandingPromptProfile] = useState<PromptProfile | null>(null);
@@ -143,7 +143,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       if (!currentProjectId) {
         currentProjectId = await createProject();
       }
-      
+
       if (!currentProjectId) {
         throw new Error('Could not create or find project');
       }
@@ -161,9 +161,9 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         })) || [],
         generated_at: new Date().toISOString(),
       };
-      
+
       const success = await saveMarketingAnglesOutput(currentProjectId, structuredOutput);
-      
+
       if (success) {
         setIsSynced(true);
         toast({
@@ -194,12 +194,12 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   const loadPromptProfiles = async () => {
     const language = audienceTargeting.language.split('-')[0] || 'ar';
     const market = audienceTargeting.targetMarket || 'gcc';
-    
+
     const [anglesProfile, landingProfile] = await Promise.all([
       getActivePrompt('marketing_angles', language, market),
       getActivePrompt('landing_page', language, market)
     ]);
-    
+
     setAnglesPromptProfile(anglesProfile);
     setLandingPromptProfile(landingProfile);
   };
@@ -217,11 +217,11 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         .maybeSingle();
 
       const currentPrefs = (existingSettings?.preferences as Record<string, unknown>) || {};
-      
+
       const updatedPrefs: Record<string, unknown> = {
         ...currentPrefs,
       };
-      
+
       if (data.angles !== undefined) {
         updatedPrefs.studio_marketing_angles = JSON.parse(JSON.stringify(data.angles));
       }
@@ -254,7 +254,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
 
       if (settings) {
         // Backend mode is now managed by useBackendMode hook
-        
+
         const prefs = settings.preferences as Record<string, any>;
         if (prefs) {
           setProductInfo({
@@ -273,7 +273,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
           const stageWebhooks = prefs.stage_webhooks || {};
           const productContentWebhook = stageWebhooks.product_content;
           const globalWebhookUrl = prefs.n8n_global_webhook_url || prefs.global_webhook_url || '';
-          
+
           if (productContentWebhook?.webhook_url) {
             setN8nWebhookUrl(productContentWebhook.webhook_url);
           } else if (globalWebhookUrl) {
@@ -303,7 +303,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
     setIsGenerating(true);
     setWebhookResponse(null);
     setLastUsedPromptDebug(null);
-    
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
@@ -314,7 +314,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
 
       // CRITICAL: Get prompt from database - block if not configured
       const promptResult = await getPromptForExecution('marketing_angles', language, market);
-      
+
       if (!promptResult) {
         toast({
           title: "Prompt Not Configured",
@@ -327,7 +327,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
 
       const { prompt: activePrompt, debugInfo } = promptResult;
       setLastUsedPromptDebug(debugInfo);
-      
+
       // Replace variables in prompt
       const anglesPrompt = activePrompt.prompt_text
         .replace(/\{\{product_name\}\}/g, productInfo.name)
@@ -347,9 +347,9 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         if (!n8nWebhookUrl) {
           throw new Error('n8n Backend Mode is enabled but no webhook URL is configured for Product Content stage. Please configure it in Settings.');
         }
-        
+
         console.log('Calling Product Content webhook via proxy (n8n mode):', n8nWebhookUrl);
-        
+
         // Use edge function proxy to avoid CORS issues
         const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('n8n-proxy', {
           body: {
@@ -402,7 +402,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
 
         setGeneratedAngles(angles);
         saveContent({ angles });
-        
+
         // Save structured output to projects table for Stage 2 consumption
         let currentProjectId = projectId;
         if (!currentProjectId) {
@@ -430,11 +430,11 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
           title: "تم إنشاء الزوايا التسويقية",
           description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل (via n8n)",
         });
-      } 
+      }
       // Priority 2: When AI Operator Agent is enabled, use Supabase function
       else if (aiOperatorEnabled) {
         console.log('Calling AI Content Factory (AI Operator mode)');
-        
+
         const { data, error } = await supabase.functions.invoke('ai-content-factory', {
           body: {
             productName: productInfo.name,
@@ -471,7 +471,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
 
         setGeneratedAngles(angles);
         saveContent({ angles });
-        
+
         // Save structured output to projects table for Stage 2 consumption
         let currentProjectId = projectId;
         if (!currentProjectId) {
@@ -495,7 +495,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
           };
           await saveMarketingAnglesOutput(currentProjectId, structuredOutput);
         }
-        
+
         toast({
           title: "تم إنشاء الزوايا التسويقية",
           description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل (via AI Operator)",
@@ -504,7 +504,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       // Priority 3: Auto mode - use Lovable AI directly via edge function
       else {
         console.log('Calling AI Content Factory (Auto mode - Lovable AI)');
-        
+
         const { data, error } = await supabase.functions.invoke('ai-content-factory', {
           body: {
             productName: productInfo.name,
@@ -541,7 +541,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
 
         setGeneratedAngles(angles);
         saveContent({ angles });
-        
+
         // Save structured output to projects table for Stage 2 consumption
         let currentProjectId = projectId;
         if (!currentProjectId) {
@@ -565,7 +565,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
           };
           await saveMarketingAnglesOutput(currentProjectId, structuredOutput);
         }
-        
+
         toast({
           title: "تم إنشاء الزوايا التسويقية",
           description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل",
@@ -580,10 +580,10 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         language: audienceTargeting.language,
       };
       console.error('Generation error:', createDetailedErrorLog(error, context));
-      
+
       const parsedError = parseEdgeFunctionError(error);
       const toastContent = formatErrorForToast(parsedError);
-      
+
       toast({
         title: toastContent.title,
         description: toastContent.description,
@@ -597,14 +597,14 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   const generateScripts = async () => {
     // Backend mode is now managed by useBackendMode hook - 'auto' mode uses Lovable AI
     setIsGenerating(true);
-    
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
       const tones = ['engaging', 'professional', 'urgent', 'emotional', 'casual', 'humorous', 'luxurious', 'educational', 'storytelling', 'direct'];
       const count = parseInt(scriptsCount);
-      
+
       // Get prompts
       const scriptsPrompt = getPrompt('voiceover_scripts', {
         product_name: productInfo.name,
@@ -616,9 +616,9 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         if (!n8nWebhookUrl) {
           throw new Error('n8n Backend Mode is enabled but no webhook URL is configured for Product Content stage. Please configure it in Settings.');
         }
-        
+
         console.log('Calling Scripts webhook via proxy (n8n mode):', n8nWebhookUrl);
-        
+
         // Use edge function proxy to avoid CORS issues
         const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('n8n-proxy', {
           body: {
@@ -651,7 +651,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         }
 
         const data = proxyResponse.data;
-        
+
         const generatedScripts: GeneratedScript[] = data?.scripts || tones.slice(0, count).map((tone, i) => ({
           id: `script-${i}`,
           tone,
@@ -669,7 +669,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       // Priority 2: AI Operator Agent Mode
       else if (aiOperatorEnabled) {
         console.log('Calling Script Generation (AI Operator mode)');
-        
+
         const { data, error } = await supabase.functions.invoke('ai-content-factory', {
           body: {
             productName: productInfo.name,
@@ -687,19 +687,19 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         if (error) throw error;
 
         const scriptsData = data?.content?.scripts?.scripts || [];
-        const generatedScripts: GeneratedScript[] = scriptsData.length > 0 
+        const generatedScripts: GeneratedScript[] = scriptsData.length > 0
           ? scriptsData.map((s: any, i: number) => ({
-              id: `script-${i}`,
-              tone: s.style || tones[i] || 'engaging',
-              content: s.script || '',
-              wordCount: s.script?.split(' ').length || 50,
-            }))
+            id: `script-${i}`,
+            tone: s.style || tones[i] || 'engaging',
+            content: s.script || '',
+            wordCount: s.script?.split(' ').length || 50,
+          }))
           : tones.slice(0, count).map((tone, i) => ({
-              id: `script-${i}`,
-              tone,
-              content: `سكريبت ${tone} لمنتج ${productInfo.name}...`,
-              wordCount: 50,
-            }));
+            id: `script-${i}`,
+            tone,
+            content: `سكريبت ${tone} لمنتج ${productInfo.name}...`,
+            wordCount: 50,
+          }));
 
         setScripts(generatedScripts);
         saveContent({ scripts: generatedScripts });
@@ -711,7 +711,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       // Priority 3: Auto mode - use Lovable AI directly
       else {
         console.log('Calling Script Generation (Auto mode - Lovable AI)');
-        
+
         const { data, error } = await supabase.functions.invoke('ai-content-factory', {
           body: {
             productName: productInfo.name,
@@ -729,19 +729,19 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         if (error) throw error;
 
         const scriptsData = data?.content?.scripts?.scripts || [];
-        const generatedScripts: GeneratedScript[] = scriptsData.length > 0 
+        const generatedScripts: GeneratedScript[] = scriptsData.length > 0
           ? scriptsData.map((s: any, i: number) => ({
-              id: `script-${i}`,
-              tone: s.style || tones[i] || 'engaging',
-              content: s.script || '',
-              wordCount: s.script?.split(' ').length || 50,
-            }))
+            id: `script-${i}`,
+            tone: s.style || tones[i] || 'engaging',
+            content: s.script || '',
+            wordCount: s.script?.split(' ').length || 50,
+          }))
           : tones.slice(0, count).map((tone, i) => ({
-              id: `script-${i}`,
-              tone,
-              content: `سكريبت ${tone} لمنتج ${productInfo.name}...`,
-              wordCount: 50,
-            }));
+            id: `script-${i}`,
+            tone,
+            content: `سكريبت ${tone} لمنتج ${productInfo.name}...`,
+            wordCount: 50,
+          }));
 
         setScripts(generatedScripts);
         saveContent({ scripts: generatedScripts });
@@ -760,10 +760,10 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         scriptsCount,
       };
       console.error('Scripts generation error:', createDetailedErrorLog(error, context));
-      
+
       const parsedError = parseEdgeFunctionError(error);
       const toastContent = formatErrorForToast(parsedError);
-      
+
       toast({
         title: toastContent.title,
         description: toastContent.description,
@@ -792,9 +792,9 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         if (!n8nWebhookUrl) {
           throw new Error('n8n Backend Mode is enabled but no webhook URL is configured for Product Content stage.');
         }
-        
+
         console.log('Calling Landing Content webhook via proxy (n8n mode):', n8nWebhookUrl);
-        
+
         // Use edge function proxy to avoid CORS issues
         const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('n8n-proxy', {
           body: {
@@ -830,7 +830,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       // Priority 2: AI Operator Mode or Auto Mode - use edge function with Lovable AI
       else {
         console.log('Calling Landing Content (Lovable AI mode)');
-        
+
         const { data, error } = await supabase.functions.invoke('ai-content-factory', {
           body: {
             productName: productInfo.name,
@@ -848,7 +848,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
 
         const landingData = data?.content?.landing_page;
         let content = '';
-        
+
         if (landingData) {
           // Format the landing page data into readable content
           content = `# ${productInfo.name}
@@ -903,10 +903,10 @@ ${landingData.finalCta?.urgencyText || ''}`;
         language: audienceTargeting.language,
       };
       console.error('Landing content error:', createDetailedErrorLog(error, context));
-      
+
       const parsedError = parseEdgeFunctionError(error);
       const toastContent = formatErrorForToast(parsedError);
-      
+
       toast({
         title: toastContent.title,
         description: toastContent.description,
@@ -1035,15 +1035,15 @@ ${landingData.finalCta?.urgencyText || ''}`;
               <div className="space-y-1">
                 <h3 className="font-semibold">Product Marketing Angles</h3>
                 <p className="text-sm text-muted-foreground">AI-generated marketing angles in Arabic</p>
-                <PromptIndicator 
-                  prompt={anglesPromptProfile} 
+                <PromptIndicator
+                  prompt={anglesPromptProfile}
                   onClick={() => setShowAnglesPromptModal(true)}
                   label="Marketing Angles Prompt"
                 />
               </div>
               <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   onClick={() => setShowAnglesPromptModal(true)}
                   className="gap-1"
@@ -1085,9 +1085,9 @@ ${landingData.finalCta?.urgencyText || ''}`;
                   <div className="flex items-center gap-2 mb-3">
                     <Zap className="w-5 h-5 text-red-500" />
                     <h4 className="font-medium text-foreground">المشاكل التي يحلها المنتج</h4>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => copyToClipboard(generatedAngles.problemsSolved.join('\n'))}
                     >
                       <Copy className="w-4 h-4" />
@@ -1108,9 +1108,9 @@ ${landingData.finalCta?.urgencyText || ''}`;
                   <div className="flex items-center gap-2 mb-3">
                     <Heart className="w-5 h-5 text-green-500" />
                     <h4 className="font-medium text-foreground">القيمة للعميل</h4>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => copyToClipboard(generatedAngles.customerValue.join('\n'))}
                     >
                       <Copy className="w-4 h-4" />
@@ -1131,9 +1131,9 @@ ${landingData.finalCta?.urgencyText || ''}`;
                   <div className="flex items-center gap-2 mb-3">
                     <Lightbulb className="w-5 h-5 text-primary" />
                     <h4 className="font-medium text-foreground">الزوايا التسويقية</h4>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => copyToClipboard(generatedAngles.marketingAngles.join('\n'))}
                     >
                       <Copy className="w-4 h-4" />
@@ -1156,14 +1156,14 @@ ${landingData.finalCta?.urgencyText || ''}`;
                     <div>
                       <p className="text-sm font-medium text-foreground">Sync to Database</p>
                       <p className="text-xs text-muted-foreground">
-                        {isSynced 
-                          ? 'Angles synced - ready for Landing Page generation' 
+                        {isSynced
+                          ? 'Angles synced - ready for Landing Page generation'
                           : 'Save angles to database for Landing Page Compiler'}
                       </p>
                     </div>
                   </div>
-                  <Button 
-                    onClick={syncAnglesToDatabase} 
+                  <Button
+                    onClick={syncAnglesToDatabase}
                     disabled={isSyncing || isSynced}
                     variant={isSynced ? "outline" : "default"}
                     size="sm"
@@ -1191,15 +1191,15 @@ ${landingData.finalCta?.urgencyText || ''}`;
               <div className="space-y-1">
                 <h3 className="font-semibold">Landing Page Content</h3>
                 <p className="text-sm text-muted-foreground">Generate Arabic landing page content for COD eCommerce</p>
-                <PromptIndicator 
-                  prompt={landingPromptProfile} 
+                <PromptIndicator
+                  prompt={landingPromptProfile}
                   onClick={() => setShowLandingPromptModal(true)}
                   label="Landing Page Prompt"
                 />
               </div>
               <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   onClick={() => setShowLandingPromptModal(true)}
                   className="gap-1"
@@ -1256,7 +1256,7 @@ ${landingData.finalCta?.urgencyText || ''}`;
           setShowAnglesPromptModal(false);
         }}
       />
-      
+
       <PromptSettingsModal
         isOpen={showLandingPromptModal}
         onClose={() => setShowLandingPromptModal(false)}
@@ -1281,10 +1281,7 @@ ${landingData.finalCta?.urgencyText || ''}`;
             </span>
           )}
         </div>
-        <Button onClick={onNext} className="gap-2">
-          Continue to Images
-          <ArrowRight className="w-4 h-4" />
-        </Button>
+        {/* Continue button removed as requested */}
       </div>
     </div>
   );
