@@ -27,7 +27,6 @@ export interface EngineProgress {
   message: string;
   error?: string;
   duration_ms?: number;
-  duration_ms?: number;
   jobId?: string; // Capture jobId for logs
   etaSec?: number; // ETA in seconds
 }

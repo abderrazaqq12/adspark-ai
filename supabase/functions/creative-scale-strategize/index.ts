@@ -1,9 +1,31 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Cost tracking helper
+async function trackCost(userId: string, pipelineStage: string, engineName: string, operationType: string, costUsd: number) {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) return;
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    await supabase.from('cost_transactions').insert({
+      user_id: userId,
+      pipeline_stage: pipelineStage,
+      engine_name: engineName,
+      operation_type: operationType,
+      cost_usd: costUsd,
+      metadata: { source: 'creative-scale' }
+    });
+  } catch (e) {
+    console.warn('[cost-tracking] Failed to track cost:', e);
+  }
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -15,6 +37,22 @@ serve(async (req) => {
     
     // Clamp variation count to safe limits (1-20)
     const safeVariationCount = Math.max(1, Math.min(20, variation_count));
+
+    // Get user ID from auth header for cost tracking
+    let userId: string | null = null;
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader) {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        const token = authHeader.replace('Bearer ', '');
+        const { data: { user } } = await supabase.auth.getUser(token);
+        userId = user?.id || null;
+      } catch (e) {
+        console.warn('[auth] Failed to get user:', e);
+      }
+    }
 
     if (!analysis || !analysis.segments) {
       return new Response(
@@ -184,6 +222,11 @@ Return ONLY the JSON, no markdown, no explanation.`;
     }
 
     console.log(`[creative-scale-strategize] Success: ${blueprint.variation_ideas?.length || 0} variations generated`);
+
+    // Track cost for successful strategy generation
+    if (userId) {
+      await trackCost(userId, 'creative_scale_strategy', 'google/gemini-2.5-flash', 'strategy_generation', 0.002);
+    }
 
     return new Response(
       JSON.stringify({ 

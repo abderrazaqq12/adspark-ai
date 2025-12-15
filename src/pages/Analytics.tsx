@@ -51,10 +51,10 @@ import { DateRange } from "react-day-picker";
 
 // Content type categories mapped to pipeline stages
 const CONTENT_TYPES = {
-  text: ['product_content', 'script_generation', 'landing_page', 'marketing_content'],
+  text: ['product_content', 'script_generation', 'landing_page', 'marketing_content', 'creative_scale_analyze', 'creative_scale_strategy'],
   audio: ['voiceover', 'audio_generation', 'voice_synthesis'],
   image: ['image_generation', 'thumbnail', 'product_image'],
-  video: ['video_generation', 'scene_generation', 'assembly', 'export']
+  video: ['video_generation', 'scene_generation', 'assembly', 'export', 'creative_scale_render']
 };
 
 const CONTENT_TYPE_ICONS = {
@@ -135,6 +135,10 @@ const ENGINE_COSTS: Record<string, number> = {
   "Gemini": 0.01,
   "ChatGPT": 0.02,
   "Lovable AI": 0.005,
+  "google/gemini-2.5-flash": 0.002,
+  "google/gemini-2.5-pro": 0.005,
+  "openai/gpt-5": 0.01,
+  "openai/gpt-5-mini": 0.003,
 };
 
 const COLORS = [
