@@ -47,7 +47,7 @@ export const ENGINE_CAPABILITIES: EngineCapabilityProfile[] = [
     name: 'Cloudinary Video API',
     capabilities: new Set(['trim', 'resize', 'format_convert', 'speed_change']),
     isPaid: false,
-    priority: 1,
+    priority: 99, // Downgraded to fallback
   },
   {
     id: 'server_ffmpeg',
@@ -58,7 +58,7 @@ export const ENGINE_CAPABILITIES: EngineCapabilityProfile[] = [
       'advanced_filters', 'overlay', 'transition', 'text_overlay'
     ]),
     isPaid: false,
-    priority: 2,
+    priority: 1, // Primary (Server Default)
   },
   {
     id: 'plan_export',

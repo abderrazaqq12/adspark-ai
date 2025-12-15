@@ -40,6 +40,7 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
 const TEMP_DIR = path.join(UPLOAD_DIR, 'temp'); // Temp dir for downloaded assets
 const MAX_RENDER_TIME = parseInt(process.env.MAX_RENDER_TIME || '600'); // 10 min
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || String(500 * 1024 * 1024)); // 500MB
+const FFMPEG_HW_ACCEL = process.env.FFMPEG_HW_ACCEL || 'auto'; // auto, cuda, vaapi, off
 
 // Allowed MIME types (whitelist)
 const ALLOWED_MIME_TYPES = [
@@ -70,6 +71,7 @@ const ALLOWED_MIME_TYPES = [
 
 let ffmpegPath = null;
 let ffmpegVersion = null;
+let bestEncoder = 'libx264'; // Default to CPU
 
 function detectFFmpeg() {
   try {
@@ -84,6 +86,28 @@ function detectFFmpeg() {
     }
 
     console.log(`[FFmpeg] Found: ${ffmpegPath} (version ${ffmpegVersion})`);
+
+    // Hardware Acceleration Detection
+    if (FFMPEG_HW_ACCEL !== 'off') {
+      try {
+        const encoders = execSync('ffmpeg -encoders 2>&1').toString();
+
+        if ((FFMPEG_HW_ACCEL === 'auto' || FFMPEG_HW_ACCEL === 'cuda') && encoders.includes('h264_nvenc')) {
+          bestEncoder = 'h264_nvenc';
+          console.log('[FFmpeg] GPU Acceleration: ENABLED (NVIDIA NVENC)');
+        } else if ((FFMPEG_HW_ACCEL === 'auto' || FFMPEG_HW_ACCEL === 'vaapi') && encoders.includes('h264_vaapi')) {
+          bestEncoder = 'h264_vaapi';
+          console.log('[FFmpeg] GPU Acceleration: ENABLED (VAAPI)');
+        } else {
+          console.log('[FFmpeg] GPU Acceleration: NOT AVAILABLE (Falling back to libx264)');
+        }
+      } catch (e) {
+        console.warn('[FFmpeg] Failed to detect encoders, defaulting to libx264');
+      }
+    } else {
+      console.log('[FFmpeg] GPU Acceleration: DISABLED (Configured to off)');
+    }
+
     return true;
   } catch (err) {
     console.error('[FFmpeg] NOT FOUND - video processing will fail');
@@ -238,8 +262,9 @@ async function processNextJob() {
       completedAt: new Date().toISOString(),
       output: result,
       progressPct: 100,
+      encoderUsed: bestEncoder // Store metadata
     });
-    appendLog(jobId, `[${new Date().toISOString()}] Job completed successfully`);
+    appendLog(jobId, `[${new Date().toISOString()}] Job completed successfully (Encoder: ${bestEncoder})`);
   } catch (err) {
     updateJob(jobId, {
       status: 'error',
@@ -367,12 +392,19 @@ async function executeFFmpegJob(job) {
       if (code === 0) {
         if (fs.existsSync(outputPath)) {
           const stats = fs.statSync(outputPath);
-          resolve({
-            outputPath,
-            outputUrl: `/outputs/${outputFilename}`,
-            outputSize: stats.size,
-            durationMs: Date.now() - new Date(job.startedAt).getTime(),
-          });
+
+          if (stats.size > 0) {
+            resolve({
+              outputPath,
+              outputUrl: `/outputs/${outputFilename}`,
+              outputSize: stats.size,
+              durationMs: Date.now() - new Date(job.startedAt).getTime(),
+            });
+          } else {
+            const err = new Error('FFmpeg completed but output file is empty (0 bytes)');
+            err.code = 'EMPTY_OUTPUT';
+            reject(err);
+          }
         } else {
           const err = new Error('FFmpeg completed but output file not found');
           err.code = 'NO_OUTPUT';
@@ -446,12 +478,26 @@ function buildFFmpegArgs(input, outputPath) {
     }
   }
 
-  // Output codec (whitelist)
-  args.push('-c:v', 'libx264');
+  // Output codec (Dynamic Selection)
+  if (bestEncoder === 'h264_nvenc') {
+    args.push('-c:v', 'h264_nvenc');
+    args.push('-preset', 'p4'); // NVENC preset (p1-p7)
+    args.push('-rc', 'vbr');
+  } else if (bestEncoder === 'h264_vaapi') {
+    args.push('-vaapi_device', '/dev/dri/renderD128');
+    args.push('-vf', 'format=nv12,hwupload'); // Required for VAAPI
+    args.push('-c:v', 'h264_vaapi');
+  } else {
+    args.push('-c:v', 'libx264');
+    args.push('-preset', 'fast');
+    args.push('-crf', '23');
+  }
+
   args.push('-c:a', 'aac');
-  args.push('-preset', 'fast');
-  args.push('-crf', '23');
-  args.push('-movflags', '+faststart');
+  if (bestEncoder === 'libx264') {
+    // these flags might conflict with hw encoders depending on version
+    args.push('-movflags', '+faststart');
+  }
   args.push(outputPath);
 
   return args;
@@ -495,7 +541,15 @@ function buildPlanArgs(input, outputPath) {
     args.push('-vf', filters.join(','));
   }
 
-  args.push('-c:v', 'libx264', '-c:a', 'aac', '-preset', 'fast', '-crf', '23', '-movflags', '+faststart');
+  args.push('-c:v', bestEncoder);
+
+  if (bestEncoder === 'h264_nvenc') {
+    args.push('-preset', 'p4');
+  } else if (bestEncoder === 'libx264') {
+    args.push('-preset', 'fast', '-crf', '23');
+  }
+
+  args.push('-c:a', 'aac', '-movflags', '+faststart');
   args.push(outputPath);
 
   return args;
