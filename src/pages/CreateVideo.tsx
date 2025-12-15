@@ -7,13 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { 
-  Upload, 
-  Sparkles, 
-  Loader2, 
-  FileText, 
-  Mic, 
-  Video, 
+import {
+  Upload,
+  Sparkles,
+  Loader2,
+  FileText,
+  Mic,
+  Video,
   Wand2,
   CheckCircle2,
   Circle,
@@ -37,6 +37,7 @@ import { StudioProductInput } from "@/components/studio/StudioProductInput";
 import { StudioMarketingEngine } from "@/components/studio/StudioMarketingEngine";
 import { StudioImageGeneration } from "@/components/studio/StudioImageGeneration";
 import { StudioLandingPage } from "@/components/studio/StudioLandingPage";
+import { StudioUnifiedLandingPage } from "@/components/studio/StudioUnifiedLandingPage";
 import { StudioExport } from "@/components/studio/StudioExport";
 import { VideoScriptStage } from "@/components/studio/VideoScriptStage";
 import { supabase } from "@/integrations/supabase/client";
@@ -84,7 +85,7 @@ const ELEVENLABS_VOICES = [
   { id: "oWAxZDx7w5VEj9dCyTzz", name: "Grace", language: "en", gender: "female", accent: "American" },
   { id: "ThT5KcBeYPX3keUQqHPh", name: "Dorothy", language: "en", gender: "female", accent: "British" },
   { id: "pMsXgVXv3BLzUgSXRplE", name: "Serena", language: "en", gender: "female", accent: "American" },
-  
+
   // Male voices - English
   { id: "CwhRBWXzGAHq8TQ4Fs17", name: "Roger", language: "en", gender: "male", accent: "American" },
   { id: "IKne3meq5aSn9XLyUdCD", name: "Charlie", language: "en", gender: "male", accent: "Australian" },
@@ -106,7 +107,7 @@ const ELEVENLABS_VOICES = [
   { id: "g5CIjZEefAph4nQFvHAz", name: "Ethan", language: "en", gender: "male", accent: "American" },
   { id: "ODq5zmih8GrVes37Dizd", name: "Patrick", language: "en", gender: "male", accent: "American" },
   { id: "ZQe5CZNOzWyzPSCn5a3c", name: "James", language: "en", gender: "male", accent: "Australian" },
-  
+
   // Multilingual voices
   { id: "FGY2WhTYpPnrIDTdsKH5", name: "Laura", language: "es", gender: "female", accent: "Spanish" },
   { id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", language: "fr", gender: "female", accent: "French" },
@@ -173,13 +174,12 @@ interface ElevenLabsVoice {
 // Production pipeline stages - Merged Scene Builder + Video Generation, Auto-Ad Factory for Assembly
 const pipelineStages = [
   { id: 0, key: 'studio-product', name: "Product Input", icon: Package, description: "Product details & targeting", required: true },
-  { id: 1, key: 'studio-content', name: "Product Content", icon: Lightbulb, description: "Angles, scripts & content", required: false },
-  { id: 2, key: 'studio-images', name: "Image Generation", icon: Image, description: "Product images & mockups", required: false },
-  { id: 3, key: 'studio-landing', name: "Landing Page", icon: Layout, description: "Sales page content", required: false },
-  { id: 4, key: 'scripts', name: "Video Script Text & Audio", icon: Mic, description: "Voice-over scripts and audio", required: true },
-  { id: 5, key: 'unified-scene-video', name: "Scene Builder & Video Generation", icon: Wand2, description: "Build scenes, select engines, generate videos", required: true },
-  { id: 6, key: 'auto-ad-factory', name: "Auto-Ad Factory", icon: Palette, description: "Mass-produce <30s ads with one click", required: true },
-  { id: 7, key: 'export', name: "Export", icon: Globe, description: "Multi-format export", required: true },
+  { id: 1, key: 'studio-images', name: "Image Generation", icon: Image, description: "Product images & mockups", required: false },
+  { id: 2, key: 'studio-landing', name: "Landing Page", icon: Layout, description: "Marketing angles & landing page", required: false },
+  { id: 3, key: 'scripts', name: "Voiceover", icon: Mic, description: "Video Script Text & Audio", required: true },
+  { id: 4, key: 'unified-scene-video', name: "Scene Builder & Video Generation", icon: Wand2, description: "Build scenes, select engines, generate videos", required: true },
+  { id: 5, key: 'auto-ad-factory', name: "Auto-Ad Factory", icon: Palette, description: "Mass-produce <30s ads with one click", required: true },
+  { id: 6, key: 'export', name: "Export", icon: Globe, description: "Multi-format export", required: true },
 ];
 
 interface ScriptSlot {
@@ -213,16 +213,16 @@ export default function CreateVideo() {
     imageUrl: "",
     link: "",
   });
-  
+
   const [scriptSlots, setScriptSlots] = useState<ScriptSlot[]>([
     { id: 1, text: "", audioFile: null, audioUrl: null, generatedAudioUrl: null, isGenerating: false }
   ]);
-  
+
   // Voice settings
   const [selectedVoice, setSelectedVoice] = useState("EXAVITQu4vr4xnSDxMaL"); // Sarah
   const [selectedModel, setSelectedModel] = useState("eleven_multilingual_v2");
   const [voiceLanguage, setVoiceLanguage] = useState("en");
-  
+
   const [currentStage, setCurrentStage] = useState(0);
   const [expandedStage, setExpandedStage] = useState(0);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -238,7 +238,7 @@ export default function CreateVideo() {
   const [isLoadingVoices, setIsLoadingVoices] = useState(false);
   const [isGeneratingScript, setIsGeneratingScript] = useState(false);
   const [voiceSource, setVoiceSource] = useState<'library' | 'my'>('library');
-  
+
   // Template state
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
@@ -260,10 +260,10 @@ export default function CreateVideo() {
   const [transitionStyle, setTransitionStyle] = useState('mixed');
   const [randomizeOrder, setRandomizeOrder] = useState(true);
   const [autoAddMusic, setAutoAddMusic] = useState(true);
-  
+
   // Cost & engine preferences
   const [freeEnginesOnly, setFreeEnginesOnly] = useState(true);
-  
+
   // Timeline editor state
   const [showTimelineEditor, setShowTimelineEditor] = useState(false);
 
@@ -272,7 +272,7 @@ export default function CreateVideo() {
 
   // Backend mode state for webhook indicators
   const [webhookConfig, setWebhookConfig] = useState<Record<string, { enabled: boolean; webhook_url: string }>>({});
-  
+
   // Backend mode hook - replaces individual state for n8n and AI operator
   const { mode: backendMode, setMode: setBackendMode, n8nEnabled: useN8nBackend, aiOperatorEnabled, isLoading: isBackendModeLoading } = useBackendMode();
 
@@ -284,7 +284,7 @@ export default function CreateVideo() {
   // Clear functions for each stage - clears from UI state and user_settings
   const clearStageData = async (stageId: number) => {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     const clearFromSettings = async (keys: string[]) => {
       if (!user) return;
       try {
@@ -293,11 +293,11 @@ export default function CreateVideo() {
           .select('preferences')
           .eq('user_id', user.id)
           .maybeSingle();
-        
+
         if (settings?.preferences) {
           const prefs = { ...(settings.preferences as Record<string, unknown>) };
           keys.forEach(key => { delete prefs[key]; });
-          
+
           await supabase
             .from('user_settings')
             .update({ preferences: prefs as any })
@@ -315,37 +315,26 @@ export default function CreateVideo() {
         toast.success("Product input cleared");
         break;
       case 1:
-        await clearFromSettings(['studio_marketing_angles', 'studio_scripts', 'studio_landing_content']);
-        toast.success("Product content cleared");
-        break;
-      case 2:
         // Image generation clears generated_images in DB if needed
         toast.success("Image generation cleared");
         break;
-      case 3:
-        await clearFromSettings(['studio_landing_content']);
+      case 2:
+        await clearFromSettings(['studio_marketing_angles', 'studio_scripts', 'studio_landing_content']);
         toast.success("Landing page cleared");
         break;
-      case 4:
+      case 3:
         setScriptSlots([{ id: 1, text: "", audioFile: null, audioUrl: null, generatedAudioUrl: null, isGenerating: false }]);
-        toast.success("Scripts cleared");
+        toast.success("Voiceover scripts cleared");
         break;
-      case 5:
+      case 4:
         setScenes([]);
         toast.success("Scenes cleared");
         break;
-      case 6:
+      case 5:
         setUploadedVideos([]);
         toast.success("Video generation cleared");
         break;
-      case 7:
-        setVideosToGenerate(10);
-        setTransitionStyle('mixed');
-        setRandomizeOrder(true);
-        setAutoAddMusic(true);
-        toast.success("Assembly settings reset");
-        break;
-      case 8:
+      case 6:
         setSelectedFormats(["9:16", "16:9", "1:1"]);
         toast.success("Export settings reset");
         break;
@@ -354,7 +343,7 @@ export default function CreateVideo() {
 
   const clearAllPipelineData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     // Clear UI state
     setProductInfo({ name: "", description: "", imageUrl: "", link: "" });
     setScriptSlots([{ id: 1, text: "", audioFile: null, audioUrl: null, generatedAudioUrl: null, isGenerating: false }]);
@@ -363,7 +352,7 @@ export default function CreateVideo() {
     setCurrentStage(0);
     setExpandedStage(0);
     setSelectedTemplates([]);
-    
+
     // Clear user_settings preferences related to studio
     if (user) {
       try {
@@ -372,17 +361,17 @@ export default function CreateVideo() {
           .select('preferences')
           .eq('user_id', user.id)
           .maybeSingle();
-        
+
         if (settings?.preferences) {
           const prefs = { ...(settings.preferences as Record<string, unknown>) };
           const keysToRemove = [
-            'studio_product_name', 'studio_product_url', 'studio_description', 
+            'studio_product_name', 'studio_product_url', 'studio_description',
             'studio_media_links', 'studio_target_market', 'studio_language',
             'studio_audience_age', 'studio_audience_gender', 'studio_marketing_angles',
             'studio_scripts', 'studio_landing_content'
           ];
           keysToRemove.forEach(key => { delete prefs[key]; });
-          
+
           await supabase
             .from('user_settings')
             .update({ preferences: prefs as any })
@@ -392,7 +381,7 @@ export default function CreateVideo() {
         console.error('Error clearing settings:', error);
       }
     }
-    
+
     setShowClearPipelineDialog(false);
     toast.success("Pipeline reset - all data cleared");
   };
@@ -443,7 +432,7 @@ export default function CreateVideo() {
       if (projects[0].product_name) {
         setProductInfo(prev => ({ ...prev, name: projects[0].product_name || "" }));
       }
-      
+
       // Load script for this project
       const { data: scripts } = await supabase
         .from("scripts")
@@ -456,7 +445,7 @@ export default function CreateVideo() {
         if (scripts[0].raw_text) {
           setScriptSlots([{ id: 1, text: scripts[0].raw_text, audioFile: null, audioUrl: null, generatedAudioUrl: null, isGenerating: false }]);
         }
-        
+
         // Load scenes
         const { data: scenesData } = await supabase
           .from("scenes")
@@ -515,8 +504,8 @@ export default function CreateVideo() {
   };
 
   const toggleTemplateSelection = (templateId: string) => {
-    setSelectedTemplates(prev => 
-      prev.includes(templateId) 
+    setSelectedTemplates(prev =>
+      prev.includes(templateId)
         ? prev.filter(id => id !== templateId)
         : prev.length < 20 ? [...prev, templateId] : prev
     );
@@ -583,7 +572,7 @@ export default function CreateVideo() {
         // Replace existing empty slots or add new ones
         const existingNonEmpty = scriptSlots.filter(s => s.text.trim());
         const combined = [...existingNonEmpty, ...newSlots].slice(0, 20);
-        
+
         // Renumber IDs
         setScriptSlots(combined.map((slot, idx) => ({ ...slot, id: idx + 1 })));
         toast.success(`Generated ${successCount} scripts from templates!`);
@@ -634,10 +623,10 @@ export default function CreateVideo() {
       toast.error("Maximum 20 scripts allowed");
       return;
     }
-    setScriptSlots([...scriptSlots, { 
-      id: scriptSlots.length + 1, 
-      text: "", 
-      audioFile: null, 
+    setScriptSlots([...scriptSlots, {
+      id: scriptSlots.length + 1,
+      text: "",
+      audioFile: null,
       audioUrl: null,
       generatedAudioUrl: null,
       isGenerating: false
@@ -650,7 +639,7 @@ export default function CreateVideo() {
   };
 
   const updateScriptSlot = (id: number, field: keyof ScriptSlot, value: any) => {
-    setScriptSlots(scriptSlots.map(slot => 
+    setScriptSlots(scriptSlots.map(slot =>
       slot.id === id ? { ...slot, [field]: value } : slot
     ));
   };
@@ -721,7 +710,7 @@ export default function CreateVideo() {
       audio.onended = () => setPlayingAudio(null);
       setAudioElements(prev => ({ ...prev, [slotId]: audio }));
     }
-    
+
     audio.play();
     setPlayingAudio(slotId);
   };
@@ -891,7 +880,7 @@ export default function CreateVideo() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Clear All Pipeline Data?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will reset all stages including product info, scripts, scenes, and videos. 
+                    This will reset all stages including product info, scripts, scenes, and videos.
                     This action only affects the dashboard view, not your database or Google Sheets.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
@@ -904,12 +893,12 @@ export default function CreateVideo() {
               </AlertDialogContent>
             </AlertDialog>
           </div>
-          
+
           {/* Backend Mode Selector */}
           <div className="mt-4 mb-2">
             <BackendModeSelector compact className="w-full justify-between" />
           </div>
-          
+
           {/* Progress Indicator */}
           <div className="mt-3 space-y-1">
             <div className="flex items-center justify-between text-xs">
@@ -917,7 +906,7 @@ export default function CreateVideo() {
               <span className="font-medium text-primary">{Math.round((currentStage / (pipelineStages.length - 1)) * 100)}%</span>
             </div>
             <div className="h-2 bg-muted rounded-full overflow-hidden">
-              <div 
+              <div
                 className="h-full bg-gradient-primary transition-all duration-500 ease-out"
                 style={{ width: `${(currentStage / (pipelineStages.length - 1)) * 100}%` }}
               />
@@ -936,13 +925,12 @@ export default function CreateVideo() {
                     setExpandedStage(stage.id);
                     setCurrentStage(stage.id);
                   }}
-                  className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left flex-1 cursor-pointer ${
-                    expandedStage === stage.id 
-                      ? 'bg-primary/20 text-primary' 
-                      : currentStage > stage.id || currentStage === stage.id
-                        ? 'bg-primary/10 text-primary hover:bg-primary/20'
-                        : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-                  }`}
+                  className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left flex-1 cursor-pointer ${expandedStage === stage.id
+                    ? 'bg-primary/20 text-primary'
+                    : currentStage > stage.id || currentStage === stage.id
+                      ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                    }`}
                 >
                   {currentStage > stage.id ? (
                     <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
@@ -991,7 +979,7 @@ export default function CreateVideo() {
       <div className="flex-1 p-8 space-y-8 overflow-auto">
         <div className="flex items-center justify-between">
           <BackendModeSelector showCard className="w-auto" />
-          <PipelineStatusIndicator 
+          <PipelineStatusIndicator
             pipelineStatus={{
               product_info: currentStage > 0 ? 'completed' : expandedStage === 0 ? 'in_progress' : 'pending',
               scripts: currentStage > 4 ? 'completed' : expandedStage === 4 ? 'in_progress' : 'pending',
@@ -1008,8 +996,8 @@ export default function CreateVideo() {
 
         {/* Smart Defaults Banner - only show when not on Product Input stage */}
         {expandedStage !== 0 && (
-          <SmartDefaultsBanner 
-            projectId={projectId || undefined} 
+          <SmartDefaultsBanner
+            projectId={projectId || undefined}
             onApplyDefaults={(appliedDefaults) => {
               if (appliedDefaults.preferredVoice) {
                 setSelectedVoice(appliedDefaults.preferredVoice);
@@ -1025,7 +1013,7 @@ export default function CreateVideo() {
         <div className="flex flex-col gap-6">
           {/* Stage 0: Studio Product Input */}
           {expandedStage === 0 && (
-            <StudioProductInput 
+            <StudioProductInput
               onNext={() => {
                 setExpandedStage(1);
                 setCurrentStage(1);
@@ -1040,15 +1028,18 @@ export default function CreateVideo() {
             />
           )}
 
-          {/* Stage 1: Studio Product Content (Optional) */}
+          {/* Stage 1: Studio Image Generation (Prioritized) */}
           {expandedStage === 1 && (
             <div className="space-y-4">
-              <StudioMarketingEngine onNext={() => {
-                setExpandedStage(2);
-                setCurrentStage(2);
-              }} />
-              <Button 
-                variant="ghost" 
+              <StudioImageGeneration
+                onNext={() => {
+                  setExpandedStage(2);
+                  setCurrentStage(2);
+                }}
+                projectId={projectId}
+              />
+              <Button
+                variant="ghost"
                 className="w-full text-muted-foreground hover:text-foreground"
                 onClick={() => {
                   setExpandedStage(2);
@@ -1060,55 +1051,20 @@ export default function CreateVideo() {
             </div>
           )}
 
-          {/* Stage 2: Studio Image Generation (Optional) */}
+          {/* Stage 2: Unified Landing Page (Marketing Angles + Compiler) */}
           {expandedStage === 2 && (
-            <div className="space-y-4">
-              <StudioImageGeneration 
-                onNext={() => {
-                  setExpandedStage(3);
-                  setCurrentStage(3);
-                }}
-                projectId={projectId}
-              />
-              <Button 
-                variant="ghost" 
-                className="w-full text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  setExpandedStage(3);
-                  setCurrentStage(Math.max(currentStage, 3));
-                }}
-              >
-                Skip this step →
-              </Button>
-            </div>
+            <StudioUnifiedLandingPage onNext={() => {
+              setExpandedStage(3);
+              setCurrentStage(3);
+            }} />
           )}
 
-          {/* Stage 3: Studio Landing Page (Optional) */}
+          {/* Stage 3: Voiceover (Video Script Text & Audio) */}
           {expandedStage === 3 && (
-            <div className="space-y-4">
-              <StudioLandingPage onNext={() => {
-                setExpandedStage(4);
-                setCurrentStage(4);
-              }} />
-              <Button 
-                variant="ghost" 
-                className="w-full text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  setExpandedStage(4);
-                  setCurrentStage(Math.max(currentStage, 4));
-                }}
-              >
-                Skip this step →
-              </Button>
-            </div>
-          )}
-
-          {/* Stage 4: Video Script Text & Audio - NEW REDESIGNED */}
-          {expandedStage === 4 && (
             <VideoScriptStage
               onNext={() => {
-                setExpandedStage(5);
-                setCurrentStage(5);
+                setExpandedStage(4);
+                setCurrentStage(4);
               }}
               productInfo={productInfo}
               language={voiceLanguage}
@@ -1116,8 +1072,8 @@ export default function CreateVideo() {
             />
           )}
 
-          {/* Stage 5: Unified Scene Builder & Video Generation */}
-          {expandedStage === 5 && (
+          {/* Stage 4: Unified Scene Builder & Video Generation */}
+          {expandedStage === 4 && (
             <div className="space-y-6">
               {/* Unified Video Creation - Intelligent Engine Selection */}
               <UnifiedVideoCreation
@@ -1142,8 +1098,8 @@ export default function CreateVideo() {
                 onComplete={(output) => {
                   if (output.status === 'success') {
                     toast.success('Video generated! Proceeding to assembly...');
-                    setExpandedStage(6);
-                    setCurrentStage(6);
+                    setExpandedStage(5);
+                    setCurrentStage(5);
                   }
                 }}
               />
@@ -1195,8 +1151,8 @@ export default function CreateVideo() {
                     })));
                   }}
                   onProceedToAssembly={() => {
-                    setExpandedStage(6);
-                    setCurrentStage(6);
+                    setExpandedStage(5);
+                    setCurrentStage(5);
                   }}
                   videosToGenerate={videosToGenerate}
                   onVideosToGenerateChange={setVideosToGenerate}
@@ -1214,8 +1170,8 @@ export default function CreateVideo() {
             </div>
           )}
 
-          {/* Stage 6: Auto-Ad Factory (Assembly) */}
-          {expandedStage === 6 && (
+          {/* Stage 5: Auto-Ad Factory (Assembly) */}
+          {expandedStage === 5 && (
             <div className="space-y-6">
               {projectId ? (
                 <AutoAdFactory
@@ -1225,8 +1181,8 @@ export default function CreateVideo() {
                   videosToGenerate={videosToGenerate}
                   onComplete={(videos) => {
                     toast.success(`Created ${videos.length} video ads!`);
-                    setExpandedStage(7);
-                    setCurrentStage(7);
+                    setExpandedStage(6);
+                    setCurrentStage(6);
                   }}
                 />
               ) : (
@@ -1237,8 +1193,8 @@ export default function CreateVideo() {
               )}
 
               {/* Optional Timeline Editor */}
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="w-full"
                 onClick={() => {
                   if (scenes.length === 0 && unifiedScenes.length === 0) {
@@ -1255,8 +1211,8 @@ export default function CreateVideo() {
               {/* Proceed to Export */}
               <Button
                 onClick={() => {
-                  setExpandedStage(7);
-                  setCurrentStage(7);
+                  setExpandedStage(6);
+                  setCurrentStage(6);
                 }}
                 className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow"
               >
@@ -1266,13 +1222,13 @@ export default function CreateVideo() {
             </div>
           )}
 
-          {/* Stage 7: Export */}
-          {expandedStage === 7 && (
+          {/* Stage 6: Export */}
+          {expandedStage === 6 && (
             <StudioExport />
           )}
 
           {/* Save Button - shown when scenes exist */}
-          {(scenes.length > 0 || unifiedScenes.length > 0) && !scriptId && expandedStage <= 5 && (
+          {(scenes.length > 0 || unifiedScenes.length > 0) && !scriptId && expandedStage <= 4 && (
             <Button
               onClick={saveProjectAndScenes}
               disabled={isSaving}
@@ -1296,7 +1252,7 @@ export default function CreateVideo() {
       </div>
 
       {/* AI Assistant */}
-      <AIAssistant 
+      <AIAssistant
         context="video ad creation with scripts, hooks, and marketing copy"
         currentState={{
           productName: productInfo.name,
@@ -1324,7 +1280,7 @@ export default function CreateVideo() {
               Timeline Editor
             </DialogTitle>
           </DialogHeader>
-          <VideoTimelineEditor 
+          <VideoTimelineEditor
             scenes={(unifiedScenes.length > 0 ? unifiedScenes : scenes).map((s, idx) => ({
               id: s.id || `scene-${idx}`,
               index: s.index ?? idx,
