@@ -305,11 +305,71 @@ async function executeServerFFmpeg(
       };
     }
 
-    if (parsedData?.ok && (parsedData?.jobId || parsedData?.outputPath || parsedData?.outputUrl)) {
+    if (vpsResponse.status === 202 && parsedData?.jobId) {
+      const jobId = parsedData.jobId as string;
+      ctx.onProgress?.('server_ffmpeg', 10, `Job queued: ${jobId}. Waiting for render...`);
+      console.log(`[ServerFFmpeg] Job Queued: ${jobId}. Starting Poll Loop...`);
+
+      // POLL LOOP
+      const maxAttempts = 120; // 4 minutes
+      let attempts = 0;
+
+      while (attempts < maxAttempts) {
+        attempts++;
+        await new Promise(r => setTimeout(r, 2000));
+
+        try {
+          // Use window.location.origin if available, or relative path
+          const pollRes = await fetch(`/api/jobs/${jobId}`);
+          if (!pollRes.ok) continue;
+
+          const jobData = await pollRes.json();
+          const progress = 10 + Math.min(80, Math.floor((attempts / maxAttempts) * 80));
+          ctx.onProgress?.('server_ffmpeg', progress, `Rendering... (${jobData.status})`);
+
+          if (jobData.status === 'done' && jobData.output) {
+            const finalUrl = jobData.output.outputUrl || jobData.output.outputPath;
+            ctx.onProgress?.('server_ffmpeg', 100, 'Rendering complete');
+
+            // Log final network response for debug panel
+            executionDebugLogger.logNetworkResponse(
+              ctx.variationIndex ?? 0,
+              'server_ffmpeg',
+              {
+                endpoint: `/api/jobs/${jobId}`,
+                method: 'GET',
+                requestSentAt: new Date().toISOString(),
+                durationMs: Date.now() - start,
+                rawResponseBody: JSON.stringify(jobData),
+                httpStatus: 200
+              }
+            );
+
+            return {
+              success: true,
+              video_url: finalUrl,
+              duration_ms: Date.now() - start,
+            };
+          }
+
+          if (jobData.status === 'error') {
+            throw new Error(jobData.error?.message || 'Job failed on server');
+          }
+        } catch (pollErr: any) {
+          console.warn(`[ServerFFmpeg] Poll error:`, pollErr);
+          if (attempts % 5 === 0) ctx.onProgress?.('server_ffmpeg', 10, 'Waiting for server...');
+          // Continue polling...
+        }
+      }
+
+      throw new Error(`Server rendering timed out (polling limit reached for ${jobId})`);
+    }
+
+    if (parsedData?.ok && (parsedData?.outputPath || parsedData?.outputUrl)) {
       ctx.onProgress?.('server_ffmpeg', 100, 'VPS rendering complete');
       return {
         success: true,
-        video_url: (parsedData.outputUrl || parsedData.outputPath || `/outputs/${parsedData.jobId}`) as string,
+        video_url: (parsedData.outputUrl || parsedData.outputPath) as string,
         duration_ms: durationMs,
       };
     }
