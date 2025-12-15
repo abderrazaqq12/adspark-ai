@@ -48,9 +48,9 @@ interface ResultsGridProps {
 }
 
 // Engine configuration for badges - server-only engines
-const ENGINE_CONFIG: Record<string, { 
-  label: string; 
-  icon: typeof Cpu; 
+const ENGINE_CONFIG: Record<string, {
+  label: string;
+  icon: typeof Cpu;
   color: string;
   bgColor: string;
   description: string;
@@ -136,8 +136,8 @@ export function ResultsGrid({
   return (
     <div className="grid grid-cols-2 gap-4">
       {items.map((item) => {
-        const hasVideo = item.result?.status === 'completed' && 
-          'output_video_url' in item.result && 
+        const hasVideo = ((item.result as any)?.status === 'completed' || (item.result as any)?.status === 'success') &&
+          item.result && 'output_video_url' in item.result &&
           item.result.output_video_url;
         const isPlanOnly = item.engineUsed === 'plan_export' || item.engineUsed === 'no-render';
         const failed = item.result?.status === 'partial_success' || !item.result;
@@ -145,19 +145,18 @@ export function ResultsGrid({
         const EngineIcon = engineConfig.icon;
 
         return (
-          <div 
-            key={item.plan.plan_id} 
-            className={`rounded-lg border p-4 ${
-              failed && !isPlanOnly ? 'border-destructive/50 bg-destructive/5' : 
+          <div
+            key={item.plan.plan_id}
+            className={`rounded-lg border p-4 ${failed && !isPlanOnly ? 'border-destructive/50 bg-destructive/5' :
               isPlanOnly ? 'border-amber-500/30 bg-amber-500/5' :
-              'border-border'
-            }`}
+                'border-border'
+              }`}
           >
             {/* Thumbnail / Placeholder */}
             <div className="aspect-video bg-muted rounded-lg mb-3 flex items-center justify-center overflow-hidden relative">
               {hasVideo ? (
-                <video 
-                  src={(item.result as any).output_video_url} 
+                <video
+                  src={(item.result as any).output_video_url}
                   className="w-full h-full object-cover"
                   controls={false}
                 />
@@ -171,9 +170,9 @@ export function ResultsGrid({
                     <Play className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
                   )}
                   <p className="text-xs text-muted-foreground">
-                    {isPlanOnly ? 'Advanced rendering required' : 
-                     failed ? 'Execution failed' : 
-                     'No video generated'}
+                    {isPlanOnly ? 'Advanced rendering required' :
+                      failed ? 'Execution failed' :
+                        'No video generated'}
                   </p>
                 </div>
               )}
@@ -232,8 +231,8 @@ export function ResultsGrid({
               <div className="flex gap-2 pt-2">
                 {/* Download Video - ONLY if exists */}
                 {hasVideo && onDownloadVideo && (
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     variant="default"
                     className="flex-1"
                     onClick={() => onDownloadVideo(item)}
@@ -244,8 +243,8 @@ export function ResultsGrid({
                 )}
 
                 {/* Download Plan - ALWAYS available */}
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   variant={isPlanOnly ? 'default' : 'outline'}
                   className="flex-1"
                   onClick={() => onDownloadPlan(item)}
@@ -256,8 +255,8 @@ export function ResultsGrid({
 
                 {/* Retry if failed (not for plan-only) */}
                 {failed && !isPlanOnly && onRetry && (
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     variant="ghost"
                     onClick={() => onRetry(item)}
                   >
@@ -267,8 +266,8 @@ export function ResultsGrid({
 
                 {/* Duplicate & Iterate */}
                 {onDuplicate && (
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     variant="ghost"
                     onClick={() => onDuplicate(item)}
                     title="Duplicate & Iterate"

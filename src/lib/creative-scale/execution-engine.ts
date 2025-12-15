@@ -34,6 +34,7 @@ export type ExecutionStatus = 'success' | 'partial' | 'plan_only' | 'failed';
 export interface ExecutionResult {
   status: ExecutionStatus;
   engine_used: EngineId;
+  output_type?: 'video' | 'plan';
   output_video_url?: string;
   plan_url?: string;
   execution_plan_json: string;
@@ -569,6 +570,7 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
       return {
         status: 'success',
         engine_used: engineId,
+        output_type: (result as any).outputType || 'video',
         output_video_url: result.video_url,
         execution_plan_json: JSON.stringify(ctx.plan, null, 2),
         processing_time_ms: Date.now() - totalStart,
