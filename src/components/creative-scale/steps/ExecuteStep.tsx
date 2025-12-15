@@ -7,13 +7,15 @@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Play, 
   ArrowRight,
   Zap,
   Cloud,
   Download,
-  Server
+  Server,
+  ShieldAlert
 } from 'lucide-react';
 import { ExecutionProgressPanel, ExecutionProgressState } from '@/components/creative-scale/ExecutionProgressPanel';
 import { ExecutionExplainer } from '@/components/creative-scale/ExecutionExplainer';
@@ -21,6 +23,7 @@ import { CapabilityIndicators } from '@/components/creative-scale/CapabilityIndi
 import { RenderDebugPanel } from '@/components/creative-scale/RenderDebugPanel';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
 import type { CreativeBlueprint } from '@/lib/creative-scale/types';
+import type { ComplianceResult } from '@/lib/creative-scale/compliance-types';
 
 interface ExecuteStepProps {
   plans: ExecutionPlan[];
@@ -28,6 +31,7 @@ interface ExecuteStepProps {
   executionProgress: ExecutionProgressState;
   isExecuting: boolean;
   ffmpegReady: boolean;
+  complianceResult?: ComplianceResult | null;
   onExecute: () => void;
   onDownloadPlans: () => void;
   onContinue: () => void;
@@ -39,11 +43,16 @@ export function ExecuteStep({
   executionProgress,
   isExecuting,
   ffmpegReady,
+  complianceResult,
   onExecute,
   onDownloadPlans,
   onContinue
 }: ExecuteStepProps) {
   const isComplete = executionProgress.status === 'complete' || executionProgress.status === 'partial';
+  
+  // Check if rendering is blocked due to critical compliance violations
+  const isRenderingBlocked = complianceResult?.overallRisk === 'blocked' || 
+    (complianceResult?.overallRisk === 'high_risk' && !complianceResult?.canRender);
 
   return (
     <div className="h-full flex flex-col">
@@ -88,14 +97,41 @@ export function ExecuteStep({
                 <CapabilityIndicators plans={plans} />
               )}
 
+              {/* Compliance Blocking Alert */}
+              {isRenderingBlocked && (
+                <Alert variant="destructive" className="border-destructive/50 bg-destructive/10">
+                  <ShieldAlert className="w-4 h-4" />
+                  <AlertDescription className="ml-2">
+                    <span className="font-medium">Rendering Blocked:</span> Critical policy violations must be resolved before execution.
+                    {complianceResult?.violations && complianceResult.violations.length > 0 && (
+                      <span className="block text-xs mt-1 text-muted-foreground">
+                        {complianceResult.violations.filter(v => v.severity === 'high_risk' || v.severity === 'blocked').length} critical violation(s) detected. 
+                        Return to Strategy step to review and resolve.
+                      </span>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
+
               {/* Ready to Render CTA */}
               <div className="flex flex-col items-center justify-center text-center py-8">
-                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                  <Zap className="w-8 h-8 text-primary" />
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${
+                  isRenderingBlocked ? 'bg-destructive/10' : 'bg-primary/10'
+                }`}>
+                  {isRenderingBlocked ? (
+                    <ShieldAlert className="w-8 h-8 text-destructive" />
+                  ) : (
+                    <Zap className="w-8 h-8 text-primary" />
+                  )}
                 </div>
-                <h3 className="text-lg font-semibold mb-2">Ready to Render</h3>
+                <h3 className="text-lg font-semibold mb-2">
+                  {isRenderingBlocked ? 'Rendering Blocked' : 'Ready to Render'}
+                </h3>
                 <p className="text-muted-foreground max-w-md mb-6 text-sm">
-                  Each variation will be routed to the most appropriate engine based on its required capabilities.
+                  {isRenderingBlocked 
+                    ? 'Critical compliance violations prevent rendering. Review and resolve issues in the Strategy step.'
+                    : 'Each variation will be routed to the most appropriate engine based on its required capabilities.'
+                  }
                 </p>
                 
                 <div className="flex gap-3">
@@ -103,6 +139,7 @@ export function ExecuteStep({
                     size="lg"
                     onClick={onExecute}
                     className="h-12 px-8"
+                    disabled={isRenderingBlocked}
                   >
                     <Play className="w-5 h-5 mr-2" />
                     Generate {plans.length} Video{plans.length !== 1 ? 's' : ''}
