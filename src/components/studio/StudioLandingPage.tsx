@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { 
-  ArrowRight, 
   Database,
   CheckCircle2,
   AlertTriangle,
@@ -250,13 +248,6 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
         />
       )}
 
-      {/* Continue Button */}
-      <div className="flex justify-end pt-2">
-        <Button onClick={onNext} className="gap-2 px-6">
-          Continue to Voiceover
-          <ArrowRight className="w-4 h-4" />
-        </Button>
-      </div>
     </div>
   );
 };
