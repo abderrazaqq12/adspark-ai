@@ -20,7 +20,8 @@ import {
   Bug,
   RefreshCw,
   Settings2,
-  ExternalLink
+  ExternalLink,
+  ClipboardCopy
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePromptProfiles, PromptProfile } from '@/hooks/usePromptProfiles';
@@ -207,6 +208,42 @@ export const LandingPageCompiler = ({
     URL.revokeObjectURL(url);
   };
 
+  const copyPromptForAIStudio = () => {
+    const prompt = `You are a senior Arabic eCommerce landing page expert. Generate a complete, production-ready HTML landing page for the following product.
+
+## Product Information
+- **Product Name:** ${productInfo.name}
+- **Description:** ${productInfo.description}
+- **Product URL:** ${productInfo.url || 'N/A'}
+- **Target Market:** ${audienceTargeting.targetMarket}
+- **Language:** ${audienceTargeting.language}
+- **Audience Age:** ${audienceTargeting.audienceAge}
+- **Audience Gender:** ${audienceTargeting.audienceGender}
+
+## Marketing Angles (from previous analysis)
+${marketingAngles?.problems?.map((p, i) => `${i + 1}. Problem: ${p}`).join('\n') || 'No problems listed'}
+
+${marketingAngles?.angles?.map((a, i) => `${i + 1}. Hook: ${a.hook}\n   Promise: ${a.promise || 'N/A'}\n   Audience: ${a.audience_focus || 'N/A'}`).join('\n\n') || 'No angles listed'}
+
+## Requirements
+1. Generate a complete, valid HTML document with embedded CSS
+2. Mobile-first, responsive design
+3. RTL layout for Arabic (dir="rtl")
+4. Use semantic HTML5 elements
+5. Include sections: Hero, Problem, Solution, Benefits, Features, Social Proof (10 reviews in Saudi dialect), FAQ, CTA
+6. Use Arabic font (Cairo, Tajawal, or Almarai)
+7. Color scheme: Professional with accent colors
+8. No external dependencies - everything inline
+
+Generate the complete HTML code now:`;
+
+    navigator.clipboard.writeText(prompt);
+    toast({ 
+      title: "Prompt Copied", 
+      description: "Paste this prompt into Google AI Studio to generate your landing page" 
+    });
+  };
+
   const hasAngles = !!(marketingAngles && (marketingAngles.problems?.length > 0 || marketingAngles.angles?.length > 0));
 
   return (
@@ -312,6 +349,19 @@ export const LandingPageCompiler = ({
           )}
         </Button>
 
+        {/* Copy Prompt for AI Studio */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={copyPromptForAIStudio}
+          disabled={!hasAngles}
+          title="Copy formatted prompt to paste into Google AI Studio"
+        >
+          <ClipboardCopy className="w-4 h-4" />
+          Copy Prompt
+        </Button>
+
         {/* Google AI Studio Link */}
         <Button
           variant="outline"
@@ -320,9 +370,8 @@ export const LandingPageCompiler = ({
           onClick={() => window.open('https://aistudio.google.com/prompts/new_chat', '_blank')}
         >
           <ExternalLink className="w-4 h-4" />
-          Open Google AI Studio
+          Open AI Studio
         </Button>
-
         {htmlOutput && (
           <>
             <Button variant="ghost" size="icon" onClick={copyHtml} title="Copy HTML">
