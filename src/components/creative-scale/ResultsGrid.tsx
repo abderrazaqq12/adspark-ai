@@ -129,7 +129,8 @@ function getEngineConfig(engineUsed: string) {
 }
 
 /**
- * Video Thumbnail with hover-to-play preview and duration overlay
+ * Video Thumbnail with static image preview, hover-to-play, and duration overlay
+ * Captures a frame from the video as a static image for faster initial loading
  */
 function VideoThumbnail({
   videoUrl,
@@ -141,8 +142,11 @@ function VideoThumbnail({
   hasVideo: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isHovering, setIsHovering] = useState(false);
   const [duration, setDuration] = useState<number | null>(null);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const [thumbnailGenerated, setThumbnailGenerated] = useState(false);
 
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -150,11 +154,48 @@ function VideoThumbnail({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Capture thumbnail frame when video metadata loads
   const handleLoadedMetadata = useCallback(() => {
-    if (videoRef.current && videoRef.current.duration) {
-      setDuration(videoRef.current.duration);
+    const video = videoRef.current;
+    if (!video) return;
+    
+    if (video.duration) {
+      setDuration(video.duration);
     }
-  }, []);
+    
+    // Only seek for thumbnail if not already generated
+    if (!thumbnailGenerated) {
+      // Seek to 1 second or 25% for better thumbnail
+      const seekTime = Math.min(1, video.duration * 0.25);
+      video.currentTime = seekTime;
+    }
+  }, [thumbnailGenerated]);
+
+  // Capture frame when seeked to thumbnail position
+  const handleSeeked = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || thumbnailGenerated) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    canvas.width = video.videoWidth || 320;
+    canvas.height = video.videoHeight || 180;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    try {
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      setThumbnailUrl(dataUrl);
+      setThumbnailGenerated(true);
+      // Reset video to start for hover preview
+      video.currentTime = 0;
+    } catch (e) {
+      // CORS or other error - fallback to video element
+      console.warn('Could not generate thumbnail:', e);
+      setThumbnailGenerated(true);
+    }
+  }, [thumbnailGenerated]);
 
   const handleMouseEnter = useCallback(() => {
     setIsHovering(true);
@@ -183,17 +224,33 @@ function VideoThumbnail({
       onMouseLeave={handleMouseLeave}
       onClick={onPlay}
     >
+      {/* Hidden canvas for thumbnail generation */}
+      <canvas ref={canvasRef} className="hidden" />
+      
+      {/* Static thumbnail image - shown when not hovering */}
+      {thumbnailUrl && !isHovering && (
+        <img
+          src={thumbnailUrl}
+          alt="Video thumbnail"
+          className="w-full h-full object-cover absolute inset-0"
+        />
+      )}
+      
+      {/* Video element - hidden until hover or no thumbnail */}
       <video
         ref={videoRef}
         src={videoUrl}
-        className="w-full h-full object-cover"
+        className={`w-full h-full object-cover ${thumbnailUrl && !isHovering ? 'invisible' : 'visible'}`}
         controls={false}
         muted
         loop
         playsInline
         preload="metadata"
+        crossOrigin="anonymous"
         onLoadedMetadata={handleLoadedMetadata}
+        onSeeked={handleSeeked}
       />
+      
       {/* Play overlay - shows when not hovering */}
       <div 
         className={`absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity duration-200 ${
@@ -204,12 +261,14 @@ function VideoThumbnail({
           <Play className="w-6 h-6 text-primary-foreground ml-0.5" />
         </div>
       </div>
+      
       {/* Duration overlay - bottom right */}
       {duration !== null && (
         <div className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-black/70 rounded text-[11px] text-white font-medium tabular-nums">
           {formatDuration(duration)}
         </div>
       )}
+      
       {/* Hover indicator - bottom left */}
       {isHovering && (
         <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/60 rounded text-[10px] text-white font-medium backdrop-blur-sm">
