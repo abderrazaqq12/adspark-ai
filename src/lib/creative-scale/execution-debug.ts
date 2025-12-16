@@ -3,7 +3,7 @@
  * Deep visibility into rendering pipeline for diagnostics
  */
 
-import type { Capability, EngineId, CapabilityRouterResult } from './capability-router';
+import type { EngineId } from './execution-engine';
 
 // ============================================
 // DEBUG EVENT TYPES
@@ -26,25 +26,14 @@ export interface UITriggerEvent extends ExecutionTraceEvent {
   };
 }
 
+// Keeping RoutingEvent for backward compat/completeness, though mostly irrelevant now
 export interface RoutingDebugEvent extends ExecutionTraceEvent {
   eventType: 'routing';
   data: {
     variationIndex: number;
-    requiredCapabilities: Capability[];
-    enginesEvaluated: EngineEvaluation[];
     selectedEngine: EngineId;
     executionPath: EngineId[];
-    allowCloudFallback: boolean;
   };
-}
-
-export interface EngineEvaluation {
-  engineId: EngineId;
-  engineName: string;
-  evaluated: boolean;
-  canHandle: boolean;
-  rejectionReason?: string;
-  priority: number;
 }
 
 export interface EngineDispatchEvent extends ExecutionTraceEvent {
@@ -56,16 +45,9 @@ export interface EngineDispatchEvent extends ExecutionTraceEvent {
     targetEndpoint: string;
     httpMethod: string;
     payloadSummary: {
-      hasExecutionPlan: boolean;
-      inputFileUrl: string;
-      timelineSegments: number;
+      planSegments: number;
       audioTracks: number;
-      outputFormat: string;
     };
-    timeoutMs: number;
-    retryCount: number;
-    isMisrouting: boolean;
-    misroutingError?: string;
   };
 }
 
@@ -79,13 +61,7 @@ export interface NetworkDebugEvent extends ExecutionTraceEvent {
     requestSentAt: string;
     responseReceivedAt?: string;
     durationMs?: number;
-    httpStatus?: number;
-    httpStatusText?: string;
-    contentType?: string;
-    isJsonResponse: boolean;
-    rawResponsePreview?: string;
-    jsonParseError?: string;
-    connectionError?: string;
+    error?: string;
   };
 }
 
@@ -97,11 +73,8 @@ export interface ExecutionSummaryEvent extends ExecutionTraceEvent {
     totalVariations: number;
     successfulVariations: number[];
     failedVariations: number[];
-    partialVariations: number[];
     rootCause: string;
-    nextAction: string;
     totalDurationMs: number;
-    fallbackChainSummary: string[];
   };
 }
 
@@ -112,26 +85,10 @@ export interface ExecutionSummaryEvent extends ExecutionTraceEvent {
 export interface VariationDebugState {
   variationIndex: number;
   planId: string;
-  jobId: string | null; // Server job ID for log polling
-  routing: {
-    status: 'pending' | 'success' | 'error';
-    requiredCapabilities: Capability[];
-    selectedEngine: EngineId | null;
-    engineEvaluations: EngineEvaluation[];
-    executionPath: EngineId[];
-  };
-  serverFFmpeg: {
-    status: 'pending' | 'dispatched' | 'success' | 'error' | 'skipped';
-    endpoint: string | null;
-    httpStatus: number | null;
-    contentType: string | null;
-    responsePreview: string | null;
-    errorReason: string | null;
-    durationMs: number | null;
-    jobId: string | null; // Backend job ID for this variation
-  };
-  cloudinary: {
-    status: 'pending' | 'dispatched' | 'success' | 'error' | 'skipped';
+  jobId: string | null;
+  unifiedServer: {
+    status: 'pending' | 'dispatched' | 'success' | 'error';
+    jobId: string | null;
     errorReason: string | null;
     durationMs: number | null;
   };
@@ -186,9 +143,7 @@ class ExecutionDebugLogger {
     };
 
     this.state.events.push(triggerEvent);
-    console.log('[ExecutionDebug] Session started:', triggerEvent.data);
     this.notifyListeners();
-
     return sessionId;
   }
 
@@ -197,25 +152,9 @@ class ExecutionDebugLogger {
       variationIndex: index,
       planId: '',
       jobId: null,
-      routing: {
+      unifiedServer: {
         status: 'pending',
-        requiredCapabilities: [],
-        selectedEngine: null,
-        engineEvaluations: [],
-        executionPath: [],
-      },
-      serverFFmpeg: {
-        status: 'pending',
-        endpoint: null,
-        httpStatus: null,
-        contentType: null,
-        responsePreview: null,
-        errorReason: null,
-        durationMs: null,
         jobId: null,
-      },
-      cloudinary: {
-        status: 'pending',
         errorReason: null,
         durationMs: null,
       },
@@ -228,88 +167,18 @@ class ExecutionDebugLogger {
     };
   }
 
-  // Track job ID for a variation (for log polling)
-  setJobId(variationIndex: number, jobId: string): void {
-    if (!this.state) return;
-    const variation = this.state.variations[variationIndex];
-    if (!variation) return;
-    
-    variation.jobId = jobId;
-    variation.serverFFmpeg.jobId = jobId;
-    
-    console.log(`[ExecutionDebug] Var ${variationIndex + 1} assigned jobId: ${jobId}`);
-    this.notifyListeners();
-  }
-
-  // Get all active job IDs for console polling
-  getActiveJobs(): Array<{ jobId: string; variationIndex: number }> {
-    if (!this.state) return [];
-    return this.state.variations
-      .filter(v => v.jobId !== null)
-      .map(v => ({ jobId: v.jobId!, variationIndex: v.variationIndex }));
-  }
-
-  logRouting(
-    variationIndex: number,
-    planId: string,
-    routingResult: CapabilityRouterResult,
-    engineEvaluations: EngineEvaluation[]
-  ): void {
-    if (!this.state) return;
-
-    const variation = this.state.variations[variationIndex];
-    if (!variation) return;
-
-    variation.planId = planId;
-    variation.routing = {
-      status: 'success',
-      requiredCapabilities: [...routingResult.requiredCapabilities.capabilities],
-      selectedEngine: routingResult.selection.selectedEngineId,
-      engineEvaluations,
-      executionPath: routingResult.executionPath,
-    };
-
-    const event: RoutingDebugEvent = {
-      timestamp: new Date().toISOString(),
-      eventType: 'routing',
-      variationIndex,
-      data: {
-        variationIndex,
-        requiredCapabilities: [...routingResult.requiredCapabilities.capabilities],
-        enginesEvaluated: engineEvaluations,
-        selectedEngine: routingResult.selection.selectedEngineId,
-        executionPath: routingResult.executionPath,
-        allowCloudFallback: routingResult.selection.allowCloudFallback,
-      },
-    };
-
-    this.state.events.push(event);
-    console.log('[ExecutionDebug] Routing:', event.data);
-    this.notifyListeners();
-  }
-
   logEngineDispatch(
     variationIndex: number,
     engineId: EngineId,
     endpoint: string,
     method: string,
-    payloadSummary: EngineDispatchEvent['data']['payloadSummary'],
-    timeoutMs: number = 30000
+    payloadSummary: EngineDispatchEvent['data']['payloadSummary']
   ): void {
     if (!this.state) return;
 
-    const variation = this.state.variations[variationIndex];
-    if (!variation) return;
-
-    // Check for misrouting (fal.ai or browser FFmpeg)
-    const isMisrouting = endpoint.includes('fal.ai') || endpoint.includes('fal.run') ||
-      endpoint.includes('wasm') || endpoint.includes('ffmpeg-core');
-
-    if (engineId === 'server_ffmpeg') {
-      variation.serverFFmpeg.status = 'dispatched';
-      variation.serverFFmpeg.endpoint = endpoint;
-    } else if (engineId === 'cloudinary') {
-      variation.cloudinary.status = 'dispatched';
+    if (engineId === 'unified_server') {
+      const v = this.state.variations[variationIndex];
+      if (v) v.unifiedServer.status = 'dispatched';
     }
 
     const event: EngineDispatchEvent = {
@@ -319,256 +188,86 @@ class ExecutionDebugLogger {
       data: {
         variationIndex,
         engineId,
-        engineName: this.getEngineName(engineId),
+        engineName: 'Unified VPS Engine',
         targetEndpoint: endpoint,
         httpMethod: method,
-        payloadSummary,
-        timeoutMs,
-        retryCount: 0,
-        isMisrouting,
-        misroutingError: isMisrouting
-          ? `CRITICAL MISROUTING: External engine called while ${engineId} selected. Endpoint: ${endpoint}`
-          : undefined,
+        payloadSummary
       },
     };
-
     this.state.events.push(event);
-
-    if (isMisrouting) {
-      console.error('[ExecutionDebug] CRITICAL MISROUTING:', event.data);
-    } else {
-      console.log('[ExecutionDebug] Engine dispatch:', event.data);
-    }
-
     this.notifyListeners();
   }
 
-  logNetworkResponse(
+  logEngineError(
     variationIndex: number,
     engineId: EngineId,
-    details: {
-      endpoint: string;
-      method: string;
-      requestSentAt: string;
-      httpStatus?: number;
-      httpStatusText?: string;
-      contentType?: string;
-      rawResponseBody?: string;
-      jsonParseError?: string;
-      connectionError?: string;
-      durationMs: number;
-    }
+    errorMessage: string,
+    stack?: string
   ): void {
     if (!this.state) return;
-
-    const variation = this.state.variations[variationIndex];
-    if (!variation) return;
-
-    const isJsonResponse = details.contentType?.includes('application/json') || false;
-    const responsePreview = details.rawResponseBody?.substring(0, 500) || null;
-
-    if (engineId === 'server_ffmpeg') {
-      variation.serverFFmpeg.httpStatus = details.httpStatus || null;
-      variation.serverFFmpeg.contentType = details.contentType || null;
-      variation.serverFFmpeg.responsePreview = responsePreview;
-      variation.serverFFmpeg.durationMs = details.durationMs;
-
-      if (details.connectionError || details.jsonParseError || (details.httpStatus && details.httpStatus >= 400)) {
-        variation.serverFFmpeg.status = 'error';
-        variation.serverFFmpeg.errorReason = this.formatErrorReason(details);
-      }
-    } else if (engineId === 'cloudinary') {
-      variation.cloudinary.durationMs = details.durationMs;
-      if (details.connectionError || details.jsonParseError || (details.httpStatus && details.httpStatus >= 400)) {
-        variation.cloudinary.status = 'error';
-        variation.cloudinary.errorReason = this.formatErrorReason(details);
-      }
+    const v = this.state.variations[variationIndex];
+    if (v && engineId === 'unified_server') {
+      v.unifiedServer.status = 'error';
+      v.unifiedServer.errorReason = errorMessage;
     }
 
-    const event: NetworkDebugEvent = {
+    const event: ExecutionTraceEvent = {
       timestamp: new Date().toISOString(),
-      eventType: 'network',
+      eventType: 'error',
       variationIndex,
       data: {
-        variationIndex,
         engineId,
-        endpoint: details.endpoint,
-        method: details.method,
-        requestSentAt: details.requestSentAt,
-        responseReceivedAt: new Date().toISOString(),
-        durationMs: details.durationMs,
-        httpStatus: details.httpStatus,
-        httpStatusText: details.httpStatusText,
-        contentType: details.contentType,
-        isJsonResponse,
-        rawResponsePreview: responsePreview || undefined,
-        jsonParseError: details.jsonParseError,
-        connectionError: details.connectionError,
-      },
+        message: errorMessage,
+        stack
+      }
     };
-
     this.state.events.push(event);
-    console.log('[ExecutionDebug] Network response:', event.data);
     this.notifyListeners();
   }
 
-  private formatErrorReason(details: {
-    httpStatus?: number;
-    httpStatusText?: string;
-    contentType?: string;
-    jsonParseError?: string;
-    connectionError?: string;
-    rawResponseBody?: string;
-  }): string {
-    if (details.connectionError) {
-      return `Connection failed: ${details.connectionError}`;
-    }
-    if (details.jsonParseError) {
-      return `CRITICAL: Misconfigured Backend/Proxy. Received ${details.contentType || 'unknown'} instead of JSON. Raw: ${details.rawResponseBody?.substring(0, 50)}`;
-    }
-    if (details.httpStatus === 502) {
-      return `502 Bad Gateway - Server unreachable or Nginx proxy misconfigured`;
-    }
-    if (details.httpStatus === 404) {
-      return `404 Not Found - API endpoint does not exist`;
-    }
-    if (details.httpStatus === 500) {
-      return `500 Internal Server Error - Server crashed or FFmpeg binary failed`;
-    }
-    if (details.httpStatus && details.httpStatus >= 400) {
-      return `HTTP ${details.httpStatus} ${details.httpStatusText || ''}`;
-    }
-    return 'Unknown error';
-  }
+  // No-op for now as we removed capability router, but kept for method signature compat if needed (though avoiding calls is better)
+  logRouting(): void { }
 
-  logVariationComplete(
-    variationIndex: number,
-    result: {
-      status: 'success' | 'partial' | 'plan_only' | 'failed';
-      engineUsed: EngineId;
-      videoUrl?: string;
-      errorReason?: string;
-    }
-  ): void {
+  setJobId(variationIndex: number, jobId: string): void {
     if (!this.state) return;
-
-    const variation = this.state.variations[variationIndex];
-    if (!variation) return;
-
-    variation.finalResult = {
-      status: result.status === 'plan_only' ? 'partial' : result.status,
-      engineUsed: result.engineUsed,
-      videoUrl: result.videoUrl || null,
-      errorReason: result.errorReason || null,
-    };
-
-    // Update engine statuses
-    if (result.engineUsed === 'server_ffmpeg' && result.status === 'success') {
-      variation.serverFFmpeg.status = 'success';
+    const v = this.state.variations[variationIndex];
+    if (v) {
+      v.jobId = jobId;
+      v.unifiedServer.jobId = jobId;
     }
-    if (result.engineUsed === 'cloudinary' && result.status === 'success') {
-      variation.cloudinary.status = 'success';
-    }
-    if (result.status === 'failed' || result.status === 'plan_only') {
-      if (variation.serverFFmpeg.status !== 'success') {
-        variation.serverFFmpeg.status = variation.serverFFmpeg.status === 'dispatched' ? 'error' : 'skipped';
-      }
-    }
-
     this.notifyListeners();
   }
 
   completeSession(): void {
     if (!this.state) return;
-
-    const successful = this.state.variations
-      .filter(v => v.finalResult.status === 'success')
-      .map(v => v.variationIndex);
-
-    const failed = this.state.variations
-      .filter(v => v.finalResult.status === 'failed')
-      .map(v => v.variationIndex);
-
-    const partial = this.state.variations
-      .filter(v => v.finalResult.status === 'partial')
-      .map(v => v.variationIndex);
-
-    // Determine root cause from first failure
-    const firstFailure = this.state.variations.find(v => v.finalResult.status === 'failed');
-    let rootCause = 'Unknown';
-    let nextAction = 'Check server logs';
-
-    if (firstFailure) {
-      if (firstFailure.serverFFmpeg.errorReason) {
-        rootCause = firstFailure.serverFFmpeg.errorReason;
-        if (rootCause.includes('502')) {
-          nextAction = 'Check VPS Node server status and Nginx proxy configuration';
-        } else if (rootCause.includes('404')) {
-          nextAction = 'Verify /api/execute endpoint exists in server/api.js';
-        } else if (rootCause.includes('Non-JSON')) {
-          nextAction = 'Check Nginx error logs - likely serving HTML error page';
-        }
-      }
-    }
+    this.state.isComplete = true;
+    // Basic summary logic
+    const successful = this.state.variations.filter(v => v.finalResult.status === 'success').map(v => v.variationIndex);
+    const failed = this.state.variations.filter(v => v.finalResult.status === 'failed').map(v => v.variationIndex);
 
     const summary: ExecutionSummaryEvent['data'] = {
-      uiAction: `Generate ${this.state.totalVariations} Videos`,
-      selectedEngine: this.state.variations[0]?.routing.selectedEngine || 'plan_export',
+      uiAction: `Generate ${this.state.totalVariations}`,
+      selectedEngine: 'unified_server',
       totalVariations: this.state.totalVariations,
       successfulVariations: successful,
       failedVariations: failed,
-      partialVariations: partial,
-      rootCause,
-      nextAction,
-      totalDurationMs: Date.now() - new Date(this.state.startedAt).getTime(),
-      fallbackChainSummary: this.state.variations.map(v =>
-        `Var ${v.variationIndex + 1}: ${v.routing.executionPath.join(' → ')} → ${v.finalResult.status}`
-      ),
-    };
+      rootCause: failed.length > 0 ? 'VPS Error' : '',
+      totalDurationMs: Date.now() - new Date(this.state.startedAt).getTime()
+    }
 
     this.state.summary = summary;
-    this.state.isComplete = true;
-
-    const event: ExecutionSummaryEvent = {
-      timestamp: new Date().toISOString(),
-      eventType: 'summary',
-      data: summary,
-    };
-
-    this.state.events.push(event);
-    console.log('[ExecutionDebug] Session complete:', summary);
     this.notifyListeners();
-  }
-
-  private getEngineName(engineId: EngineId): string {
-    const names: Record<EngineId, string> = {
-      cloudinary: 'Cloudinary Video API',
-      server_ffmpeg: 'Server FFmpeg (VPS)',
-      plan_export: 'Plan Export',
-    };
-    return names[engineId] || engineId;
-  }
-
-  getState(): ExecutionDebugState | null {
-    return this.state;
   }
 
   subscribe(listener: (state: ExecutionDebugState) => void): () => void {
     this.listeners.add(listener);
-    if (this.state) {
-      listener(this.state);
-    }
+    if (this.state) listener(this.state);
     return () => this.listeners.delete(listener);
   }
 
   private notifyListeners(): void {
     if (!this.state) return;
     this.listeners.forEach(listener => listener(this.state!));
-  }
-
-  reset(): void {
-    this.state = null;
-    this.notifyListeners();
   }
 }
 

@@ -10,7 +10,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useCreativeScale } from '@/hooks/useCreativeScale';
-import { executeWithFallback, ExecutionResult, EngineId, executionDebugLogger } from '@/lib/creative-scale/execution-engine';
+import { executeUnifiedStrategy, ExecutionResult, EngineId, executionDebugLogger } from '@/lib/creative-scale/execution-engine';
 import { validateVideoFile, sanitizeFilename, LIMITS } from '@/lib/creative-scale/validation';
 import { createInitialProgressState, ExecutionProgressState } from '@/components/creative-scale/ExecutionProgressPanel';
 import { StepSidebar, StepId } from '@/components/creative-scale/StepSidebar';
@@ -20,7 +20,7 @@ import { StrategyStep } from '@/components/creative-scale/steps/StrategyStep';
 import { ExecuteStep } from '@/components/creative-scale/steps/ExecuteStep';
 import { ResultsStep } from '@/components/creative-scale/steps/ResultsStep';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
-import { RenderingMode } from '@/lib/creative-scale/capability-router';
+// REMOVED: RenderingMode import as we are unifying engines
 import { RenderDebugPanel, RenderDebugInfo } from '@/components/replicator/RenderDebugPanel';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -86,8 +86,8 @@ export default function CreativeScale() {
   const [isUploading, setIsUploading] = useState(false);
 
   // Advanced Mode State
-  const [isAdvancedMode, setIsAdvancedMode] = useState(false);
-  const [renderingMode, setRenderingMode] = useState<RenderingMode>('auto');
+
+
   const [debugInfo, setDebugInfo] = useState<RenderDebugInfo | null>(null);
 
   // Cancellation
@@ -390,12 +390,9 @@ export default function CreativeScale() {
     setExecutionProgress({
       variationIndex: 0,
       totalVariations: currentPlans.length,
-      currentEngine: null,
+      currentEngine: 'unified_server',
       engines: [
-        { engine: 'cloudinary', status: 'pending', progress: 0, message: '' },
-        { engine: 'server_ffmpeg', status: 'pending', progress: 0, message: '' },
-        { engine: 'renderflow', status: 'pending', progress: 0, message: '' },
-        { engine: 'plan_export', status: 'pending', progress: 0, message: '' },
+        { engine: 'unified_server', status: 'pending', progress: 0, message: '' },
       ],
       overallProgress: 0,
       status: 'executing'
@@ -420,20 +417,16 @@ export default function CreativeScale() {
         variationIndex: i,
         currentEngine: null,
         engines: [
-          { engine: 'cloudinary', status: 'pending', progress: 0, message: '' },
-          { engine: 'server_ffmpeg', status: 'pending', progress: 0, message: '' },
-          { engine: 'renderflow', status: 'pending', progress: 0, message: '' },
-          { engine: 'plan_export', status: 'pending', progress: 0, message: '' },
+          { engine: 'unified_server', status: 'pending', progress: 0, message: '' },
         ],
         overallProgress: (i / currentPlans.length) * 100
       }));
 
-      const result = await executeWithFallback({
+      const result = await executeUnifiedStrategy({
         plan,
         analysis: currentAnalysis,
         blueprint: currentBlueprint,
         variationIndex: i,
-        renderingMode, // Pass override
         onProgress: (engine: EngineId, progress: number, message: string, metadata?: any) => {
           setExecutionProgress(prev => ({
             ...prev,
@@ -445,31 +438,8 @@ export default function CreativeScale() {
             )
           }));
         },
-        onEngineSwitch: (from: EngineId | null, to: EngineId, reason: string) => {
-          // Capture detailed debug info on engine switch/start
-          setDebugInfo({
-            engine: to,
-            executionPath: `${from ? from + ' -> ' : ''}${to}`,
-            status: 'pending',
-            logs: [`Switching engine due to: ${reason}`],
-            payload: { reason, variationIndex: i }
-          });
-
-          setExecutionProgress(prev => ({
-            ...prev,
-            currentEngine: to,
-            engines: prev.engines.map(e => {
-              if (from && e.engine === from) {
-                return { ...e, status: 'failed' as const, error: reason.substring(0, 100) };
-              }
-              if (e.engine === to) {
-                return { ...e, status: 'attempting' as const, message: 'Starting...' };
-              }
-              return e;
-            })
-          }));
-        }
       });
+
 
       // Update Debug Info with final result
       setDebugInfo(prev => prev ? {
@@ -624,34 +594,7 @@ export default function CreativeScale() {
           {/* Step 4: Execute */}
           {currentStep === 4 && (
             <div className="space-y-6">
-              {/* Advanced Mode Controls */}
-              <div className="flex items-center gap-4 bg-muted/50 p-3 rounded-lg border border-border/50">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="adv-mode-scale"
-                    checked={isAdvancedMode}
-                    onCheckedChange={setIsAdvancedMode}
-                  />
-                  <Label htmlFor="adv-mode-scale" className="text-sm cursor-pointer font-medium">Advanced Mode</Label>
-                </div>
 
-                {isAdvancedMode && (
-                  <div className="flex items-center gap-2 ml-4">
-                    <span className="text-xs text-muted-foreground">Engine:</span>
-                    <Select value={renderingMode} onValueChange={(v: RenderingMode) => setRenderingMode(v)}>
-                      <SelectTrigger className="h-8 w-[180px] text-xs bg-background">
-                        <SelectValue placeholder="Render Mode" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="auto">Auto (Smart Routing)</SelectItem>
-                        <SelectItem value="server_only">Force Server FFmpeg (VPS)</SelectItem>
-                        <SelectItem value="cloudinary_only">Force Cloudinary</SelectItem>
-                        <SelectItem value="renderflow">Force RenderFlow Engine</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
 
               <ExecuteStep
                 plans={currentPlans}
@@ -666,7 +609,7 @@ export default function CreativeScale() {
               />
 
               {/* Debug Panel */}
-              <RenderDebugPanel debugInfo={debugInfo} isOpen={isAdvancedMode} />
+
             </div>
           )}
 

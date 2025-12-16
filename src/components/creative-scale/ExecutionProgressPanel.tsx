@@ -48,29 +48,11 @@ const ENGINE_CONFIG: Record<EngineId, {
   color: string;
   description: string;
 }> = {
-  'cloudinary': {
-    label: 'Cloudinary',
-    icon: Cloud,
-    color: 'text-purple-500',
-    description: 'Cloud video transformation API'
-  },
-  'server_ffmpeg': {
-    label: 'Server FFmpeg',
+  'unified_server': {
+    label: 'Unified Engine',
     icon: Server,
     color: 'text-blue-500',
-    description: 'VPS server-side rendering'
-  },
-  'renderflow': {
-    label: 'RenderFlow Engine',
-    icon: MonitorPlay,
-    color: 'text-cyan-500',
-    description: 'Dedicated rendering pipeline'
-  },
-  'plan_export': {
-    label: 'Plan Export',
-    icon: FileCode,
-    color: 'text-amber-500',
-    description: 'Downloadable execution plan'
+    description: 'High-fidelity FFmpeg VPS Rendering'
   }
 };
 
@@ -208,7 +190,7 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
 
         {/* Live Execution Console */}
         {state.engines.map(engine => {
-          if ((engine.engine === 'server_ffmpeg' || engine.engine === 'renderflow') && engine.jobId) {
+          if (engine.engine === 'unified_server' && engine.jobId) {
             return <ExecutionConsole key={engine.jobId} jobId={engine.jobId} />;
           }
           return null;
@@ -282,10 +264,7 @@ export function createInitialProgressState(totalVariations: number): ExecutionPr
     totalVariations,
     currentEngine: null,
     engines: [
-      { engine: 'cloudinary', status: 'pending', progress: 0, message: '' },
-      { engine: 'server_ffmpeg', status: 'pending', progress: 0, message: '' },
-      { engine: 'renderflow', status: 'pending', progress: 0, message: '' },
-      { engine: 'plan_export', status: 'pending', progress: 0, message: '' },
+      { engine: 'unified_server', status: 'pending', progress: 0, message: '' },
     ],
     overallProgress: 0,
     status: 'idle'

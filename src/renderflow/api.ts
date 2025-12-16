@@ -237,5 +237,38 @@ export const RenderFlowApi = {
             }
             throw e;
         }
+    },
+
+    // Submit Execution Plan - POST /render/jobs
+    submitPlan: async (plan: any): Promise<SubmitJobResponse> => {
+        const payload = {
+            project_id: plan.project_id || 'unified_plan',
+            variations: [{
+                id: plan.id || `var_${Date.now()}`,
+                data: { plan }
+            }]
+        };
+
+        try {
+            const res = await fetch(`${getBaseUrl()}/jobs`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                signal: AbortSignal.timeout(10000)
+            });
+
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(`Submission failed: ${res.status} - ${text}`);
+            }
+
+            return res.json();
+        } catch (e: any) {
+            if (e.name === 'AbortError' || e.message.includes('fetch')) {
+                console.log('VPS unavailable - returning preview mode IDs');
+                return { ids: [`preview_${payload.variations[0].id}`] };
+            }
+            throw e;
+        }
     }
 };

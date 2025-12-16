@@ -25,20 +25,20 @@ export interface TimelineSegment {
   source_video_id: string;
   source_segment_id: string;
   asset_url: string | null;
-  
+
   // Source timing (what to extract)
   trim_start_ms: number;
   trim_end_ms: number;
   source_duration_ms: number;
-  
+
   // Output timing (where to place)
   timeline_start_ms: number;
   timeline_end_ms: number;
   output_duration_ms: number;
-  
+
   // Transformations (numbers only)
   speed_multiplier: number;
-  
+
   // Track assignment
   track: 'video' | 'overlay';
   layer: number;
@@ -48,22 +48,40 @@ export interface AudioSegment {
   audio_id: string;
   source_video_id: string;
   asset_url: string | null;
-  
+
   // Source timing
   trim_start_ms: number;
   trim_end_ms: number;
-  
+
   // Output timing
   timeline_start_ms: number;
   timeline_end_ms: number;
-  
+
   // Audio parameters (numbers only)
   volume: number; // 0.0 - 1.0
   fade_in_ms: number;
   fade_out_ms: number;
-  
+
   // Track assignment
   track: 'voiceover' | 'music' | 'sfx';
+}
+
+export interface TextOverlay {
+  text_id: string;
+  content: string;
+
+  // Timing
+  timeline_start_ms: number;
+  timeline_end_ms: number;
+
+  // Style
+  font_size: number;
+  color: string; // hex
+  x: string; // ffmpeg expression e.g. "(w-text_w)/2"
+  y: string;
+  box?: boolean;
+  box_color?: string;
+  font_file?: string; // Optional custom font
 }
 
 export interface ValidationResult {
@@ -81,15 +99,16 @@ export interface ExecutionPlan {
   source_blueprint_id: string;
   variation_id: string;
   created_at: string;
-  
+
   status: CompilationStatus;
   reason?: string; // Only if uncompilable
-  
+
   output_format: OutputFormat;
-  
+
   timeline: TimelineSegment[];
   audio_tracks: AudioSegment[];
-  
+  text_overlays?: TextOverlay[]; // Optional for backward capability
+
   validation: ValidationResult;
 }
 

@@ -6,6 +6,8 @@ import { Job, ERROR_CODES } from './types';
 import { PATHS, sleep } from './utils';
 import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
+import crypto from 'crypto';
+import { FFmpegBuilder } from './ffmpeg-builder';
 
 const WORKER_PID = process.pid;
 const POLL_INTERVAL_MS = 1000;
@@ -21,10 +23,7 @@ export class RenderEngine {
         if (this.isRunning) return;
         this.isRunning = true;
         console.log(`[RenderFlow] Worker ${WORKER_PID} started.`);
-
-        // Initial recovery check
         RenderFlowDB.recoverOrphanedJobs();
-
         this.pollLoop();
     }
 
@@ -32,7 +31,6 @@ export class RenderEngine {
         while (this.isRunning) {
             try {
                 if (!this.currentJob) {
-                    // ATOMIC CLAIM: Single DB call, no Select-then-Update in TS
                     const job = RenderFlowDB.claimNextJob(WORKER_PID);
                     if (job) {
                         console.log(`[RenderFlow] Claimed Job ${job.id}`);
@@ -52,7 +50,6 @@ export class RenderEngine {
         // START WATCHDOG
         const startTime = Date.now();
         let ffmpegProcess: any = null;
-        let isStalled = false;
 
         this.watchdogTimer = setInterval(() => {
             const elapsed = Date.now() - startTime;
@@ -64,18 +61,34 @@ export class RenderEngine {
                     code: ERROR_CODES.TIMEOUT,
                     message: `Job exceeded max runtime of ${MAX_RUNTIME_MS}ms`
                 });
-                this.resetInternalState(); // Force break via state reset
+                this.resetInternalState();
             }
         }, 5000);
 
         try {
             // 1. DOWNLOADING
             RenderFlowDB.updateState(job.id, 'downloading');
-            const localInputParams = await this.downloadAssets(job);
+            // Support both old sourceVideoUrl and new Plan-based assets
+            const localPaths = await this.downloadAssets(job);
 
-            // 2. PROCESSING
-            RenderFlowDB.updateState(job.id, 'processing');
-            // (Any pre-calc logic here - v1 is simple pass-through)
+            // 2. BUILD PLAN
+            const plan = job.data.plan;
+            if (!plan) throw new Error('No execution plan found in job data');
+
+            // Map remote URLs to local paths in a plan copy
+            const localPlan = JSON.parse(JSON.stringify(plan));
+            localPlan.timeline.forEach((seg: any) => {
+                if (localPaths.has(seg.asset_url)) {
+                    seg.asset_url = localPaths.get(seg.asset_url);
+                }
+            });
+            if (localPlan.audio_tracks) {
+                localPlan.audio_tracks.forEach((track: any) => {
+                    if (localPaths.has(track.asset_url)) {
+                        track.asset_url = localPaths.get(track.asset_url);
+                    }
+                });
+            }
 
             // 3. ENCODING
             RenderFlowDB.updateState(job.id, 'encoding');
@@ -83,53 +96,18 @@ export class RenderEngine {
             const outputFilename = `${job.id}.mp4`;
             const outputPath = path.join(PATHS.OUTPUT, outputFilename);
 
-            // Build Command
-            // Strict CPU: libx264
-            const args = [
-                '-y',
-                '-progress', 'pipe:1',
-                '-hide_banner',
-                '-nostats',
-                '-i', localInputParams.sourcePath,
-                '-c:v', 'libx264',
-                '-preset', 'medium', // Deterministic balance
-                '-c:a', 'aac',
-                outputPath
-            ];
+            const builder = new FFmpegBuilder(localPlan);
+            const { command, args } = builder.buildCommand(outputPath);
 
-            // Filters
-            if (localInputParams.trim) {
-                // Note: Input seeking is faster but requires separate duration calc logic
-                // For v1 safety, we put trim args BEFORE input if possible or rely on filters
-                // To stay "boring", let's standard filter trim if needed, 
-                // but -ss before -i is better for strict Seeking.
-                // Simplicity: Apply -ss/t if present
-                if (localInputParams.trim.start) args.unshift('-ss', String(localInputParams.trim.start));
-                if (localInputParams.trim.end) args.unshift('-t', String(localInputParams.trim.end - localInputParams.trim.start));
-            }
+            console.log(`[RenderFlow] Executing: ${command} ${args.join(' ')}`);
 
-            console.log(`[RenderFlow] Spawning FFmpeg: ffmpeg ${args.join(' ')}`);
-
-            ffmpegProcess = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+            ffmpegProcess = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
             // PROGRESS PARSING
             let totalDurationMs = 0;
-            // Heuristic: Probe duration first? Or assume metadata in stdout?
-            // FFmpeg pipe:1 often doesn't give total duration easily in simple mode.
-            // We will perform a quick probe or rely on existing knowledge. 
-            // For v1 strictness: Let's assume input has duration.
-            // We can use a separate probe, OR parse 'Duration: ...' from stderr startup.
-
-            // Parsing State
-            let lastProgressUpdate = Date.now();
-
-            const stdoutStream = ffmpegProcess.stdout;
-            const stderrStream = ffmpegProcess.stderr;
-
-            // Parse Stderr for Duration (Startup) and Errors
-            stderrStream.on('data', (data: Buffer) => {
+            // Attempt to parse duration from stderr init
+            ffmpegProcess.stderr.on('data', (data: Buffer) => {
                 const str = data.toString();
-                // Duration: 00:00:10.50,
                 const durMatch = str.match(/Duration: (\d{2}):(\d{2}):(\d{2}\.\d{2})/);
                 if (durMatch) {
                     const h = parseInt(durMatch[1]);
@@ -139,60 +117,24 @@ export class RenderEngine {
                 }
             });
 
-            // Parse Stdout for Progress (pipe:1 key=value)
-            stdoutStream.on('data', (data: Buffer) => {
-                const lines = data.toString().split('\n');
-                let outTimeMs = 0;
-
-                for (const line of lines) {
-                    const [key, val] = line.trim().split('=');
-                    if (key === 'out_time_ms') {
-                        outTimeMs = parseInt(val);
-                    } else if (key === 'progress' && val === 'end') {
-                        // End
-                    }
-                }
-
-                if (outTimeMs > 0 && totalDurationMs > 0) {
-                    const pct = Math.min(99, Math.floor((outTimeMs / totalDurationMs) * 100)); // Clamp 99
-                    // Throttled Update
-                    if (Date.now() - lastProgressUpdate > 1000) {
-                        try {
-                            RenderFlowDB.updateProgress(job.id, pct);
-                        } catch (e) {
-                            // Best-effort: ignore DB write failures during rendering to avoid killing the job
-                            console.warn(`[RenderFlow] Failed to persist progress for ${job.id} (non-fatal):`, e);
-                        }
-                        lastProgressUpdate = Date.now();
-                    }
-                }
-            });
-
-            // Stall Detection?
-            // Requires checking if 'out_time_ms' changes. Kept simple for now:
-            // If process doesn't exit, Watchdog kills it. 
-            // Strict stall detection would entail checking `lastProgressUpdate` vs threshold.
-
             await new Promise<void>((resolve, reject) => {
                 ffmpegProcess.on('close', (code: number) => {
                     if (code === 0) resolve();
                     else reject(new Error(`FFmpeg exited with code ${code}`));
                 });
-
                 ffmpegProcess.on('error', (err: any) => reject(err));
             });
 
             // 4. FINALIZING
             RenderFlowDB.updateState(job.id, 'finalizing');
 
-            // Check Output
             if (fs.existsSync(outputPath)) {
                 const stats = fs.statSync(outputPath);
                 RenderFlowDB.markDone(job.id, {
                     output_path: outputPath,
-                    output_url: `/outputs/${outputFilename}`, // Relative mapping
+                    output_url: `/outputs/${outputFilename}`,
                     file_size: stats.size,
-                    duration_ms: totalDurationMs
+                    duration_ms: totalDurationMs || (Date.now() - startTime)
                 });
                 console.log(`[RenderFlow] Job ${job.id} DONE`);
             } else {
@@ -201,7 +143,6 @@ export class RenderEngine {
 
         } catch (err: any) {
             console.error(`[RenderFlow] Job ${job.id} FAILED:`, err);
-            // If not already failed by watchdog
             const current = RenderFlowDB.getJob(job.id);
             if (current?.state !== 'failed') {
                 RenderFlowDB.markFailed(job.id, {
@@ -215,38 +156,49 @@ export class RenderEngine {
     }
 
     private resetInternalState() {
+        if (this.currentJob) {
+            // console.log(`[RenderFlow] Resetting state for job ${this.currentJob.id}`);
+        }
+        this.currentJob = null;
         if (this.watchdogTimer) {
             clearInterval(this.watchdogTimer);
             this.watchdogTimer = null;
         }
     }
 
-    private async downloadAssets(job: Job): Promise<{ sourcePath: string, trim?: any }> {
-        // Check if source is URL or local
-        const { source_url, trim } = job.input;
+    private async downloadAssets(job: Job): Promise<Map<string, string>> {
+        const localPaths = new Map<string, string>();
+        const plan = job.data.plan;
 
-        if (!source_url) throw new Error('Missing source_url');
+        const uniqueUrls = new Set<string>();
 
-        // Local File Check
-        if (fs.existsSync(source_url)) {
-            return { sourcePath: source_url, trim };
+        // Support legacy single source
+        if (job.data.sourceVideoUrl) uniqueUrls.add(job.data.sourceVideoUrl);
+
+        // Support Plan assets
+        if (plan && plan.timeline) {
+            plan.timeline.forEach((seg: any) => uniqueUrls.add(seg.asset_url));
+            if (plan.audio_tracks) {
+                plan.audio_tracks.forEach((track: any) => uniqueUrls.add(track.asset_url));
+            }
         }
 
-        // Remote Download
-        const ext = path.extname(source_url) || '.mp4';
-        const filename = `${job.id}_src${ext}`;
-        const dest = path.join(PATHS.TEMP, filename);
+        // Download loop
+        for (const url of uniqueUrls) {
+            if (!url) continue;
+            // Simple hash for consistency
+            const filename = crypto.createHash('md5').update(url).digest('hex') + path.extname(url).split('?')[0];
+            const localPath = path.join(PATHS.TEMP, filename);
 
-        console.log(`[RenderFlow] Downloading ${source_url} to ${dest}`);
+            if (!fs.existsSync(localPath)) {
+                console.log(`[RenderFlow] Downloading asset: ${url}`);
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`Failed to download ${url}`);
+                await pipeline(response.body as any, createWriteStream(localPath));
+            }
+            localPaths.set(url, localPath);
+        }
 
-        const res = await fetch(source_url);
-        if (!res.ok) throw new Error(`Download failed: ${res.statusText}`);
-        if (!res.body) throw new Error('No body');
-
-        const fileStream = createWriteStream(dest);
-        // @ts-ignore
-        await pipeline(res.body, fileStream);
-
-        return { sourcePath: dest, trim };
+        return localPaths;
     }
 }
