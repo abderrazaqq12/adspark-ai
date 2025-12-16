@@ -38,7 +38,7 @@ export interface ExecutionProgressState {
   currentEngine: EngineId | null;
   engines: EngineProgress[];
   overallProgress: number;
-  status: 'idle' | 'executing' | 'complete' | 'partial';
+  status: 'idle' | 'executing' | 'complete' | 'partial' | 'stopped';
 }
 
 // Engine configuration (Server-only)
@@ -94,6 +94,9 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
             )}
             {state.status === 'partial' && (
               <XCircle className="w-4 h-4 text-amber-500" />
+            )}
+            {state.status === 'stopped' && (
+              <XCircle className="w-4 h-4 text-red-500" />
             )}
             Rendering Variation {state.variationIndex + 1} of {state.totalVariations}
           </CardTitle>

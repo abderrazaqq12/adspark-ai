@@ -6,7 +6,7 @@
  * Steps: 1.Upload → 2.Analyze → 3.Strategy → 4.Execute → 5.Results
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useCreativeScale } from '@/hooks/useCreativeScale';
@@ -89,6 +89,9 @@ export default function CreativeScale() {
   const [isAdvancedMode, setIsAdvancedMode] = useState(false);
   const [renderingMode, setRenderingMode] = useState<RenderingMode>('auto');
   const [debugInfo, setDebugInfo] = useState<RenderDebugInfo | null>(null);
+
+  // Cancellation
+  const isCancelled = useRef(false);
 
 
   // Hook
@@ -361,6 +364,13 @@ export default function CreativeScale() {
     }
   }, [currentAnalysis, generateBrainV2Strategy, generateBlueprint, compileAllVariations, uploadedVideos, variationCount]);
 
+  const handleStopExecution = useCallback(() => {
+    isCancelled.current = true;
+    toast.info('Stopping execution after current variation...');
+    console.log('[CreativeScale] Process cancelled by user');
+    setExecutionProgress(prev => ({ ...prev, status: 'stopped' })); // Visual update
+  }, []);
+
   const handleStrategyContinue = useCallback(() => {
     completeStep(3);
     setCurrentStep(4);
@@ -393,7 +403,16 @@ export default function CreativeScale() {
 
     const results = new Map<string, ExecutionResult>();
 
+    // Reset cancellation
+    isCancelled.current = false;
+
     for (let i = 0; i < currentPlans.length; i++) {
+      // Check cancellation
+      if (isCancelled.current) {
+        toast.info('Execution stopped by user');
+        break;
+      }
+
       const plan = currentPlans[i];
 
       setExecutionProgress(prev => ({
@@ -641,6 +660,7 @@ export default function CreativeScale() {
                 isExecuting={isRouting || executionProgress.status === 'executing'}
                 ffmpegReady={true}
                 onExecute={handleExecute}
+                onStop={handleStopExecution}
                 onDownloadPlans={downloadAllPlans}
                 onContinue={handleExecuteContinue}
               />

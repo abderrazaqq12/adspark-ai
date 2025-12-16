@@ -8,14 +8,15 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
-  Play, 
+import {
+  Play,
   ArrowRight,
   Zap,
   Cloud,
   Download,
   Server,
-  ShieldAlert
+  ShieldAlert,
+  Square
 } from 'lucide-react';
 import { ExecutionProgressPanel, ExecutionProgressState } from '@/components/creative-scale/ExecutionProgressPanel';
 import { ExecutionExplainer } from '@/components/creative-scale/ExecutionExplainer';
@@ -33,11 +34,12 @@ interface ExecuteStepProps {
   ffmpegReady: boolean;
   complianceResult?: ComplianceResult | null;
   onExecute: () => void;
+  onStop: () => void;
   onDownloadPlans: () => void;
   onContinue: () => void;
 }
 
-export function ExecuteStep({ 
+export function ExecuteStep({
   plans,
   blueprint,
   executionProgress,
@@ -45,13 +47,14 @@ export function ExecuteStep({
   ffmpegReady,
   complianceResult,
   onExecute,
+  onStop,
   onDownloadPlans,
   onContinue
 }: ExecuteStepProps) {
   const isComplete = executionProgress.status === 'complete' || executionProgress.status === 'partial';
-  
+
   // Check if rendering is blocked due to critical compliance violations
-  const isRenderingBlocked = complianceResult?.overallRisk === 'blocked' || 
+  const isRenderingBlocked = complianceResult?.overallRisk === 'blocked' ||
     (complianceResult?.overallRisk === 'high_risk' && !complianceResult?.canRender);
 
   return (
@@ -105,7 +108,7 @@ export function ExecuteStep({
                     <span className="font-medium">Rendering Blocked:</span> Critical policy violations must be resolved before execution.
                     {complianceResult?.violations && complianceResult.violations.length > 0 && (
                       <span className="block text-xs mt-1 text-muted-foreground">
-                        {complianceResult.violations.filter(v => v.severity === 'high_risk' || v.severity === 'blocked').length} critical violation(s) detected. 
+                        {complianceResult.violations.filter(v => v.severity === 'high_risk' || v.severity === 'blocked').length} critical violation(s) detected.
                         Return to Strategy step to review and resolve.
                       </span>
                     )}
@@ -115,9 +118,8 @@ export function ExecuteStep({
 
               {/* Ready to Render CTA */}
               <div className="flex flex-col items-center justify-center text-center py-8">
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${
-                  isRenderingBlocked ? 'bg-destructive/10' : 'bg-primary/10'
-                }`}>
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${isRenderingBlocked ? 'bg-destructive/10' : 'bg-primary/10'
+                  }`}>
                   {isRenderingBlocked ? (
                     <ShieldAlert className="w-8 h-8 text-destructive" />
                   ) : (
@@ -128,23 +130,32 @@ export function ExecuteStep({
                   {isRenderingBlocked ? 'Rendering Blocked' : 'Ready to Render'}
                 </h3>
                 <p className="text-muted-foreground max-w-md mb-6 text-sm">
-                  {isRenderingBlocked 
+                  {isRenderingBlocked
                     ? 'Critical compliance violations prevent rendering. Review and resolve issues in the Strategy step.'
                     : 'Each variation will be routed to the most appropriate engine based on its required capabilities.'
                   }
                 </p>
-                
+
                 <div className="flex gap-3">
-                  <Button 
+                  <Button
                     size="lg"
-                    onClick={onExecute}
-                    className="h-12 px-8"
+                    onClick={isExecuting ? onStop : onExecute}
+                    className={`h-12 px-8 ${isExecuting ? 'bg-destructive hover:bg-destructive/90' : ''}`}
                     disabled={isRenderingBlocked}
                   >
-                    <Play className="w-5 h-5 mr-2" />
-                    Generate {plans.length} Video{plans.length !== 1 ? 's' : ''}
+                    {isExecuting ? (
+                      <>
+                        <Square className="w-5 h-5 mr-2 fill-current" />
+                        Stop Generation
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-5 h-5 mr-2" />
+                        Generate {plans.length} Video{plans.length !== 1 ? 's' : ''}
+                      </>
+                    )}
                   </Button>
-                  <Button 
+                  <Button
                     variant="outline"
                     size="lg"
                     onClick={onDownloadPlans}
@@ -172,7 +183,7 @@ export function ExecuteStep({
               {plans[executionProgress.variationIndex] && blueprint && (
                 <div>
                   <h4 className="text-sm font-medium mb-3">Current Variation</h4>
-                  <ExecutionExplainer 
+                  <ExecutionExplainer
                     plan={plans[executionProgress.variationIndex]}
                     variation={blueprint.variation_ideas[executionProgress.variationIndex]}
                   />
@@ -186,7 +197,7 @@ export function ExecuteStep({
       {/* Continue CTA */}
       {isComplete && (
         <div className="pt-6 border-t border-border mt-auto">
-          <Button 
+          <Button
             className="w-full h-12 text-base"
             onClick={onContinue}
           >
