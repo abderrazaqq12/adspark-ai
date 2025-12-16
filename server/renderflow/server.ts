@@ -21,7 +21,8 @@ import fs from 'fs';
     }
 });
 
-// Mount API
+// Mount API (Support both Nginx proxy /api and internal /render)
+app.use('/api', apiRouter);
 app.use('/render', apiRouter);
 
 // Serve Outputs
