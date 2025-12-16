@@ -1,11 +1,12 @@
 /**
  * RenderFlow Step Sidebar
- * Vertical navigation with 5 steps - mirrors Creative Scale structure
+ * Vertical navigation with 6 steps - Full Creative Scale style
  */
 
 import { 
   Upload, 
-  Settings, 
+  Search,
+  Brain,
   FileCheck, 
   Play,
   CheckCircle2,
@@ -13,7 +14,7 @@ import {
   Download
 } from 'lucide-react';
 
-export type RenderStepId = 1 | 2 | 3 | 4 | 5;
+export type RenderStepId = 1 | 2 | 3 | 4 | 5 | 6;
 
 interface Step {
   id: RenderStepId;
@@ -24,10 +25,11 @@ interface Step {
 
 const STEPS: Step[] = [
   { id: 1, label: 'Input', description: 'Source video', icon: Upload },
-  { id: 2, label: 'Configure', description: 'Variation count', icon: Settings },
-  { id: 3, label: 'Review', description: 'Verify settings', icon: FileCheck },
-  { id: 4, label: 'Execute', description: 'Render videos', icon: Play },
-  { id: 5, label: 'Results', description: 'Download outputs', icon: Download },
+  { id: 2, label: 'Analyze', description: 'AI deconstruction', icon: Search },
+  { id: 3, label: 'Strategy', description: 'Brain V2 planning', icon: Brain },
+  { id: 4, label: 'Review', description: 'Verify settings', icon: FileCheck },
+  { id: 5, label: 'Execute', description: 'Render videos', icon: Play },
+  { id: 6, label: 'Results', description: 'Download outputs', icon: Download },
 ];
 
 interface RenderFlowStepSidebarProps {
@@ -61,7 +63,7 @@ export function RenderFlowStepSidebar({ currentStep, completedSteps, onStepClick
               onClick={() => canClick && onStepClick?.(step.id)}
               disabled={isLocked}
               className={`
-                w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left transition-all
+                w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all
                 ${isCurrent 
                   ? 'bg-primary/10 border border-primary/30 text-foreground' 
                   : isCompleted 
@@ -72,7 +74,7 @@ export function RenderFlowStepSidebar({ currentStep, completedSteps, onStepClick
             >
               {/* Step Number / Icon */}
               <div className={`
-                w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-sm font-medium
+                w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-sm font-medium
                 ${isCurrent 
                   ? 'bg-primary text-primary-foreground' 
                   : isCompleted 
@@ -111,12 +113,12 @@ export function RenderFlowStepSidebar({ currentStep, completedSteps, onStepClick
       {/* Footer */}
       <div className="p-4 border-t border-border space-y-3">
         <div className="text-xs text-muted-foreground">
-          <span className="font-medium">{completedSteps.length}</span> of 5 steps complete
+          <span className="font-medium">{completedSteps.length}</span> of 6 steps complete
         </div>
         <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
           <div 
             className="h-full bg-primary transition-all duration-300"
-            style={{ width: `${(completedSteps.length / 5) * 100}%` }}
+            style={{ width: `${(completedSteps.length / 6) * 100}%` }}
           />
         </div>
         {onReset && (
