@@ -12,12 +12,12 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { 
-  Settings2, 
-  ArrowRight, 
-  FileJson, 
+import {
+  Settings2,
+  ArrowRight,
+  FileJson,
   Copy,
-  CheckCircle2 
+  CheckCircle2
 } from 'lucide-react';
 import { useState } from 'react';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
@@ -31,7 +31,7 @@ interface ExecutionExplainerProps {
   engineUsed?: string;
 }
 
-export function ExecutionExplainer({ plan, variation, engineUsed = 'ffmpeg-browser' }: ExecutionExplainerProps) {
+export function ExecutionExplainer({ plan, variation, engineUsed = 'unified-vps' }: ExecutionExplainerProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopyPlan = () => {
@@ -43,7 +43,7 @@ export function ExecutionExplainer({ plan, variation, engineUsed = 'ffmpeg-brows
 
   // Map variation action to FFmpeg operation
   const getOperation = (actionType: string): string => {
-    const mapping = OPERATION_MAPPINGS.find(m => 
+    const mapping = OPERATION_MAPPINGS.find(m =>
       m.strategy_action.toLowerCase() === actionType.toLowerCase()
     );
     return mapping?.ffmpeg_operation || 'custom operation';

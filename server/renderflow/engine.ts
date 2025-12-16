@@ -72,7 +72,7 @@ export class RenderEngine {
             const localPaths = await this.downloadAssets(job);
 
             // 2. BUILD PLAN
-            const plan = job.data.plan;
+            const plan = job.input.plan;
             if (!plan) throw new Error('No execution plan found in job data');
 
             // Map remote URLs to local paths in a plan copy
@@ -101,7 +101,11 @@ export class RenderEngine {
 
             console.log(`[RenderFlow] Executing: ${command} ${args.join(' ')}`);
 
-            ffmpegProcess = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+            // Allow custom FFmpeg path from environment
+            const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
+            console.log(`[RenderFlow] Using FFmpeg: ${ffmpegPath}`);
+
+            ffmpegProcess = spawn(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
             // PROGRESS PARSING
             let totalDurationMs = 0;
@@ -168,12 +172,12 @@ export class RenderEngine {
 
     private async downloadAssets(job: Job): Promise<Map<string, string>> {
         const localPaths = new Map<string, string>();
-        const plan = job.data.plan;
+        const plan = job.input.plan;
 
         const uniqueUrls = new Set<string>();
 
         // Support legacy single source
-        if (job.data.sourceVideoUrl) uniqueUrls.add(job.data.sourceVideoUrl);
+        if (job.input.sourceVideoUrl) uniqueUrls.add(job.input.sourceVideoUrl);
 
         // Support Plan assets
         if (plan && plan.timeline) {
