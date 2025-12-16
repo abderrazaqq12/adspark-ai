@@ -18,7 +18,7 @@ const getBaseUrl = () => {
     }
 
     // 3. Local Development default
-    return 'http://localhost:3001/render';
+    return 'http://localhost:3001/api';
 };
 
 export type RenderFlowJobState =

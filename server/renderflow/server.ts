@@ -22,7 +22,7 @@ import fs from 'fs';
 });
 
 // Mount API
-app.use('/render', apiRouter);
+app.use('/api', apiRouter);
 
 // Serve Outputs
 app.use('/outputs', express.static(PATHS.OUTPUT));
