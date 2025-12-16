@@ -23,7 +23,6 @@ const workflowItems = [
   { title: "Agency Mode", url: "/agency", icon: Building2, description: "Batch generation" },
   { title: "Creative Replicator", url: "/creative-replicator", icon: SlidersHorizontal, description: "Replicate winning ads" },
   { title: "Creative Scale", url: "/creative-scale", icon: Scale, description: "AI-powered optimization" },
-  { title: "RenderFlow", url: "/renderflow", icon: Video, description: "Deterministic Render Engine" },
   { title: "AI Tools", url: "/ai-tools", icon: Wand2, description: "AI-powered tools" },
 ];
 
