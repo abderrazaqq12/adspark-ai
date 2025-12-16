@@ -20,7 +20,7 @@ const SESSION_KEY = 'renderflow_pipeline_state';
 interface PipelineState {
   currentStep: RenderStepId;
   completedSteps: RenderStepId[];
-  sourceUrl: string;
+  sourceUrls: string[];
   variations: number;
   jobs: RenderFlowJob[];
 }
@@ -59,8 +59,8 @@ export default function RenderFlowDashboard() {
   const [currentStep, setCurrentStep] = useState<RenderStepId>(initialState?.currentStep ?? 1);
   const [completedSteps, setCompletedSteps] = useState<RenderStepId[]>(initialState?.completedSteps ?? []);
 
-  // Pipeline Data
-  const [sourceUrl, setSourceUrl] = useState(initialState?.sourceUrl ?? '');
+  // Pipeline Data - now supports multiple source URLs (1-20)
+  const [sourceUrls, setSourceUrls] = useState<string[]>(initialState?.sourceUrls ?? []);
   const [variations, setVariations] = useState(initialState?.variations ?? 1);
   const [jobs, setJobs] = useState<RenderFlowJob[]>(initialState?.jobs ?? []);
   
@@ -84,11 +84,11 @@ export default function RenderFlowDashboard() {
     saveSessionState({
       currentStep,
       completedSteps,
-      sourceUrl,
+      sourceUrls,
       variations,
       jobs
     });
-  }, [currentStep, completedSteps, sourceUrl, variations, jobs]);
+  }, [currentStep, completedSteps, sourceUrls, variations, jobs]);
 
   // Health check on mount
   useEffect(() => {
@@ -122,9 +122,9 @@ export default function RenderFlowDashboard() {
     });
   }, []);
 
-  // Step 1: Input complete
-  const handleInputComplete = (url: string) => {
-    setSourceUrl(url);
+  // Step 1: Input complete (now receives array of URLs)
+  const handleInputComplete = (urls: string[]) => {
+    setSourceUrls(urls);
     completeStep(1);
     setCurrentStep(2);
   };
@@ -136,25 +136,28 @@ export default function RenderFlowDashboard() {
     setCurrentStep(3);
   };
 
-  // Step 3: Start rendering
+  // Step 3: Start rendering - submit jobs for ALL source URLs
   const handleStartRendering = async () => {
     setSubmitError(null);
     setIsSubmitting(true);
 
     try {
-      const res = await RenderFlowApi.submitJob(
-        `proj_${Date.now()}`,
-        sourceUrl,
-        variations
-      );
+      const allJobIds: string[] = [];
+      const projectId = `proj_${Date.now()}`;
 
-      const ids = res.ids || [];
-      if (ids.length === 0) {
+      // Submit jobs for each source URL
+      for (const url of sourceUrls) {
+        const res = await RenderFlowApi.submitJob(projectId, url, variations);
+        const ids = res.ids || [];
+        allJobIds.push(...ids);
+      }
+
+      if (allJobIds.length === 0) {
         throw new Error('Backend returned empty job IDs');
       }
 
       // Initialize jobs from API response only
-      const initialJobs: RenderFlowJob[] = ids.map((id: string) => ({
+      const initialJobs: RenderFlowJob[] = allJobIds.map((id: string) => ({
         id,
         variation_id: '',
         project_id: '',
@@ -209,7 +212,7 @@ export default function RenderFlowDashboard() {
   const handleReset = () => {
     setCurrentStep(1);
     setCompletedSteps([]);
-    setSourceUrl('');
+    setSourceUrls([]);
     setVariations(1);
     setJobs([]);
     setSubmitError(null);
@@ -224,11 +227,16 @@ export default function RenderFlowDashboard() {
   const renderStepContent = () => {
     switch (currentStep) {
       case 1:
-        return <InputStep onContinue={handleInputComplete} />;
+        return (
+          <InputStep 
+            onContinue={handleInputComplete} 
+            initialUrls={sourceUrls}
+          />
+        );
       case 2:
         return (
           <ConfigureStep
-            sourceUrl={sourceUrl}
+            sourceUrls={sourceUrls}
             initialVariations={variations}
             onContinue={handleConfigureComplete}
             onBack={() => setCurrentStep(1)}
@@ -237,7 +245,7 @@ export default function RenderFlowDashboard() {
       case 3:
         return (
           <ReviewStep
-            sourceUrl={sourceUrl}
+            sourceUrls={sourceUrls}
             variations={variations}
             isSubmitting={isSubmitting}
             submitError={submitError}

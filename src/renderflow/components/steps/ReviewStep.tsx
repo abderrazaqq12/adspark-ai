@@ -5,10 +5,10 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileCheck, ArrowLeft, Play, AlertCircle } from 'lucide-react';
+import { FileCheck, ArrowLeft, Play, AlertCircle, FileVideo } from 'lucide-react';
 
 interface ReviewStepProps {
-  sourceUrl: string;
+  sourceUrls: string[];
   variations: number;
   isSubmitting: boolean;
   submitError: string | null;
@@ -17,13 +17,15 @@ interface ReviewStepProps {
 }
 
 export function ReviewStep({ 
-  sourceUrl, 
+  sourceUrls, 
   variations, 
   isSubmitting, 
   submitError,
   onStartRendering, 
   onBack 
 }: ReviewStepProps) {
+  const totalJobs = sourceUrls.length * variations;
+
   return (
     <Card className="border-border">
       <CardHeader className="border-b border-border">
@@ -34,14 +36,34 @@ export function ReviewStep({
       </CardHeader>
       <CardContent className="p-6 space-y-6">
         {/* Configuration Summary */}
-        <div className="space-y-3 p-4 bg-muted/50 rounded border border-border">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Source:</span>
-            <span className="font-mono truncate max-w-[280px]">{sourceUrl}</span>
+        <div className="space-y-4 p-4 bg-muted/50 rounded border border-border">
+          {/* Source Videos */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground flex items-center gap-1">
+                <FileVideo className="w-4 h-4" />
+                Source Videos:
+              </span>
+              <span className="font-mono text-sm">{sourceUrls.length}</span>
+            </div>
+            <div className="max-h-[100px] overflow-y-auto space-y-1 pl-5">
+              {sourceUrls.map((url, i) => (
+                <p key={i} className="font-mono text-xs truncate text-muted-foreground">
+                  {url}
+                </p>
+              ))}
+            </div>
           </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Variations:</span>
-            <span className="font-mono">{variations}</span>
+
+          <div className="border-t border-border pt-3 space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Variations per video:</span>
+              <span className="font-mono">{variations}</span>
+            </div>
+            <div className="flex justify-between text-sm font-medium">
+              <span className="text-foreground">Total jobs:</span>
+              <span className="font-mono text-primary">{totalJobs}</span>
+            </div>
           </div>
         </div>
 
@@ -66,7 +88,7 @@ export function ReviewStep({
           </Button>
           <Button onClick={onStartRendering} className="flex-1" disabled={isSubmitting}>
             <Play className="w-4 h-4 mr-2" />
-            {isSubmitting ? 'Submitting...' : 'Start Rendering'}
+            {isSubmitting ? 'Submitting...' : `Start Rendering (${totalJobs} jobs)`}
           </Button>
         </div>
       </CardContent>
