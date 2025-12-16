@@ -10,17 +10,23 @@ const getBaseUrl = () => {
         return import.meta.env.VITE_RENDER_FLOW_API_URL;
     }
 
-    // 2. PRODUCTION: When running on flowscale.cloud (or any public domain)
-    // We use a "Relative Path" (/api). This is secure and avoids "Mixed Content" errors.
-    // The Browser sends request to -> https://flowscale.cloud/api/...
-    // Nginx (on the VPS) receives it and forwards it internally to -> http://localhost:3001/api/...
-    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-        return '/api';
+    // 2. Check hostname to determine correct backend URL
+    if (typeof window !== 'undefined') {
+        const hostname = window.location.hostname;
+        
+        // When running on the VPS itself (flowscale.cloud), use relative path
+        if (hostname === 'flowscale.cloud' || hostname.endsWith('.flowscale.cloud')) {
+            return '/api';
+        }
+        
+        // When running on Lovable preview or other hosts, use the full VPS URL
+        // This requires CORS to be configured on the VPS
+        if (hostname !== 'localhost') {
+            return 'https://flowscale.cloud/api';
+        }
     }
 
-    // 3. LOCAL DEVELOPMENT: When working on your laptop (localhost:8080)
-    // We try to connect to a local server. 
-    // If you want to connect Local Frontend -> VPS Backend, set VITE_RENDER_FLOW_API_URL in .env
+    // 3. LOCAL DEVELOPMENT: localhost
     return 'http://localhost:3001/api';
 };
 
