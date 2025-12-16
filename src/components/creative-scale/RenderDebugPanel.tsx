@@ -67,7 +67,10 @@ export function RenderDebugPanel({ className }: RenderDebugPanelProps) {
     return null;
   }
 
-  const activeJobs = executionDebugLogger.getActiveJobs();
+  // Derive active jobs from variations with valid job IDs
+  const activeJobs = debugState.variations
+    .filter(v => v.jobId && (v.unifiedServer.status === 'dispatched' || v.unifiedServer.status === 'pending'))
+    .map(v => ({ jobId: v.jobId!, variationIndex: v.variationIndex }));
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -205,9 +208,6 @@ export function RenderDebugPanel({ className }: RenderDebugPanelProps) {
                       </p>
                       <p className="text-red-400">
                         <span className="text-muted-foreground">Root Cause:</span> {debugState.summary.rootCause}
-                      </p>
-                      <p className="text-amber-400">
-                        <span className="text-muted-foreground">Next Action:</span> {debugState.summary.nextAction}
                       </p>
                     </>
                   )}
