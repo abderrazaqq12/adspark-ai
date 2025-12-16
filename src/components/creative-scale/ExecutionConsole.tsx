@@ -8,11 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  Terminal, 
-  RefreshCw, 
-  CheckCircle2, 
-  XCircle, 
+import {
+  Terminal,
+  RefreshCw,
+  CheckCircle2,
+  XCircle,
   Clock,
   Loader2,
   Copy,
@@ -49,8 +49,8 @@ interface ExecutionConsoleProps {
   apiBaseUrl?: string;
 }
 
-export function ExecutionConsole({ 
-  jobId, 
+export function ExecutionConsole({
+  jobId,
   variationIndex,
   apiBaseUrl = ''
 }: ExecutionConsoleProps) {
@@ -62,6 +62,38 @@ export function ExecutionConsole({
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchLogs = async () => {
+    // Handle Preview/Simulation Mode (VPS Unavailable)
+    if (jobId.startsWith('preview_') || jobId.startsWith('var_')) {
+      setLogs({
+        jobId,
+        variationIndex,
+        status: 'done',
+        command: 'simulation_run --mode=preview',
+        fullLogs: [
+          '[System] VPS Connection Unavailable',
+          '[System] Running in Simulation Mode',
+          '[Simulation] Validated Execution Plan',
+          '[Simulation] Skipped remote rendering',
+          '[Success] Simulation complete'
+        ],
+        execution: {
+          engine: 'simulation',
+          encoderUsed: null,
+          exitCode: 0,
+          outputPath: null,
+          outputExists: false,
+          outputSize: 0,
+          durationMs: 100
+        },
+        error: null,
+        createdAt: new Date().toISOString(),
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      });
+      setIsPolling(false);
+      return;
+    }
+
     try {
       const response = await fetch(`${apiBaseUrl}/api/jobs/${jobId}/logs`);
       if (!response.ok) {
@@ -88,7 +120,12 @@ export function ExecutionConsole({
         setIsPolling(false);
       }
     } catch (err: any) {
-      setError(err.message);
+      // If we get a syntax error (HTML response), it's likely a 404/proxy issue.
+      // Don't show confusing syntax error, show "Connection unavailable"
+      const msg = err.message.includes('Unexpected token')
+        ? 'Backend unavailable (received HTML)'
+        : err.message;
+      setError(msg);
     }
   };
 
@@ -121,19 +158,19 @@ export function ExecutionConsole({
       `=== Variation ${variationIndex + 1} Execution Log ===`,
       `Job ID: ${logs.jobId}`,
       `Status: ${logs.status}`,
-      `Engine: ${logs.execution.engine}`,
-      `Encoder: ${logs.execution.encoderUsed || 'N/A'}`,
+      `Engine: ${logs.execution?.engine || 'unified_server'}`,
+      `Encoder: ${logs.execution?.encoderUsed || 'N/A'}`,
       '',
       `=== Command ===`,
       logs.command || 'N/A',
       '',
       `=== Output ===`,
-      ...logs.fullLogs,
+      ...(logs.fullLogs || []),
       '',
       `=== Result ===`,
-      `Exit Code: ${logs.execution.exitCode}`,
-      `Output Exists: ${logs.execution.outputExists}`,
-      `Output Size: ${logs.execution.outputSize ? `${(logs.execution.outputSize / 1024 / 1024).toFixed(2)} MB` : 'N/A'}`,
+      `Exit Code: ${logs.execution?.exitCode ?? 'N/A'}`,
+      `Output Exists: ${logs.execution?.outputExists ?? false}`,
+      `Output Size: ${logs.execution?.outputSize ? `${(logs.execution.outputSize / 1024 / 1024).toFixed(2)} MB` : 'N/A'}`,
       logs.error ? `Error: ${logs.error.code} - ${logs.error.message}` : 'No errors',
     ].join('\n');
     navigator.clipboard.writeText(text);
@@ -207,7 +244,7 @@ export function ExecutionConsole({
             )}
 
             {/* Logs Terminal */}
-            <div 
+            <div
               ref={scrollRef}
               className="h-48 overflow-y-auto bg-black/50 p-3 font-mono text-xs"
             >
@@ -222,19 +259,18 @@ export function ExecutionConsole({
                 </div>
               )}
               {logs?.fullLogs.map((line, i) => (
-                <div 
-                  key={i} 
-                  className={`whitespace-pre-wrap break-all ${
-                    line.includes('error') || line.includes('Error') || line.includes('ERROR')
-                      ? 'text-red-400'
-                      : line.includes('Warning') || line.includes('warning')
+                <div
+                  key={i}
+                  className={`whitespace-pre-wrap break-all ${line.includes('error') || line.includes('Error') || line.includes('ERROR')
+                    ? 'text-red-400'
+                    : line.includes('Warning') || line.includes('warning')
                       ? 'text-yellow-400'
                       : line.includes('DONE') || line.includes('success') || line.includes('completed')
-                      ? 'text-green-400'
-                      : line.startsWith('[Command]')
-                      ? 'text-cyan-400'
-                      : 'text-slate-300'
-                  }`}
+                        ? 'text-green-400'
+                        : line.startsWith('[Command]')
+                          ? 'text-cyan-400'
+                          : 'text-slate-300'
+                    }`}
                 >
                   {line}
                 </div>
@@ -252,32 +288,30 @@ export function ExecutionConsole({
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                   <div>
                     <span className="text-muted-foreground">Engine:</span>
-                    <span className="ml-1 font-mono text-blue-400">{logs.execution.engine}</span>
+                    <span className="ml-1 font-mono text-blue-400">{logs.execution?.engine || 'unified'}</span>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Encoder:</span>
-                    <span className="ml-1 font-mono">{logs.execution.encoderUsed || 'pending'}</span>
+                    <span className="ml-1 font-mono">{logs.execution?.encoderUsed || 'pending'}</span>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Exit:</span>
-                    <span className={`ml-1 font-mono ${
-                      logs.execution.exitCode === 0 ? 'text-green-400' : 
-                      logs.execution.exitCode === null ? 'text-muted-foreground' : 'text-red-400'
-                    }`}>
-                      {logs.execution.exitCode ?? '—'}
+                    <span className={`ml-1 font-mono ${logs.execution?.exitCode === 0 ? 'text-green-400' :
+                      logs.execution?.exitCode === null || logs.execution?.exitCode === undefined ? 'text-muted-foreground' : 'text-red-400'
+                      }`}>
+                      {logs.execution?.exitCode ?? '—'}
                     </span>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Output:</span>
-                    <span className={`ml-1 font-mono ${
-                      logs.execution.outputExists ? 'text-green-400' : 'text-muted-foreground'
-                    }`}>
-                      {logs.execution.outputExists ? '✓' : '—'}
-                      {logs.execution.outputSize ? ` (${(logs.execution.outputSize / 1024 / 1024).toFixed(1)}MB)` : ''}
+                    <span className={`ml-1 font-mono ${logs.execution?.outputExists ? 'text-green-400' : 'text-muted-foreground'
+                      }`}>
+                      {logs.execution?.outputExists ? '✓' : '—'}
+                      {logs.execution?.outputSize ? ` (${(logs.execution.outputSize / 1024 / 1024).toFixed(1)}MB)` : ''}
                     </span>
                   </div>
                 </div>
-                
+
                 {logs.error && (
                   <div className="mt-2 p-2 rounded bg-red-500/10 border border-red-500/30">
                     <span className="text-red-400 font-mono text-xs">
@@ -334,7 +368,7 @@ export function MultiExecutionConsole({ jobs, apiBaseUrl }: MultiExecutionConsol
   return (
     <div className="space-y-3">
       {jobs.map((job) => (
-        <ExecutionConsole 
+        <ExecutionConsole
           key={job.jobId}
           jobId={job.jobId}
           variationIndex={job.variationIndex}

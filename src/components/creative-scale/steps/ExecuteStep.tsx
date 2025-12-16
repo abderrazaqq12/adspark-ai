@@ -23,6 +23,7 @@ import { RenderDebugPanel } from '@/components/creative-scale/RenderDebugPanel';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
 import type { CreativeBlueprint } from '@/lib/creative-scale/types';
 import type { ComplianceResult } from '@/lib/creative-scale/compliance-types';
+import { PlanInputDetails } from '@/components/creative-scale/PlanInputDetails';
 
 interface ExecuteStepProps {
   plans: ExecutionPlan[];
@@ -91,6 +92,13 @@ export function ExecuteStep({
         {!isExecuting && executionProgress.status === 'idle' && (
           <ScrollArea className="h-[calc(100vh-420px)] min-h-[300px]">
             <div className="space-y-6">
+
+              {/* Plan Inputs Preview */}
+              <div className="space-y-4">
+                {plans.map((plan, i) => (
+                  <PlanInputDetails key={plan.plan_id} plan={plan} index={i} total={plans.length} />
+                ))}
+              </div>
 
 
               {/* Compliance Blocking Alert */}
