@@ -780,43 +780,46 @@ const RENDERFLOW_API = process.env.RENDERFLOW_URL || 'http://localhost:3001/rend
 // Proxies render requests to RenderFlow Engine
 app.post('/api/render/renderflow', async (req, res) => {
   try {
-    const { projectId, scenes } = req.body;
+    const { projectId, scenes, variations: outputVariations } = req.body;
 
     // Translation: FlowScale Scenes -> RenderFlow Variations
-    // v1: We map the first scene source to input.source_url
-    // (Assuming simple 1-file render for now as per constraints)
+    // If we have 'variations' already (New UI), use them.
+    // If we have 'scenes' (Legacy/Studio), map them.
 
-    const variations = scenes.map((scene, idx) => {
-      return {
-        id: `var_proxy_${Date.now()}_${idx}`,
-        data: {
-          // If scene has 'video' payload, use it. Else fallback.
-          // FlowScale UI usually sends { video: "url", ... }
-          source_url: scene.video || scene.sourceUrl || null,
-          trim: scene.trim || null,
-          // Pass-through metadata for debugging
-          original_scene_id: scene.id
-        }
-      };
-    }).filter(v => v.data.source_url); // Filter invalid
-
-    if (variations.length === 0) {
-      return jsonError(res, 400, 'INVALID_PAYLOAD', 'No valid scenes with source video found');
+    let variations = [];
+    if (outputVariations && Array.isArray(outputVariations)) {
+      variations = outputVariations;
+    } else if (scenes && Array.isArray(scenes)) {
+      variations = scenes.map((scene, idx) => {
+        return {
+          id: `var_proxy_${Date.now()}_${idx}`,
+          data: {
+            source_url: scene.video || scene.sourceUrl || null,
+            trim: scene.trim || null,
+            original_scene_id: scene.id
+          }
+        };
+      }).filter(v => v.data.source_url);
     }
 
-    // Call RenderFlow
+    if (variations.length === 0) {
+      return jsonError(res, 400, 'INVALID_PAYLOAD', 'No valid variations or scenes found');
+    }
+
+    const fetch = (await import('node-fetch')).default;
+
     const rfRes = await fetch(`${RENDERFLOW_API}/jobs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        project_id: projectId || 'anonymous',
-        variations
+        project_id: projectId,
+        variations: variations
       })
     });
 
     if (!rfRes.ok) {
-      const errText = await rfRes.text();
-      throw new Error(`RenderFlow rejected: ${rfRes.status} ${errText}`);
+      console.error('[Adapter] RenderFlow POST Error:', rfRes.status, await rfRes.text());
+      return res.status(rfRes.status).json({ error: 'RenderFlow API Error', details: await rfRes.text() });
     }
 
     const rfData = await rfRes.json();
@@ -826,13 +829,29 @@ app.post('/api/render/renderflow', async (req, res) => {
     res.json(rfData);
 
   } catch (err) {
-    console.error('[Adapter] Proxy Error:', err);
-    jsonError(res, 500, 'PROXY_ERROR', err.message);
+    console.error('RenderFlow Proxy Error:', err);
+    res.status(502).json({ error: 'RenderFlow Gateway Error' });
   }
 });
 
-// GET /api/render/renderflow/jobs/:id
-// Proxies status checks
+// PROXY: GET /api/render/renderflow/jobs (List)
+app.get('/api/render/renderflow/jobs', async (req, res) => {
+  try {
+    const fetch = (await import('node-fetch')).default;
+
+    const response = await fetch(`${RENDERFLOW_API}/jobs`);
+    if (!response.ok) {
+      return res.status(response.status).send(await response.text());
+    }
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    console.error('RenderFlow List Proxy Error:', err);
+    res.status(502).json({ error: 'RenderFlow Gateway Error' });
+  }
+});
+
+// PROXY: GET /api/render/renderflow/jobs/:id (Status)
 app.get('/api/render/renderflow/jobs/:id', async (req, res) => {
   try {
     const rfRes = await fetch(`${RENDERFLOW_API}/jobs/${req.params.id}`);
@@ -846,6 +865,30 @@ app.get('/api/render/renderflow/jobs/:id', async (req, res) => {
     console.error('[Adapter] Proxy Status Error:', err);
     jsonError(res, 500, 'PROXY_ERROR', err.message);
   }
+});
+
+// PROXY: POST /api/render/renderflow/upload (New Strict Endpoint)
+// Purpose: Upload assets specifically for RenderFlow, decoupled from legacy upload
+app.post('/api/render/renderflow/upload', (req, res) => {
+  // Reuse multer instance 'upload' defined earlier in api.js
+  // Strict separation: We store in a subfolder 'renderflow' within uploads to keep it clean
+  // But due to multer config 'upload' using 'uploads/', we might just tag it.
+  // v1: Use same multer, but separate route logic. 
+
+  upload.single('file')(req, res, (err) => {
+    if (err) return jsonError(res, 400, 'UPLOAD_ERROR', err.message);
+    if (!req.file) return jsonError(res, 400, 'NO_FILE', 'No file provided');
+
+    const publicUrl = `/uploads/${req.file.filename}`;
+    console.log(`[Adapter] RenderFlow Upload: ${req.file.filename}`);
+
+    res.json({
+      ok: true,
+      url: publicUrl,
+      filename: req.file.filename,
+      size: req.file.size
+    });
+  });
 });
 
 // ============================================

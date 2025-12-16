@@ -2,36 +2,44 @@ import { RenderFlowDB } from './db';
 import { Job, JobInput } from './types';
 import { generateId } from './utils';
 
-// The Manager is the Public Interface for the API and the Guardian of State
 export const JobManager = {
-
     createJob: (input: JobInput): Job => {
-        const job: Job = {
-            id: generateId(),
-            variation_id: input.variation_id || generateId('var'),
-            project_id: input.project_id,
-            state: 'queued',
-            created_at: new Date().toISOString(),
-            input,
-            progress_pct: 0
-        };
+        try {
+            console.log('[JobManager] Creating job for project:', input.project_id);
 
-        RenderFlowDB.insertJob(job);
-        return job;
+            // Ensure inputs are valid strings
+            const pid = input.project_id || 'anonymous';
+            const vid = input.variation_id || generateId('var');
+
+            const job: Job = {
+                id: generateId('job'),
+                variation_id: vid,
+                project_id: pid,
+                state: 'queued',
+                created_at: new Date().toISOString(),
+                input: input, // DB will stringify this
+                progress_pct: 0
+            };
+
+            RenderFlowDB.insertJob(job);
+            return job;
+        } catch (err) {
+            console.error('[JobManager] Create Failed:', err);
+            throw err;
+        }
     },
 
     getJob: (id: string): Job | undefined => {
         return RenderFlowDB.getJob(id);
     },
 
-    // Used by API for polling
     getJobStatus: (id: string) => {
         const job = RenderFlowDB.getJob(id);
         if (!job) return null;
         return {
             id: job.id,
             state: job.state,
-            progress: job.progress_pct, // Simple integer % as requested
+            progress: job.progress_pct,
             error: job.error,
             output: job.output
         };

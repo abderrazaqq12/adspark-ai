@@ -23,6 +23,7 @@ const workflowItems = [
   { title: "Agency Mode", url: "/agency", icon: Building2, description: "Batch generation" },
   { title: "Creative Replicator", url: "/creative-replicator", icon: SlidersHorizontal, description: "Replicate winning ads" },
   { title: "Creative Scale", url: "/creative-scale", icon: Scale, description: "AI-powered optimization" },
+  { title: "RenderFlow", url: "/renderflow", icon: Video, description: "Deterministic Render Engine" },
   { title: "AI Tools", url: "/ai-tools", icon: Wand2, description: "AI-powered tools" },
 ];
 
@@ -64,7 +65,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
       <SidebarContent className="py-2">
         {/* Logo/Brand with Dashboard */}
-        <div 
+        <div
           className={`flex items-center gap-3 px-3 py-4 cursor-pointer hover:bg-sidebar-accent/50 rounded-lg mx-2 transition-colors ${open ? '' : 'justify-center'}`}
           onClick={() => navigate('/')}
         >
@@ -86,8 +87,8 @@ export function AppSidebar() {
               {quickAccessItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild className="h-10">
-                    <NavLink 
-                      to={item.url} 
+                    <NavLink
+                      to={item.url}
                       end={item.url === "/"}
                       className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-all duration-200 ${!open ? 'justify-center px-0' : ''}`}
                       activeClassName="bg-primary/10 text-primary font-medium shadow-sm"
@@ -117,7 +118,7 @@ export function AppSidebar() {
               {workflowItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild className="h-10">
-                    <NavLink 
+                    <NavLink
                       to={item.url}
                       className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-all duration-200 ${!open ? 'justify-center px-0' : ''}`}
                       activeClassName="bg-primary/10 text-primary font-medium shadow-sm"
@@ -147,7 +148,7 @@ export function AppSidebar() {
               {libraryItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild className="h-10">
-                    <NavLink 
+                    <NavLink
                       to={item.url}
                       className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-all duration-200 ${!open ? 'justify-center px-0' : ''}`}
                       activeClassName="bg-primary/10 text-primary font-medium shadow-sm"
@@ -177,7 +178,7 @@ export function AppSidebar() {
               {toolsItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild className="h-10">
-                    <NavLink 
+                    <NavLink
                       to={item.url}
                       className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-all duration-200 ${!open ? 'justify-center px-0' : ''}`}
                       activeClassName="bg-primary/10 text-primary font-medium shadow-sm"
@@ -192,12 +193,12 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      
+
       <SidebarFooter className="border-t border-sidebar-border p-3 space-y-2">
         {open && <CreditsDisplay />}
-        
+
         {/* Logout Button */}
-        <SidebarMenuButton 
+        <SidebarMenuButton
           onClick={handleLogout}
           className={`w-full rounded-lg h-10 text-destructive hover:bg-destructive/10 transition-colors ${open ? 'justify-start px-3 gap-3' : 'justify-center px-0'}`}
         >

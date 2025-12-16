@@ -32,6 +32,7 @@ export class RenderEngine {
         while (this.isRunning) {
             try {
                 if (!this.currentJob) {
+                    // ATOMIC CLAIM: Single DB call, no Select-then-Update in TS
                     const job = RenderFlowDB.claimNextJob(WORKER_PID);
                     if (job) {
                         console.log(`[RenderFlow] Claimed Job ${job.id}`);
@@ -156,7 +157,12 @@ export class RenderEngine {
                     const pct = Math.min(99, Math.floor((outTimeMs / totalDurationMs) * 100)); // Clamp 99
                     // Throttled Update
                     if (Date.now() - lastProgressUpdate > 1000) {
-                        RenderFlowDB.updateProgress(job.id, pct);
+                        try {
+                            RenderFlowDB.updateProgress(job.id, pct);
+                        } catch (e) {
+                            // Best-effort: ignore DB write failures during rendering to avoid killing the job
+                            console.warn(`[RenderFlow] Failed to persist progress for ${job.id} (non-fatal):`, e);
+                        }
                         lastProgressUpdate = Date.now();
                     }
                 }

@@ -22,6 +22,8 @@ import AgencyMode from "./pages/AgencyMode";
 import AITools from "./pages/AITools";
 import CreativeReplicator from "./pages/CreativeReplicator";
 import CreativeScale from "./pages/CreativeScale";
+import RenderFlowDashboard from "./renderflow/pages/RenderFlowDashboard";
+import RenderFlowJobDetail from "./renderflow/pages/RenderFlowJobDetail";
 
 const queryClient = new QueryClient();
 
@@ -43,7 +45,10 @@ const App = () => (
                     <Route path="/quick-generate" element={<CreateVideo />} />
                     <Route path="/agency" element={<AgencyMode />} />
                     <Route path="/creative-replicator" element={<CreativeReplicator />} />
+                    <Route path="/creative-replicator" element={<CreativeReplicator />} />
                     <Route path="/creative-scale" element={<CreativeScale />} />
+                    <Route path="/renderflow" element={<RenderFlowDashboard />} />
+                    <Route path="/renderflow/jobs/:id" element={<RenderFlowJobDetail />} />
                     <Route path="/projects" element={<Projects />} />
                     <Route path="/gallery" element={<Gallery />} />
                     <Route path="/videos" element={<Videos />} />
