@@ -8,15 +8,16 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { JobStatusBadge } from '../JobStatusBadge';
 import { RenderFlowJob } from '../../api';
-import { Play, AlertCircle, CheckCircle, Download, RotateCcw, Loader2 } from 'lucide-react';
+import { Play, AlertCircle, CheckCircle, Download, RotateCcw, Loader2, ArrowRight } from 'lucide-react';
 
 interface ExecuteStepProps {
   jobs: RenderFlowJob[];
   isPolling: boolean;
   onReset: () => void;
+  onViewResults?: () => void;
 }
 
-export function ExecuteStep({ jobs, isPolling, onReset }: ExecuteStepProps) {
+export function ExecuteStep({ jobs, isPolling, onReset, onViewResults }: ExecuteStepProps) {
   const allDone = jobs.length > 0 && jobs.every(j => j.state === 'done' || j.state === 'failed');
   const anyFailed = jobs.some(j => j.state === 'failed');
   const successCount = jobs.filter(j => j.state === 'done').length;
@@ -130,12 +131,20 @@ export function ExecuteStep({ jobs, isPolling, onReset }: ExecuteStepProps) {
           </p>
         )}
 
-        {/* Reset Button */}
+        {/* Action Buttons */}
         {allDone && (
-          <Button variant="outline" onClick={onReset} className="w-full">
-            <RotateCcw className="w-4 h-4 mr-2" />
-            Start New Pipeline
-          </Button>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={onReset} className="flex-1">
+              <RotateCcw className="w-4 h-4 mr-2" />
+              New Pipeline
+            </Button>
+            {onViewResults && (
+              <Button onClick={onViewResults} className="flex-1">
+                View Results
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>

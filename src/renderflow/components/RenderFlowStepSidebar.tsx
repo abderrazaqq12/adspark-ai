@@ -1,6 +1,6 @@
 /**
  * RenderFlow Step Sidebar
- * Vertical navigation with 4 steps - mirrors Creative Scale structure
+ * Vertical navigation with 5 steps - mirrors Creative Scale structure
  */
 
 import { 
@@ -9,10 +9,11 @@ import {
   FileCheck, 
   Play,
   CheckCircle2,
-  Lock
+  Lock,
+  Download
 } from 'lucide-react';
 
-export type RenderStepId = 1 | 2 | 3 | 4;
+export type RenderStepId = 1 | 2 | 3 | 4 | 5;
 
 interface Step {
   id: RenderStepId;
@@ -25,7 +26,8 @@ const STEPS: Step[] = [
   { id: 1, label: 'Input', description: 'Source video', icon: Upload },
   { id: 2, label: 'Configure', description: 'Variation count', icon: Settings },
   { id: 3, label: 'Review', description: 'Verify settings', icon: FileCheck },
-  { id: 4, label: 'Execute', description: 'Render & download', icon: Play },
+  { id: 4, label: 'Execute', description: 'Render videos', icon: Play },
+  { id: 5, label: 'Results', description: 'Download outputs', icon: Download },
 ];
 
 interface RenderFlowStepSidebarProps {
@@ -109,12 +111,12 @@ export function RenderFlowStepSidebar({ currentStep, completedSteps, onStepClick
       {/* Footer */}
       <div className="p-4 border-t border-border space-y-3">
         <div className="text-xs text-muted-foreground">
-          <span className="font-medium">{completedSteps.length}</span> of 4 steps complete
+          <span className="font-medium">{completedSteps.length}</span> of 5 steps complete
         </div>
         <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
           <div 
             className="h-full bg-primary transition-all duration-300"
-            style={{ width: `${(completedSteps.length / 4) * 100}%` }}
+            style={{ width: `${(completedSteps.length / 5) * 100}%` }}
           />
         </div>
         {onReset && (
