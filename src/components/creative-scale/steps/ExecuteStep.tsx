@@ -167,14 +167,6 @@ export function ExecuteStep({
                 </div>
               </div>
             </div>
-            {/* Temporary Debug Info for User Verification */}
-            <div className="mt-4 p-2 bg-black/80 text-green-400 text-xs font-mono rounded border border-green-800 absolute bottom-4 right-4 z-50 pointer-events-none">
-              <p>Debug Overlay:</p>
-              <p>isExecuting: {String(isExecuting)}</p>
-              <p>Status: {executionProgress.status}</p>
-              <p>Plans: {plans.length}</p>
-            </div>
-
           </ScrollArea>
         )}
 
