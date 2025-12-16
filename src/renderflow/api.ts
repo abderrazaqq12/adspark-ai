@@ -2,7 +2,10 @@
 // All responses returned raw. No normalization. No retries.
 
 const getBaseUrl = () => {
-    // STRICT V1: Always point to independent backend
+    // Use relative paths in production, localhost in development
+    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+        return '/api/render';
+    }
     return 'http://localhost:3001/render';
 };
 

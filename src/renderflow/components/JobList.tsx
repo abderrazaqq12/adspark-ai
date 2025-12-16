@@ -4,11 +4,7 @@ import { JobStatusBadge } from "./JobStatusBadge";
 import { Download, AlertCircle, ExternalLink } from "lucide-react";
 import { Link } from "react-router-dom";
 
-interface JobListProps {
-    refreshTrigger?: number;
-}
-
-export const JobList = ({ refreshTrigger = 0 }: JobListProps) => {
+export const JobList = () => {
     const [jobs, setJobs] = useState<RenderFlowJob[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -39,7 +35,7 @@ export const JobList = ({ refreshTrigger = 0 }: JobListProps) => {
             mounted = false;
             clearInterval(interval);
         };
-    }, [refreshTrigger]);
+    }, []);
 
     if (loading) {
         return (

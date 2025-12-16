@@ -1,75 +1,267 @@
-import { useState, useEffect } from "react";
-import { JobWizard } from "../components/JobWizard";
-import { JobList } from "../components/JobList";
-import { RenderFlowApi } from "../api";
-import { AlertCircle, CheckCircle } from "lucide-react";
+/**
+ * RenderFlow Dashboard - Rebuilt to match Creative Scale structure
+ * Step-based pipeline with strict backend mirroring
+ * NO fake progress, NO optimistic UI, NO abstractions
+ */
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { RenderFlowStepSidebar, RenderStepId } from '../components/RenderFlowStepSidebar';
+import { InputStep } from '../components/steps/InputStep';
+import { ConfigureStep } from '../components/steps/ConfigureStep';
+import { ReviewStep } from '../components/steps/ReviewStep';
+import { ExecuteStep } from '../components/steps/ExecuteStep';
+import { JobList } from '../components/JobList';
+import { RenderFlowApi, RenderFlowJob, HealthResponse } from '../api';
+import { AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 
 export default function RenderFlowDashboard() {
-    const [refreshTrigger, setRefreshTrigger] = useState(0);
-    const [healthStatus, setHealthStatus] = useState<'checking' | 'ready' | 'unavailable'>('checking');
-    const [healthError, setHealthError] = useState<string | null>(null);
+  // Step Navigation
+  const [currentStep, setCurrentStep] = useState<RenderStepId>(1);
+  const [completedSteps, setCompletedSteps] = useState<RenderStepId[]>([]);
 
-    // Health check on mount - no retries
-    useEffect(() => {
-        const checkHealth = async () => {
-            try {
-                const res = await RenderFlowApi.checkHealth();
-                if (res.ok && res.ffmpeg === 'ready') {
-                    setHealthStatus('ready');
-                } else {
-                    setHealthStatus('unavailable');
-                    setHealthError(res.error || 'FFmpeg not ready');
-                }
-            } catch (e: any) {
-                setHealthStatus('unavailable');
-                setHealthError(e.message);
-            }
-        };
-        checkHealth();
-    }, []);
+  // Pipeline Data
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [variations, setVariations] = useState(1);
+  const [jobs, setJobs] = useState<RenderFlowJob[]>([]);
+  
+  // Submission State
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  
+  // Health Check State
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [healthError, setHealthError] = useState<string | null>(null);
+  const [healthChecking, setHealthChecking] = useState(true);
 
-    return (
-        <div className="container py-8 max-w-5xl mx-auto space-y-10">
-            {/* Header */}
-            <div className="text-center space-y-2">
-                <h1 className="text-3xl font-bold tracking-tight">RenderFlow Engine</h1>
-                <p className="text-muted-foreground">
-                    Deterministic FFmpeg Rendering Pipeline. CPU-Only. Strict Persistence.
-                </p>
-                
-                {/* Health Status */}
-                <div className="flex justify-center pt-2">
-                    {healthStatus === 'checking' && (
-                        <span className="text-xs text-muted-foreground font-mono">
-                            Checking backend health...
-                        </span>
-                    )}
-                    {healthStatus === 'ready' && (
-                        <span className="inline-flex items-center gap-1 text-xs text-green-500 font-mono">
-                            <CheckCircle size={12} /> Backend Ready
-                        </span>
-                    )}
-                    {healthStatus === 'unavailable' && (
-                        <span className="inline-flex items-center gap-1 text-xs text-destructive font-mono">
-                            <AlertCircle size={12} /> Backend Unavailable: {healthError}
-                        </span>
-                    )}
-                </div>
-            </div>
+  // Polling
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
 
-            {/* Wizard Section */}
-            <section>
-                <JobWizard />
-            </section>
+  // Derived state from API only
+  const allDone = jobs.length > 0 && jobs.every(j => j.state === 'done' || j.state === 'failed');
 
-            {/* History Section */}
-            <section className="space-y-4">
-                <div className="flex items-center justify-between border-b border-border pb-2">
-                    <h2 className="text-xl font-semibold">Recent Execution History</h2>
-                    <span className="text-xs text-muted-foreground font-mono">Polling every 1000ms</span>
-                </div>
-                <JobList refreshTrigger={refreshTrigger} />
-            </section>
+  // Health check on mount
+  useEffect(() => {
+    const checkHealth = async () => {
+      setHealthChecking(true);
+      try {
+        const res = await RenderFlowApi.checkHealth();
+        setHealth(res);
+        setHealthError(null);
+      } catch (e: any) {
+        setHealthError(e.message);
+        setHealth(null);
+      } finally {
+        setHealthChecking(false);
+      }
+    };
+    checkHealth();
+  }, []);
+
+  // Step navigation
+  const goToStep = useCallback((step: RenderStepId) => {
+    if (step <= currentStep || completedSteps.includes(step)) {
+      setCurrentStep(step);
+    }
+  }, [currentStep, completedSteps]);
+
+  const completeStep = useCallback((step: RenderStepId) => {
+    setCompletedSteps(prev => {
+      if (prev.includes(step)) return prev;
+      return [...prev, step];
+    });
+  }, []);
+
+  // Step 1: Input complete
+  const handleInputComplete = (url: string) => {
+    setSourceUrl(url);
+    completeStep(1);
+    setCurrentStep(2);
+  };
+
+  // Step 2: Configure complete
+  const handleConfigureComplete = (count: number) => {
+    setVariations(count);
+    completeStep(2);
+    setCurrentStep(3);
+  };
+
+  // Step 3: Start rendering
+  const handleStartRendering = async () => {
+    setSubmitError(null);
+    setIsSubmitting(true);
+
+    try {
+      const res = await RenderFlowApi.submitJob(
+        `proj_${Date.now()}`,
+        sourceUrl,
+        variations
+      );
+
+      const ids = res.ids || [];
+      if (ids.length === 0) {
+        throw new Error('Backend returned empty job IDs');
+      }
+
+      // Initialize jobs from API response only
+      const initialJobs: RenderFlowJob[] = ids.map((id: string) => ({
+        id,
+        variation_id: '',
+        project_id: '',
+        state: 'queued' as const,
+        progress_pct: 0,
+        created_at: new Date().toISOString()
+      }));
+
+      setJobs(initialJobs);
+      completeStep(3);
+      setCurrentStep(4);
+    } catch (e: any) {
+      setSubmitError(e.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Step 4: Polling - strict 1000ms, stops only when ALL done/failed
+  useEffect(() => {
+    if (currentStep !== 4 || jobs.length === 0) return;
+    if (allDone) {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      completeStep(4);
+      return;
+    }
+
+    const poll = async () => {
+      const updatedJobs = await Promise.all(
+        jobs.map(async (job) => {
+          if (job.state === 'done' || job.state === 'failed') return job;
+          try {
+            return await RenderFlowApi.getJobStatus(job.id);
+          } catch {
+            return job; // Return existing on error - no inference
+          }
+        })
+      );
+      setJobs(updatedJobs);
+    };
+
+    pollRef.current = setInterval(poll, 1000);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [currentStep, jobs, allDone, completeStep]);
+
+  // Reset pipeline
+  const handleReset = () => {
+    setCurrentStep(1);
+    setCompletedSteps([]);
+    setSourceUrl('');
+    setVariations(1);
+    setJobs([]);
+    setSubmitError(null);
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  // Render current step content
+  const renderStepContent = () => {
+    switch (currentStep) {
+      case 1:
+        return <InputStep onContinue={handleInputComplete} />;
+      case 2:
+        return (
+          <ConfigureStep
+            sourceUrl={sourceUrl}
+            initialVariations={variations}
+            onContinue={handleConfigureComplete}
+            onBack={() => setCurrentStep(1)}
+          />
+        );
+      case 3:
+        return (
+          <ReviewStep
+            sourceUrl={sourceUrl}
+            variations={variations}
+            isSubmitting={isSubmitting}
+            submitError={submitError}
+            onStartRendering={handleStartRendering}
+            onBack={() => setCurrentStep(2)}
+          />
+        );
+      case 4:
+        return (
+          <ExecuteStep
+            jobs={jobs}
+            isPolling={!allDone}
+            onReset={handleReset}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen bg-background">
+      {/* Step Sidebar - matches Creative Scale */}
+      <RenderFlowStepSidebar
+        currentStep={currentStep}
+        completedSteps={completedSteps}
+        onStepClick={goToStep}
+        onReset={handleReset}
+      />
+
+      {/* Main Content */}
+      <div className="flex-1 p-6 space-y-6 overflow-auto">
+        {/* Health Status Banner */}
+        <div className={`p-3 rounded border flex items-center gap-3 ${
+          healthChecking 
+            ? 'bg-muted border-border' 
+            : healthError 
+              ? 'bg-destructive/10 border-destructive/30' 
+              : health?.ffmpeg === 'ready'
+                ? 'bg-green-500/10 border-green-500/30'
+                : 'bg-yellow-500/10 border-yellow-500/30'
+        }`}>
+          {healthChecking ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Checking backend health...</span>
+            </>
+          ) : healthError ? (
+            <>
+              <AlertTriangle className="w-4 h-4 text-destructive" />
+              <span className="text-sm text-destructive font-mono">{healthError}</span>
+            </>
+          ) : health?.ffmpeg === 'ready' ? (
+            <>
+              <CheckCircle className="w-4 h-4 text-green-500" />
+              <span className="text-sm text-green-600">Backend ready (FFmpeg available)</span>
+            </>
+          ) : (
+            <>
+              <AlertTriangle className="w-4 h-4 text-yellow-500" />
+              <span className="text-sm text-yellow-600">Backend unhealthy: {health?.error || 'FFmpeg unavailable'}</span>
+            </>
+          )}
         </div>
-    );
+
+        {/* Current Step Content */}
+        <div className="max-w-2xl">
+          {renderStepContent()}
+        </div>
+
+        {/* Execution History */}
+        <div className="pt-6 border-t border-border">
+          <h3 className="text-lg font-semibold mb-4">Recent Execution History</h3>
+          <JobList />
+        </div>
+      </div>
+    </div>
+  );
 }
