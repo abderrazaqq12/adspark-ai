@@ -16,6 +16,8 @@ app.use('/render', apiRouter);
 
 // Serve Outputs
 app.use('/outputs', express.static(PATHS.OUTPUT));
+// Serve Uploads (Temp) for local worker access via URL simulation or UI preview
+app.use('/uploads', express.static(PATHS.TEMP));
 
 // Start Worker
 const engine = new RenderEngine();
