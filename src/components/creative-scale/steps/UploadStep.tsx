@@ -6,11 +6,11 @@
 import { useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  Upload, 
-  FileVideo, 
-  Trash2, 
-  CheckCircle2, 
+import {
+  Upload,
+  FileVideo,
+  Trash2,
+  CheckCircle2,
   AlertCircle,
   RefreshCw,
   ArrowRight
@@ -36,12 +36,12 @@ interface UploadStepProps {
   isUploading: boolean;
 }
 
-export function UploadStep({ 
-  uploadedVideos, 
-  onUpload, 
-  onRemove, 
+export function UploadStep({
+  uploadedVideos,
+  onUpload,
+  onRemove,
   onContinue,
-  isUploading 
+  isUploading
 }: UploadStepProps) {
   const readyCount = uploadedVideos.filter(v => v.status === 'ready').length;
   const canContinue = readyCount > 0 && !isUploading;
@@ -89,19 +89,18 @@ export function UploadStep({
                 {readyCount} ready
               </span>
             </div>
-            
+
             <ScrollArea className="h-[calc(100vh-480px)] min-h-[200px]">
               <div className="space-y-2">
                 {uploadedVideos.map((video) => (
                   <div
                     key={video.id}
-                    className={`flex items-center gap-3 p-3 rounded-lg border ${
-                      video.status === 'error' 
-                        ? 'border-destructive/50 bg-destructive/5' 
-                        : video.status === 'ready'
-                          ? 'border-green-500/30 bg-green-500/5'
-                          : 'border-border bg-muted/30'
-                    }`}
+                    className={`flex items-center gap-3 p-3 rounded-lg border ${video.status === 'error'
+                      ? 'border-destructive/50 bg-destructive/5'
+                      : video.status === 'ready'
+                        ? 'border-green-500/30 bg-green-500/5'
+                        : 'border-border bg-muted/30'
+                      }`}
                   >
                     {/* Thumbnail */}
                     <div className="w-20 h-12 rounded-md overflow-hidden bg-muted shrink-0">
@@ -112,20 +111,20 @@ export function UploadStep({
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{video.file.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {video.status === 'uploading' 
+                        {video.status === 'uploading'
                           ? `Uploading... ${video.uploadProgress ?? 0}%`
                           : video.status === 'error'
                             ? video.error || 'Upload failed'
-                            : video.duration 
+                            : video.duration
                               ? `${video.duration.toFixed(1)} seconds`
                               : 'Processing...'}
                       </p>
-                      
+
                       {/* Upload Progress Bar */}
                       {video.status === 'uploading' && video.uploadProgress !== undefined && (
                         <div className="w-full h-1 bg-muted rounded-full mt-1.5 overflow-hidden">
-                          <div 
-                            className="h-full bg-primary transition-all duration-200" 
+                          <div
+                            className="h-full bg-primary transition-all duration-200"
                             style={{ width: `${video.uploadProgress}%` }}
                           />
                         </div>
@@ -174,7 +173,7 @@ export function UploadStep({
 
       {/* Continue CTA */}
       <div className="pt-6 border-t border-border mt-auto">
-        <Button 
+        <Button
           className="w-full h-12 text-base"
           onClick={onContinue}
           disabled={!canContinue}

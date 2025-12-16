@@ -11,6 +11,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+import fs from 'fs';
+
+// Ensure Directories Exist
+[PATHS.DATA, PATHS.OUTPUT, PATHS.TEMP].forEach(dir => {
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+        console.log(`[RenderFlow] Created directory: ${dir}`);
+    }
+});
+
 // Mount API
 app.use('/render', apiRouter);
 

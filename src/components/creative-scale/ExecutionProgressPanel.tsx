@@ -16,7 +16,8 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
-  ArrowRight
+  ArrowRight,
+  MonitorPlay
 } from 'lucide-react';
 import type { EngineId } from '@/lib/creative-scale/execution-engine';
 
@@ -58,6 +59,12 @@ const ENGINE_CONFIG: Record<EngineId, {
     icon: Server,
     color: 'text-blue-500',
     description: 'VPS server-side rendering'
+  },
+  'renderflow': {
+    label: 'RenderFlow Engine',
+    icon: MonitorPlay,
+    color: 'text-cyan-500',
+    description: 'Dedicated rendering pipeline'
   },
   'plan_export': {
     label: 'Plan Export',
@@ -198,7 +205,7 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
 
         {/* Live Execution Console */}
         {state.engines.map(engine => {
-          if (engine.engine === 'server_ffmpeg' && engine.jobId) {
+          if ((engine.engine === 'server_ffmpeg' || engine.engine === 'renderflow') && engine.jobId) {
             return <ExecutionConsole key={engine.jobId} jobId={engine.jobId} />;
           }
           return null;
@@ -274,6 +281,7 @@ export function createInitialProgressState(totalVariations: number): ExecutionPr
     engines: [
       { engine: 'cloudinary', status: 'pending', progress: 0, message: '' },
       { engine: 'server_ffmpeg', status: 'pending', progress: 0, message: '' },
+      { engine: 'renderflow', status: 'pending', progress: 0, message: '' },
       { engine: 'plan_export', status: 'pending', progress: 0, message: '' },
     ],
     overallProgress: 0,

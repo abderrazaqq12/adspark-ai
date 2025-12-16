@@ -384,6 +384,7 @@ export default function CreativeScale() {
       engines: [
         { engine: 'cloudinary', status: 'pending', progress: 0, message: '' },
         { engine: 'server_ffmpeg', status: 'pending', progress: 0, message: '' },
+        { engine: 'renderflow', status: 'pending', progress: 0, message: '' },
         { engine: 'plan_export', status: 'pending', progress: 0, message: '' },
       ],
       overallProgress: 0,
@@ -402,6 +403,7 @@ export default function CreativeScale() {
         engines: [
           { engine: 'cloudinary', status: 'pending', progress: 0, message: '' },
           { engine: 'server_ffmpeg', status: 'pending', progress: 0, message: '' },
+          { engine: 'renderflow', status: 'pending', progress: 0, message: '' },
           { engine: 'plan_export', status: 'pending', progress: 0, message: '' },
         ],
         overallProgress: (i / currentPlans.length) * 100
@@ -625,6 +627,7 @@ export default function CreativeScale() {
                         <SelectItem value="auto">Auto (Smart Routing)</SelectItem>
                         <SelectItem value="server_only">Force Server FFmpeg (VPS)</SelectItem>
                         <SelectItem value="cloudinary_only">Force Cloudinary</SelectItem>
+                        <SelectItem value="renderflow">Force RenderFlow Engine</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

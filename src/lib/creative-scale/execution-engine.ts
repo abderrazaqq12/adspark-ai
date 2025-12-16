@@ -24,6 +24,7 @@ import {
   executionDebugLogger,
   EngineEvaluation
 } from './execution-debug';
+import { RenderFlowApi } from '@/renderflow/api';
 
 // ============================================
 // EXECUTION RESULT CONTRACT
@@ -450,6 +451,129 @@ async function executeServerFFmpeg(
 }
 
 // ============================================
+// ENGINE 2.5: RENDERFLOW (New Engine)
+// ============================================
+
+async function executeRenderFlow(
+  ctx: ExecutionContext
+): Promise<{ success: boolean; video_url?: string; error?: string; duration_ms: number; status?: string; outputType?: string }> {
+  const start = Date.now();
+  const requestSentAt = new Date().toISOString();
+
+  ctx.onProgress?.('renderflow', 0, 'Submitting to RenderFlow...');
+
+  // Log dispatch
+  executionDebugLogger.logEngineDispatch(
+    ctx.variationIndex ?? 0,
+    'renderflow',
+    '/render/jobs',
+    'POST',
+    {
+      hasExecutionPlan: true,
+      inputFileUrl: ctx.plan.timeline[0]?.asset_url || 'N/A',
+      timelineSegments: ctx.plan.timeline.length,
+      audioTracks: ctx.plan.audio_tracks.length,
+      outputFormat: ctx.plan.output_format.container,
+    }
+  );
+
+  try {
+    const sourceUrl = ctx.plan.timeline[0]?.asset_url;
+    if (!sourceUrl) throw new Error('No source video found in plan');
+
+    // Submit Job
+    const submitRes = await RenderFlowApi.submitJob(
+      ctx.userId || 'anonymous',
+      sourceUrl,
+      1
+    );
+
+    const jobId = submitRes.ids[0];
+
+    // Log detailed network response
+    executionDebugLogger.logNetworkResponse(
+      ctx.variationIndex ?? 0,
+      'renderflow',
+      {
+        endpoint: '/render/jobs',
+        method: 'POST',
+        requestSentAt,
+        httpStatus: 202, // Assumed
+        rawResponseBody: JSON.stringify(submitRes),
+        durationMs: Date.now() - start,
+      }
+    );
+
+    // Track job ID
+    executionDebugLogger.setJobId(ctx.variationIndex ?? 0, jobId);
+    ctx.onProgress?.('renderflow', 5, `Job queued: ${jobId}`, { jobId });
+
+    // Poll Loop
+    const maxAttempts = 120; // 4 minutes
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      attempts++;
+      await new Promise(r => setTimeout(r, 2000));
+
+      try {
+        const status = await RenderFlowApi.getJobStatus(jobId);
+
+        ctx.onProgress?.('renderflow', status.progress_pct || 10, `Rendering... (${status.state})`, { jobId });
+
+        if (status.state === 'done') {
+          if (status.output?.output_url) {
+            return {
+              success: true,
+              status: 'success',
+              outputType: 'video',
+              video_url: status.output.output_url,
+              duration_ms: Date.now() - start
+            };
+          } else {
+            throw new Error('RenderFlow job done but no output URL');
+          }
+        }
+
+        if (status.state === 'failed') {
+          throw new Error(status.error?.message || 'RenderFlow job failed');
+        }
+      } catch (pollErr: any) {
+        console.warn(`[RenderFlow] Poll error:`, pollErr);
+      }
+    }
+
+    return {
+      success: false,
+      error: 'RenderFlow polling timed out',
+      duration_ms: Date.now() - start
+    };
+
+  } catch (err: unknown) {
+    const durationMs = Date.now() - start;
+    const errorMessage = err instanceof Error ? err.message : 'RenderFlow request failed';
+
+    executionDebugLogger.logNetworkResponse(
+      ctx.variationIndex ?? 0,
+      'renderflow',
+      {
+        endpoint: 'RenderFlowApi',
+        method: 'API',
+        requestSentAt,
+        durationMs,
+        connectionError: errorMessage,
+      }
+    );
+
+    return {
+      success: false,
+      error: errorMessage,
+      duration_ms: durationMs,
+    };
+  }
+}
+
+// ============================================
 // ENGINE 3: PLAN EXPORT (Always Available)
 // ============================================
 
@@ -564,6 +688,9 @@ export async function executeWithFallback(ctx: ExecutionContext): Promise<Execut
         break;
       case 'server_ffmpeg':
         result = await executeServerFFmpeg(ctx);
+        break;
+      case 'renderflow':
+        result = await executeRenderFlow(ctx);
         break;
       default:
         continue;

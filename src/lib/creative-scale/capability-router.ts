@@ -27,7 +27,7 @@ export type Capability =
   | 'transition'
   | 'text_overlay';
 
-export type EngineId = 'cloudinary' | 'server_ffmpeg' | 'plan_export';
+export type EngineId = 'cloudinary' | 'server_ffmpeg' | 'plan_export' | 'renderflow';
 
 export interface EngineCapabilityProfile {
   id: EngineId;
@@ -70,6 +70,13 @@ export const ENGINE_CAPABILITIES: EngineCapabilityProfile[] = [
     ]),
     isPaid: false,
     priority: 999,
+  },
+  {
+    id: 'renderflow',
+    name: 'RenderFlow Engine',
+    capabilities: new Set(['trim']),
+    isPaid: false,
+    priority: 50,
   },
 ];
 
@@ -159,7 +166,7 @@ export interface EngineSelectionResult {
 // RENDERING MODES
 // ============================================
 
-export type RenderingMode = 'auto' | 'server_only' | 'cloudinary_only';
+export type RenderingMode = 'auto' | 'server_only' | 'cloudinary_only' | 'renderflow';
 
 export function selectEngine(
   requiredCapabilities: RequiredCapabilities,
@@ -203,6 +210,26 @@ export function selectEngine(
         reason: unsatisfied.length > 0 ? `Forced Cloudinary (Missing: ${unsatisfied.join(', ')})` : 'Forced by User (Cloudinary Only)',
         alternativeEngines: [],
         allowCloudFallback: true
+      };
+    }
+  }
+
+  if (mode === 'renderflow') {
+    const renderflow = ENGINE_CAPABILITIES.find(e => e.id === 'renderflow');
+    if (renderflow) {
+      const unsatisfied: Capability[] = [];
+      for (const cap of required) {
+        if (!renderflow.capabilities.has(cap)) unsatisfied.push(cap);
+      }
+
+      return {
+        selectedEngine: renderflow,
+        selectedEngineId: 'renderflow',
+        canExecute: true,
+        unsatisfiedCapabilities: unsatisfied,
+        reason: unsatisfied.length > 0 ? `Forced RenderFlow (Missing: ${unsatisfied.join(', ')})` : 'Forced by User (RenderFlow)',
+        alternativeEngines: [],
+        allowCloudFallback: false
       };
     }
   }
