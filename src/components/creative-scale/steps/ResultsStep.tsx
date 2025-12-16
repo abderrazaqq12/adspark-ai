@@ -35,7 +35,7 @@ export function ResultsStep({
   onReset
 }: ResultsStepProps) {
   const successCount = Array.from(results.values()).filter(r => r.status === 'success').length;
-  const planOnlyCount = Array.from(results.values()).filter(r => r.status === 'plan_only' || r.status === 'partial').length;
+  const planOnlyCount = Array.from(results.values()).filter(r => r.status === 'partial').length;
   const failCount = Array.from(results.values()).filter(r => r.status === 'failed').length;
 
   return (
@@ -85,8 +85,8 @@ export function ResultsStep({
                 plan,
                 result: result as any,
                 engineUsed: result?.engine_used || 'none',
-                errorReason: result?.reason,
-                fallbackUsed: (result?.fallbackChain?.length || 0) > 1
+                errorReason: result?.error,
+                fallbackUsed: false
               };
             })}
             onDownloadPlan={(item) => onDownloadPlan(item.plan)}
