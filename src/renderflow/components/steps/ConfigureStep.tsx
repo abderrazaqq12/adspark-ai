@@ -1,6 +1,6 @@
 /**
  * RenderFlow Step 2: Configure
- * Variation count - deterministic, no presets
+ * Variation count per video - deterministic, no presets
  */
 
 import { useState } from 'react';
@@ -8,17 +8,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Settings, ArrowLeft } from 'lucide-react';
+import { Settings, ArrowLeft, FileVideo } from 'lucide-react';
 
 interface ConfigureStepProps {
-  sourceUrl: string;
+  sourceUrls: string[];
   initialVariations?: number;
   onContinue: (variations: number) => void;
   onBack: () => void;
 }
 
-export function ConfigureStep({ sourceUrl, initialVariations = 1, onContinue, onBack }: ConfigureStepProps) {
+export function ConfigureStep({ sourceUrls, initialVariations = 1, onContinue, onBack }: ConfigureStepProps) {
   const [variations, setVariations] = useState(initialVariations);
+
+  const totalJobs = sourceUrls.length * variations;
 
   return (
     <Card className="border-border">
@@ -30,14 +32,28 @@ export function ConfigureStep({ sourceUrl, initialVariations = 1, onContinue, on
       </CardHeader>
       <CardContent className="p-6 space-y-6">
         {/* Source Summary */}
-        <div className="p-3 bg-muted rounded border border-border">
-          <Label className="text-xs text-muted-foreground">Source</Label>
-          <p className="font-mono text-sm truncate mt-1">{sourceUrl}</p>
+        <div className="p-3 bg-muted rounded border border-border space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs text-muted-foreground flex items-center gap-1">
+              <FileVideo className="w-3 h-3" />
+              Source Videos
+            </Label>
+            <span className="text-xs font-mono bg-background px-2 py-0.5 rounded">
+              {sourceUrls.length} video{sourceUrls.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="max-h-[120px] overflow-y-auto space-y-1">
+            {sourceUrls.map((url, i) => (
+              <p key={i} className="font-mono text-xs truncate text-muted-foreground">
+                {i + 1}. {url}
+              </p>
+            ))}
+          </div>
         </div>
 
         {/* Variations Input */}
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Variations (Copies)</Label>
+          <Label className="text-sm font-medium">Variations per Video</Label>
           <Input
             type="number"
             min={1}
@@ -47,8 +63,18 @@ export function ConfigureStep({ sourceUrl, initialVariations = 1, onContinue, on
             className="font-mono"
           />
           <p className="text-xs text-muted-foreground">
-            Deterministic render count. No presets. No suggestions.
+            Deterministic render count per video. No presets. No suggestions.
           </p>
+        </div>
+
+        {/* Total Jobs Preview */}
+        <div className="p-3 bg-primary/10 rounded border border-primary/30">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-muted-foreground">Total render jobs:</span>
+            <span className="font-mono text-lg font-semibold text-primary">
+              {sourceUrls.length} × {variations} = {totalJobs}
+            </span>
+          </div>
         </div>
 
         {/* Navigation */}
