@@ -67,25 +67,7 @@ export function ExecuteStep({
       </div>
 
       {/* Engine Status */}
-      <div className="mb-4 p-4 bg-muted/30 rounded-lg border border-border">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Server className="w-4 h-4 text-blue-500" />
-              <span className="text-xs font-semibold">Unified FFmpeg Engine</span>
-            </div>
-            < Badge variant="secondary" className="text-xs bg-blue-500/10 text-blue-600 hover:bg-blue-500/20">
-              VPS Hosted
-            </Badge>
-          </div>
-          <Badge variant="outline" className="text-xs">
-            High Fidelity
-          </Badge>
-        </div>
-        <p className="text-xs text-muted-foreground mt-2">
-          All variations are rendered on the dedicated VPS using the unified FFmpeg engine for maximum quality and consistency.
-        </p>
-      </div>
+      {/* Engine Status Removed per User Request */}
 
       {/* Content */}
       <div className="flex-1">
@@ -175,7 +157,7 @@ export function ExecuteStep({
           <ScrollArea className="h-[calc(100vh-400px)] min-h-[250px]">
             <div className="space-y-6">
               {/* Progress Panel */}
-              <ExecutionProgressPanel state={executionProgress} />
+              {/* Progress Panel Removed per User Request */}
 
               {/* Debug Panel */}
               <RenderDebugPanel />
