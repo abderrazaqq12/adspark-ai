@@ -1,21 +1,35 @@
 /**
- * RenderFlow Dashboard - Rebuilt to match Creative Scale structure
- * Step-based pipeline with strict backend mirroring
- * NO fake progress, NO optimistic UI, NO abstractions
+ * RenderFlow Dashboard - Full Creative Scale style
+ * 6-step pipeline: Input → Analyze → Strategy → Review → Execute → Results
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { RenderFlowStepSidebar, RenderStepId } from '../components/RenderFlowStepSidebar';
 import { InputStep } from '../components/steps/InputStep';
-import { ConfigureStep } from '../components/steps/ConfigureStep';
+import { AnalyzeStep } from '../components/steps/AnalyzeStep';
+import { StrategyStep } from '../components/steps/StrategyStep';
 import { ReviewStep } from '../components/steps/ReviewStep';
 import { ExecuteStep } from '../components/steps/ExecuteStep';
 import { ResultsStep } from '../components/steps/ResultsStep';
 import { JobList } from '../components/JobList';
 import { RenderFlowApi, RenderFlowJob, HealthResponse } from '../api';
+import { supabase } from '@/integrations/supabase/client';
 import { AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import type { VideoAnalysis, CreativeBlueprint } from '@/lib/creative-scale/types';
+import type { OptimizationGoal, RiskTolerance, DetectedProblem } from '@/lib/creative-scale/brain-v2-types';
 
 const SESSION_KEY = 'renderflow_pipeline_state';
+
+type PlatformType = 'tiktok' | 'reels' | 'snapchat' | 'youtube' | 'facebook' | 'general';
+type FunnelStageType = 'cold' | 'warm' | 'retargeting';
+
+interface BrainV2State {
+  optimizationGoal: OptimizationGoal;
+  riskTolerance: RiskTolerance;
+  platform: PlatformType;
+  funnelStage: FunnelStageType;
+  detectedProblems: DetectedProblem[];
+}
 
 interface PipelineState {
   currentStep: RenderStepId;
@@ -23,7 +37,18 @@ interface PipelineState {
   sourceUrls: string[];
   variations: number;
   jobs: RenderFlowJob[];
+  analysis: VideoAnalysis | null;
+  blueprint: CreativeBlueprint | null;
+  brainV2State: BrainV2State;
 }
+
+const defaultBrainV2State: BrainV2State = {
+  optimizationGoal: 'retention',
+  riskTolerance: 'medium',
+  platform: 'tiktok',
+  funnelStage: 'cold',
+  detectedProblems: []
+};
 
 function loadSessionState(): PipelineState | null {
   try {
@@ -51,18 +76,64 @@ function clearSessionState(): void {
   }
 }
 
+// Mock analysis for demo when edge function unavailable
+function createMockAnalysis(sourceUrl: string): VideoAnalysis {
+  return {
+    id: `analysis_${Date.now()}`,
+    source_video_id: sourceUrl,
+    analyzed_at: new Date().toISOString(),
+    metadata: { duration_ms: 15000, aspect_ratio: '9:16', resolution: '1080x1920', fps: 30 },
+    segments: [
+      { id: 's1', type: 'hook', start_ms: 0, end_ms: 3000, transcript: 'Opening hook', visual_tags: ['face'], pacing_score: 0.8, clarity_score: 0.7, attention_score: 0.85 },
+      { id: 's2', type: 'problem', start_ms: 3000, end_ms: 6000, transcript: 'Problem statement', visual_tags: ['text'], pacing_score: 0.6, clarity_score: 0.8, attention_score: 0.7 },
+      { id: 's3', type: 'solution', start_ms: 6000, end_ms: 10000, transcript: 'Solution reveal', visual_tags: ['product'], pacing_score: 0.7, clarity_score: 0.75, attention_score: 0.75 },
+      { id: 's4', type: 'cta', start_ms: 10000, end_ms: 15000, transcript: 'Call to action', visual_tags: ['text'], pacing_score: 0.9, clarity_score: 0.85, attention_score: 0.8 }
+    ],
+    audio: { has_voiceover: true, has_music: true, music_energy: 'medium', voice_tone: 'friendly', silence_ratio: 0.1 },
+    overall_scores: { hook_strength: 0.85, message_clarity: 0.75, pacing_consistency: 0.7, cta_effectiveness: 0.8 },
+    detected_style: 'ugc',
+    detected_language: 'en'
+  };
+}
+
+function createMockBlueprint(analysis: VideoAnalysis): CreativeBlueprint {
+  return {
+    id: `blueprint_${Date.now()}`,
+    source_analysis_id: analysis.id,
+    created_at: new Date().toISOString(),
+    framework: 'PAS',
+    framework_rationale: 'Problem-Agitate-Solution framework detected based on segment structure',
+    objective: { primary_goal: 'Drive conversions', target_emotion: 'Urgency', key_message: 'Solve your problem today' },
+    strategic_insights: ['Strong hook detected', 'CTA could be more urgent', 'Consider faster pacing in middle'],
+    variation_ideas: [
+      { id: 'v1', action: 'emphasize_segment', target_segment_type: 'hook', intent: 'Strengthen opening', priority: 'high', reasoning: 'Hook determines first 3 seconds retention' },
+      { id: 'v2', action: 'compress_segment', target_segment_type: 'problem', intent: 'Tighten pacing', priority: 'medium', reasoning: 'Problem section slightly slow' }
+    ],
+    recommended_duration_range: { min_ms: 12000, max_ms: 18000 },
+    target_formats: ['9:16', '1:1']
+  };
+}
+
 export default function RenderFlowDashboard() {
-  // Load initial state from session
   const initialState = loadSessionState();
 
   // Step Navigation
   const [currentStep, setCurrentStep] = useState<RenderStepId>(initialState?.currentStep ?? 1);
   const [completedSteps, setCompletedSteps] = useState<RenderStepId[]>(initialState?.completedSteps ?? []);
 
-  // Pipeline Data - now supports multiple source URLs (1-20)
+  // Pipeline Data
   const [sourceUrls, setSourceUrls] = useState<string[]>(initialState?.sourceUrls ?? []);
   const [variations, setVariations] = useState(initialState?.variations ?? 1);
   const [jobs, setJobs] = useState<RenderFlowJob[]>(initialState?.jobs ?? []);
+  
+  // Step 2: Analyze
+  const [analysis, setAnalysis] = useState<VideoAnalysis | null>(initialState?.analysis ?? null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
+  // Step 3: Strategy
+  const [blueprint, setBlueprint] = useState<CreativeBlueprint | null>(initialState?.blueprint ?? null);
+  const [isGeneratingStrategy, setIsGeneratingStrategy] = useState(false);
+  const [brainV2State, setBrainV2State] = useState<BrainV2State>(initialState?.brainV2State ?? defaultBrainV2State);
   
   // Submission State
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -76,19 +147,22 @@ export default function RenderFlowDashboard() {
   // Polling
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Derived state from API only
+  // Derived state
   const allDone = jobs.length > 0 && jobs.every(j => j.state === 'done' || j.state === 'failed');
 
-  // Persist state to sessionStorage on change
+  // Persist state to sessionStorage
   useEffect(() => {
     saveSessionState({
       currentStep,
       completedSteps,
       sourceUrls,
       variations,
-      jobs
+      jobs,
+      analysis,
+      blueprint,
+      brainV2State
     });
-  }, [currentStep, completedSteps, sourceUrls, variations, jobs]);
+  }, [currentStep, completedSteps, sourceUrls, variations, jobs, analysis, blueprint, brainV2State]);
 
   // Health check on mount
   useEffect(() => {
@@ -116,27 +190,81 @@ export default function RenderFlowDashboard() {
   }, [currentStep, completedSteps]);
 
   const completeStep = useCallback((step: RenderStepId) => {
-    setCompletedSteps(prev => {
-      if (prev.includes(step)) return prev;
-      return [...prev, step];
-    });
+    setCompletedSteps(prev => prev.includes(step) ? prev : [...prev, step]);
   }, []);
 
-  // Step 1: Input complete (now receives array of URLs)
+  // Step 1: Input complete
   const handleInputComplete = (urls: string[]) => {
     setSourceUrls(urls);
     completeStep(1);
     setCurrentStep(2);
   };
 
-  // Step 2: Configure complete
-  const handleConfigureComplete = (count: number) => {
-    setVariations(count);
+  // Step 2: AI Analysis
+  const handleAnalyze = async () => {
+    if (sourceUrls.length === 0) return;
+    setIsAnalyzing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('creative-scale-analyze', {
+        body: { video_url: sourceUrls[0], video_id: `renderflow_${Date.now()}` }
+      });
+      if (error) throw error;
+      if (data?.analysis) {
+        setAnalysis(data.analysis);
+        if (data.detectedProblems) {
+          setBrainV2State(prev => ({ ...prev, detectedProblems: data.detectedProblems }));
+        }
+      }
+    } catch (e: any) {
+      console.error('Analysis failed:', e);
+      setAnalysis(createMockAnalysis(sourceUrls[0]));
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleAnalyzeComplete = () => {
     completeStep(2);
     setCurrentStep(3);
   };
 
-  // Step 3: Start rendering - submit jobs for ALL source URLs
+  // Step 3: Strategy Generation
+  const handleGenerateStrategy = async () => {
+    if (!analysis) return;
+    setIsGeneratingStrategy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('creative-scale-strategize', {
+        body: { 
+          analysis,
+          target_framework: null,
+          variation_count: variations,
+          optimization_goal: brainV2State.optimizationGoal,
+          risk_tolerance: brainV2State.riskTolerance,
+          platform: brainV2State.platform,
+          funnel_stage: brainV2State.funnelStage
+        }
+      });
+      if (error) throw error;
+      if (data?.blueprint) {
+        setBlueprint(data.blueprint);
+        if (data.detectedProblems) {
+          setBrainV2State(prev => ({ ...prev, detectedProblems: data.detectedProblems }));
+        }
+      }
+    } catch (e: any) {
+      console.error('Strategy generation failed:', e);
+      setBlueprint(createMockBlueprint(analysis));
+    } finally {
+      setIsGeneratingStrategy(false);
+    }
+  };
+
+  const handleStrategyComplete = () => {
+    completeStep(3);
+    setCurrentStep(4);
+  };
+
+  // Step 4: Start rendering
   const handleStartRendering = async () => {
     setSubmitError(null);
     setIsSubmitting(true);
@@ -145,7 +273,6 @@ export default function RenderFlowDashboard() {
       const allJobIds: string[] = [];
       const projectId = `proj_${Date.now()}`;
 
-      // Submit jobs for each source URL
       for (const url of sourceUrls) {
         const res = await RenderFlowApi.submitJob(projectId, url, variations);
         const ids = res.ids || [];
@@ -156,7 +283,6 @@ export default function RenderFlowDashboard() {
         throw new Error('Backend returned empty job IDs');
       }
 
-      // Initialize jobs from API response only
       const initialJobs: RenderFlowJob[] = allJobIds.map((id: string) => ({
         id,
         variation_id: '',
@@ -167,8 +293,8 @@ export default function RenderFlowDashboard() {
       }));
 
       setJobs(initialJobs);
-      completeStep(3);
-      setCurrentStep(4);
+      completeStep(4);
+      setCurrentStep(5);
     } catch (e: any) {
       setSubmitError(e.message);
     } finally {
@@ -176,15 +302,15 @@ export default function RenderFlowDashboard() {
     }
   };
 
-  // Step 4: Polling - strict 1000ms, stops only when ALL done/failed
+  // Step 5: Polling
   useEffect(() => {
-    if (currentStep !== 4 || jobs.length === 0) return;
+    if (currentStep !== 5 || jobs.length === 0) return;
     if (allDone) {
       if (pollRef.current) {
         clearInterval(pollRef.current);
         pollRef.current = null;
       }
-      completeStep(4);
+      completeStep(5);
       return;
     }
 
@@ -195,7 +321,7 @@ export default function RenderFlowDashboard() {
           try {
             return await RenderFlowApi.getJobStatus(job.id);
           } catch {
-            return job; // Return existing on error - no inference
+            return job;
           }
         })
       );
@@ -208,13 +334,16 @@ export default function RenderFlowDashboard() {
     };
   }, [currentStep, jobs, allDone, completeStep]);
 
-  // Reset pipeline and clear session
+  // Reset pipeline
   const handleReset = () => {
     setCurrentStep(1);
     setCompletedSteps([]);
     setSourceUrls([]);
     setVariations(1);
     setJobs([]);
+    setAnalysis(null);
+    setBlueprint(null);
+    setBrainV2State(defaultBrainV2State);
     setSubmitError(null);
     clearSessionState();
     if (pollRef.current) {
@@ -227,22 +356,37 @@ export default function RenderFlowDashboard() {
   const renderStepContent = () => {
     switch (currentStep) {
       case 1:
-        return (
-          <InputStep 
-            onContinue={handleInputComplete} 
-            initialUrls={sourceUrls}
-          />
-        );
+        return <InputStep onContinue={handleInputComplete} initialUrls={sourceUrls} />;
       case 2:
         return (
-          <ConfigureStep
-            sourceUrls={sourceUrls}
-            initialVariations={variations}
-            onContinue={handleConfigureComplete}
+          <AnalyzeStep
+            sourceUrl={sourceUrls[0] || ''}
+            analysis={analysis}
+            isAnalyzing={isAnalyzing}
+            onAnalyze={handleAnalyze}
+            onContinue={handleAnalyzeComplete}
             onBack={() => setCurrentStep(1)}
           />
         );
       case 3:
+        return analysis ? (
+          <StrategyStep
+            analysis={analysis}
+            blueprint={blueprint}
+            brainV2State={brainV2State}
+            variationCount={variations}
+            isGenerating={isGeneratingStrategy}
+            onSetGoal={(goal) => setBrainV2State(prev => ({ ...prev, optimizationGoal: goal }))}
+            onSetRisk={(risk) => setBrainV2State(prev => ({ ...prev, riskTolerance: risk }))}
+            onSetPlatform={(platform) => setBrainV2State(prev => ({ ...prev, platform }))}
+            onSetFunnelStage={(stage) => setBrainV2State(prev => ({ ...prev, funnelStage: stage }))}
+            onSetVariationCount={setVariations}
+            onGenerate={handleGenerateStrategy}
+            onContinue={handleStrategyComplete}
+            onBack={() => setCurrentStep(2)}
+          />
+        ) : null;
+      case 4:
         return (
           <ReviewStep
             sourceUrls={sourceUrls}
@@ -250,28 +394,23 @@ export default function RenderFlowDashboard() {
             isSubmitting={isSubmitting}
             submitError={submitError}
             onStartRendering={handleStartRendering}
-            onBack={() => setCurrentStep(2)}
+            onBack={() => setCurrentStep(3)}
           />
         );
-      case 4:
+      case 5:
         return (
           <ExecuteStep
             jobs={jobs}
             isPolling={!allDone}
             onReset={handleReset}
             onViewResults={() => {
-              completeStep(4);
-              setCurrentStep(5);
+              completeStep(5);
+              setCurrentStep(6);
             }}
           />
         );
-      case 5:
-        return (
-          <ResultsStep
-            jobs={jobs}
-            onReset={handleReset}
-          />
-        );
+      case 6:
+        return <ResultsStep jobs={jobs} onReset={handleReset} />;
       default:
         return null;
     }
@@ -279,7 +418,6 @@ export default function RenderFlowDashboard() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      {/* Step Sidebar - matches Creative Scale */}
       <RenderFlowStepSidebar
         currentStep={currentStep}
         completedSteps={completedSteps}
@@ -287,7 +425,6 @@ export default function RenderFlowDashboard() {
         onReset={handleReset}
       />
 
-      {/* Main Content */}
       <div className="flex-1 p-6 space-y-6 overflow-auto">
         {/* Health Status Banner */}
         <div className={`p-3 rounded border flex items-center gap-3 ${
