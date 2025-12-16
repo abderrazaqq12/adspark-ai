@@ -11,23 +11,24 @@ const getBaseUrl = () => {
     }
 
     // 2. Check hostname to determine correct backend URL
+    // RenderFlow server runs on port 3001 with routes at /render/*
     if (typeof window !== 'undefined') {
         const hostname = window.location.hostname;
         
         // When running on the VPS itself (flowscale.cloud), use relative path
+        // Nginx should proxy /render/* to localhost:3001/render/*
         if (hostname === 'flowscale.cloud' || hostname.endsWith('.flowscale.cloud')) {
-            return '/api';
+            return '/render';
         }
         
         // When running on Lovable preview or other hosts, use the full VPS URL
-        // This requires CORS to be configured on the VPS
         if (hostname !== 'localhost') {
-            return 'https://flowscale.cloud/api';
+            return 'https://flowscale.cloud/render';
         }
     }
 
-    // 3. LOCAL DEVELOPMENT: localhost
-    return 'http://localhost:3001/api';
+    // 3. LOCAL DEVELOPMENT: localhost - direct to RenderFlow server
+    return 'http://localhost:3001/render';
 };
 
 export type RenderFlowJobState =
