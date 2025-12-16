@@ -20,6 +20,7 @@ import {
   MonitorPlay
 } from 'lucide-react';
 import type { EngineId } from '@/lib/creative-scale/execution-engine';
+import { MultiExecutionConsole } from './ExecutionConsole';
 
 export interface EngineProgress {
   engine: EngineId;
@@ -191,69 +192,18 @@ export function ExecutionProgressPanel({ state }: ExecutionProgressPanelProps) {
         {/* Live Execution Console */}
         {state.engines.map(engine => {
           if (engine.engine === 'unified_server' && engine.jobId) {
-            return <ExecutionConsole key={engine.jobId} jobId={engine.jobId} />;
+            return (
+              <MultiExecutionConsole
+                key={engine.jobId}
+                jobs={[{ jobId: engine.jobId, variationIndex: state.variationIndex }]}
+              />
+            );
           }
           return null;
         })}
 
       </CardContent>
     </Card >
-  );
-}
-
-function ExecutionConsole({ jobId }: { jobId: string }) {
-  const [logs, setLogs] = useState<string[]>([]);
-  const [command, setCommand] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    const poll = async () => {
-      try {
-        const res = await fetch(`/api/jobs/${jobId}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted) {
-            setLogs(data.fullLogs || []);
-            setCommand(data.command || null);
-          }
-          if (data.status === 'done' || data.status === 'error') return; // Stop polling
-        }
-      } catch (e) {
-        console.error('Log poll error', e);
-      }
-      if (isMounted) setTimeout(poll, 1000);
-    };
-    poll();
-    return () => { isMounted = false; };
-  }, [jobId]);
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [logs]);
-
-  return (
-    <div className="mt-4 border rounded-md bg-black text-xs font-mono">
-      <div className="px-3 py-1 border-b border-gray-800 flex justify-between items-center bg-gray-900/50">
-        <span className="text-gray-400">Execution Console ({jobId})</span>
-      </div>
-      <div
-        ref={scrollRef}
-        className="h-48 overflow-y-auto p-3 space-y-1 text-green-400"
-      >
-        {command && (
-          <div className="text-yellow-400 mb-2 pb-2 border-b border-gray-800">
-            $ {command}
-          </div>
-        )}
-        {logs.map((log, i) => (
-          <div key={i} className="whitespace-pre-wrap break-all">{log}</div>
-        ))}
-        {logs.length === 0 && <div className="text-gray-600 italic">Waiting for logs...</div>}
-      </div>
-    </div>
   );
 }
 
