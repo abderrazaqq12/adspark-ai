@@ -15,15 +15,54 @@ import { JobList } from '../components/JobList';
 import { RenderFlowApi, RenderFlowJob, HealthResponse } from '../api';
 import { AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 
+const SESSION_KEY = 'renderflow_pipeline_state';
+
+interface PipelineState {
+  currentStep: RenderStepId;
+  completedSteps: RenderStepId[];
+  sourceUrl: string;
+  variations: number;
+  jobs: RenderFlowJob[];
+}
+
+function loadSessionState(): PipelineState | null {
+  try {
+    const stored = sessionStorage.getItem(SESSION_KEY);
+    if (!stored) return null;
+    return JSON.parse(stored) as PipelineState;
+  } catch {
+    return null;
+  }
+}
+
+function saveSessionState(state: PipelineState): void {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(state));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function clearSessionState(): void {
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 export default function RenderFlowDashboard() {
+  // Load initial state from session
+  const initialState = loadSessionState();
+
   // Step Navigation
-  const [currentStep, setCurrentStep] = useState<RenderStepId>(1);
-  const [completedSteps, setCompletedSteps] = useState<RenderStepId[]>([]);
+  const [currentStep, setCurrentStep] = useState<RenderStepId>(initialState?.currentStep ?? 1);
+  const [completedSteps, setCompletedSteps] = useState<RenderStepId[]>(initialState?.completedSteps ?? []);
 
   // Pipeline Data
-  const [sourceUrl, setSourceUrl] = useState('');
-  const [variations, setVariations] = useState(1);
-  const [jobs, setJobs] = useState<RenderFlowJob[]>([]);
+  const [sourceUrl, setSourceUrl] = useState(initialState?.sourceUrl ?? '');
+  const [variations, setVariations] = useState(initialState?.variations ?? 1);
+  const [jobs, setJobs] = useState<RenderFlowJob[]>(initialState?.jobs ?? []);
   
   // Submission State
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,6 +78,17 @@ export default function RenderFlowDashboard() {
 
   // Derived state from API only
   const allDone = jobs.length > 0 && jobs.every(j => j.state === 'done' || j.state === 'failed');
+
+  // Persist state to sessionStorage on change
+  useEffect(() => {
+    saveSessionState({
+      currentStep,
+      completedSteps,
+      sourceUrl,
+      variations,
+      jobs
+    });
+  }, [currentStep, completedSteps, sourceUrl, variations, jobs]);
 
   // Health check on mount
   useEffect(() => {
@@ -155,7 +205,7 @@ export default function RenderFlowDashboard() {
     };
   }, [currentStep, jobs, allDone, completeStep]);
 
-  // Reset pipeline
+  // Reset pipeline and clear session
   const handleReset = () => {
     setCurrentStep(1);
     setCompletedSteps([]);
@@ -163,6 +213,7 @@ export default function RenderFlowDashboard() {
     setVariations(1);
     setJobs([]);
     setSubmitError(null);
+    clearSessionState();
     if (pollRef.current) {
       clearInterval(pollRef.current);
       pollRef.current = null;
