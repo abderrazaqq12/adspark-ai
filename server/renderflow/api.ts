@@ -59,4 +59,9 @@ router.get('/jobs/:id/logs', (req, res) => {
     res.json({ logs: [] });
 });
 
+// GET /health
+router.get('/health', (req, res) => {
+    res.json({ status: 'ok', time: new Date().toISOString() });
+});
+
 export const apiRouter = router;

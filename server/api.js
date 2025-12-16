@@ -770,6 +770,85 @@ app.use('/uploads', express.static(UPLOAD_DIR));
 app.use('/outputs', express.static(OUTPUT_DIR));
 
 // ============================================
+// RENDERFLOW PROXY ADAPTER (Phase 2)
+// Direct proxy to deterministic engine on port 3001
+// ============================================
+
+const RENDERFLOW_API = process.env.RENDERFLOW_URL || 'http://localhost:3001/render';
+
+// POST /api/render/renderflow
+// Proxies render requests to RenderFlow Engine
+app.post('/api/render/renderflow', async (req, res) => {
+  try {
+    const { projectId, scenes } = req.body;
+
+    // Translation: FlowScale Scenes -> RenderFlow Variations
+    // v1: We map the first scene source to input.source_url
+    // (Assuming simple 1-file render for now as per constraints)
+
+    const variations = scenes.map((scene, idx) => {
+      return {
+        id: `var_proxy_${Date.now()}_${idx}`,
+        data: {
+          // If scene has 'video' payload, use it. Else fallback.
+          // FlowScale UI usually sends { video: "url", ... }
+          source_url: scene.video || scene.sourceUrl || null,
+          trim: scene.trim || null,
+          // Pass-through metadata for debugging
+          original_scene_id: scene.id
+        }
+      };
+    }).filter(v => v.data.source_url); // Filter invalid
+
+    if (variations.length === 0) {
+      return jsonError(res, 400, 'INVALID_PAYLOAD', 'No valid scenes with source video found');
+    }
+
+    // Call RenderFlow
+    const rfRes = await fetch(`${RENDERFLOW_API}/jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        project_id: projectId || 'anonymous',
+        variations
+      })
+    });
+
+    if (!rfRes.ok) {
+      const errText = await rfRes.text();
+      throw new Error(`RenderFlow rejected: ${rfRes.status} ${errText}`);
+    }
+
+    const rfData = await rfRes.json();
+    console.log('[Adapter] RenderFlow accepted:', rfData);
+
+    // Return to UI
+    res.json(rfData);
+
+  } catch (err) {
+    console.error('[Adapter] Proxy Error:', err);
+    jsonError(res, 500, 'PROXY_ERROR', err.message);
+  }
+});
+
+// GET /api/render/renderflow/jobs/:id
+// Proxies status checks
+app.get('/api/render/renderflow/jobs/:id', async (req, res) => {
+  try {
+    const rfRes = await fetch(`${RENDERFLOW_API}/jobs/${req.params.id}`);
+    if (!rfRes.ok) {
+      if (rfRes.status === 404) return jsonError(res, 404, 'NOT_FOUND', 'Job not found in RenderFlow');
+      throw new Error(`RenderFlow error: ${rfRes.status}`);
+    }
+    const data = await rfRes.json();
+    res.json(data);
+  } catch (err) {
+    console.error('[Adapter] Proxy Status Error:', err);
+    jsonError(res, 500, 'PROXY_ERROR', err.message);
+  }
+});
+
+// ============================================
 // GET /api/health
 // ============================================
 
