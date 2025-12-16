@@ -10,14 +10,17 @@ const getBaseUrl = () => {
         return import.meta.env.VITE_RENDER_FLOW_API_URL;
     }
 
-    // 2. Use relative paths in production, localhost in development
+    // 2. PRODUCTION: When running on flowscale.cloud (or any public domain)
+    // We use a "Relative Path" (/api). This is secure and avoids "Mixed Content" errors.
+    // The Browser sends request to -> https://flowscale.cloud/api/...
+    // Nginx (on the VPS) receives it and forwards it internally to -> http://localhost:3001/api/...
     if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-        // PRODUCTION: Use relative path to leverage Nginx proxy and avoid Mixed Content (HTTPS -> HTTP)
-        // Nginx typically maps /api -> http://localhost:3001/render
         return '/api';
     }
 
-    // 3. Local Development default
+    // 3. LOCAL DEVELOPMENT: When working on your laptop (localhost:8080)
+    // We try to connect to a local server. 
+    // If you want to connect Local Frontend -> VPS Backend, set VITE_RENDER_FLOW_API_URL in .env
     return 'http://localhost:3001/api';
 };
 
