@@ -1,90 +1,138 @@
 import { useEffect, useState } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { RenderFlowApi, RenderFlowJob } from "../api";
 import { JobStatusBadge } from "./JobStatusBadge";
-import { Progress } from "@/components/ui/progress";
-import { ExternalLink, AlertCircle } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Download, AlertCircle, ExternalLink } from "lucide-react";
+import { Link } from "react-router-dom";
 
-export const JobList = ({ refreshTrigger }: { refreshTrigger: number }) => {
+interface JobListProps {
+    refreshTrigger?: number;
+}
+
+export const JobList = ({ refreshTrigger = 0 }: JobListProps) => {
     const [jobs, setJobs] = useState<RenderFlowJob[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    // Poll for job updates
+    // Strict 1-second polling
     useEffect(() => {
-        // Initial Fetch (Mocked list mostly, but in v1 we need an endpoint to LIST jobs)
-        // Wait, the API spec only had POST /jobs and GET /jobs/:id.
-        // We need a list endpoint! 
-        // Checking server/renderflow/api.ts... it DOES NOT have list jobs end point.
-        // Critical Gap.
-        // I will add GET /jobs (List all) to server/renderflow/api.ts immediately after this file creation.
-        // For now, I will implement clientside assuming it exists.
+        let mounted = true;
 
         const fetchJobs = async () => {
             try {
-                const res = await fetch('/api/render/renderflow/jobs');
-                if (res.ok) {
-                    const data = await res.json();
-                    setJobs(data.jobs || []);
+                const res = await RenderFlowApi.getHistory();
+                if (mounted) {
+                    setJobs(res.jobs || []);
+                    setError(null);
                 }
-            } catch (e) { console.error("Poll error", e); }
-            setLoading(false);
+            } catch (e: any) {
+                if (mounted) {
+                    setError(e.message);
+                }
+            } finally {
+                if (mounted) setLoading(false);
+            }
         };
 
         fetchJobs();
-        const interval = setInterval(fetchJobs, 1000); // 1s Poll
-        return () => clearInterval(interval);
+        const interval = setInterval(fetchJobs, 1000);
+        return () => {
+            mounted = false;
+            clearInterval(interval);
+        };
     }, [refreshTrigger]);
 
+    if (loading) {
+        return (
+            <div className="text-center py-8 text-muted-foreground text-sm font-mono">
+                Loading history...
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="p-4 bg-destructive/10 border border-destructive/30 rounded text-sm text-destructive font-mono">
+                <div className="flex items-center gap-2">
+                    <AlertCircle size={16} />
+                    <span>Failed to fetch history: {error}</span>
+                </div>
+            </div>
+        );
+    }
+
+    if (jobs.length === 0) {
+        return (
+            <div className="text-center py-8 text-muted-foreground text-sm">
+                No jobs found. Start a new render.
+            </div>
+        );
+    }
+
     return (
-        <div className="space-y-4">
-            {jobs.length === 0 && !loading && (
-                <div className="text-center p-8 text-gray-500 text-sm">No jobs found. Start a new render.</div>
-            )}
-
-            {jobs.map(job => (
-                <Card key={job.id} className="overflow-hidden border-l-4 border-l-primary/20">
-                    <CardContent className="p-4 grid grid-cols-12 gap-4 items-center">
-
-                        {/* ID & Time */}
-                        <div className="col-span-3">
-                            <div className="font-mono text-xs text-muted-foreground">{job.id.slice(0, 8)}...</div>
-                            <div className="text-xs text-gray-500">{new Date(job.created_at).toLocaleTimeString()}</div>
-                        </div>
-
-                        {/* Status */}
-                        <div className="col-span-2 text-center">
-                            <JobStatusBadge state={job.state} />
-                        </div>
-
-                        {/* Progress */}
-                        <div className="col-span-5 space-y-1">
-                            <div className="flex justify-between text-xs">
-                                <span>Progress</span>
-                                <span>{job.progress_pct}%</span>
-                            </div>
-                            <Progress value={job.progress_pct} className="h-2" />
-                            {job.error && (
-                                <div className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                                    <AlertCircle size={10} /> {job.error.message}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Action */}
-                        <div className="col-span-2 text-right">
-                            <Button variant="outline" size="sm" asChild>
-                                {/* Link to Detail Page */}
-                                <div onClick={() => window.location.href = `/renderflow/jobs/${job.id}`} className="cursor-pointer flex items-center">
-                                    <ExternalLink className="mr-2 h-3 w-3" /> Details
-                                </div>
-                            </Button>
-                        </div>
-
-                    </CardContent>
-                </Card>
-            ))}
+        <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+                <thead>
+                    <tr className="border-b border-border text-left">
+                        <th className="py-3 px-2 font-medium text-muted-foreground">Job ID</th>
+                        <th className="py-3 px-2 font-medium text-muted-foreground">State</th>
+                        <th className="py-3 px-2 font-medium text-muted-foreground">Progress</th>
+                        <th className="py-3 px-2 font-medium text-muted-foreground">Created At</th>
+                        <th className="py-3 px-2 font-medium text-muted-foreground">Completed At</th>
+                        <th className="py-3 px-2 font-medium text-muted-foreground">Result</th>
+                        <th className="py-3 px-2 font-medium text-muted-foreground">Error</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {jobs.map(job => (
+                        <tr key={job.id} className="border-b border-border/50 hover:bg-muted/30">
+                            <td className="py-3 px-2">
+                                <Link 
+                                    to={`/renderflow/jobs/${job.id}`}
+                                    className="font-mono text-xs text-primary hover:underline flex items-center gap-1"
+                                >
+                                    {job.id.slice(0, 12)}...
+                                    <ExternalLink size={10} />
+                                </Link>
+                            </td>
+                            <td className="py-3 px-2">
+                                <JobStatusBadge state={job.state} />
+                            </td>
+                            <td className="py-3 px-2 font-mono text-xs">
+                                {job.progress_pct}%
+                            </td>
+                            <td className="py-3 px-2 font-mono text-xs text-muted-foreground">
+                                {job.created_at ? new Date(job.created_at).toLocaleString() : '-'}
+                            </td>
+                            <td className="py-3 px-2 font-mono text-xs text-muted-foreground">
+                                {job.completed_at ? new Date(job.completed_at).toLocaleString() : '-'}
+                            </td>
+                            <td className="py-3 px-2">
+                                {job.state === 'done' && job.output ? (
+                                    <a 
+                                        href={job.output.output_url} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                                    >
+                                        <Download size={12} /> Download
+                                    </a>
+                                ) : (
+                                    <span className="text-xs text-muted-foreground">-</span>
+                                )}
+                            </td>
+                            <td className="py-3 px-2">
+                                {job.error ? (
+                                    <span className="text-xs text-destructive font-mono">
+                                        {job.error.message}
+                                    </span>
+                                ) : (
+                                    <span className="text-xs text-muted-foreground">-</span>
+                                )}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
         </div>
     );
 };
