@@ -12,8 +12,9 @@ const getBaseUrl = () => {
 
     // 2. Use relative paths in production, localhost in development
     if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-        // PRODUCTION: Default to the known VPS IP if not overridden
-        return 'http://72.62.26.4:3001/render';
+        // PRODUCTION: Use relative path to leverage Nginx proxy and avoid Mixed Content (HTTPS -> HTTP)
+        // Nginx typically maps /api -> http://localhost:3001/render
+        return '/api';
     }
 
     // 3. Local Development default
