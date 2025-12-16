@@ -10,6 +10,7 @@ import { InputStep } from '../components/steps/InputStep';
 import { ConfigureStep } from '../components/steps/ConfigureStep';
 import { ReviewStep } from '../components/steps/ReviewStep';
 import { ExecuteStep } from '../components/steps/ExecuteStep';
+import { ResultsStep } from '../components/steps/ResultsStep';
 import { JobList } from '../components/JobList';
 import { RenderFlowApi, RenderFlowJob, HealthResponse } from '../api';
 import { AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
@@ -198,6 +199,17 @@ export default function RenderFlowDashboard() {
           <ExecuteStep
             jobs={jobs}
             isPolling={!allDone}
+            onReset={handleReset}
+            onViewResults={() => {
+              completeStep(4);
+              setCurrentStep(5);
+            }}
+          />
+        );
+      case 5:
+        return (
+          <ResultsStep
+            jobs={jobs}
             onReset={handleReset}
           />
         );
