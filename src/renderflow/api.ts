@@ -7,7 +7,9 @@ import { supabase } from '@/integrations/supabase/client';
 const getBaseUrl = () => {
     // Use relative paths in production, localhost in development
     if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-        return '/api/render';
+        // PRODUCTION: Use your VPS IPv4 Address (NOT IPv6)
+        // Ensure you have opened Port 3001 in Hostinger Firewall
+        return 'http://72.62.26.4:3001/render'; // Replace with the IPv4 from your screenshot
     }
     return 'http://localhost:3001/render';
 };
