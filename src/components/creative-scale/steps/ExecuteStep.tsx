@@ -12,7 +12,6 @@ import {
   Play,
   ArrowRight,
   Zap,
-  Cloud,
   Download,
   Server,
   ShieldAlert,
@@ -20,7 +19,6 @@ import {
 } from 'lucide-react';
 import { ExecutionProgressPanel, ExecutionProgressState } from '@/components/creative-scale/ExecutionProgressPanel';
 import { ExecutionExplainer } from '@/components/creative-scale/ExecutionExplainer';
-import { CapabilityIndicators } from '@/components/creative-scale/CapabilityIndicators';
 import { RenderDebugPanel } from '@/components/creative-scale/RenderDebugPanel';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
 import type { CreativeBlueprint } from '@/lib/creative-scale/types';
@@ -72,21 +70,19 @@ export function ExecuteStep({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <Cloud className="w-4 h-4 text-purple-500" />
-              <span className="text-xs">Cloudinary</span>
-            </div>
-            <span className="text-muted-foreground">→</span>
-            <div className="flex items-center gap-2">
               <Server className="w-4 h-4 text-blue-500" />
-              <span className="text-xs">Server FFmpeg</span>
+              <span className="text-xs font-semibold">Unified FFmpeg Engine</span>
             </div>
+            < Badge variant="secondary" className="text-xs bg-blue-500/10 text-blue-600 hover:bg-blue-500/20">
+              VPS Hosted
+            </Badge>
           </div>
           <Badge variant="outline" className="text-xs">
-            Capability-based routing
+            High Fidelity
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground mt-2">
-          Each variation routes to the simplest engine that satisfies its requirements. Server-only rendering.
+          All variations are rendered on the dedicated VPS using the unified FFmpeg engine for maximum quality and consistency.
         </p>
       </div>
 
@@ -95,10 +91,7 @@ export function ExecuteStep({
         {!isExecuting && executionProgress.status === 'idle' && (
           <ScrollArea className="h-[calc(100vh-420px)] min-h-[300px]">
             <div className="space-y-6">
-              {/* Capability Indicators */}
-              {plans.length > 0 && (
-                <CapabilityIndicators plans={plans} />
-              )}
+
 
               {/* Compliance Blocking Alert */}
               {isRenderingBlocked && (
@@ -132,7 +125,7 @@ export function ExecuteStep({
                 <p className="text-muted-foreground max-w-md mb-6 text-sm">
                   {isRenderingBlocked
                     ? 'Critical compliance violations prevent rendering. Review and resolve issues in the Strategy step.'
-                    : 'Each variation will be routed to the most appropriate engine based on its required capabilities.'
+                    : 'The Unified Engine will execute the plan with pixel-perfect accuracy on the VPS.'
                   }
                 </p>
 
