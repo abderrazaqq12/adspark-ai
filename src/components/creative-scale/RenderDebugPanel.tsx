@@ -27,10 +27,10 @@ import {
   Terminal
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { 
-  executionDebugLogger, 
+import {
+  executionDebugLogger,
   ExecutionDebugState,
-  VariationDebugState 
+  VariationDebugState
 } from '@/lib/creative-scale/execution-debug';
 import { MultiExecutionConsole } from './ExecutionConsole';
 
@@ -50,7 +50,7 @@ export function RenderDebugPanel({ className }: RenderDebugPanelProps) {
 
   const copyDebugLog = () => {
     if (!debugState) return;
-    
+
     const logText = JSON.stringify({
       sessionId: debugState.sessionId,
       startedAt: debugState.startedAt,
@@ -58,7 +58,7 @@ export function RenderDebugPanel({ className }: RenderDebugPanelProps) {
       events: debugState.events,
       variations: debugState.variations,
     }, null, 2);
-    
+
     navigator.clipboard.writeText(logText);
     toast.success('Debug log copied to clipboard');
   };
@@ -123,7 +123,7 @@ export function RenderDebugPanel({ className }: RenderDebugPanelProps) {
                   </Badge>
                 )}
                 {debugState.isComplete && debugState.summary && (
-                  <Badge 
+                  <Badge
                     variant={debugState.summary.failedVariations.length > 0 ? 'destructive' : 'default'}
                     className="text-xs"
                   >
@@ -235,8 +235,6 @@ function VariationDebugCard({ variation }: { variation: VariationDebugState }) {
         return <Clock className="w-3 h-3 text-muted-foreground" />;
       case 'dispatched':
         return <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />;
-      case 'skipped':
-        return <AlertTriangle className="w-3 h-3 text-yellow-500" />;
       default:
         return <Clock className="w-3 h-3 text-muted-foreground" />;
     }
@@ -249,12 +247,9 @@ function VariationDebugCard({ variation }: { variation: VariationDebugState }) {
           <div className="flex items-center justify-between p-2 bg-muted/30 cursor-pointer hover:bg-muted/50">
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium">Variation {variation.variationIndex + 1}</span>
-              <Badge variant="outline" className="text-xs font-mono">
-                {variation.routing.selectedEngine || 'pending'}
-              </Badge>
             </div>
             <div className="flex items-center gap-2">
-              {getStatusIcon(variation.finalResult.status)}
+              {getStatusIcon(variation.unifiedServer.status)}
               {isOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
             </div>
           </div>
@@ -262,85 +257,45 @@ function VariationDebugCard({ variation }: { variation: VariationDebugState }) {
 
         <CollapsibleContent>
           <div className="p-2 space-y-2 text-xs">
-            {/* Routing */}
-            <div className="flex items-center gap-2">
-              {getStatusIcon(variation.routing.status)}
-              <span className="text-muted-foreground">Capability Routing</span>
-              {variation.routing.status === 'success' && (
-                <span className="text-green-400 font-mono">
-                  [{variation.routing.requiredCapabilities.join(', ')}]
-                </span>
-              )}
-            </div>
-
-            {/* Server FFmpeg */}
+            {/* Unified Server Details */}
             <div className="flex items-start gap-2">
-              {getStatusIcon(variation.serverFFmpeg.status)}
+              <Server className="w-3 h-3 text-blue-400 mt-0.5" />
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <Server className="w-3 h-3 text-blue-400" />
-                  <span className="text-muted-foreground">Server FFmpeg</span>
-                  {variation.serverFFmpeg.endpoint && (
-                    <span className="font-mono text-blue-300">
-                      POST {variation.serverFFmpeg.endpoint}
-                    </span>
+                  <span className="text-muted-foreground">Unified VPS Engine</span>
+                  {variation.unifiedServer.status === 'dispatched' && (
+                    <span className="text-blue-400 font-mono">DISPATCHED</span>
                   )}
                 </div>
-                {variation.serverFFmpeg.status === 'error' && (
-                  <div className="mt-1 p-1.5 rounded bg-red-500/10 border border-red-500/30">
-                    <p className="text-red-400">
-                      {variation.serverFFmpeg.httpStatus && (
-                        <span className="font-mono">HTTP {variation.serverFFmpeg.httpStatus} • </span>
-                      )}
-                      {variation.serverFFmpeg.contentType && (
-                        <span className="font-mono">{variation.serverFFmpeg.contentType}</span>
-                      )}
-                    </p>
-                    {variation.serverFFmpeg.errorReason && (
-                      <p className="text-red-300 mt-1">{variation.serverFFmpeg.errorReason}</p>
-                    )}
-                    {variation.serverFFmpeg.responsePreview && (
-                      <details className="mt-1">
-                        <summary className="text-muted-foreground cursor-pointer">Response preview</summary>
-                        <pre className="mt-1 p-1 bg-background/50 rounded text-xs overflow-x-auto">
-                          {variation.serverFFmpeg.responsePreview.substring(0, 300)}
-                        </pre>
-                      </details>
-                    )}
-                  </div>
+
+                {variation.unifiedServer.errorReason && (
+                  <p className="text-red-400 mt-1">{variation.unifiedServer.errorReason}</p>
+                )}
+
+                {variation.unifiedServer.jobId && (
+                  <p className="text-muted-foreground mt-1 font-mono text-[10px]">
+                    Job ID: {variation.unifiedServer.jobId}
+                  </p>
+                )}
+
+                {variation.unifiedServer.durationMs && (
+                  <p className="text-muted-foreground mt-1">
+                    Duration: {(variation.unifiedServer.durationMs / 1000).toFixed(2)}s
+                  </p>
                 )}
               </div>
             </div>
 
-            {/* Cloudinary */}
-            {variation.cloudinary.status !== 'pending' && (
-              <div className="flex items-start gap-2">
-                {getStatusIcon(variation.cloudinary.status)}
-                <div className="flex items-center gap-2">
-                  <Cloud className="w-3 h-3 text-purple-400" />
-                  <span className="text-muted-foreground">Cloudinary</span>
-                </div>
-                {variation.cloudinary.errorReason && (
-                  <span className="text-red-400">{variation.cloudinary.errorReason}</span>
-                )}
-              </div>
-            )}
-
             {/* Final Result */}
-            <div className="flex items-center gap-2 pt-1 border-t border-border">
+            <div className="flex items-center gap-2 pt-1 border-t border-border mt-2">
               {getStatusIcon(variation.finalResult.status)}
-              <span className="text-muted-foreground">Result:</span>
-              <Badge 
-                variant={variation.finalResult.status === 'success' ? 'default' : 'destructive'} 
+              <span className="text-muted-foreground">Final Status:</span>
+              <Badge
+                variant={variation.finalResult.status === 'success' ? 'default' : variation.finalResult.status === 'failed' ? 'destructive' : 'outline'}
                 className="text-xs"
               >
-                {variation.finalResult.status}
+                {variation.finalResult.status.toUpperCase()}
               </Badge>
-              {variation.finalResult.engineUsed && (
-                <span className="font-mono text-muted-foreground">
-                  via {variation.finalResult.engineUsed}
-                </span>
-              )}
             </div>
           </div>
         </CollapsibleContent>

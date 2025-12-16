@@ -33,6 +33,7 @@ interface UploadStepProps {
   onUpload: (files: FileList | null) => void;
   onRemove: (id: string) => void;
   onContinue: () => void;
+  onDemoLoad?: () => void;
   isUploading: boolean;
 }
 
@@ -41,6 +42,7 @@ export function UploadStep({
   onUpload,
   onRemove,
   onContinue,
+  onDemoLoad,
   isUploading
 }: UploadStepProps) {
   const readyCount = uploadedVideos.filter(v => v.status === 'ready').length;
@@ -76,6 +78,16 @@ export function UploadStep({
           disabled={isUploading}
         />
       </label>
+
+      {/* Demo Button */}
+      {onDemoLoad && (
+        <div className="flex justify-center mt-4">
+          <Button variant="outline" size="sm" onClick={onDemoLoad} disabled={isUploading}>
+            <FileVideo className="w-4 h-4 mr-2" />
+            Load Demo Video
+          </Button>
+        </div>
+      )}
 
       {/* Video List */}
       <div className="flex-1 mt-6">

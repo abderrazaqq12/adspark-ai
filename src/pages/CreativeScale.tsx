@@ -284,6 +284,25 @@ export default function CreativeScale() {
     }
   }, [uploadedVideos.length]);
 
+  const handleDemoLoad = useCallback(() => {
+    const demoId = `demo_${Date.now()}`;
+    const demoUrl = 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
+
+    // Create a dummy file object for type compatibility
+    const demoFile = new File([''], 'demo_video.mp4', { type: 'video/mp4' });
+
+    setUploadedVideos(prev => [...prev, {
+      id: demoId,
+      file: demoFile,
+      url: demoUrl,
+      storageUrl: demoUrl,
+      duration: 15,
+      status: 'ready' as const
+    }]);
+
+    toast.success('Demo video loaded');
+  }, []);
+
   const removeVideo = useCallback((id: string) => {
     setUploadedVideos(prev => {
       const video = prev.find(v => v.id === id);
@@ -558,6 +577,7 @@ export default function CreativeScale() {
               onUpload={handleFileUpload}
               onRemove={removeVideo}
               onContinue={handleUploadContinue}
+              onDemoLoad={handleDemoLoad}
               isUploading={isUploading}
             />
           )}
