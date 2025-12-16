@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { PredictiveMetrics } from '@/components/creative-scale/PredictiveMetrics';
 import { ComplianceStatusCard } from '@/components/creative-scale/ComplianceStatusCard';
+import { AdDirectorPanel } from '@/components/creative-scale/AdDirectorPanel';
 import { AutoFrameworkCard } from '@/components/creative-scale/AutoFrameworkCard';
 import { FrameworkComparisonView } from '@/components/creative-scale/FrameworkComparisonView';
 import { ProblemDisplay } from '@/components/creative-scale/BrainV2Display';
@@ -288,7 +289,7 @@ export function StrategyStep({
       )}
 
       {hasStrategy && !isGenerating && (
-        <ScrollArea className="h-[280px]">
+        <ScrollArea className="h-[400px]">
           <div className="space-y-4">
             {/* Compliance Status */}
             {complianceResult && (
@@ -321,6 +322,11 @@ export function StrategyStep({
             {/* Predictive Metrics */}
             {predictiveMetrics && (
               <PredictiveMetrics metrics={predictiveMetrics} />
+            )}
+
+            {/* Ad Director Panel - Hormozi-style suggestions */}
+            {adDirectorReview && (
+              <AdDirectorPanel review={adDirectorReview} />
             )}
 
             {/* Detected Problems */}
