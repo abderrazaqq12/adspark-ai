@@ -15,15 +15,14 @@ const getBaseUrl = () => {
         const hostname = window.location.hostname;
 
         // PRODUCTION: When running on flowscale.cloud
-        // Nginx is configured to proxy /api/* to localhost:3001/render/*
-        // So we MUST send requests to /api from the browser
+        // Nginx proxies /render/* to localhost:3001/render/*
         if (hostname === 'flowscale.cloud' || hostname.endsWith('.flowscale.cloud')) {
-            return '/api';
+            return '/render';
         }
 
-        // PREVIEW / OTHER: Use full VPS URL with /api
+        // PREVIEW / OTHER: Use full VPS URL with /render endpoint
         if (hostname !== 'localhost') {
-            return 'https://flowscale.cloud/api';
+            return 'https://flowscale.cloud/render';
         }
     }
 
