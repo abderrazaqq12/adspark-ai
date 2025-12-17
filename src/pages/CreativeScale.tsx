@@ -441,22 +441,40 @@ export default function CreativeScale() {
         overallProgress: (i / currentPlans.length) * 100
       }));
 
-      // SIMULATE SUCCESS (No Backend Call)
-      // Per user request: "remove any engine render from execution step"
-      await new Promise(r => setTimeout(r, 500)); // Fake delay
+      const result = await executeUnifiedStrategy({
+        plan,
+        analysis: currentAnalysis,
+        blueprint: currentBlueprint,
+        variationIndex: i,
+        onProgress: (engine: EngineId, progress: number, message: string, metadata?: any) => {
+          setExecutionProgress(prev => ({
+            ...prev,
+            currentEngine: engine,
+            engines: prev.engines.map(e =>
+              e.engine === engine
+                ? { ...e, status: 'attempting' as const, progress, message, jobId: metadata?.jobId, etaSec: metadata?.etaSec }
+                : e
+            )
+          }));
+        },
+      });
 
-      const result: ExecutionResult = {
-        status: 'success',
-        engine_used: 'unified_server',
-        output_video_url: '', // No output
-        logs: ['Execution bypassed by user request']
-      };
+
+      // Update Debug Info with final result
+      setDebugInfo(prev => prev ? {
+        ...prev,
+        status: result.status === 'success' ? 'success' : 'failed',
+        logs: [...prev.logs, `Completed with status: ${result.status}`, `Output: ${result.output_video_url || 'N/A'}`],
+        serverJobId: (result as any).jobId
+      } : null);
 
       setExecutionProgress(prev => ({
         ...prev,
-        variationIndex: i,
-        currentEngine: null,
-        engines: prev.engines.map(e => ({ ...e, status: 'success', progress: 100 })),
+        engines: prev.engines.map(e =>
+          e.engine === result.engine_used
+            ? { ...e, status: result.status === 'success' ? 'success' as const : 'failed' as const, progress: 100 }
+            : e.status === 'pending' ? { ...e, status: 'skipped' as const } : e
+        ),
         overallProgress: ((i + 1) / currentPlans.length) * 100
       }));
 
