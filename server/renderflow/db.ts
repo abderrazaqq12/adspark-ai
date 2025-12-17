@@ -28,7 +28,18 @@ const initSchema = () => {
       worker_pid INTEGER,
       full_logs TEXT
     )
-  `);
+    `);
+
+  // Schema Migration: Ensure full_logs exists (for existing DBs)
+  try {
+    const columns = db.pragma('table_info(jobs)') as any[];
+    if (!columns.find((c: any) => c.name === 'full_logs')) {
+      console.log('[RenderFlowDB] Migrating: Adding full_logs column');
+      db.exec('ALTER TABLE jobs ADD COLUMN full_logs TEXT');
+    }
+  } catch (err) {
+    console.error('[RenderFlowDB] Migration Error:', err);
+  }
 };
 initSchema();
 

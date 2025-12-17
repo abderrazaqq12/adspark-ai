@@ -287,4 +287,32 @@ router.post('/execute-plan', (req: Request, res: Response) => {
     }
 });
 
+// POST /debug/create-job (Manual Lifecycle Test)
+router.post('/debug/create-job', (req: Request, res: Response) => {
+    try {
+        console.log('[RenderFlow API] POST /debug/create-job');
+        const job = JobManager.createJob({
+            project_id: 'debug_' + Date.now(),
+            variation_id: 'debug_var',
+            plan: {
+                output_format: { container: 'mp4', width: 640, height: 360 },
+                timeline: []
+            }
+        });
+
+        // Immediately append a test log to verify persistence
+        RenderFlowDB.appendLogs(job.id, 'Debug job created. Lifecycle check: PASS.');
+
+        res.json({
+            ok: true,
+            jobId: job.id,
+            status: 'queued',
+            checkLogsUrl: `/api/jobs/${job.id}/logs`
+        });
+    } catch (err: any) {
+        console.error('[RenderFlow API] Debug Job Failed:', err);
+        res.status(500).json({ error: err.message, stack: err.stack });
+    }
+});
+
 export const apiRouter = router;
