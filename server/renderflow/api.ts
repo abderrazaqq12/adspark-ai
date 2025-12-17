@@ -124,7 +124,12 @@ router.post('/jobs', (req: Request, res: Response) => {
 router.get('/jobs/:id/logs', (req: Request, res: Response) => {
     try {
         const job = JobManager.getJob(req.params.id);
-        if (!job) return res.status(404).json({ error: 'Job not found' });
+        if (!job) {
+            return res.status(410).json({
+                code: "JOB_EXPIRED_OR_INVALID",
+                message: "Render job no longer exists"
+            });
+        }
 
         res.json({
             jobId: job.id,
@@ -153,7 +158,12 @@ router.get('/jobs/:id/logs', (req: Request, res: Response) => {
 router.get('/jobs/:id', (req: Request, res: Response) => {
     try {
         const job = JobManager.getJob(req.params.id);
-        if (!job) return res.status(404).json({ error: 'Job not found' });
+        if (!job) {
+            return res.status(410).json({
+                code: "JOB_EXPIRED_OR_INVALID",
+                message: "Render job no longer exists"
+            });
+        }
 
         // Map to legacy frontend format
         res.json({

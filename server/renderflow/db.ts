@@ -10,36 +10,77 @@ const dbPath = path.join(PATHS.DATA, 'renderflow.db');
 const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 
-// Initialize Schema
-const initSchema = () => {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS jobs (
-      id TEXT PRIMARY KEY,
-      variation_id TEXT,
-      project_id TEXT,
-      state TEXT,
-      created_at TEXT,
-      started_at TEXT,
-      completed_at TEXT,
-      input_json TEXT,
-      output_json TEXT,
-      error_json TEXT,
-      progress_pct INTEGER DEFAULT 0,
-      worker_pid INTEGER,
-      full_logs TEXT
-    )
-    `);
+// Schema Version Control
+const CURRENT_SCHEMA_VERSION = 2;
 
-  // Schema Migration: Ensure full_logs exists (for existing DBs)
-  try {
-    const columns = db.pragma('table_info(jobs)') as any[];
-    if (!columns.find((c: any) => c.name === 'full_logs')) {
-      console.log('[RenderFlowDB] Migrating: Adding full_logs column');
-      db.exec('ALTER TABLE jobs ADD COLUMN full_logs TEXT');
-    }
-  } catch (err) {
-    console.error('[RenderFlowDB] Migration Error:', err);
+const initSchema = () => {
+  // 1. Initialize Meta Table
+  db.exec(`CREATE TABLE IF NOT EXISTS schema_meta (version INTEGER DEFAULT 0)`);
+  
+  // 2. Get Current Version
+  let { version } = db.prepare('SELECT version FROM schema_meta LIMIT 1').get() || { version: 0 };
+  if (version === 0) {
+      // Handle legacy case: initialized but not versioned
+      const tableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='jobs'").get();
+      if (tableExists) {
+          version = 1; // Assume base v1 if table exists
+          db.exec('INSERT INTO schema_meta (version) VALUES (1)');
+      } else {
+          db.exec('INSERT INTO schema_meta (version) VALUES (0)');
+      }
   }
+
+  console.log(`[RenderFlowDB] Current Schema Version: ${version}`);
+
+  const runMigration = (targetVer: number, migrationFn: () => void) => {
+      if (version < targetVer) {
+          console.log(`[RenderFlowDB] Migrating to v${targetVer}...`);
+          try {
+              db.transaction(() => {
+                  migrationFn();
+                  db.prepare('UPDATE schema_meta SET version = ?').run(targetVer);
+              })();
+              version = targetVer;
+              console.log(`[RenderFlowDB] Migration v${targetVer} SUCCESS`);
+          } catch (e) {
+              console.error(`[RenderFlowDB] Migration v${targetVer} FAILED`, e);
+              process.exit(1); // Fatal exit on migration failure
+          }
+      }
+  };
+
+  // 3. Define Migrations
+  
+  // v1: Base Schema
+  runMigration(1, () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS jobs (
+          id TEXT PRIMARY KEY,
+          variation_id TEXT,
+          project_id TEXT,
+          state TEXT,
+          created_at TEXT,
+          started_at TEXT,
+          completed_at TEXT,
+          input_json TEXT,
+          output_json TEXT,
+          error_json TEXT,
+          progress_pct INTEGER DEFAULT 0,
+          worker_pid INTEGER
+        )
+      `);
+  });
+
+  // v2: Full Logs
+  runMigration(2, () => {
+      // Idempotent check for robustness, though version guard should prevent this
+      const columns = db.pragma('table_info(jobs)') as any[];
+      if (!columns.find((c: any) => c.name === 'full_logs')) {
+          db.exec('ALTER TABLE jobs ADD COLUMN full_logs TEXT');
+      }
+  });
+
+  console.log(`[RenderFlowDB] Schema Up-to-Date (v${version})`);
 };
 initSchema();
 

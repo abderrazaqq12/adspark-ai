@@ -10,9 +10,10 @@ export const JobManager = {
             // Ensure inputs are valid strings
             const pid = input.project_id || 'anonymous';
             const vid = input.variation_id || generateId('var');
+            const newId = generateId('job');
 
             const job: Job = {
-                id: generateId('job'),
+                id: newId,
                 variation_id: vid,
                 project_id: pid,
                 state: 'queued',
@@ -21,10 +22,24 @@ export const JobManager = {
                 progress_pct: 0
             };
 
-            RenderFlowDB.insertJob(job);
+            // FAIL-FAST: Strict Insert
+            try {
+                RenderFlowDB.insertJob(job);
+            } catch (dbErr) {
+                console.error('[JobManager] FATAL: DB Insert Failed', dbErr);
+                throw new Error('FATAL_DB_INSERT_FAILED');
+            }
+
+            // INVARIANT: Verify Existence
+            const verification = RenderFlowDB.getJob(newId);
+            if (!verification) {
+                console.error('[JobManager] FATAL: Job not found after insert', newId);
+                throw new Error('FATAL_INVARIANT_VIOLATION: Job lost immediately after insert');
+            }
+
             return job;
         } catch (err) {
-            console.error('[JobManager] Create Failed:', err);
+            console.error('[JobManager] Create Job Aborted:', err);
             throw err;
         }
     },
