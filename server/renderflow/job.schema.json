@@ -1,0 +1,43 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "RenderFlow Job",
+    "description": "Strict contract for RenderFlow job submission. No defaults allowed.",
+    "type": "object",
+    "required": [
+        "source_url",
+        "output_format",
+        "resolution"
+    ],
+    "properties": {
+        "source_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Direct URL to the source media file. Must be accessible."
+        },
+        "output_format": {
+            "type": "string",
+            "enum": [
+                "mp4",
+                "webm",
+                "gif"
+            ],
+            "description": "Target output format. Required."
+        },
+        "resolution": {
+            "type": "string",
+            "pattern": "^\\d+x\\d+$",
+            "description": "Output resolution in WxH format (e.g., 1920x1080). Required."
+        },
+        "webhook_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Optional webhook to call when job completes."
+        },
+        "metadata": {
+            "type": "object",
+            "description": "Optional passthrough metadata.",
+            "additionalProperties": true
+        }
+    },
+    "additionalProperties": false
+}

@@ -1,15 +1,14 @@
 module.exports = {
-    apps: [{
-        name: "renderflow-engine",
-        script: "./server/renderflow/server.ts",
-        interpreter: "node",
-        interpreter_args: "--import tsx",
-        env: {
-            NODE_ENV: "production",
-            PORT: 3001
-        },
-        error_file: "./server/renderflow/logs/err.log",
-        out_file: "./server/renderflow/logs/out.log",
-        time: true
-    }]
+    apps: [
+        {
+            name: "flowscale-renderflow",
+            script: "./server/renderflow/server.cjs",
+            instances: 1,
+            exec_mode: "fork",
+            env: {
+                NODE_ENV: "production",
+                // PORT: 3001
+            }
+        }
+    ]
 };
