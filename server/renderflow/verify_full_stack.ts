@@ -1,66 +1,126 @@
-import { sleep } from './utils';
 
-// FlowScale Adapter Endpoint
-const ADAPTER_URL = 'http://localhost:3000/api/render/renderflow';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 
-async function verifyIntegration() {
-    console.log('--- STARTING WRAPPER/ADAPTER VERIFICATION ---');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-    // 1. Submit to Adapter (FlowScale format)
-    // Logic: Client (StudioExport) -> POST Adapter -> POST RenderFlow
-    console.log('1. Submitting Job to Adapter...');
-    const res = await fetch(ADAPTER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            projectId: 'integ_test_proj',
-            scenes: [
-                { video: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4' }
-            ]
-        })
-    });
+// Configuration
+const API_BASE = 'http://localhost:3001/render';
+const TEST_FILE_NAME = 'test_vid.mp4';
+const TEST_FILE_PATH = path.join(__dirname, TEST_FILE_NAME);
 
-    if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(`Adapter Failed: ${res.status} ${txt}`);
+// Colors
+const colors = {
+    reset: "\x1b[0m",
+    green: "\x1b[32m",
+    red: "\x1b[31m",
+    yellow: "\x1b[33m",
+    blue: "\x1b[34m"
+};
+
+async function runTest() {
+    console.log(`${colors.blue}[TEST] Starting Full Stack Integration Test...${colors.reset}`);
+
+    // 0. Ensure Test File Exists
+    if (!fs.existsSync(TEST_FILE_PATH)) {
+        console.log(`${colors.yellow}[TEST] Creating dummy test video file...${colors.reset}`);
+        fs.writeFileSync(TEST_FILE_PATH, 'dummy video content for mock testing');
     }
 
-    const data: any = await res.json();
-    // Expecting RenderFlow response format (as passed through)
-    const jobs = data.data.jobs;
-    if (!jobs || jobs.length === 0) throw new Error('Adapter returned no jobs');
+    try {
+        // 1. Upload
+        console.log(`${colors.blue}[TEST] Step 1: Uploading file...${colors.reset}`);
+        const formData = new FormData();
+        const fileContent = fs.readFileSync(TEST_FILE_PATH);
+        const blob = new Blob([fileContent], { type: 'video/mp4' });
+        formData.append('file', blob, TEST_FILE_NAME);
 
-    const jobId = jobs[0].id;
-    console.log(`Job Created via Adapter: ${jobId}`);
+        const uploadRes = await fetch(`${API_BASE}/upload`, {
+            method: 'POST',
+            body: formData
+        });
 
-    // 2. Poll Adapter for Status
-    console.log('2. Polling Adapter...');
-    let state = 'unknown';
-    let attempts = 0;
+        if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
+        const uploadData = await uploadRes.json();
+        console.log(`${colors.green}[PASS] Upload successful:${colors.reset}`, uploadData);
 
-    while (state !== 'done' && state !== 'failed' && attempts < 60) {
-        await sleep(1000);
-        const statusRes = await fetch(`${ADAPTER_URL}/jobs/${jobId}`);
-        if (!statusRes.ok) throw new Error(`Adapter Poll Failed: ${statusRes.status}`);
-
-        const status: any = await statusRes.json();
-        if (status.state !== state) {
-            console.log(`[Adapter Proxy] State -> ${status.state} | Progress: ${status.progress}%`);
-            state = status.state;
+        if (!uploadData.filePath || !uploadData.ok) {
+            throw new Error('Upload response missing filePath or ok:true');
         }
-        attempts++;
-    }
 
-    if (state === 'done') {
-        console.log('✅ SUCCESS: Integration Verified. Adapter correctly proxies to RenderFlow.');
-        process.exit(0);
-    } else {
-        console.error(`❌ FAILED: Job ended in ${state}`);
+        // 2. Execute Simple Job
+        console.log(`${colors.blue}[TEST] Step 2: Queueing Execute Job...${colors.reset}`);
+        const execRes = await fetch(`${API_BASE}/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sourcePath: uploadData.url, // Test URL flow (since download is handled by engine)
+                // OR sourcePath: uploadData.filePath // Test local path flow
+                trim: { start: 0, end: 5 }
+            })
+        });
+
+        if (!execRes.ok) throw new Error(`Execute failed: ${execRes.status}`);
+        const execData = await execRes.json();
+        console.log(`${colors.green}[PASS] Job Queued:${colors.reset}`, execData);
+
+        const jobId = execData.jobId;
+
+        // 3. Poll Status
+        console.log(`${colors.blue}[TEST] Step 3: Polling Job ${jobId}...${colors.reset}`);
+
+        let attempts = 0;
+        while (attempts < 20) {
+            const statusRes = await fetch(`${API_BASE}/jobs/${jobId}`);
+            const statusData = await statusRes.json();
+
+            console.log(`[Poll] Status: ${statusData.status}, Progress: ${statusData.progressPct}%`);
+
+            if (statusData.status === 'done') {
+                console.log(`${colors.green}[PASS] Job Completed!${colors.reset}`);
+                console.log('Output URL:', statusData.outputUrl);
+                break;
+            } else if (statusData.status === 'failed' || statusData.status === 'error') {
+                console.error(`${colors.red}[FAIL] Job Failed:${colors.reset}`, statusData.error);
+                process.exit(1);
+            }
+
+            await new Promise(r => setTimeout(r, 1000));
+            attempts++;
+        }
+
+        if (attempts >= 20) {
+            console.error(`${colors.red}[FAIL] Job Timed Out${colors.reset}`);
+            process.exit(1);
+        }
+
+        // 4. Test Plan Execution
+        console.log(`${colors.blue}[TEST] Step 4: Queueing Execution Plan...${colors.reset}`);
+        const planRes = await fetch(`${API_BASE}/execute-plan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sourceVideoUrl: uploadData.url,
+                plan: {
+                    timeline: [],
+                    audio_tracks: [],
+                    output_format: { width: 1080, height: 1920 }
+                }
+            })
+        });
+
+        if (!planRes.ok) throw new Error(`Plan Execute failed: ${planRes.status}`);
+        const planData = await planRes.json();
+        console.log(`${colors.green}[PASS] Plan Job Queued:${colors.reset}`, planData);
+
+        console.log(`${colors.green}[SUCCESS] All integration tests passed.${colors.reset}`);
+
+    } catch (err: any) {
+        console.error(`${colors.red}[FAIL] Test Error:${colors.reset}`, err);
         process.exit(1);
     }
 }
 
-// Ensure Adapter (server/api.js) is running. 
-// Note: In this environment, I might need to run this script while manually ensuring api.js is up.
-// For now, I'll assume port 8080 is the target.
-verifyIntegration();
+runTest();

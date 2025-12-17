@@ -60,10 +60,13 @@ router.post('/upload', upload.single('file'), (req: any, res: Response) => {
         // Engine expects `source_url`. Engine `download()` handles http/https/file?
         // Let's check Engine.
 
-        const fileUrl = `http://localhost:3001/uploads/${req.file.filename}`; // We will mount this
+        const fileUrl = `http://localhost:3001/uploads/${req.file.filename}`;
+        const filePath = path.resolve(req.file.path);
 
         res.json({
+            ok: true,
             url: fileUrl,
+            filePath: filePath, // Frontend expects this
             filename: req.file.filename,
             size: req.file.size
         });
@@ -120,9 +123,19 @@ router.post('/jobs', (req: Request, res: Response) => {
 // GET /render/jobs/:id
 router.get('/jobs/:id', (req: Request, res: Response) => {
     try {
-        const status = JobManager.getJobStatus(req.params.id);
-        if (!status) return res.status(404).json({ error: 'Job not found' });
-        res.json(status);
+        const job = JobManager.getJob(req.params.id);
+        if (!job) return res.status(404).json({ error: 'Job not found' });
+
+        // Map to legacy frontend format
+        res.json({
+            ok: true,
+            jobId: job.id,
+            status: job.state, // state -> status
+            progressPct: job.progress_pct, // progress_pct -> progressPct
+            outputUrl: job.output?.output_url,
+            outputSize: job.output?.file_size,
+            error: job.error
+        });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }
@@ -139,8 +152,8 @@ router.get('/jobs', (req: Request, res: Response) => {
 
         const jobs = rows.map((row: any) => ({
             id: row.id,
-            state: row.state,
-            progress_pct: row.progress_pct,
+            status: row.state,
+            progressPct: row.progress_pct,
             created_at: row.created_at,
             error: row.error_json ? JSON.parse(row.error_json) : undefined,
             output: row.output_json ? JSON.parse(row.output_json) : undefined
@@ -156,6 +169,72 @@ router.get('/jobs', (req: Request, res: Response) => {
 // GET /health
 router.get('/health', async (req: Request, res: Response) => {
     res.json({ status: 'ok', worker: 'active' });
+});
+
+
+// POST /render/execute (Legacy Adapter)
+// Supports simple single-file render operations
+router.post('/execute', (req: Request, res: Response) => {
+    try {
+        console.log('[RenderFlow API] POST /execute adapter');
+        const { sourcePath, ...options } = req.body;
+
+        const job = JobManager.createJob({
+            project_id: 'legacy_execute',
+            variation_id: 'legacy_' + Date.now(),
+            source_url: sourcePath,
+            // Convert legacy options to engine-compatible input if needed
+            // For now, engine handles 'trim' etc if passed in input
+            ...options
+        });
+
+        res.json({
+            ok: true,
+            jobId: job.id,
+            status: 'queued',
+            queuePosition: 1, // simplified
+            statusUrl: `/api/jobs/${job.id}`
+        });
+
+    } catch (err: any) {
+        console.error('[RenderFlow API] Execute Error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /render/execute-plan (Legacy Adapter)
+// Supports full ExecutionPlan
+router.post('/execute-plan', (req: Request, res: Response) => {
+    try {
+        console.log('[RenderFlow API] POST /execute-plan adapter');
+        const { plan, sourceVideoUrl, outputName } = req.body;
+
+        if (!plan) {
+            return res.status(400).json({ error: 'Missing plan' });
+        }
+
+        // Map ExecutionPlan to Job
+        // engine.ts expects job.input.plan
+        const job = JobManager.createJob({
+            project_id: 'legacy_plan',
+            variation_id: 'plan_' + Date.now(),
+            source_url: sourceVideoUrl,
+            plan: plan,
+            outputName: outputName
+        });
+
+        res.json({
+            ok: true,
+            jobId: job.id,
+            status: 'queued',
+            queuePosition: 1,
+            statusUrl: `/api/jobs/${job.id}`
+        });
+
+    } catch (err: any) {
+        console.error('[RenderFlow API] ExecutePlan Error:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 export const apiRouter = router;
