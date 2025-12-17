@@ -46,14 +46,17 @@ export class FFmpegBuilder {
             }
 
             // TRIM & SCALE Filter
-            // [0:v]trim=0:15,setpts=PTS-STARTPTS,scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2[v0];
-            const trimStart = segment.trim_start_ms / 1000;
-            const trimEnd = segment.trim_end_ms / 1000;
+            const trimStart = (segment.trim_start_ms || 0) / 1000;
+            const trimEnd = segment.trim_end_ms ? (segment.trim_end_ms / 1000) : null;
             const tag = `v${i}`;
+
+            // Build Trim Filter String
+            let trimFilter = `trim=start=${trimStart}`;
+            if (trimEnd !== null) trimFilter += `:end=${trimEnd}`;
 
             // Basic video chain: Trim -> SetPTS -> Scale -> Pad
             this.filters.push(
-                `[${fileIdx}:v]trim=${trimStart}:${trimEnd},setpts=PTS-STARTPTS,` +
+                `[${fileIdx}:v]${trimFilter},setpts=PTS-STARTPTS,` +
                 `scale=${this.plan.output_format.width}:${this.plan.output_format.height}:force_original_aspect_ratio=decrease,` +
                 `pad=${this.plan.output_format.width}:${this.plan.output_format.height}:(ow-iw)/2:(oh-ih)/2,` +
                 `setsar=1[${tag}]`

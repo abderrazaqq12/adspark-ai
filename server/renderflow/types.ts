@@ -61,6 +61,7 @@ export interface Job {
 
     // Internal
     logs_path?: string;
+    full_logs?: string[];
 }
 
 export const ERROR_CODES = {

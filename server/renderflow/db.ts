@@ -25,7 +25,8 @@ const initSchema = () => {
       output_json TEXT,
       error_json TEXT,
       progress_pct INTEGER DEFAULT 0,
-      worker_pid INTEGER
+      worker_pid INTEGER,
+      full_logs TEXT
     )
   `);
 };
@@ -33,8 +34,8 @@ initSchema();
 
 // Prepared Statements
 const insertStmt = db.prepare(`
-  INSERT INTO jobs (id, variation_id, project_id, state, created_at, input_json)
-  VALUES (?, ?, ?, ?, ?, ?)
+  INSERT INTO jobs (id, variation_id, project_id, state, created_at, input_json, full_logs)
+  VALUES (?, ?, ?, ?, ?, ?, '')
 `);
 
 const getStmt = db.prepare('SELECT * FROM jobs WHERE id = ?');
@@ -59,6 +60,10 @@ const failStmt = db.prepare(`
 
 const updateProgressStmt = db.prepare(`
   UPDATE jobs SET progress_pct = ? WHERE id = ?
+`);
+
+const appendLogsStmt = db.prepare(`
+  UPDATE jobs SET full_logs = full_logs || ? || CHAR(10) WHERE id = ?
 `);
 
 const lockJobStmt = db.prepare(`
@@ -115,6 +120,15 @@ export const RenderFlowDB = {
     updateProgressStmt.run(pct, id);
   },
 
+  appendLogs: (id: string, log: string) => {
+    try {
+      appendLogsStmt.run(log, id);
+    } catch (e) {
+      // Ignore log write errors to prevent job failure
+      console.error('Failed to write logs to DB:', e);
+    }
+  },
+
   markDone: (id: string, output: JobResult) => {
     const now = new Date().toISOString();
     completeStmt.run(now, JSON.stringify(output), id);
@@ -169,6 +183,7 @@ function mapRowToJob(row: any): Job {
     output: row.output_json ? JSON.parse(row.output_json) : undefined,
     error: row.error_json ? JSON.parse(row.error_json) : undefined,
     progress_pct: row.progress_pct,
-    worker_pid: row.worker_pid
+    worker_pid: row.worker_pid,
+    full_logs: row.full_logs ? row.full_logs.split('\n') : [] // Map back to array
   };
 }

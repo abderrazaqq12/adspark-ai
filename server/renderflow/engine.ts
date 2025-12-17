@@ -107,11 +107,16 @@ export class RenderEngine {
 
             ffmpegProcess = spawn(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
-            // PROGRESS PARSING
+            // PROGRESS PARSING & LOGGING
             let totalDurationMs = 0;
-            // Attempt to parse duration from stderr init
-            ffmpegProcess.stderr.on('data', (data: Buffer) => {
-                const str = data.toString();
+
+            const handleLog = (data: Buffer) => {
+                const str = data.toString().trim();
+                if (!str) return;
+
+                // Store in DB for UI Console
+                RenderFlowDB.appendLogs(job.id, str);
+
                 const durMatch = str.match(/Duration: (\d{2}):(\d{2}):(\d{2}\.\d{2})/);
                 if (durMatch) {
                     const h = parseInt(durMatch[1]);
@@ -119,7 +124,10 @@ export class RenderEngine {
                     const s = parseFloat(durMatch[3]);
                     totalDurationMs = ((h * 3600) + (m * 60) + s) * 1000;
                 }
-            });
+            };
+
+            ffmpegProcess.stdout.on('data', handleLog);
+            ffmpegProcess.stderr.on('data', handleLog);
 
             await new Promise<void>((resolve, reject) => {
                 ffmpegProcess.on('close', (code: number) => {

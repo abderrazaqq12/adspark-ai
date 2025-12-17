@@ -120,6 +120,35 @@ router.post('/jobs', (req: Request, res: Response) => {
     }
 });
 
+// GET /render/jobs/:id/logs
+router.get('/jobs/:id/logs', (req: Request, res: Response) => {
+    try {
+        const job = JobManager.getJob(req.params.id);
+        if (!job) return res.status(404).json({ error: 'Job not found' });
+
+        res.json({
+            jobId: job.id,
+            status: job.state,
+            command: 'ffmpeg ...', // TODO: Capture command in DB too? Engine prints it but doesn't store in DB yet.
+            fullLogs: job.full_logs || [],
+            execution: {
+                engine: 'unified_ffmpeg',
+                encoderUsed: 'libx264', // Default
+                exitCode: job.state === 'done' ? 0 : (job.state === 'failed' ? 1 : null),
+                outputExists: !!job.output,
+                outputSize: job.output?.file_size,
+                durationMs: job.output?.duration_ms
+            },
+            error: job.error,
+            createdAt: job.created_at,
+            startedAt: job.started_at,
+            completedAt: job.completed_at
+        });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET /render/jobs/:id
 router.get('/jobs/:id', (req: Request, res: Response) => {
     try {
@@ -177,22 +206,43 @@ router.get('/health', async (req: Request, res: Response) => {
 router.post('/execute', (req: Request, res: Response) => {
     try {
         console.log('[RenderFlow API] POST /execute adapter');
-        const { sourcePath, ...options } = req.body;
+        const { sourcePath, trim, resize, outputName } = req.body;
+
+        if (!sourcePath) return res.status(400).json({ error: 'Missing sourcePath' });
+
+        // Auto-Generate a simple Plan from legacy options
+        const plan = {
+            output_format: {
+                width: resize?.width || 1080, // Default to 1080p vertical
+                height: resize?.height || 1920,
+                container: 'mp4'
+            },
+            timeline: [
+                {
+                    asset_url: sourcePath,
+                    type: 'video',
+                    timeline_start_ms: 0,
+                    // Basic trim mapping
+                    trim_start_ms: (trim?.start || 0) * 1000,
+                    trim_end_ms: trim?.end ? trim.end * 1000 : undefined
+                }
+            ],
+            audio_tracks: []
+        };
 
         const job = JobManager.createJob({
             project_id: 'legacy_execute',
             variation_id: 'legacy_' + Date.now(),
-            source_url: sourcePath,
-            // Convert legacy options to engine-compatible input if needed
-            // For now, engine handles 'trim' etc if passed in input
-            ...options
+            plan: plan,
+            sourceVideoUrl: sourcePath, // Backup for downloader
+            outputName: outputName
         });
 
         res.json({
             ok: true,
             jobId: job.id,
             status: 'queued',
-            queuePosition: 1, // simplified
+            queuePosition: 1,
             statusUrl: `/api/jobs/${job.id}`
         });
 
