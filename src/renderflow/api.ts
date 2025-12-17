@@ -198,35 +198,17 @@ export const RenderFlowApi = {
 
             return res.json();
         } catch (e: any) {
-            // If VPS unavailable, return mock job IDs for demo/preview mode
-            if (e.name === 'AbortError' || e.message.includes('fetch') || e.message.includes('500')) {
-                console.log('VPS unavailable for job submission - returning preview mode IDs');
-                const ids = variationList.map(v => `preview_${v.id}`);
-                return { ids };
-            }
+            // Strict Mode: Re-throw all errors. No fallbacks.
+            console.error('[RenderFlowApi] Job submission failed:', e);
             throw e;
         }
     },
 
     // Poll Job Status - GET /render/jobs/:id
     getJobStatus: async (jobId: string): Promise<RenderFlowJob> => {
-        // For preview mode jobs, return mock status
-        if (jobId.startsWith('preview_')) {
-            return {
-                id: jobId,
-                variation_id: jobId,
-                project_id: 'preview',
-                state: 'done',
-                progress_pct: 100,
-                created_at: new Date().toISOString(),
-                completed_at: new Date().toISOString(),
-                output: {
-                    output_url: '',
-                    file_size: 0,
-                    duration_ms: 0
-                }
-            };
-        }
+        // REMOVED: Preview Mode Mocking
+        // if (jobId.startsWith('preview_')) { ... }
+        // All requests must hit the real server.
 
         const res = await fetch(`${getBaseUrl()}/jobs/${jobId}`);
         if (!res.ok) {
@@ -281,10 +263,8 @@ export const RenderFlowApi = {
 
             return res.json();
         } catch (e: any) {
-            if (e.name === 'AbortError' || e.message.includes('fetch')) {
-                console.log('VPS unavailable - returning preview mode IDs');
-                return { ids: [`preview_${payload.variations[0].id}`] };
-            }
+            // Strict Mode: Re-throw all errors.
+            console.error('[RenderFlowApi] Plan submission failed:', e);
             throw e;
         }
     }
