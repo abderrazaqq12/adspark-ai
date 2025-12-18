@@ -5,8 +5,29 @@
 
 ---
 
+## 🏗️ Step 0: Initial Setup (Fresh VPS Only)
+If this is a **brand new** Hostinger VPS, run this first to install Docker and Git:
+
+```bash
+# 1. Update system
+sudo apt-get update && sudo apt-get upgrade -y
+
+# 2. Install Docker using the convenience script
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+
+# 3. Install Docker Compose and Git
+sudo apt-get install -y docker-compose-plugin git
+
+# 4. (Optional) Allow running docker without sudo
+sudo usermod -aG docker $USER
+# You might need to log out and log back in (or use 'newgrp docker')
+```
+
+---
+
 ## 🛑 Step 1: Clean Slate (Danger Zone)
-**WARNING:** This will DELETE ALL DATA on your VPS related to Docker. Only do this if you want a fresh start.
+**WARNING:** This will DELETE ALL DATA on your VPS related to Docker and the project. Only do this if you want a fresh start.
 
 ```bash
 # 1. Stop all running containers
@@ -15,7 +36,12 @@ docker-compose down
 # 2. Remove all unused containers, networks, and images
 docker system prune -a --volumes -f
 
-# 3. (Optional) Manually remove persistence folders if they exist
+# 3. Remove the old project folder to ensure fresh clone
+cd ~
+rm -rf adspark-ai
+rm -rf flowscale-ai  # Just in case
+
+# 4. (Optional) Manually remove persistence folders if they exist
 rm -rf supabase/volumes
 rm -rf docker/volumes
 ```
@@ -96,6 +122,20 @@ docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
     -   **Frontend:** `http://your-vps-ip` (Should see FlowScale AI Login)
     -   **Backend Health:** `http://your-vps-ip/api/health` (Should return `{"status":"healthy"}`)
     -   **Supabase:** `http://your-vps-ip:8000`
+
+---
+
+## 🌐 Hostinger Specific Setup
+
+1.  **Firewall:**
+    -   Go to your Hostinger VPS Dashboard -> **Networking** -> **Firewall**.
+    -   Ensure the following ports are **OPEN** (Accept):
+        -   `80` (HTTP - Frontend/API)
+        -   `443` (HTTPS - if you use SSL later)
+        -   `8000` (Supabase API - Optional, for debugging)
+
+2.  **DNS / Domain:**
+    -   Point your domain's **A Record** to your VPS IP address.
 
 ---
 
