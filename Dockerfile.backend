@@ -1,0 +1,32 @@
+# Dockerfile.backend
+# Specialized for FlowScale Node.js Server (RenderFlow v2)
+
+FROM node:20-alpine
+
+# Install FFmpeg (Required for video rendering)
+RUN apk add --no-cache ffmpeg python3 make g++
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY bun.lockb ./
+
+# Install ONLY production dependencies (ignoring devDeps like vite)
+# We use --legacy-peer-deps to avoid conflicts
+RUN npm ci --omit=dev --legacy-peer-deps
+
+# Copy server code
+COPY server/ ./server/
+
+# Create necessary directories
+RUN mkdir -p /app/uploads /app/outputs
+
+# Expose ports
+# 3000: Main API Gateway
+# 3001: RenderFlow Engine
+EXPOSE 3000 3001
+
+# Start script
+# We start both the API gateway and the Render Engine
+CMD ["sh", "-c", "node server/api.js & node server/renderflow/server.cjs"]
