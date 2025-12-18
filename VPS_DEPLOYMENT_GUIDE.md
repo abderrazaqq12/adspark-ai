@@ -26,8 +26,8 @@ rm -rf docker/volumes
 
 1.  **Clone or Update Repository**
     ```bash
-    git clone https://github.com/your-repo/flowscale-ai.git
-    cd flowscale-ai
+    git clone https://github.com/abderrazaqq12/adspark-ai.git
+    cd adspark-ai
     ```
 
 2.  **Verify New Deployment Files**
