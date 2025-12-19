@@ -8,6 +8,7 @@ import { Upload, X, Clock, Sparkles, ArrowRight, Loader2, FolderOpen } from "luc
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { UploadedAd, AdAnalysis } from "@/pages/CreativeReplicator";
+import { useVideoUpload } from "@/hooks/useVideoUpload";
 
 interface AdUploaderProps {
   uploadedAds: UploadedAd[];
@@ -21,6 +22,8 @@ export const AdUploader = ({ uploadedAds, setUploadedAds, projectName, setProjec
   const [isDragging, setIsDragging] = useState(false);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { uploadVideo, uploading } = useVideoUpload();
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
@@ -44,28 +47,48 @@ export const AdUploader = ({ uploadedAds, setUploadedAds, projectName, setProjec
 
     for (const file of files) {
       const id = `ad-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const url = URL.createObjectURL(file);
-      
-      // Get video duration
+
+      // 1. Get duration locally first
+      const tempUrl = URL.createObjectURL(file);
       const video = document.createElement("video");
-      video.src = url;
-      
+      video.src = tempUrl;
+
       await new Promise<void>((resolve) => {
-        video.onloadedmetadata = () => {
+        video.onloadedmetadata = async () => {
           if (video.duration > 60) {
             toast.error(`${file.name} exceeds 60 seconds limit`);
-            URL.revokeObjectURL(url);
-          } else {
-            const newAd: UploadedAd = {
-              id,
-              file,
-              url,
-              duration: Math.round(video.duration),
-            };
-            setUploadedAds((prev) => [...prev, newAd]);
-            // Auto-analyze after upload
-            analyzeAd(newAd);
+            URL.revokeObjectURL(tempUrl);
+            resolve();
+            return;
           }
+
+          // 2. Upload to Supabase Storage immediately
+          toast.message(`Uploading ${file.name}...`);
+          const uploadResult = await uploadVideo(file, "videos", "input_ads");
+
+          if (!uploadResult) {
+            toast.error(`Failed to upload ${file.name}`);
+            URL.revokeObjectURL(tempUrl);
+            resolve();
+            return;
+          }
+
+          // 3. Add to state with PUBLIC REMOTE URL
+          const newAd: UploadedAd = {
+            id,
+            file,
+            url: uploadResult.url, // Use remote URL
+            duration: Math.round(video.duration),
+          };
+
+          setUploadedAds((prev) => [...prev, newAd]);
+
+          // 4. Analyze using REMOTE URL
+          toast.success(`Uploaded ${file.name}`);
+          analyzeAd(newAd);
+
+          // cleanup local blob
+          URL.revokeObjectURL(tempUrl);
           resolve();
         };
       });
@@ -74,12 +97,12 @@ export const AdUploader = ({ uploadedAds, setUploadedAds, projectName, setProjec
 
   const analyzeAd = async (ad: UploadedAd) => {
     setAnalyzingId(ad.id);
-    
+
     try {
       // Call the edge function for AI analysis
       const { data, error } = await supabase.functions.invoke('creative-replicator-analyze', {
         body: {
-          videoUrl: ad.url,
+          videoUrl: ad.url, // This is now a Supabase Public URL
           fileName: ad.file.name,
           duration: ad.duration,
         },
@@ -101,7 +124,7 @@ export const AdUploader = ({ uploadedAds, setUploadedAds, projectName, setProjec
       console.error('Analysis error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Analysis failed';
       toast.error(errorMessage);
-      
+
       // Fallback to default analysis
       const fallbackAnalysis: AdAnalysis = {
         transcript: "This is a product showcase video demonstrating key features and benefits.",
@@ -119,7 +142,7 @@ export const AdUploader = ({ uploadedAds, setUploadedAds, projectName, setProjec
         musicType: "upbeat",
         aspectRatio: "9:16"
       };
-      
+
       setUploadedAds((prev) =>
         prev.map((a) => (a.id === ad.id ? { ...a, analysis: fallbackAnalysis } : a))
       );
@@ -175,11 +198,10 @@ export const AdUploader = ({ uploadedAds, setUploadedAds, projectName, setProjec
         }}
         onDragLeave={() => setIsDragging(false)}
         onClick={() => fileInputRef.current?.click()}
-        className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
-          isDragging
+        className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${isDragging
             ? "border-primary bg-primary/5"
             : "border-border hover:border-primary/50 hover:bg-accent/50"
-        }`}
+          }`}
       >
         <input
           ref={fileInputRef}
@@ -231,7 +253,7 @@ export const AdUploader = ({ uploadedAds, setUploadedAds, projectName, setProjec
               </div>
               <CardContent className="p-3 space-y-2">
                 <p className="text-sm font-medium truncate">{ad.file.name}</p>
-                
+
                 {analyzingId === ad.id ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="w-4 h-4 animate-spin" />
