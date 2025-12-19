@@ -1,0 +1,23 @@
+FROM node:20-bullseye
+
+# Install FFmpeg (Critical for engine)
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install Dependencies
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copy Source
+COPY server ./server
+
+# Create data directories
+RUN mkdir -p server/renderflow/data server/renderflow/output server/renderflow/temp
+
+ENV PORT=3001
+ENV NODE_ENV=production
+
+EXPOSE 3001
+
+CMD ["node", "server/renderflow/server.cjs"]

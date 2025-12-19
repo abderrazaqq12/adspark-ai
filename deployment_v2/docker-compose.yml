@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ..
+      dockerfile: deployment_v2/Dockerfile.frontend
+      args:
+        VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}"
+        VITE_SUPABASE_ANON_KEY: "${VITE_SUPABASE_ANON_KEY}"
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: always
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+  api:
+    build:
+      context: ..
+      dockerfile: deployment_v2/Dockerfile.api
+    environment:
+      - PORT=3000
+      - UPLOAD_DIR=/app/uploads
+      - OUTPUT_DIR=/app/outputs
+      - RENDERFLOW_URL=http://renderflow:3001/render
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+    volumes:
+      - uploads_data:/app/uploads
+      - outputs_data:/app/outputs
+    depends_on:
+      - renderflow
+    restart: always
+
+  renderflow:
+    build:
+      context: ..
+      dockerfile: deployment_v2/Dockerfile.renderflow
+    environment:
+      - PORT=3001
+      # We cannot easily change internal paths in worker.cjs without code change
+      # So we mount volumes to where worker.cjs expects them, AND where API expects them
+      - NODE_ENV=production
+    volumes:
+      # RenderFlow Worker expects output in server/renderflow/output
+      - outputs_data:/app/server/renderflow/output
+      # RenderFlow Worker expects temp in server/renderflow/temp
+      - uploads_data:/app/server/renderflow/temp
+      # API sends source paths as /app/uploads/..., so Renderflow must see them there:
+      - uploads_data:/app/uploads
+      # Persistence for SQLite
+      - render_db:/app/server/renderflow/data
+    restart: always
+
+volumes:
+  uploads_data:
+  outputs_data:
+  render_db:

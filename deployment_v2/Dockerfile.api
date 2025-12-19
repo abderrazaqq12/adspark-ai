@@ -1,0 +1,22 @@
+FROM node:20-bullseye
+
+# Install FFmpeg (Required for legacy rendering in api.js)
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install Dependencies
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copy Source
+COPY server ./server
+# If there are shared libs in src that api.js imports (unlikely but possible), copy src?
+# api.js checks: import path from 'path'; etc. No src imports seen.
+
+ENV PORT=3000
+ENV NODE_ENV=production
+
+EXPOSE 3000
+
+CMD ["node", "server/api.js"]
