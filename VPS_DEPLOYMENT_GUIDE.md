@@ -1,155 +1,153 @@
-# FlowScale AI - VPS Deployment Guide
+# 🚀 Ultimate Beginner's Guide to Deploying FlowScale AI
 
-**Target Audience:** System Administrators / Developers
-**Goal:** Deploy FlowScale AI (Frontend + Node.js Backend + Database + AI Engine) on a Linux VPS.
+**Goal:** Get your AI website running on the internet.
+**Difficulty:** Easy (Just copy & paste!)
+**Time:** 10-15 Minutes
 
 ---
 
-## 🏗️ Step 0: Initial Setup (Fresh VPS Only)
-If this is a **brand new** Hostinger VPS, run this first to install Docker and Git:
+## 🔑 Step 1: Connect to Your Server (The Black Screen)
 
+We need to control your remote computer (VPS).
+
+1.  **Get your Login Details:**
+    -   Go to **Hostinger Dashboard Website**.
+    -   Click **VPS** -> **Manage**.
+    -   Click the **"SSH Access"** tab.
+    -   Look for the **"Terminal Command"** (It looks like `ssh root@123.45.67.89`).
+    -   **Copy that command.**
+
+2.  **Open the Terminal:**
+    -   **Windows:** Press `Start`, type `PowerShell`, and press Enter.
+    -   **Mac:** Press `Cmd+Space`, type `Terminal`, and press Enter.
+
+3.  **Log In:**
+    -   Paste the command you copied (Right-click to paste in PowerShell).
+    -   Press **Enter**.
+    -   It will ask for a **password**. Type your VPS password.
+    -   **⚠️ Important:** You will NOT see the characters while typing. Just type it blindly and press **Enter**.
+    -   If it asks "Are you sure you want to continue?", type `yes` and press Enter.
+
+🎉 **Success:** You should see a line starting with `root@...`. You are in!
+
+---
+
+## 🏗️ Step 2: Install The Software (One-Time Setup)
+
+*Skip this step if your VPS is not brand new.*
+
+Copy and paste these commands **one by one**. Press **Enter** after each one.
+
+**1. Update the system:**
 ```bash
-# 1. Update system
 sudo apt-get update && sudo apt-get upgrade -y
+```
 
-# 2. Install Docker using the convenience script
+**2. Install Docker (The program that runs your app):**
+```bash
 curl -fsSL https://get.docker.com -o get-docker.sh
 sudo sh get-docker.sh
+```
 
-# 3. Install Docker Compose and Git
+**3. Install Git (To download your code):**
+```bash
 sudo apt-get install -y docker-compose-plugin git
-
-# 4. (Optional) Allow running docker without sudo
-sudo usermod -aG docker $USER
-# You might need to log out and log back in (or use 'newgrp docker')
 ```
 
 ---
 
-## 🛑 Step 1: Clean Slate (Danger Zone)
-**WARNING:** This will DELETE ALL DATA on your VPS related to Docker and the project. Only do this if you want a fresh start.
+## 🧹 Step 3: Clean Up (Fresh Start)
+
+If you tried this before, let's delete everything to ensure a clean start.
 
 ```bash
-# 1. Stop all running containers
 docker-compose down
-
-# 2. Remove all unused containers, networks, and images
 docker system prune -a --volumes -f
-
-# 3. Remove the old project folder to ensure fresh clone
 cd ~
 rm -rf adspark-ai
-rm -rf flowscale-ai  # Just in case
-
-# 4. (Optional) Manually remove persistence folders if they exist
-rm -rf supabase/volumes
-rm -rf docker/volumes
+rm -rf flowscale-ai
 ```
 
 ---
 
-## 🚀 Step 2: Setup Codebase
+## � Step 4: Download Your Code
 
-1.  **Clone or Update Repository**
-    ```bash
-    git clone https://github.com/abderrazaqq12/adspark-ai.git
-    cd adspark-ai
-    ```
+**1. Clone the repository:**
+```bash
+git clone https://github.com/abderrazaqq12/adspark-ai.git
+```
 
-2.  **Verify New Deployment Files**
-    Ensure these files exist (I just created them for you):
-    - `Dockerfile.backend`
-    - `docker-compose.prod.yml`
-    - `docker/nginx-prod.conf`
-
-3.  **Environment Configuration**
-    ```bash
-    cp .env.example .env
-    nano .env
-    ```
-    **Critical .env Settings for VPS:**
-    ```env
-    # Database Security
-    POSTGRES_PASSWORD=generate_a_strong_password_here
-    
-    # Supabase Keys (Use the scripts/generate-keys.sh if you have it, or use online generator)
-    # MUST be valid JWTs signed with your JWT_SECRET
-    JWT_SECRET=generate_a_32_char_secret_here
-    SUPABASE_ANON_KEY=...
-    SUPABASE_SERVICE_ROLE_KEY=...
-    
-    # AI Providers (Required)
-    OPENAI_API_KEY=sk-...
-    GEMINI_API_KEY=...
-    
-    # Backend URL (Must point to your VPS IP or Domain)
-    # For Docker internal, we use relative paths, but for public access:
-    VITE_SUPABASE_URL=http://your-vps-ip:8000
-    VITE_BACKEND_PROVIDER=local
-    VITE_AI_PROVIDER=gemini 
-    ```
+**2. Enter the folder:**
+```bash
+cd adspark-ai
+```
 
 ---
 
-## 🛠️ Step 3: Deploy
+## ⚙️ Step 5: Configure Settings (The Tricky Part)
 
-We use two compose files: the base one for Supabase/DB and the production override for our custom Node.js backend.
+We need to set up the secret passwords for your database.
+
+**1. Create the settings file:**
+```bash
+cp .env.example .env
+```
+
+**2. Open the file editor:**
+```bash
+nano .env
+```
+
+**3. Edit the file:**
+You will see a text file inside the terminal. Use your **Arrow Keys** to move around.
+
+Change these lines (Delete the old values and type your own):
+
+*   **POSTGRES_PASSWORD**: Type any random strong password.
+*   **JWT_SECRET**: Type a long random string (at least 32 characters, like a passwordmash).
+*   **VITE_SUPABASE_URL**: Change this to `http://YOUR_VPS_IP:8000` (Replace `YOUR_VPS_IP` with the numbers from Step 1, e.g., `http://89.11.22.33:8000`).
+
+**4. Save and Exit (Pay Attention!):**
+-   Press **`Ctrl + X`** (on your keyboard).
+-   It will ask "Save modified buffer?". Press **`Y`**.
+-   It will verify the filename. Press **`Enter`**.
+
+You should be back at the main command line.
+
+---
+
+## � Step 6: Launch!
+
+This is the magic command that starts everything.
 
 ```bash
-# Build and Start in Background
 docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
-**Wait for 1-2 minutes** for the database to initialize and applying migrations.
+**Wait!**
+It will take about **2-5 minutes**. You will see lots of text scrolling. This is normal.
+Wait until it finishes and gives you the command prompt back.
 
 ---
 
-## ✅ Step 4: Verification
+## ✅ Step 7: Did It Work?
 
-1.  **Check Service Status**
-    ```bash
-    docker-compose ps
-    ```
-    *You should see: `app`, `backend`, `supabase-db`, `supabase-kong`, `supabase-auth`, etc., all "Up".*
+Open your browser (Chrome/Safari) and go to:
+`http://YOUR_VPS_IP`
+(e.g., `http://123.45.67.89`)
 
-2.  **Check Backend Logs** (If video generation isn't working)
-    ```bash
-    docker-compose logs -f backend
-    ```
-    *Look for: `RenderFlow v2 listening on port 3001` and `FFmpeg Found`.*
-
-3.  **Test Endpoints**
-    -   **Frontend:** `http://your-vps-ip` (Should see FlowScale AI Login)
-    -   **Backend Health:** `http://your-vps-ip/api/health` (Should return `{"status":"healthy"}`)
-    -   **Supabase:** `http://your-vps-ip:8000`
+**You should see the FlowScale AI Login Page!**
 
 ---
 
-## 🌐 Hostinger Specific Setup
+## 🔍 Troubleshooting (If things break)
 
-1.  **Firewall:**
-    -   Go to your Hostinger VPS Dashboard -> **Networking** -> **Firewall**.
-    -   Ensure the following ports are **OPEN** (Accept):
-        -   `80` (HTTP - Frontend/API)
-        -   `443` (HTTPS - if you use SSL later)
-        -   `8000` (Supabase API - Optional, for debugging)
+**1. "I can't access the site!"**
+Go to your Hostinger Firewall settings and make sure **Port 80** and **Port 443** are accepted (Open).
 
-2.  **DNS / Domain:**
-    -   Point your domain's **A Record** to your VPS IP address.
+**2. "It says 502 Bad Gateway"**
+The server is probably just starting up. Wait 1 minute and refresh.
 
----
-
-## 🔧 Troubleshooting
-
-**Issue: "Job stuck in pending"**
-- Check if the `backend` service is running.
-- View logs: `docker-compose logs --tail=100 backend`
-- Ensure `ffmpeg` is installed in the container (our `Dockerfile.backend` does this).
-
-**Issue: "Upload failed"**
-- Check Nginx body size limit (set to 500M in `docker/nginx-prod.conf`).
-- Check disk space: `df -h`.
-
-**Issue: "502 Bad Gateway"**
-- The container might be restarting. Check `docker-compose ps`.
-- If `backend` keeps restarting, check logs for crash reason (likely missing ENV variable).
+**3. "Video generation isn't working"**
+You need to add your API keys (OpenAI / Gemini) inside the website now.
+Log in -> Go to **Settings** -> Enter Keys.
