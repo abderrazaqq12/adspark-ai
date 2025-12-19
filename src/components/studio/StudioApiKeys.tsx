@@ -1,30 +1,50 @@
-import { useState } from 'react';
-import { Key, ArrowRight, Eye, EyeOff, CheckCircle2, XCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Key, ArrowRight, Eye, EyeOff, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { useSecureApiKeys } from '@/hooks/useSecureApiKeys';
 
 interface StudioApiKeysProps {
   onNext: () => void;
 }
 
 const apiKeyFields = [
-  { id: 'openai', label: 'OpenAI', placeholder: 'sk-...' },
-  { id: 'elevenlabs', label: 'ElevenLabs', placeholder: 'Enter API key' },
-  { id: 'runway', label: 'Runway', placeholder: 'Enter API key' },
-  { id: 'heygen', label: 'HeyGen', placeholder: 'Enter API key' },
+  { id: 'OPENAI_API_KEY', label: 'OpenAI', placeholder: 'sk-...' },
+  { id: 'ELEVENLABS_API_KEY', label: 'ElevenLabs', placeholder: 'Enter API key' },
+  { id: 'RUNWAY_API_KEY', label: 'Runway', placeholder: 'Enter API key' },
+  { id: 'HEYGEN_API_KEY', label: 'HeyGen', placeholder: 'Enter API key' },
 ];
 
 export const StudioApiKeys = ({ onNext }: StudioApiKeysProps) => {
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [validated, setValidated] = useState<Record<string, boolean | null>>({});
+  const [saving, setSaving] = useState(false);
   const { toast } = useToast();
+  const { saveApiKey, providers } = useSecureApiKeys();
+
+  // Load existing keys (status only, not values)
+  useEffect(() => {
+    if (providers) {
+      const updates: Record<string, boolean> = {};
+      providers.forEach(p => {
+        if (p.is_active) {
+          updates[p.provider] = true;
+        }
+      });
+      // We don't set keys values because we can't retrieve them decrypted here easily without excessive RPC calls, 
+      // and usually we only let users overwrite them.
+      // But we can mark them as "validated" (exists).
+      setValidated(prev => ({ ...prev, ...updates }));
+    }
+  }, [providers]);
 
   const handleKeyChange = (id: string, value: string) => {
     setKeys(prev => ({ ...prev, [id]: value }));
+    // Reset validation status when user types
     setValidated(prev => ({ ...prev, [id]: null }));
   };
 
@@ -32,23 +52,55 @@ export const StudioApiKeys = ({ onNext }: StudioApiKeysProps) => {
     setShowKeys(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const validateKey = (id: string) => {
-    // Simulate validation
-    const isValid = keys[id]?.length > 10;
-    setValidated(prev => ({ ...prev, [id]: isValid }));
-    toast({
-      title: isValid ? "Key Valid" : "Key Invalid",
-      description: isValid ? `${id} API key validated successfully` : `${id} API key validation failed`,
-      variant: isValid ? "default" : "destructive",
-    });
+  const validateKey = async (id: string) => {
+    // Current validation is just "save it". 
+    // In future we could call the test-api-connection function.
+    // For now, let's just save it.
+    if (!keys[id]) return;
+
+    try {
+      const success = await saveApiKey(id, keys[id]);
+      setValidated(prev => ({ ...prev, [id]: success }));
+
+      toast({
+        title: success ? "Key Saved" : "Save Failed",
+        description: success ? `${id} saved successfully` : `Failed to save ${id}`,
+        variant: success ? "default" : "destructive",
+      });
+    } catch (error) {
+      setValidated(prev => ({ ...prev, [id]: false }));
+    }
   };
 
-  const handleSave = () => {
-    toast({
-      title: "API Keys Saved",
-      description: "Your API keys have been securely stored",
-    });
-    onNext();
+  const handleSave = async () => {
+    setSaving(true);
+    let allSaved = true;
+
+    try {
+      // Save all entered keys
+      for (const [provider, key] of Object.entries(keys)) {
+        if (key) {
+          const success = await saveApiKey(provider, key);
+          if (!success) allSaved = false;
+        }
+      }
+
+      if (allSaved) {
+        toast({
+          title: "API Keys Saved",
+          description: "Your API keys have been securely stored",
+        });
+        onNext();
+      } else {
+        toast({
+          title: "Some keys failed to save",
+          description: "Please check the invalid keys and try again",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -75,7 +127,7 @@ export const StudioApiKeys = ({ onNext }: StudioApiKeysProps) => {
                     type={showKeys[field.id] ? 'text' : 'password'}
                     value={keys[field.id] || ''}
                     onChange={(e) => handleKeyChange(field.id, e.target.value)}
-                    placeholder={field.placeholder}
+                    placeholder={validated[field.id] ? '(Stored) - Enter new key to overwrite' : field.placeholder}
                     className="bg-background border-border pr-10"
                   />
                   <button
@@ -86,17 +138,17 @@ export const StudioApiKeys = ({ onNext }: StudioApiKeysProps) => {
                     {showKeys[field.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   onClick={() => validateKey(field.id)}
                   disabled={!keys[field.id]}
                 >
-                  Test
+                  Save
                 </Button>
-                {validated[field.id] !== null && (
-                  validated[field.id] ? 
-                    <CheckCircle2 className="w-5 h-5 text-green-500 self-center" /> : 
+                {validated[field.id] !== null && validated[field.id] !== undefined && (
+                  validated[field.id] ?
+                    <CheckCircle2 className="w-5 h-5 text-green-500 self-center" /> :
                     <XCircle className="w-5 h-5 text-destructive self-center" />
                 )}
               </div>
@@ -104,7 +156,8 @@ export const StudioApiKeys = ({ onNext }: StudioApiKeysProps) => {
           ))}
 
           <div className="flex justify-end pt-4">
-            <Button onClick={handleSave} className="gap-2">
+            <Button onClick={handleSave} className="gap-2" disabled={saving}>
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               Save & Continue
               <ArrowRight className="w-4 h-4" />
             </Button>
