@@ -23,6 +23,7 @@ services:
       dockerfile: deployment_v2/Dockerfile.api
     environment:
       - PORT=3000
+      - HOST=0.0.0.0
       - UPLOAD_DIR=/app/uploads
       - OUTPUT_DIR=/app/outputs
       - RENDERFLOW_URL=http://renderflow:3001/render
