@@ -6,19 +6,19 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import type { 
-  VideoAnalysis, 
-  CreativeBlueprint, 
+import type {
+  VideoAnalysis,
+  CreativeBlueprint,
   PhaseAOutput,
-  MarketingFramework 
+  MarketingFramework
 } from '@/lib/creative-scale/types';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
-import type { 
-  RouterResult, 
-  EngineEntry, 
-  CostProfile, 
+import type {
+  RouterResult,
+  EngineEntry,
+  CostProfile,
   ProcessingLocation,
-  RouterEvent 
+  RouterEvent
 } from '@/lib/creative-scale/router-types';
 import type {
   BrainInput,
@@ -29,11 +29,11 @@ import type {
   RiskTolerance,
   VideoAnalysisSignals
 } from '@/lib/creative-scale/brain-v2-types';
-import { 
-  routeExecution, 
-  getCompatibleEngines, 
-  scoreEngines, 
-  extractRequiredCapabilities 
+import {
+  routeExecution,
+  getCompatibleEngines,
+  scoreEngines,
+  extractRequiredCapabilities
 } from '@/lib/creative-scale/router';
 import {
   validateVideoAnalysis,
@@ -151,41 +151,41 @@ interface UseCreativeScaleReturn {
   isCompiling: boolean;
   isRouting: boolean;
   error: string | null;
-  
+
   // Results
   currentAnalysis: VideoAnalysis | null;
   currentBlueprint: CreativeBlueprint | null;
   currentPlans: ExecutionPlan[];
   routerResult: RouterResult | null;
   routerEvents: RouterEvent[];
-  
+
   // Brain V2 State
   brainV2State: BrainV2State;
   setBrainV2Options: (options: { goal?: OptimizationGoal; risk?: RiskTolerance; platform?: PlatformType; funnelStage?: FunnelStageType }) => void;
-  
+
   // Phase A Actions
   analyzeVideo: (videoUrl: string, videoId: string, options?: {
     language?: string;
     market?: string;
   }) => Promise<VideoAnalysis | null>;
-  
+
   generateBlueprint: (analysis: VideoAnalysis, options?: {
     targetFramework?: MarketingFramework;
     variationCount?: number;
   }) => Promise<CreativeBlueprint | null>;
-  
+
   // Brain V2 Strategy Generation
   generateBrainV2Strategy: (analysis: VideoAnalysis, options?: {
     variationCount?: number;
   }) => Promise<BrainOutput>;
-  
+
   runFullPhaseA: (videoUrl: string, videoId: string, options?: {
     language?: string;
     market?: string;
     targetFramework?: MarketingFramework;
     variationCount?: number;
   }) => Promise<PhaseAOutput | null>;
-  
+
   // Step 4: Compiler Actions
   compileVariation: (
     analysis: VideoAnalysis,
@@ -193,16 +193,16 @@ interface UseCreativeScaleReturn {
     variationIndex: number,
     assetBaseUrl?: string
   ) => Promise<ExecutionPlan | null>;
-  
+
   compileAllVariations: (
     analysis: VideoAnalysis,
     blueprint: CreativeBlueprint,
     assetBaseUrl?: string
   ) => Promise<ExecutionPlan[]>;
-  
+
   // Phase B: Router Actions
   getCompatibleEnginesForPlan: (plan: ExecutionPlan) => EngineEntry[];
-  
+
   routePlan: (
     plan: ExecutionPlan,
     analysis: VideoAnalysis,
@@ -213,7 +213,7 @@ interface UseCreativeScaleReturn {
       forceLocation?: ProcessingLocation;
     }
   ) => Promise<RouterResult>;
-  
+
   // Full Pipeline
   runFullPipeline: (videoUrl: string, videoId: string, options?: {
     language?: string;
@@ -222,7 +222,7 @@ interface UseCreativeScaleReturn {
     variationCount?: number;
     assetBaseUrl?: string;
   }) => Promise<FullPipelineOutput | null>;
-  
+
   reset: () => void;
 }
 
@@ -237,7 +237,7 @@ export function useCreativeScale(): UseCreativeScaleReturn {
   const [currentPlans, setCurrentPlans] = useState<ExecutionPlan[]>([]);
   const [routerResult, setRouterResult] = useState<RouterResult | null>(null);
   const [routerEvents, setRouterEvents] = useState<RouterEvent[]>([]);
-  
+
   // Brain V2 State
   const [brainV2State, setBrainV2State] = useState<BrainV2State>({
     detectedProblems: [],
@@ -291,16 +291,16 @@ export function useCreativeScale(): UseCreativeScaleReturn {
   // ============================================
 
   const analyzeVideo = useCallback(async (
-    videoUrl: string, 
+    videoUrl: string,
     videoId: string,
     options?: { language?: string; market?: string }
   ): Promise<VideoAnalysis | null> => {
     setIsAnalyzing(true);
     setError(null);
-    
+
     try {
       const { data, error: fnError } = await invokeWithTimeout<{ analysis: unknown }>(
-        'creative-scale-analyze',
+        'creative-replicator-analyze',
         {
           video_url: videoUrl,
           video_id: videoId,
@@ -393,7 +393,7 @@ export function useCreativeScale(): UseCreativeScaleReturn {
     try {
       // Convert analysis to Brain V2 signal format
       const signals = convertToSignals(analysis);
-      
+
       // Build Brain input
       const brainInput: BrainInput = {
         video_analysis: signals,
@@ -427,7 +427,7 @@ export function useCreativeScale(): UseCreativeScaleReturn {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Brain V2 strategy generation failed';
       setError(message);
-      
+
       const failureResult: BrainOutput = {
         success: false,
         failure: {
@@ -435,12 +435,12 @@ export function useCreativeScale(): UseCreativeScaleReturn {
           reason: message
         }
       };
-      
+
       setBrainV2State(prev => ({
         ...prev,
         brainOutput: failureResult
       }));
-      
+
       return failureResult;
     } finally {
       setIsGeneratingBlueprint(false);
@@ -537,7 +537,7 @@ export function useCreativeScale(): UseCreativeScaleReturn {
 
     try {
       console.log('[useCreativeScale] Compiling with source video URL:', sourceVideoUrl ? 'provided' : 'missing');
-      
+
       const { data, error: fnError } = await supabase.functions.invoke('creative-scale-compile', {
         body: {
           analysis,
@@ -551,12 +551,12 @@ export function useCreativeScale(): UseCreativeScaleReturn {
       if (!data?.plans) throw new Error('No execution plans returned');
 
       const plans = data.plans as ExecutionPlan[];
-      
+
       // Log first plan's asset_url for debugging
       if (plans[0]?.timeline?.[0]) {
         console.log('[useCreativeScale] First plan asset_url:', plans[0].timeline[0].asset_url);
       }
-      
+
       setCurrentPlans(plans);
       return plans;
     } catch (err) {
@@ -653,7 +653,7 @@ export function useCreativeScale(): UseCreativeScaleReturn {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Routing failed';
       setError(message);
-      
+
       // Even on error, return partial success (router never fails user)
       const partialResult: RouterResult = {
         status: 'partial_success',
@@ -667,7 +667,7 @@ export function useCreativeScale(): UseCreativeScaleReturn {
         attempted_engines: [],
         human_readable_message: 'An error occurred during routing. Your creative plan has been preserved.',
       };
-      
+
       setRouterResult(partialResult);
       return partialResult;
     } finally {
