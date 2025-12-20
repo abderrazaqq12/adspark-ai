@@ -1,4 +1,4 @@
-import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Building2, Database, Clapperboard, Images, Wand2, SlidersHorizontal, Scale } from "lucide-react";
+import { Home, Video, Settings, Sparkles, FolderOpen, LogOut, Cpu, PlaySquare, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Building2, Clapperboard, Images, Wand2, SlidersHorizontal, Scale } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -43,7 +43,6 @@ const libraryItems = [
 const toolsItems = [
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "AI Engines", url: "/engines", icon: Cpu },
-  { title: "Data", url: "/settings?tab=data", icon: Database },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
