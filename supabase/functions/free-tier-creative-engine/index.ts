@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI } from "../_shared/ai-gateway.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -34,10 +35,7 @@ serve(async (req) => {
 
     console.log('[free-tier-creative-engine] Action:', action, 'Market:', market);
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY not configured');
-    }
+    console.log('[free-tier-creative-engine] Action:', action, 'Market:', market);
 
     // Robust JSON parser with fallback handling
     const safeParseJSON = (content: string, fallback: any = null): any => {
@@ -168,14 +166,11 @@ Provide a comprehensive JSON response with:
 
 Return ONLY valid JSON.`;
 
-        const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'google/gemini-2.5-flash', messages: [{ role: 'user', content: prompt }] }),
+        const aiResponse = await callAI({
+          messages: [{ role: 'user', content: prompt }],
         });
 
-        const aiData = await aiResponse.json();
-        const content = aiData.choices?.[0]?.message?.content;
+        const content = aiResponse.content;
         const fallbackAnalysis = {
           hookStrength: 7,
           hookAnalysis: 'Default analysis - AI response parsing failed',
@@ -217,14 +212,11 @@ Return a JSON array of hook scripts:
 
 Return ONLY valid JSON array.`;
 
-        const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'google/gemini-2.5-flash', messages: [{ role: 'user', content: prompt }] }),
+        const aiResponse = await callAI({
+          messages: [{ role: 'user', content: prompt }],
         });
 
-        const aiData = await aiResponse.json();
-        const content = aiData.choices?.[0]?.message?.content;
+        const content = aiResponse.content;
         const fallbackHooks = [
           { text: 'هل تبحث عن الحل المثالي؟', style: 'question', visualEffect: 'zoom-pop' },
           { text: 'اكتشف السر الذي غير حياة الآلاف', style: 'story', visualEffect: 'flash-intro' }
@@ -261,14 +253,11 @@ Return a JSON array of CTA scripts with overlay suggestions:
 
 Return ONLY valid JSON array.`;
 
-        const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'google/gemini-2.5-flash', messages: [{ role: 'user', content: prompt }] }),
+        const aiResponse = await callAI({
+          messages: [{ role: 'user', content: prompt }],
         });
 
-        const aiData = await aiResponse.json();
-        const content = aiData.choices?.[0]?.message?.content;
+        const content = aiResponse.content;
         const fallbackCtas = [
           { text: 'اطلب الآن - الدفع عند الاستلام', overlay: 'button', urgency: 'high', ffmpegEffect: 'cta-button' },
           { text: 'عرض محدود - احصل عليه اليوم', overlay: 'banner', urgency: 'high', ffmpegEffect: 'flash-transition' }
@@ -352,14 +341,11 @@ Return JSON with:
   "insertPoints": [{"after": scene_index, "insert": "motion-image|cta-overlay"}]
 }`;
 
-        const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'google/gemini-2.5-flash', messages: [{ role: 'user', content: prompt }] }),
+        const aiResponse = await callAI({
+          messages: [{ role: 'user', content: prompt }],
         });
 
-        const aiData = await aiResponse.json();
-        const content = aiData.choices?.[0]?.message?.content;
+        const content = aiResponse.content;
         const fallbackNarrative = {
           originalOrder: [0, 1, 2, 3],
           optimizedOrder: [0, 2, 1, 3],

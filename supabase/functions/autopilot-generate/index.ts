@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI } from "../_shared/ai-gateway.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -32,7 +33,6 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
     
     const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -152,47 +152,37 @@ Language: ${language === 'ar' ? 'Arabic (Saudi dialect)' : language === 'en' ? '
 
 Write ONLY the voice-over script text. No stage directions.`;
 
-          const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${lovableApiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: 'google/gemini-2.5-flash',
+          try {
+            const aiResponse = await callAI({
               messages: [
                 { role: 'system', content: 'You are an expert video ad scriptwriter. Create natural, engaging voice-over scripts.' },
                 { role: 'user', content: scriptPrompt }
               ],
-            }),
-          });
+            });
 
-          if (!aiResponse.ok) {
-            console.error(`[autopilot] Script generation failed for tone: ${tone}`);
-            continue;
-          }
+            const scriptText = aiResponse.content?.trim() || '';
 
-          const aiData = await aiResponse.json();
-          const scriptText = aiData.choices?.[0]?.message?.content?.trim() || '';
+            if (scriptText) {
+              const { data: script, error: scriptError } = await supabase
+                .from('scripts')
+                .insert({
+                  project_id: project.id,
+                  raw_text: scriptText,
+                  language,
+                  tone,
+                  status: 'draft',
+                  metadata: { autopilot: true, toneIndex: i }
+                })
+                .select()
+                .single();
 
-          if (scriptText) {
-            const { data: script, error: scriptError } = await supabase
-              .from('scripts')
-              .insert({
-                project_id: project.id,
-                raw_text: scriptText,
-                language,
-                tone,
-                status: 'draft',
-                metadata: { autopilot: true, toneIndex: i }
-              })
-              .select()
-              .single();
-
-            if (!scriptError && script) {
-              scripts.push(script);
-              console.log(`[autopilot] Generated script ${i + 1}/${tonesToUse.length} with tone: ${tone}`);
+              if (!scriptError && script) {
+                scripts.push(script);
+                console.log(`[autopilot] Generated script ${i + 1}/${tonesToUse.length} with tone: ${tone}`);
+              }
             }
+          } catch (aiError) {
+            console.error(`[autopilot] Script generation failed for tone: ${tone}`, aiError);
           }
 
           // Update progress
