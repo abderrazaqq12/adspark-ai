@@ -1,6 +1,6 @@
 /**
  * Unified Execution Layer
- * Switches between Agent, n8n, and Edge modes
+ * Switches between Agent and Edge modes
  * Same prompt, same schema, different execution
  */
 
@@ -22,8 +22,6 @@ export async function executeUnified(
     switch (input.executionMode) {
       case 'agent':
         return await runLovableAgent(input, customPrompt, startTime);
-      case 'n8n':
-        return await triggerWebhook(input, customPrompt, startTime);
       case 'edge':
         return await callEdgeFunction(input, customPrompt, startTime);
       case 'gemini':
@@ -64,40 +62,6 @@ async function runLovableAgent(
   if (error) throw error;
 
   return parseResponse(data, 'agent', startTime);
-}
-
-/**
- * n8n Workflow - Automation execution
- */
-async function triggerWebhook(
-  input: UnifiedInput,
-  customPrompt: string | undefined,
-  startTime: number
-): Promise<ExecutionResult> {
-  console.log('[n8n] Triggering webhook execution');
-
-  if (!input.webhookUrl) {
-    throw new Error('Webhook URL required for n8n mode');
-  }
-
-  const { systemPrompt, userPrompt } = getPromptForExecution(input, customPrompt);
-
-  // Use n8n-proxy to avoid CORS
-  const { data, error } = await supabase.functions.invoke('n8n-proxy', {
-    body: {
-      webhookUrl: input.webhookUrl,
-      payload: {
-        input,
-        prompt: userPrompt,
-        systemPrompt,
-        mode: 'n8n'
-      }
-    }
-  });
-
-  if (error) throw error;
-
-  return parseResponse(data, 'n8n', startTime);
 }
 
 /**
@@ -260,11 +224,6 @@ export function getAvailableModes(): Array<{
       label: 'Google AI Studio',
       description: 'Run locally with your API Key (Free)',
       recommended: false
-    },
-    {
-      mode: 'n8n',
-      label: 'Automation (n8n)',
-      description: 'For power users with automation workflows'
     },
     {
       mode: 'edge',

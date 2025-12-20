@@ -1,27 +1,23 @@
 /**
  * Execution Mode Selector
- * UI component for selecting between Agent, n8n, and Edge modes
+ * UI component for selecting between Agent and Edge modes
  */
 
 import React from 'react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Bot, Workflow, Zap, Sparkles } from 'lucide-react';
+import { Bot, Zap, Sparkles } from 'lucide-react';
 import { ExecutionMode, getAvailableModes } from '@/lib/unified-generation/executor';
 
 interface ExecutionModeSelectorProps {
   value: ExecutionMode;
   onChange: (mode: ExecutionMode) => void;
-  webhookUrl?: string;
-  onWebhookUrlChange?: (url: string) => void;
   compact?: boolean;
 }
 
 const modeIcons: Record<ExecutionMode, React.ReactNode> = {
   agent: <Bot className="h-4 w-4" />,
-  n8n: <Workflow className="h-4 w-4" />,
   edge: <Zap className="h-4 w-4" />,
   gemini: <Sparkles className="h-4 w-4 text-amber-500" />
 };
@@ -29,8 +25,6 @@ const modeIcons: Record<ExecutionMode, React.ReactNode> = {
 export function ExecutionModeSelector({
   value,
   onChange,
-  webhookUrl,
-  onWebhookUrlChange,
   compact = false
 }: ExecutionModeSelectorProps) {
   const modes = getAvailableModes();
@@ -51,7 +45,7 @@ export function ExecutionModeSelector({
                 }`}
             >
               {modeIcons[m.mode]}
-              {m.mode === 'agent' ? 'AI' : m.mode === 'n8n' ? 'n8n' : m.mode === 'gemini' ? 'Google' : 'API'}
+              {m.mode === 'agent' ? 'AI' : m.mode === 'gemini' ? 'Google' : 'API'}
             </button>
           ))}
         </div>
@@ -100,18 +94,6 @@ export function ExecutionModeSelector({
           </div>
         ))}
       </RadioGroup>
-
-      {value === 'n8n' && onWebhookUrlChange && (
-        <div className="space-y-2 pt-2">
-          <Label className="text-sm">n8n Webhook URL</Label>
-          <Input
-            placeholder="https://your-n8n.com/webhook/..."
-            value={webhookUrl || ''}
-            onChange={(e) => onWebhookUrlChange(e.target.value)}
-            className="font-mono text-xs"
-          />
-        </div>
-      )}
     </div>
   );
 }

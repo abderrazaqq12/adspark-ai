@@ -160,8 +160,7 @@ export const LandingPageCompiler = ({
         marketingAngles: marketingAngles.angles?.map(a => a.hook) || [],
         promptId: promptResult?.prompt?.id || 'landing-page-default',
         locale: audienceTargeting.language,
-        executionMode,
-        webhookUrl: executionMode === 'n8n' ? webhookUrl : undefined
+        executionMode
       };
 
       // Capture prompt data for debug panel
@@ -336,7 +335,7 @@ Generate the complete HTML code now:`;
             compact
           />
           <Badge variant="outline" className="text-primary border-primary/50">
-            {executionMode === 'agent' ? 'AI Agent' : executionMode === 'n8n' ? 'n8n' : executionMode === 'gemini' ? 'Google AI (Gemini API)' : 'Edge API'}
+            {executionMode === 'agent' ? 'AI Agent' : executionMode === 'gemini' ? 'Google AI (Gemini API)' : 'Edge API'}
           </Badge>
         </div>
       </div>
@@ -410,8 +409,6 @@ Generate the complete HTML code now:`;
             <ExecutionModeSelector
               value={executionMode}
               onChange={setExecutionMode}
-              webhookUrl={webhookUrl}
-              onWebhookUrlChange={setWebhookUrl}
             />
           </div>
         </CollapsibleContent>

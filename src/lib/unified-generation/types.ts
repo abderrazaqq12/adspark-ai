@@ -3,7 +3,7 @@
  * ONE intelligence, MULTIPLE execution adapters
  */
 
-export type ExecutionMode = 'agent' | 'n8n' | 'edge' | 'gemini';
+export type ExecutionMode = 'agent' | 'edge' | 'gemini';
 
 export interface UnifiedInput {
   product: {
@@ -15,7 +15,6 @@ export interface UnifiedInput {
   promptId: string;
   locale: string;
   executionMode: ExecutionMode;
-  webhookUrl?: string; // For n8n mode
 }
 
 export interface LandingPageSections {

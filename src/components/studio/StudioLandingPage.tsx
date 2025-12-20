@@ -34,7 +34,7 @@ interface ProductInfo {
 
 export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
   const { toast } = useToast();
-  const { n8nEnabled: useN8nBackend } = useBackendMode();
+  const { aiOperatorEnabled } = useBackendMode();
   
   const [productInfo, setProductInfo] = useState<ProductInfo>({ name: '', description: '', url: '', url2: '' });
   const [hasMarketingAngles, setHasMarketingAngles] = useState(false);
@@ -218,14 +218,6 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
             </div>
           </div>
         </Card>
-      )}
-
-      {/* Webhook indicator */}
-      {useN8nBackend && n8nWebhookUrl && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground px-2">
-          <Webhook className="w-3 h-3 text-green-500" />
-          <span>Webhook enabled: {n8nWebhookUrl.substring(0, 50)}...</span>
-        </div>
       )}
 
       {/* Landing Page Compiler (Unified Stage 2+3) */}

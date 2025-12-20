@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import BatchApiKeyTester from "@/components/BatchApiKeyTester";
 import EngineUsageAnalytics from "@/components/EngineUsageAnalytics";
-import N8nBackendSettings from "@/components/N8nBackendSettings";
+
 import { StudioDataSettings } from "@/components/studio/StudioDataSettings";
 import StudioPrompts from "@/components/StudioPrompts";
 import DeploymentSettings from "@/components/DeploymentSettings";
@@ -1776,7 +1776,12 @@ export default function Settings() {
 
         {/* Backend Mode Tab */}
         <TabsContent value="backend" className="space-y-6">
-          <N8nBackendSettings />
+          <Card>
+            <CardHeader>
+              <CardTitle>AI Agent Backend</CardTitle>
+              <CardDescription>AI Operator agent is now the default backend for all operations.</CardDescription>
+            </CardHeader>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

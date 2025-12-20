@@ -96,7 +96,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   const { toast } = useToast();
   const { getPrompt, loading: promptsLoading } = useStudioPrompts();
   const { aiAgent, loading: aiAgentLoading } = useAIAgent();
-  const { mode: backendMode, n8nEnabled: useN8nBackend, aiOperatorEnabled, getActiveBackend } = useBackendMode();
+  const { mode: backendMode, aiOperatorEnabled, getActiveBackend } = useBackendMode();
   const { getActivePrompt, getPromptForExecution, debugMode, setDebugMode } = usePromptProfiles();
   const { saveMarketingAnglesOutput } = usePipelineOutputs();
   const { projectId, createProject } = useProject();
@@ -342,97 +342,8 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         });
       }
 
-      // Priority 1: When n8n Backend Mode is enabled, use per-stage webhook via proxy
-      if (useN8nBackend) {
-        if (!n8nWebhookUrl) {
-          throw new Error('n8n Backend Mode is enabled but no webhook URL is configured for Product Content stage. Please configure it in Settings.');
-        }
-
-        console.log('Calling Product Content webhook via proxy (n8n mode):', n8nWebhookUrl);
-
-        // Use edge function proxy to avoid CORS issues
-        const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('n8n-proxy', {
-          body: {
-            webhookUrl: n8nWebhookUrl,
-            payload: {
-              action: 'generate_marketing_angles',
-              productName: productInfo.name,
-              productDescription: productInfo.description,
-              productUrl: productInfo.url,
-              prompt: anglesPrompt,
-              model: getModelName(aiAgent),
-              audienceTargeting: {
-                targetMarket: audienceTargeting.targetMarket,
-                language: audienceTargeting.language,
-                audienceAge: audienceTargeting.audienceAge,
-                audienceGender: audienceTargeting.audienceGender,
-              },
-            }
-          }
-        });
-
-        if (proxyError) {
-          throw new Error(proxyError.message || 'Webhook proxy error');
-        }
-
-        if (!proxyResponse?.success) {
-          throw new Error(proxyResponse?.error || 'Webhook call failed');
-        }
-
-        const data = proxyResponse.data;
-        setWebhookResponse(data);
-
-        const angles: GeneratedAngles = data?.problemsSolved ? data : {
-          problemsSolved: data?.problems_solved || [
-            'المشاكل الجلدية المزعجة مثل حب الشباب والبقع الداكنة',
-            'قلة الثقة بالنفس بسبب مظهر البشرة',
-            'صعوبة إيجاد منتج آمن وفعال',
-          ],
-          customerValue: data?.customer_value || [
-            'بشرة نضرة ومشرقة خلال أسابيع قليلة',
-            'ثقة عالية بالنفس والمظهر',
-            'مكونات طبيعية آمنة 100%',
-          ],
-          marketingAngles: data?.marketing_angles || [
-            'المشكلة → الحل: من بشرة مرهقة إلى إشراقة طبيعية',
-            'الدليل الاجتماعي: آلاف العملاء الراضين',
-            'الندرة والإلحاح: عرض محدود لفترة قصيرة',
-          ],
-        };
-
-        setGeneratedAngles(angles);
-        saveContent({ angles });
-
-        // Save structured output to projects table for Stage 2 consumption
-        let currentProjectId = projectId;
-        if (!currentProjectId) {
-          currentProjectId = await createProject();
-        }
-        if (currentProjectId) {
-          const structuredOutput: MarketingAnglesOutput = {
-            problems: angles.problemsSolved || [],
-            desires: angles.customerValue || [],
-            objections: [],
-            emotional_triggers: angles.marketingAngles?.slice(0, 3) || [],
-            angles: angles.marketingAngles?.map((a, i) => ({
-              angle_type: `angle_${i + 1}`,
-              hook: a.split(':')[0] || a,
-              promise: a.split(':')[1] || '',
-              audience_focus: audienceTargeting.audienceGender
-            })) || [],
-            generated_at: new Date().toISOString(),
-            prompt_id: debugInfo?.id,
-            prompt_hash: debugInfo?.hash
-          };
-          await saveMarketingAnglesOutput(currentProjectId, structuredOutput);
-        }
-        toast({
-          title: "تم إنشاء الزوايا التسويقية",
-          description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل (via n8n)",
-        });
-      }
-      // Priority 2: When AI Operator Agent is enabled, use Supabase function
-      else if (aiOperatorEnabled) {
+      // When AI Operator Agent is enabled, use Supabase function
+      if (aiOperatorEnabled) {
         console.log('Calling AI Content Factory (AI Operator mode)');
 
         const { data, error } = await supabase.functions.invoke('ai-content-factory', {
@@ -611,63 +522,8 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         product_description: productInfo.description,
       });
 
-      // Priority 1: n8n Backend Mode
-      if (useN8nBackend) {
-        if (!n8nWebhookUrl) {
-          throw new Error('n8n Backend Mode is enabled but no webhook URL is configured for Product Content stage. Please configure it in Settings.');
-        }
-
-        console.log('Calling Scripts webhook via proxy (n8n mode):', n8nWebhookUrl);
-
-        // Use edge function proxy to avoid CORS issues
-        const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('n8n-proxy', {
-          body: {
-            webhookUrl: n8nWebhookUrl,
-            payload: {
-              action: 'generate_scripts',
-              productName: productInfo.name,
-              productDescription: productInfo.description,
-              productUrl: productInfo.url,
-              prompt: scriptsPrompt,
-              tones: tones.slice(0, count),
-              count,
-              audienceTargeting: {
-                targetMarket: audienceTargeting.targetMarket,
-                language: audienceTargeting.language,
-                audienceAge: audienceTargeting.audienceAge,
-                audienceGender: audienceTargeting.audienceGender,
-              },
-              model: getModelName(aiAgent),
-            }
-          }
-        });
-
-        if (proxyError) {
-          throw new Error(proxyError.message || 'Webhook proxy error');
-        }
-
-        if (!proxyResponse?.success) {
-          throw new Error(proxyResponse?.error || 'Webhook call failed');
-        }
-
-        const data = proxyResponse.data;
-
-        const generatedScripts: GeneratedScript[] = data?.scripts || tones.slice(0, count).map((tone, i) => ({
-          id: `script-${i}`,
-          tone,
-          content: `سكريبت ${tone} لمنتج ${productInfo.name}...`,
-          wordCount: Math.floor(Math.random() * 100) + 50,
-        }));
-
-        setScripts(generatedScripts);
-        saveContent({ scripts: generatedScripts });
-        toast({
-          title: "تم إنشاء السكريبتات",
-          description: `تم إنشاء ${generatedScripts.length} نسخة من السكريبت (via n8n)`,
-        });
-      }
-      // Priority 2: AI Operator Agent Mode
-      else if (aiOperatorEnabled) {
+      // AI Operator Agent Mode
+      if (aiOperatorEnabled) {
         console.log('Calling Script Generation (AI Operator mode)');
 
         const { data, error } = await supabase.functions.invoke('ai-content-factory', {
@@ -787,48 +643,8 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         product_description: productInfo.description,
       });
 
-      // Priority 1: n8n Backend Mode
-      if (useN8nBackend) {
-        if (!n8nWebhookUrl) {
-          throw new Error('n8n Backend Mode is enabled but no webhook URL is configured for Product Content stage.');
-        }
-
-        console.log('Calling Landing Content webhook via proxy (n8n mode):', n8nWebhookUrl);
-
-        // Use edge function proxy to avoid CORS issues
-        const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('n8n-proxy', {
-          body: {
-            webhookUrl: n8nWebhookUrl,
-            payload: {
-              action: 'generate_landing_content',
-              productName: productInfo.name,
-              productDescription: productInfo.description,
-              prompt: landingPrompt,
-              audienceTargeting,
-              model: getModelName(aiAgent),
-            }
-          }
-        });
-
-        if (proxyError) {
-          throw new Error(proxyError.message || 'Webhook proxy error');
-        }
-
-        if (!proxyResponse?.success) {
-          throw new Error(proxyResponse?.error || 'Webhook call failed');
-        }
-
-        const data = proxyResponse.data;
-        const content = data?.content || data?.landingContent || generateDefaultLandingContent();
-        setLandingContent(content);
-        saveContent({ landingContent: content });
-        toast({
-          title: "تم إنشاء محتوى صفحة الهبوط",
-          description: "تم إنشاء جميع أقسام صفحة الهبوط بنجاح (via n8n)",
-        });
-      }
-      // Priority 2: AI Operator Mode or Auto Mode - use edge function with Lovable AI
-      else {
+      // AI Operator Mode or Auto Mode - use edge function
+      {
         console.log('Calling Landing Content (Lovable AI mode)');
 
         const { data, error } = await supabase.functions.invoke('ai-content-factory', {
@@ -983,14 +799,6 @@ ${landingData.finalCta?.urgencyText || ''}`;
           <Badge variant="outline" className="text-primary border-primary">Step 2</Badge>
         </div>
       </div>
-
-      {/* Webhook indicator */}
-      {useN8nBackend && n8nWebhookUrl && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground px-2">
-          <Webhook className="w-3 h-3 text-green-500" />
-          <span>Webhook enabled: {n8nWebhookUrl.substring(0, 50)}...</span>
-        </div>
-      )}
 
       {/* Product Info Summary */}
       <Card className="p-4 bg-primary/5 border-primary/30">

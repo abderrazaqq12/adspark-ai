@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-export type BackendMode = 'ai-operator' | 'n8n' | 'auto';
+export type BackendMode = 'ai-operator' | 'auto';
 
 interface BackendModeState {
   mode: BackendMode;
   isLoading: boolean;
-  n8nEnabled: boolean;
   aiOperatorEnabled: boolean;
 }
 
@@ -14,7 +13,6 @@ export function useBackendMode() {
   const [state, setState] = useState<BackendModeState>({
     mode: 'auto',
     isLoading: true,
-    n8nEnabled: false,
     aiOperatorEnabled: false,
   });
 
@@ -28,7 +26,7 @@ export function useBackendMode() {
 
       const { data: settings } = await supabase
         .from('user_settings')
-        .select('use_n8n_backend, ai_operator_enabled, preferences')
+        .select('ai_operator_enabled, preferences')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -39,7 +37,6 @@ export function useBackendMode() {
         setState({
           mode: savedMode || 'auto',
           isLoading: false,
-          n8nEnabled: settings.use_n8n_backend || false,
           aiOperatorEnabled: settings.ai_operator_enabled || false,
         });
       } else {
@@ -78,13 +75,11 @@ export function useBackendMode() {
             ...currentPrefs,
             backend_mode: newMode,
           },
-          use_n8n_backend: newMode === 'n8n',
           ai_operator_enabled: newMode === 'ai-operator',
         }, { onConflict: 'user_id' });
 
       setState(prev => ({
         ...prev,
-        n8nEnabled: newMode === 'n8n',
         aiOperatorEnabled: newMode === 'ai-operator',
       }));
     } catch (error) {
@@ -93,13 +88,11 @@ export function useBackendMode() {
   }, []);
 
   const getActiveBackend = useCallback((): string => {
-    if (state.mode === 'n8n') return 'n8n Webhooks';
     if (state.mode === 'ai-operator') return 'AI Agent Operator';
     return 'Auto (AI Brain)';
   }, [state.mode]);
 
   const getModeIcon = useCallback((): string => {
-    if (state.mode === 'n8n') return '🔗';
     if (state.mode === 'ai-operator') return '🤖';
     return '🧠';
   }, [state.mode]);

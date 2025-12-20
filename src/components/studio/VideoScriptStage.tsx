@@ -88,7 +88,7 @@ interface VideoScriptStageProps {
 }
 
 export const VideoScriptStage = ({ onNext, productInfo, language, market }: VideoScriptStageProps) => {
-  const { n8nEnabled: useN8nBackend, aiOperatorEnabled } = useBackendMode();
+  const { aiOperatorEnabled } = useBackendMode();
   
   // Script generation settings
   const [scriptCount, setScriptCount] = useState('5');

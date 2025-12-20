@@ -7,7 +7,7 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Bot, Link, Brain, ChevronDown, Settings, Loader2 } from "lucide-react";
+import { Bot, Brain, ChevronDown, Settings, Loader2 } from "lucide-react";
 import { useBackendMode, BackendMode } from "@/hooks/useBackendMode";
 import { cn } from "@/lib/utils";
 
@@ -36,19 +36,10 @@ const BACKEND_MODES = [
     bgColor: 'bg-blue-500/10',
     borderColor: 'border-blue-500/30',
   },
-  {
-    id: 'n8n' as BackendMode,
-    name: 'n8n Webhooks',
-    description: 'Route all operations through n8n workflows',
-    icon: Link,
-    color: 'text-orange-500',
-    bgColor: 'bg-orange-500/10',
-    borderColor: 'border-orange-500/30',
-  },
 ];
 
 export function BackendModeSelector({ compact = false, showCard = false, className }: BackendModeSelectorProps) {
-  const { mode, setMode, isLoading, getActiveBackend, getModeIcon } = useBackendMode();
+  const { mode, setMode, isLoading } = useBackendMode();
   
   const currentMode = BACKEND_MODES.find(m => m.id === mode) || BACKEND_MODES[0];
   const CurrentIcon = currentMode.icon;
@@ -213,7 +204,7 @@ export function BackendModeIndicator({ className }: { className?: string }) {
   return (
     <div className={cn("flex items-center gap-1.5", className)} title={`Backend: ${currentMode.name}`}>
       <Icon className={cn("h-3.5 w-3.5", currentMode.color)} />
-      <span className="text-xs text-muted-foreground">{mode === 'auto' ? 'Auto' : mode === 'ai-operator' ? 'AI' : 'n8n'}</span>
+      <span className="text-xs text-muted-foreground">{mode === 'auto' ? 'Auto' : 'AI'}</span>
     </div>
   );
 }
