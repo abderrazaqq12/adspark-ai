@@ -9,8 +9,6 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { useBackendMode } from '@/hooks/useBackendMode';
-import { BackendModeSelector } from '@/components/BackendModeSelector';
 import { LandingPageCompiler } from '@/components/studio/LandingPageCompiler';
 
 interface StudioLandingPageProps {
@@ -34,7 +32,6 @@ interface ProductInfo {
 
 export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
   const { toast } = useToast();
-  const { aiOperatorEnabled } = useBackendMode();
   
   const [productInfo, setProductInfo] = useState<ProductInfo>({ name: '', description: '', url: '', url2: '' });
   const [hasMarketingAngles, setHasMarketingAngles] = useState(false);
@@ -154,7 +151,6 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <BackendModeSelector compact />
           <Badge variant="outline" className="text-primary border-primary px-3 py-1">Step 4</Badge>
         </div>
       </div>

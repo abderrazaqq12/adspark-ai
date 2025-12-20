@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { useBackendMode } from '@/hooks/useBackendMode';
+
 import { VoiceAudioPlayer } from './VoiceAudioPlayer';
 import { ElevenLabsVoiceSelector } from './ElevenLabsVoiceSelector';
 
@@ -88,7 +88,6 @@ interface VideoScriptStageProps {
 }
 
 export const VideoScriptStage = ({ onNext, productInfo, language, market }: VideoScriptStageProps) => {
-  const { aiOperatorEnabled } = useBackendMode();
   
   // Script generation settings
   const [scriptCount, setScriptCount] = useState('5');

@@ -9,8 +9,6 @@ import { GenerationProgress } from "@/components/replicator/GenerationProgress";
 import { EnhancedResultsGallery } from "@/components/replicator/EnhancedResultsGallery";
 import { ProcessingTimeline } from "@/components/replicator/ProcessingTimeline";
 import { PipelineProgressPanel } from "@/components/replicator/PipelineProgressPanel";
-import { BackendModeSelector } from "@/components/BackendModeSelector";
-import { useBackendMode } from "@/hooks/useBackendMode";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { EngineRouter } from "@/lib/video-engines/EngineRouter";
@@ -148,8 +146,6 @@ const CreativeReplicator = () => {
   const [isAdvancedMode, setIsAdvancedMode] = useState(false);
   const [renderingMode, setRenderingMode] = useState<RenderingMode>('auto');
   const [debugInfo, setDebugInfo] = useState<any>(null);
-
-  const { mode: backendMode } = useBackendMode();
 
   // Real-time subscription for video status updates
   useEffect(() => {
@@ -506,8 +502,6 @@ const CreativeReplicator = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <BackendModeSelector compact />
-
             <div className="flex items-center gap-4 bg-muted/50 p-2 rounded-lg border border-border/50">
               <div className="flex items-center gap-2">
                 <Switch

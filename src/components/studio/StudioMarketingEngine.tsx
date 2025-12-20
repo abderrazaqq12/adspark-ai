@@ -28,8 +28,6 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useStudioPrompts } from '@/hooks/useStudioPrompts';
 import { useAIAgent, getModelName } from '@/hooks/useAIAgent';
-import { useBackendMode } from '@/hooks/useBackendMode';
-import { BackendModeSelector } from '@/components/BackendModeSelector';
 import { parseEdgeFunctionError, formatErrorForToast, createDetailedErrorLog } from '@/lib/edgeFunctionErrors';
 import { usePromptProfiles, PromptProfile, PromptType } from '@/hooks/usePromptProfiles';
 import { PromptSettingsModal } from '@/components/studio/PromptSettingsModal';
@@ -96,7 +94,6 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   const { toast } = useToast();
   const { getPrompt, loading: promptsLoading } = useStudioPrompts();
   const { aiAgent, loading: aiAgentLoading } = useAIAgent();
-  const { mode: backendMode, aiOperatorEnabled, getActiveBackend } = useBackendMode();
   const { getActivePrompt, getPromptForExecution, debugMode, setDebugMode } = usePromptProfiles();
   const { saveMarketingAnglesOutput } = usePipelineOutputs();
   const { projectId, createProject } = useProject();
@@ -325,150 +322,78 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         });
       }
 
-      // When AI Operator Agent is enabled, use Supabase function
-      if (aiOperatorEnabled) {
-        console.log('Calling AI Content Factory (AI Operator mode)');
+      // Use AI Operator for content generation
+      console.log('Calling AI Content Factory (AI Operator mode)');
 
-        const { data, error } = await supabase.functions.invoke('ai-content-factory', {
-          body: {
-            productName: productInfo.name,
-            productDescription: productInfo.description,
-            contentTypes: ['angles'],
-            language: audienceTargeting.language.split('-')[0] || 'ar',
-            market: audienceTargeting.targetMarket || 'sa',
-            audience: audienceTargeting.audienceGender === 'both' ? 'both' : audienceTargeting.audienceGender,
-            customPrompt: anglesPrompt,
-            projectId: 'studio-session',
-          }
-        });
-
-        if (error) throw error;
-
-        const anglesData = data?.content?.angles;
-        const angles: GeneratedAngles = {
-          problemsSolved: anglesData?.angles?.slice(0, 3).map((a: any) => a.keyMessage) || [
-            'المشاكل الجلدية المزعجة مثل حب الشباب والبقع الداكنة',
-            'قلة الثقة بالنفس بسبب مظهر البشرة',
-            'صعوبة إيجاد منتج آمن وفعال',
-          ],
-          customerValue: anglesData?.angles?.slice(3, 6).map((a: any) => a.keyMessage) || [
-            'بشرة نضرة ومشرقة خلال أسابيع قليلة',
-            'ثقة عالية بالنفس والمظهر',
-            'مكونات طبيعية آمنة 100%',
-          ],
-          marketingAngles: anglesData?.angles?.slice(6, 10).map((a: any) => `${a.name}: ${a.headline}`) || [
-            'المشكلة → الحل: من بشرة مرهقة إلى إشراقة طبيعية',
-            'الدليل الاجتماعي: آلاف العملاء الراضين',
-            'الندرة والإلحاح: عرض محدود لفترة قصيرة',
-          ],
-        };
-
-        setGeneratedAngles(angles);
-        saveContent({ angles });
-
-        // Save structured output to projects table for Stage 2 consumption
-        let currentProjectId = projectId;
-        if (!currentProjectId) {
-          currentProjectId = await createProject();
+      const { data, error } = await supabase.functions.invoke('ai-content-factory', {
+        body: {
+          productName: productInfo.name,
+          productDescription: productInfo.description,
+          contentTypes: ['angles'],
+          language: audienceTargeting.language.split('-')[0] || 'ar',
+          market: audienceTargeting.targetMarket || 'sa',
+          audience: audienceTargeting.audienceGender === 'both' ? 'both' : audienceTargeting.audienceGender,
+          customPrompt: anglesPrompt,
+          projectId: 'studio-session',
         }
-        if (currentProjectId) {
-          const structuredOutput: MarketingAnglesOutput = {
-            problems: angles.problemsSolved || [],
-            desires: angles.customerValue || [],
-            objections: [],
-            emotional_triggers: angles.marketingAngles?.slice(0, 3) || [],
-            angles: angles.marketingAngles?.map((a, i) => ({
-              angle_type: `angle_${i + 1}`,
-              hook: a.split(':')[0] || a,
-              promise: a.split(':')[1] || '',
-              audience_focus: audienceTargeting.audienceGender
-            })) || [],
-            generated_at: new Date().toISOString(),
-            prompt_id: debugInfo?.id,
-            prompt_hash: debugInfo?.hash
-          };
-          await saveMarketingAnglesOutput(currentProjectId, structuredOutput);
-        }
+      });
 
-        toast({
-          title: "تم إنشاء الزوايا التسويقية",
-          description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل (via AI Operator)",
-        });
+      if (error) throw error;
+
+      const anglesData = data?.content?.angles;
+      const angles: GeneratedAngles = {
+        problemsSolved: anglesData?.angles?.slice(0, 3).map((a: any) => a.keyMessage) || [
+          'المشاكل الجلدية المزعجة مثل حب الشباب والبقع الداكنة',
+          'قلة الثقة بالنفس بسبب مظهر البشرة',
+          'صعوبة إيجاد منتج آمن وفعال',
+        ],
+        customerValue: anglesData?.angles?.slice(3, 6).map((a: any) => a.keyMessage) || [
+          'بشرة نضرة ومشرقة خلال أسابيع قليلة',
+          'ثقة عالية بالنفس والمظهر',
+          'مكونات طبيعية آمنة 100%',
+        ],
+        marketingAngles: anglesData?.angles?.slice(6, 10).map((a: any) => `${a.name}: ${a.headline}`) || [
+          'المشكلة → الحل: من بشرة مرهقة إلى إشراقة طبيعية',
+          'الدليل الاجتماعي: آلاف العملاء الراضين',
+          'الندرة والإلحاح: عرض محدود لفترة قصيرة',
+        ],
+      };
+
+      setGeneratedAngles(angles);
+      saveContent({ angles });
+
+      // Save structured output to projects table for Stage 2 consumption
+      let currentProjectId = projectId;
+      if (!currentProjectId) {
+        currentProjectId = await createProject();
       }
-      // Priority 3: Auto mode - use Lovable AI directly via edge function
-      else {
-        console.log('Calling AI Content Factory (Auto mode - Lovable AI)');
-
-        const { data, error } = await supabase.functions.invoke('ai-content-factory', {
-          body: {
-            productName: productInfo.name,
-            productDescription: productInfo.description,
-            contentTypes: ['angles'],
-            language: audienceTargeting.language.split('-')[0] || 'ar',
-            market: audienceTargeting.targetMarket || 'sa',
-            audience: audienceTargeting.audienceGender === 'both' ? 'both' : audienceTargeting.audienceGender,
-            customPrompt: anglesPrompt,
-            projectId: 'studio-session',
-          }
-        });
-
-        if (error) throw error;
-
-        const anglesData = data?.content?.angles;
-        const angles: GeneratedAngles = {
-          problemsSolved: anglesData?.angles?.slice(0, 3).map((a: any) => a.keyMessage) || [
-            'المشاكل الجلدية المزعجة مثل حب الشباب والبقع الداكنة',
-            'قلة الثقة بالنفس بسبب مظهر البشرة',
-            'صعوبة إيجاد منتج آمن وفعال',
-          ],
-          customerValue: anglesData?.angles?.slice(3, 6).map((a: any) => a.keyMessage) || [
-            'بشرة نضرة ومشرقة خلال أسابيع قليلة',
-            'ثقة عالية بالنفس والمظهر',
-            'مكونات طبيعية آمنة 100%',
-          ],
-          marketingAngles: anglesData?.angles?.slice(6, 10).map((a: any) => `${a.name}: ${a.headline}`) || [
-            'المشكلة → الحل: من بشرة مرهقة إلى إشراقة طبيعية',
-            'الدليل الاجتماعي: آلاف العملاء الراضين',
-            'الندرة والإلحاح: عرض محدود لفترة قصيرة',
-          ],
+      if (currentProjectId) {
+        const structuredOutput: MarketingAnglesOutput = {
+          problems: angles.problemsSolved || [],
+          desires: angles.customerValue || [],
+          objections: [],
+          emotional_triggers: angles.marketingAngles?.slice(0, 3) || [],
+          angles: angles.marketingAngles?.map((a, i) => ({
+            angle_type: `angle_${i + 1}`,
+            hook: a.split(':')[0] || a,
+            promise: a.split(':')[1] || '',
+            audience_focus: audienceTargeting.audienceGender
+          })) || [],
+          generated_at: new Date().toISOString(),
+          prompt_id: debugInfo?.id,
+          prompt_hash: debugInfo?.hash
         };
-
-        setGeneratedAngles(angles);
-        saveContent({ angles });
-
-        // Save structured output to projects table for Stage 2 consumption
-        let currentProjectId = projectId;
-        if (!currentProjectId) {
-          currentProjectId = await createProject();
-        }
-        if (currentProjectId) {
-          const structuredOutput: MarketingAnglesOutput = {
-            problems: angles.problemsSolved || [],
-            desires: angles.customerValue || [],
-            objections: [],
-            emotional_triggers: angles.marketingAngles?.slice(0, 3) || [],
-            angles: angles.marketingAngles?.map((a, i) => ({
-              angle_type: `angle_${i + 1}`,
-              hook: a.split(':')[0] || a,
-              promise: a.split(':')[1] || '',
-              audience_focus: audienceTargeting.audienceGender
-            })) || [],
-            generated_at: new Date().toISOString(),
-            prompt_id: debugInfo?.id,
-            prompt_hash: debugInfo?.hash
-          };
-          await saveMarketingAnglesOutput(currentProjectId, structuredOutput);
-        }
-
-        toast({
-          title: "تم إنشاء الزوايا التسويقية",
-          description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل",
-        });
+        await saveMarketingAnglesOutput(currentProjectId, structuredOutput);
       }
+
+      toast({
+        title: "تم إنشاء الزوايا التسويقية",
+        description: "تم تحليل المنتج وإنشاء زوايا تسويقية عالية التحويل",
+      });
     } catch (error: any) {
       const context = {
         stage: 'marketing_angles',
-        backendMode: getActiveBackend(),
+        backendMode: 'ai-operator',
         productName: productInfo.name,
         market: audienceTargeting.targetMarket,
         language: audienceTargeting.language,
@@ -505,94 +430,50 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         product_description: productInfo.description,
       });
 
-      // AI Operator Agent Mode
-      if (aiOperatorEnabled) {
-        console.log('Calling Script Generation (AI Operator mode)');
+      // Use AI Operator for script generation
+      console.log('Calling Script Generation (AI Operator mode)');
 
-        const { data, error } = await supabase.functions.invoke('ai-content-factory', {
-          body: {
-            productName: productInfo.name,
-            productDescription: productInfo.description,
-            contentTypes: ['scripts'],
-            language: audienceTargeting.language.split('-')[0] || 'ar',
-            market: audienceTargeting.targetMarket || 'sa',
-            audience: audienceTargeting.audienceGender === 'both' ? 'both' : audienceTargeting.audienceGender,
-            customPrompt: scriptsPrompt,
-            scriptsCount: count,
-            projectId: 'studio-session',
-          }
-        });
+      const { data, error } = await supabase.functions.invoke('ai-content-factory', {
+        body: {
+          productName: productInfo.name,
+          productDescription: productInfo.description,
+          contentTypes: ['scripts'],
+          language: audienceTargeting.language.split('-')[0] || 'ar',
+          market: audienceTargeting.targetMarket || 'sa',
+          audience: audienceTargeting.audienceGender === 'both' ? 'both' : audienceTargeting.audienceGender,
+          customPrompt: scriptsPrompt,
+          scriptsCount: count,
+          projectId: 'studio-session',
+        }
+      });
 
-        if (error) throw error;
+      if (error) throw error;
 
-        const scriptsData = data?.content?.scripts?.scripts || [];
-        const generatedScripts: GeneratedScript[] = scriptsData.length > 0
-          ? scriptsData.map((s: any, i: number) => ({
-            id: `script-${i}`,
-            tone: s.style || tones[i] || 'engaging',
-            content: s.script || '',
-            wordCount: s.script?.split(' ').length || 50,
-          }))
-          : tones.slice(0, count).map((tone, i) => ({
-            id: `script-${i}`,
-            tone,
-            content: `سكريبت ${tone} لمنتج ${productInfo.name}...`,
-            wordCount: 50,
-          }));
+      const scriptsData = data?.content?.scripts?.scripts || [];
+      const generatedScripts: GeneratedScript[] = scriptsData.length > 0
+        ? scriptsData.map((s: any, i: number) => ({
+          id: `script-${i}`,
+          tone: s.style || tones[i] || 'engaging',
+          content: s.script || '',
+          wordCount: s.script?.split(' ').length || 50,
+        }))
+        : tones.slice(0, count).map((tone, i) => ({
+          id: `script-${i}`,
+          tone,
+          content: `سكريبت ${tone} لمنتج ${productInfo.name}...`,
+          wordCount: 50,
+        }));
 
-        setScripts(generatedScripts);
-        saveContent({ scripts: generatedScripts });
-        toast({
-          title: "تم إنشاء السكريبتات",
-          description: `تم إنشاء ${generatedScripts.length} نسخة من السكريبت (via AI Operator)`,
-        });
-      }
-      // Priority 3: Auto mode - use Lovable AI directly
-      else {
-        console.log('Calling Script Generation (Auto mode - Lovable AI)');
-
-        const { data, error } = await supabase.functions.invoke('ai-content-factory', {
-          body: {
-            productName: productInfo.name,
-            productDescription: productInfo.description,
-            contentTypes: ['scripts'],
-            language: audienceTargeting.language.split('-')[0] || 'ar',
-            market: audienceTargeting.targetMarket || 'sa',
-            audience: audienceTargeting.audienceGender === 'both' ? 'both' : audienceTargeting.audienceGender,
-            customPrompt: scriptsPrompt,
-            scriptsCount: count,
-            projectId: 'studio-session',
-          }
-        });
-
-        if (error) throw error;
-
-        const scriptsData = data?.content?.scripts?.scripts || [];
-        const generatedScripts: GeneratedScript[] = scriptsData.length > 0
-          ? scriptsData.map((s: any, i: number) => ({
-            id: `script-${i}`,
-            tone: s.style || tones[i] || 'engaging',
-            content: s.script || '',
-            wordCount: s.script?.split(' ').length || 50,
-          }))
-          : tones.slice(0, count).map((tone, i) => ({
-            id: `script-${i}`,
-            tone,
-            content: `سكريبت ${tone} لمنتج ${productInfo.name}...`,
-            wordCount: 50,
-          }));
-
-        setScripts(generatedScripts);
-        saveContent({ scripts: generatedScripts });
-        toast({
-          title: "تم إنشاء السكريبتات",
-          description: `تم إنشاء ${generatedScripts.length} نسخة من السكريبت`,
-        });
-      }
+      setScripts(generatedScripts);
+      saveContent({ scripts: generatedScripts });
+      toast({
+        title: "تم إنشاء السكريبتات",
+        description: `تم إنشاء ${generatedScripts.length} نسخة من السكريبت`,
+      });
     } catch (error: any) {
       const context = {
         stage: 'scripts',
-        backendMode: getActiveBackend(),
+        backendMode: 'ai-operator',
         productName: productInfo.name,
         market: audienceTargeting.targetMarket,
         language: audienceTargeting.language,
@@ -696,7 +577,7 @@ ${landingData.finalCta?.urgencyText || ''}`;
     } catch (error: any) {
       const context = {
         stage: 'landing_content',
-        backendMode: getActiveBackend(),
+        backendMode: 'ai-operator',
         productName: productInfo.name,
         market: audienceTargeting.targetMarket,
         language: audienceTargeting.language,
@@ -778,7 +659,6 @@ ${landingData.finalCta?.urgencyText || ''}`;
           <p className="text-muted-foreground text-sm mt-1">Generate marketing angles, scripts & landing page content</p>
         </div>
         <div className="flex items-center gap-3">
-          <BackendModeSelector compact />
           <Badge variant="outline" className="text-primary border-primary">Step 2</Badge>
         </div>
       </div>

@@ -65,8 +65,6 @@ import { useRealTimeCost } from "@/hooks/useRealTimeCost";
 import { UnifiedSceneBuilder, UnifiedScene } from "@/components/video/UnifiedSceneBuilder";
 import { AutoAdFactory } from "@/components/video/AutoAdFactory";
 import { SmartSceneBuilder } from "@/components/video/SmartSceneBuilder";
-import { BackendModeSelector, BackendModeIndicator } from "@/components/BackendModeSelector";
-import { useBackendMode } from "@/hooks/useBackendMode";
 import { UnifiedVideoCreation } from "@/components/video/UnifiedVideoCreation";
 
 // ElevenLabs voices - expanded list with categories
@@ -272,9 +270,6 @@ export default function CreateVideo() {
 
   // Backend mode state for webhook indicators
   const [webhookConfig, setWebhookConfig] = useState<Record<string, { enabled: boolean; webhook_url: string }>>({});
-
-  // Backend mode hook - replaces individual state for n8n and AI operator
-  const { mode: backendMode, setMode: setBackendMode, aiOperatorEnabled, isLoading: isBackendModeLoading } = useBackendMode();
 
   // Smart defaults and cost tracking hooks
   const { defaults, recordChoice, getDefaultForContext, suggestEngine } = useSmartDefaults(projectId || undefined);
@@ -894,11 +889,6 @@ export default function CreateVideo() {
             </AlertDialog>
           </div>
 
-          {/* Backend Mode Selector */}
-          <div className="mt-4 mb-2">
-            <BackendModeSelector compact className="w-full justify-between" />
-          </div>
-
           {/* Progress Indicator */}
           <div className="mt-3 space-y-1">
             <div className="flex items-center justify-between text-xs">
@@ -942,9 +932,7 @@ export default function CreateVideo() {
                   <div className="flex flex-col flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-sm font-medium">{stage.name}</span>
-                      {aiOperatorEnabled && (
-                        <div className="w-2 h-2 rounded-full bg-primary" title="AI Operator active" />
-                      )}
+                      <div className="w-2 h-2 rounded-full bg-primary" title="AI Operator active" />
                     </div>
                     <span className={`text-[10px] ${stage.required ? 'text-destructive/80' : 'text-muted-foreground'}`}>
                       {stage.required ? '● Required' : '○ Optional'}
@@ -974,8 +962,7 @@ export default function CreateVideo() {
 
       {/* Main Content */}
       <div className="flex-1 p-8 space-y-8 overflow-auto">
-        <div className="flex items-center justify-between">
-          <BackendModeSelector showCard className="w-auto" />
+        <div className="flex items-center justify-end">
           <PipelineStatusIndicator
             pipelineStatus={{
               product_info: currentStage > 0 ? 'completed' : expandedStage === 0 ? 'in_progress' : 'pending',

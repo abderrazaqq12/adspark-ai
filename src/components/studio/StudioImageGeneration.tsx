@@ -22,8 +22,6 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { ImageGenerationProgress } from '@/components/ImageGenerationProgress';
-import { useBackendMode } from '@/hooks/useBackendMode';
-import { BackendModeSelector } from '@/components/BackendModeSelector';
 import { useProject } from '@/contexts/ProjectContext';
 import { parseEdgeFunctionError, formatErrorForToast, createDetailedErrorLog } from '@/lib/edgeFunctionErrors';
 
@@ -75,9 +73,7 @@ const ageOptions = [
 
 export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: StudioImageGenerationProps) => {
   const { toast } = useToast();
-  const { mode: backendMode, aiOperatorEnabled, getActiveBackend } = useBackendMode();
   const { settings, setSettings, saveProject } = useProject();
-  
   const [isGenerating, setIsGenerating] = useState(false);
   const [imageEngine, setImageEngine] = useState('nano-banana');
   const [imageCount, setImageCount] = useState('3');
@@ -302,32 +298,30 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
         try {
           let imageUrl = '';
           
-          // Use Supabase function when AI Operator is enabled
-          if (aiOperatorEnabled) {
-            console.log('Calling Image Generation (AI Operator mode)');
-            // Determine which reference image to use (uploaded takes priority)
-            const effectiveReferenceUrl = uploadedReferenceImage || referenceImageUrl || undefined;
-            
-            const response = await supabase.functions.invoke('ai-image-generator', {
-              body: {
-                prompt: img.prompt,
-                imageType: img.type,
-                resolution,
-                engine: imageEngine,
-                productName: productInfo.name,
-                productDescription: productInfo.description,
-                projectId: projectId,
-                referenceImageUrl: effectiveReferenceUrl,
-                market: selectedMarket,
-                audience: selectedGender === 'both' ? 'both' : `${selectedGender}_${selectedAge}`,
-              }
-            });
-
-            imageUrl = response.data?.imageUrl || response.data?.images?.[0]?.url || response.data?.url || '';
-
-            if (response.error) {
-              throw new Error(response.error.message || 'Failed to generate');
+          // Use AI Operator mode for image generation
+          console.log('Calling Image Generation (AI Operator mode)');
+          // Determine which reference image to use (uploaded takes priority)
+          const effectiveReferenceUrl = uploadedReferenceImage || referenceImageUrl || undefined;
+          
+          const response = await supabase.functions.invoke('ai-image-generator', {
+            body: {
+              prompt: img.prompt,
+              imageType: img.type,
+              resolution,
+              engine: imageEngine,
+              productName: productInfo.name,
+              productDescription: productInfo.description,
+              projectId: projectId,
+              referenceImageUrl: effectiveReferenceUrl,
+              market: selectedMarket,
+              audience: selectedGender === 'both' ? 'both' : `${selectedGender}_${selectedAge}`,
             }
+          });
+
+          imageUrl = response.data?.imageUrl || response.data?.images?.[0]?.url || response.data?.url || '';
+
+          if (response.error) {
+            throw new Error(response.error.message || 'Failed to generate');
           }
 
           if (!imageUrl) {
@@ -479,7 +473,6 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
           <p className="text-muted-foreground text-sm mt-1">Generate product images, mockups, and thumbnails</p>
         </div>
         <div className="flex items-center gap-2">
-          <BackendModeSelector compact />
           <Badge variant="outline" className="text-primary border-primary">Step 3</Badge>
         </div>
       </div>
