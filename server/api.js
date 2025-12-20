@@ -1082,7 +1082,8 @@ app.post('/api/execute-plan', handleExecutePlan);
 // Handles both /api/jobs and /render/jobs
 // ============================================
 
-app.post(['/api/jobs', '/render/jobs'], (req, res) => {
+const unifiedJobHandler = (req, res) => {
+  console.log(`[Adapter] Incoming Job Request: ${req.path}`);
   const { variations, project_id } = req.body;
 
   // 1. Check if it's a "Plan" (Unified Engine)
@@ -1113,7 +1114,11 @@ app.post(['/api/jobs', '/render/jobs'], (req, res) => {
   }
 
   return jsonError(res, 400, 'INVALID_PAYLOAD', 'Unsupported job structure. Must contain "variations" with "plan" or "source_url".');
-});
+};
+
+app.post('/api/jobs', unifiedJobHandler);
+app.post('/render/jobs', unifiedJobHandler);
+app.post('/render/jobs/', unifiedJobHandler);
 
 // Alias for Health and Status
 app.get(['/render/health', '/api/render/health'], (req, res) => {
