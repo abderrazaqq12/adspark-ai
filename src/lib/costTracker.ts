@@ -15,7 +15,6 @@ export const COST_ESTIMATES: Record<string, number> = {
   'openai/gpt-5': 0.01,
   'openai/gpt-5-mini': 0.002,
   'openai/gpt-5-nano': 0.0008,
-  'lovable-ai': 0.001,
   'gemini': 0.001,
   'chatgpt': 0.002,
   
