@@ -274,7 +274,7 @@ export default function CreateVideo() {
   const [webhookConfig, setWebhookConfig] = useState<Record<string, { enabled: boolean; webhook_url: string }>>({});
 
   // Backend mode hook - replaces individual state for n8n and AI operator
-  const { mode: backendMode, setMode: setBackendMode, n8nEnabled: useN8nBackend, aiOperatorEnabled, isLoading: isBackendModeLoading } = useBackendMode();
+  const { mode: backendMode, setMode: setBackendMode, aiOperatorEnabled, isLoading: isBackendModeLoading } = useBackendMode();
 
   // Smart defaults and cost tracking hooks
   const { defaults, recordChoice, getDefaultForContext, suggestEngine } = useSmartDefaults(projectId || undefined);
@@ -942,10 +942,7 @@ export default function CreateVideo() {
                   <div className="flex flex-col flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-sm font-medium">{stage.name}</span>
-                      {useN8nBackend && webhookConfig[stage.key]?.enabled && webhookConfig[stage.key]?.webhook_url && (
-                        <div className="w-2 h-2 rounded-full bg-orange-500" title="Webhook configured" />
-                      )}
-                      {aiOperatorEnabled && !useN8nBackend && (
+                      {aiOperatorEnabled && (
                         <div className="w-2 h-2 rounded-full bg-primary" title="AI Operator active" />
                       )}
                     </div>

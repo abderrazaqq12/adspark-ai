@@ -75,7 +75,7 @@ const ageOptions = [
 
 export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: StudioImageGenerationProps) => {
   const { toast } = useToast();
-  const { mode: backendMode, n8nEnabled: useN8nBackend, aiOperatorEnabled, getActiveBackend } = useBackendMode();
+  const { mode: backendMode, aiOperatorEnabled, getActiveBackend } = useBackendMode();
   const { settings, setSettings, saveProject } = useProject();
   
   const [isGenerating, setIsGenerating] = useState(false);
@@ -320,46 +320,8 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
         try {
           let imageUrl = '';
           
-          // Priority 1: Use n8n webhook if Backend Mode is enabled
-          if (useN8nBackend) {
-            if (!n8nWebhookUrl) {
-              throw new Error('n8n Backend Mode is enabled but no webhook URL configured for Image Generation. Configure in Settings.');
-            }
-            
-            console.log('Calling Image Generation webhook via proxy (n8n mode):', n8nWebhookUrl);
-            
-            // Use edge function proxy to avoid CORS issues
-            const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('n8n-proxy', {
-              body: {
-                webhookUrl: n8nWebhookUrl,
-                payload: {
-                  action: 'generate_image',
-                  prompt: img.prompt,
-                  imageType: img.type,
-                  resolution,
-                  engine: imageEngine,
-                  productName: productInfo.name,
-                  productDescription: productInfo.description,
-                  projectId: projectId,
-                  market: selectedMarket,
-                  audience: selectedGender === 'both' ? 'both' : `${selectedGender}_${selectedAge}`,
-                }
-              }
-            });
-
-            if (proxyError) {
-              throw new Error(proxyError.message || 'Webhook proxy error');
-            }
-
-            if (!proxyResponse?.success) {
-              throw new Error(proxyResponse?.error || 'Webhook call failed');
-            }
-
-            const webhookData = proxyResponse.data;
-            imageUrl = webhookData?.imageUrl || webhookData?.url || webhookData?.images?.[0]?.url || '';
-          }
-          // Priority 2: Use Supabase function when AI Operator is enabled
-          else if (aiOperatorEnabled) {
+          // Use Supabase function when AI Operator is enabled
+          if (aiOperatorEnabled) {
             console.log('Calling Image Generation (AI Operator mode)');
             // Determine which reference image to use (uploaded takes priority)
             const effectiveReferenceUrl = uploadedReferenceImage || referenceImageUrl || undefined;
@@ -420,7 +382,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
     } catch (error: any) {
       const context = {
         stage: 'image_generation',
-        backendMode: useN8nBackend ? 'n8n' : 'auto',
+        backendMode: 'auto',
         productName: productInfo.name,
         engine: imageEngine,
         imageCount,
@@ -536,12 +498,6 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
         </div>
         <div className="flex items-center gap-2">
           <BackendModeSelector compact />
-          {useN8nBackend && n8nWebhookUrl && (
-            <div className="flex items-center gap-1 text-xs text-green-500">
-              <Webhook className="w-3 h-3" />
-              <span>Webhook</span>
-            </div>
-          )}
           <Badge variant="outline" className="text-primary border-primary">Step 3</Badge>
         </div>
       </div>
