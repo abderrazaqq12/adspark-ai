@@ -5,6 +5,7 @@
  * All endpoints return JSON only (never HTML).
  * Phase-2 ready for Redis/BullMQ migration.
  * Phase-3: Automatic Source Resolution (Downloads Remote URLs)
+ * Phase-4: Cost Tracking & Analytics Integration
  * 
  * Endpoints:
  *   GET  /api/health      - Health check with FFmpeg status
@@ -23,6 +24,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
+import { trackCost } from './supabase.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
