@@ -749,11 +749,27 @@ export default function Settings() {
 
   return (
     <div className="container mx-auto p-8 space-y-8 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-4xl font-bold text-foreground mb-2">Settings</h1>
-        <p className="text-muted-foreground">
-          Manage API keys, prompt templates, and integrations
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-4xl font-bold text-foreground mb-2">Settings</h1>
+          <p className="text-muted-foreground">
+            Manage API keys, prompt templates, and integrations
+          </p>
+        </div>
+        
+        {/* AI Agent Status Indicator */}
+        <Card className="bg-green-500/10 border-green-500/30 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Bot className="w-5 h-5 text-green-500" />
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-green-500">AI Agent Active</p>
+              <p className="text-xs text-muted-foreground">All operations use AI Operator</p>
+            </div>
+          </div>
+        </Card>
       </div>
 
       <Tabs defaultValue="deployment" className="space-y-6">
