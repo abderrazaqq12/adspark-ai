@@ -963,6 +963,64 @@ app.post('/api/upload', (req, res) => {
 // POST /api/execute
 // ============================================
 
+const unifiedJobHandler = (req, res) => {
+  console.log(`[Adapter] Incoming Job Request: ${req.path}`);
+  console.log('[Adapter] Payload:', JSON.stringify(req.body, null, 2));
+
+  const { variations, project_id } = req.body;
+
+  // 1. Check if it's a "Plan" (Unified Engine)
+  if (variations && variations[0] && variations[0].data && variations[0].data.plan) {
+    const plan = variations[0].data.plan;
+    console.log('[Adapter] Mapping Variations-style Plan to Execute-Plan');
+
+    // Robust Source Resolution for Plan
+    let srcUrl = plan.timeline?.[0]?.asset_url;
+    let srcPath = variations[0].data.sourcePath;
+
+    if (!srcUrl && typeof srcPath === 'string' && (srcPath.startsWith('http') || srcPath.startsWith('https'))) {
+      console.log('[Adapter] Moving URL from sourcePath to sourceVideoUrl (Plan Mode)');
+      srcUrl = srcPath;
+      srcPath = null;
+    }
+
+    req.body = {
+      plan,
+      projectId: project_id || 'unified_plan',
+      sourceVideoUrl: srcUrl,
+      sourcePath: srcPath,
+      outputName: variations[0].id
+    };
+    return handleExecutePlan(req, res);
+  }
+
+  // 2. Fallback: Check if it's a simple render request
+  if (variations && variations[0] && variations[0].data && (variations[0].data.source_url || variations[0].data.sourcePath)) {
+    console.log('[Adapter] Mapping Variations-style Job to Execute');
+    const v = variations[0];
+
+    // Fix: Handle URLs in sourcePath (common in some frontend paths)
+    let pPath = v.data.sourcePath;
+    let pUrl = v.data.source_url;
+
+    if (typeof pPath === 'string' && (pPath.startsWith('http://') || pPath.startsWith('https://'))) {
+      console.log('[Adapter] Moving URL from sourcePath to inputFileUrl');
+      pUrl = pPath;
+      pPath = null;
+    }
+
+    req.body = {
+      inputFileUrl: pUrl,
+      sourcePath: pPath,
+      projectId: project_id,
+      outputName: v.id
+    };
+    return handleExecute(req, res);
+  }
+
+  return jsonError(res, 400, 'INVALID_PAYLOAD', 'Unsupported job structure. Must contain "variations" with "plan" or "source_url".');
+};
+
 // Internal Handler for Execute (Modularized)
 function handleExecute(req, res) {
   if (!FFMPEG_AVAILABLE) {
@@ -1082,52 +1140,7 @@ app.post('/api/execute-plan', handleExecutePlan);
 // Handles both /api/jobs and /render/jobs
 // ============================================
 
-const unifiedJobHandler = (req, res) => {
-  console.log(`[Adapter] Incoming Job Request: ${req.path}`);
-  console.log('[Adapter] Payload:', JSON.stringify(req.body, null, 2));
-
-  const { variations, project_id } = req.body;
-
-  // 1. Check if it's a "Plan" (Unified Engine)
-  if (variations && variations[0] && variations[0].data && variations[0].data.plan) {
-    const plan = variations[0].data.plan;
-    console.log('[Adapter] Mapping Variations-style Plan to Execute-Plan');
-
-    req.body = {
-      plan,
-      projectId: project_id || 'unified_plan',
-      sourceVideoUrl: plan.timeline?.[0]?.asset_url,
-      outputName: variations[0].id
-    };
-    return handleExecutePlan(req, res);
-  }
-
-  // 2. Fallback: Check if it's a simple render request
-  if (variations && variations[0] && variations[0].data && (variations[0].data.source_url || variations[0].data.sourcePath)) {
-    console.log('[Adapter] Mapping Variations-style Job to Execute');
-    const v = variations[0];
-
-    // Fix: Handle URLs in sourcePath (common in some frontend paths)
-    let pPath = v.data.sourcePath;
-    let pUrl = v.data.source_url;
-
-    if (typeof pPath === 'string' && (pPath.startsWith('http://') || pPath.startsWith('https://'))) {
-      console.log('[Adapter] Moving URL from sourcePath to inputFileUrl');
-      pUrl = pPath;
-      pPath = null;
-    }
-
-    req.body = {
-      inputFileUrl: pUrl,
-      sourcePath: pPath,
-      projectId: project_id,
-      outputName: v.id
-    };
-    return handleExecute(req, res);
-  }
-
-  return jsonError(res, 400, 'INVALID_PAYLOAD', 'Unsupported job structure. Must contain "variations" with "plan" or "source_url".');
-};
+// [Reference to unifiedJobHandler which is now defined above]
 
 app.post('/api/jobs', unifiedJobHandler);
 app.post('/render/jobs', unifiedJobHandler);
