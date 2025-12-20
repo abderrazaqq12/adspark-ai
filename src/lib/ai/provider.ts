@@ -34,26 +34,22 @@ export interface AIProviderAdapter {
   isAvailable(): Promise<boolean>;
 }
 
-// Model mappings for different providers
+// Model mappings for different providers - Gemini is default, OpenAI is backup
 const MODEL_MAPPINGS: Record<AIProvider, Record<string, string>> = {
-  lovable: {
-    default: 'google/gemini-2.5-flash',
-    fast: 'google/gemini-2.5-flash-lite',
-    smart: 'google/gemini-2.5-pro',
-    'gpt-5': 'openai/gpt-5',
-    'gpt-5-mini': 'openai/gpt-5-mini',
+  gemini: {
+    default: 'gemini-2.0-flash',
+    fast: 'gemini-2.0-flash',
+    smart: 'gemini-2.5-pro-preview-06-05',
   },
   openai: {
     default: 'gpt-4o-mini',
     fast: 'gpt-4o-mini',
     smart: 'gpt-4o',
-    'gpt-5': 'gpt-4o',
-    'gpt-5-mini': 'gpt-4o-mini',
   },
-  gemini: {
-    default: 'gemini-1.5-flash',
-    fast: 'gemini-1.5-flash',
-    smart: 'gemini-1.5-pro',
+  lovable: {
+    default: 'gemini-2.0-flash',
+    fast: 'gemini-2.0-flash',
+    smart: 'gemini-2.5-pro-preview-06-05',
   },
   ollama: {
     default: 'llama3.2',

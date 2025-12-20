@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI, isAIAvailable } from "../_shared/ai-gateway.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -58,10 +59,9 @@ serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
+    if (!isAIAvailable()) {
       return new Response(
-        JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }),
+        JSON.stringify({ error: 'No AI provider configured. Please add Gemini or OpenAI API key.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -140,55 +140,15 @@ You must analyze the video content and return this exact JSON structure:
 
 Return ONLY the JSON, no markdown, no explanation.`;
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.3, // Lower temperature for more consistent output
-      }),
+    const aiResponse = await callAI({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.3,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[creative-scale-analyze] AI error:', response.status, errorText);
-      
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: 'Rate limit exceeded, please try again later' }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: 'Payment required. Please add credits to continue.' }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      return new Response(
-        JSON.stringify({ error: 'AI analysis failed' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const aiResponse = await response.json();
-    const content = aiResponse.choices?.[0]?.message?.content;
-
-    if (!content) {
-      return new Response(
-        JSON.stringify({ error: 'No content in AI response' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const content = aiResponse.content;
 
     // Parse JSON from response (handle markdown code blocks)
     let analysis;
@@ -208,11 +168,11 @@ Return ONLY the JSON, no markdown, no explanation.`;
       );
     }
 
-    console.log(`[creative-scale-analyze] Success: ${analysis.segments?.length || 0} segments identified`);
+    console.log(`[creative-scale-analyze] Success: ${analysis.segments?.length || 0} segments identified (provider: ${aiResponse.provider})`);
 
     // Track cost for successful analysis
     if (userId) {
-      await trackCost(userId, 'creative_scale_analyze', 'google/gemini-2.5-flash', 'video_analysis', 0.002);
+      await trackCost(userId, 'creative_scale_analyze', aiResponse.provider, 'video_analysis', 0.002);
     }
 
     return new Response(
@@ -222,6 +182,7 @@ Return ONLY the JSON, no markdown, no explanation.`;
         meta: {
           video_id,
           segments_count: analysis.segments?.length || 0,
+          provider: aiResponse.provider,
           processed_at: new Date().toISOString()
         }
       }),
