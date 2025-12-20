@@ -21,6 +21,7 @@ import { StudioDataSettings } from "@/components/studio/StudioDataSettings";
 import StudioPrompts from "@/components/StudioPrompts";
 import DeploymentSettings from "@/components/DeploymentSettings";
 import { useSecureApiKeys } from "@/hooks/useSecureApiKeys";
+import { BackendHealthDashboard } from "@/components/BackendHealthDashboard";
 
 
 interface PromptTemplate {
@@ -786,6 +787,7 @@ export default function Settings() {
 
         {/* Deployment Tab */}
         <TabsContent value="deployment" className="space-y-6">
+          <BackendHealthDashboard />
           <DeploymentSettings />
         </TabsContent>
 
