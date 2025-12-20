@@ -117,11 +117,24 @@ serve(async (req) => {
       });
     }
 
-    // POST: Validate analysis data
+    // POST: Either ping check or validate analysis data
     if (req.method === 'POST') {
       const body = await req.json();
       
-      // Support both direct data and wrapped in 'analysis' key
+      // Simple ping check - just confirm the function is running
+      if (body.ping === true && Object.keys(body).length === 1) {
+        return new Response(JSON.stringify({
+          success: true,
+          status: 'healthy',
+          service: 'renderflow-health',
+          timestamp: new Date().toISOString(),
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      // Full validation of analysis data
       const analysisData: AnalysisData = body.analysis || body;
       
       console.log('[RenderFlow-Health] Validating analysis data:', JSON.stringify(analysisData, null, 2));
