@@ -1,26 +1,21 @@
-import Anthropic from '@anthropic-ai/sdk';
-import express from 'express';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { randomUUID } from 'crypto';
-import fs from 'fs';
-import path from 'path';
-import { spawn } from 'child_process';
 import { createClient } from '@supabase/supabase-js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Supab ase client for cost tracking
+// Supabase client for cost tracking
 let supabase = null;
-if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    supabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
-    console.log('[Supabase] Connected for analytics tracking');
+
+// Check for VITE_ prefixed or standard env vars (Docker passes standard, Vite passes VITE_)
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+
+if (supabaseUrl && supabaseKey) {
+    try {
+        supabase = createClient(supabaseUrl, supabaseKey);
+        console.log('[Supabase] Connected for analytics tracking');
+    } catch (e) {
+        console.error('[Supabase] Failed to initialize:', e.message);
+    }
 } else {
-    console.warn('[Supabase] Not configured - analytics will not be tracked');
+    console.warn('[Supabase] Not configured - analytics will not be tracked (Missing URL or Service Role Key)');
 }
 
 // Cost tracking helper
