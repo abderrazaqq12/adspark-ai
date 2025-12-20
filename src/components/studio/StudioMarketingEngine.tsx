@@ -110,8 +110,6 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   const [landingContent, setLandingContent] = useState<string>('');
   const [scriptsCount, setScriptsCount] = useState('10');
   const [productInfo, setProductInfo] = useState({ name: '', description: '', url: '' });
-  const [webhookResponse, setWebhookResponse] = useState<any>(null);
-  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
   const [audienceTargeting, setAudienceTargeting] = useState<AudienceTargeting>({
     targetMarket: 'gcc',
     language: 'ar-sa',
@@ -248,13 +246,11 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
 
       const { data: settings } = await supabase
         .from('user_settings')
-        .select('preferences, use_n8n_backend')
+        .select('preferences')
         .eq('user_id', user.id)
         .maybeSingle();
 
       if (settings) {
-        // Backend mode is now managed by useBackendMode hook
-
         const prefs = settings.preferences as Record<string, any>;
         if (prefs) {
           setProductInfo({
@@ -269,18 +265,6 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
             audienceAge: prefs.studio_audience_age || '25-34',
             audienceGender: prefs.studio_audience_gender || 'both',
           });
-          // Load webhook URL - prefer per-stage, fallback to global
-          const stageWebhooks = prefs.stage_webhooks || {};
-          const productContentWebhook = stageWebhooks.product_content;
-          const globalWebhookUrl = prefs.n8n_global_webhook_url || prefs.global_webhook_url || '';
-
-          if (productContentWebhook?.webhook_url) {
-            setN8nWebhookUrl(productContentWebhook.webhook_url);
-          } else if (globalWebhookUrl) {
-            // Fallback to global webhook if per-stage is not configured
-            setN8nWebhookUrl(globalWebhookUrl);
-            console.log('Using global webhook URL as fallback:', globalWebhookUrl);
-          }
           // Load saved content
           if (prefs.studio_marketing_angles) {
             setGeneratedAngles(prefs.studio_marketing_angles);
@@ -301,7 +285,6 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   const generateMarketingAngles = async () => {
     // CRITICAL: Pull prompt from database - NO hardcoded fallbacks
     setIsGenerating(true);
-    setWebhookResponse(null);
     setLastUsedPromptDebug(null);
 
     try {
@@ -810,19 +793,6 @@ ${landingData.finalCta?.urgencyText || ''}`;
           </div>
         </div>
       </Card>
-
-      {/* Webhook Response Preview */}
-      {webhookResponse && (
-        <Card className="p-4 bg-card/50 border-border">
-          <div className="flex items-center gap-2 mb-3">
-            <Webhook className="w-4 h-4 text-primary" />
-            <h4 className="font-medium text-sm text-foreground">Webhook Response</h4>
-          </div>
-          <pre className="text-xs bg-background p-3 rounded-md overflow-auto max-h-48 text-muted-foreground">
-            {JSON.stringify(webhookResponse, null, 2)}
-          </pre>
-        </Card>
-      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2 bg-muted">

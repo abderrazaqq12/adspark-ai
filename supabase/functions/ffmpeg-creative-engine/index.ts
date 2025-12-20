@@ -30,8 +30,6 @@ interface AssemblyConfig {
   transitions?: string[];
   ratios?: string[];
   voiceSettings?: { language: string; tone: string };
-  useN8nWebhook?: boolean;
-  n8nWebhookUrl?: string;
   hookStyle?: string;
   ratio?: string;
 }
@@ -653,27 +651,6 @@ async function generateRealVideoWithFFmpeg(
   } catch {}
 
   const processingTime = `${((Date.now() - startTime) / 1000).toFixed(1)}s`;
-
-  // Send to n8n webhook if configured
-  if (config.useN8nWebhook && config.n8nWebhookUrl) {
-    try {
-      await fetch(config.n8nWebhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event: 'ffmpeg_processing_complete',
-          userId,
-          results,
-          processingTime,
-          ffmpegAvailable,
-          timestamp: new Date().toISOString(),
-        }),
-      });
-      console.log('[ffmpeg] Sent results to n8n webhook');
-    } catch (webhookError) {
-      console.error('[ffmpeg] Webhook error:', webhookError);
-    }
-  }
 
   return {
     success: true,

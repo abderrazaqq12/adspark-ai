@@ -49,7 +49,6 @@ interface APIKeyStatus {
 
 interface OperatorStatus {
   operator_enabled: boolean;
-  n8n_backend_enabled: boolean;
   api_keys: APIKeyStatus;
 }
 
@@ -92,7 +91,6 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
       if (!error && data) {
         setOperatorStatus({
           operator_enabled: data.settings?.ai_operator_enabled || false,
-          n8n_backend_enabled: data.settings?.n8n_backend_enabled || false,
           api_keys: {
             active_providers: data.api_keys?.active_providers || [],
             count: data.api_keys?.active_providers?.length || 0
@@ -357,12 +355,6 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
                       <Key className="w-3 h-3 mr-1" />
                       {operatorStatus.api_keys.count} API keys
                     </Badge>
-                    {operatorStatus.n8n_backend_enabled && (
-                      <Badge variant="outline" className="border-orange-500/30 text-orange-500">
-                        <Webhook className="w-3 h-3 mr-1" />
-                        n8n
-                      </Badge>
-                    )}
                   </>
                 )}
               </div>

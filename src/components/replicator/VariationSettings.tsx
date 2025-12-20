@@ -701,20 +701,6 @@ export const VariationSettings = ({
                 </div>
               )}
 
-              {/* n8n Webhook Toggle */}
-              <div className="flex items-center justify-between pt-4 border-t">
-                <div>
-                  <Label>Use n8n Webhook</Label>
-                  <p className="text-xs text-muted-foreground">Generate via external workflow</p>
-                </div>
-                <Switch
-                  checked={config.useN8nWebhook}
-                  onCheckedChange={(checked) =>
-                    setConfig((prev) => ({ ...prev, useN8nWebhook: checked }))
-                  }
-                />
-              </div>
-
               {/* Randomize Engines */}
               <div className="flex items-center justify-between">
                 <div>
