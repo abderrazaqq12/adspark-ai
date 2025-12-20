@@ -148,22 +148,52 @@ Return ONLY the JSON, no markdown, no explanation.`;
       temperature: 0.3,
     });
 
-    const content = aiResponse.content;
+    const content = aiResponse.content || '';
+    
+    if (!content) {
+      console.error('[creative-scale-analyze] Empty response from AI');
+      return new Response(
+        JSON.stringify({ error: 'AI returned empty response' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
-    // Parse JSON from response (handle markdown code blocks)
+    // Parse JSON from response (handle markdown code blocks safely)
     let analysis;
     try {
-      let jsonStr = content;
-      if (content.includes('```json')) {
-        jsonStr = content.split('```json')[1].split('```')[0].trim();
-      } else if (content.includes('```')) {
-        jsonStr = content.split('```')[1].split('```')[0].trim();
+      let jsonStr = content.trim();
+      
+      // Handle ```json blocks
+      if (jsonStr.includes('```json')) {
+        const parts = jsonStr.split('```json');
+        if (parts.length > 1 && parts[1]) {
+          const innerParts = parts[1].split('```');
+          jsonStr = innerParts[0]?.trim() || jsonStr;
+        }
+      } 
+      // Handle plain ``` blocks
+      else if (jsonStr.includes('```')) {
+        const parts = jsonStr.split('```');
+        if (parts.length > 1 && parts[1]) {
+          jsonStr = parts[1].trim();
+        }
       }
+      
+      // Try to find JSON object if still wrapped
+      if (!jsonStr.startsWith('{')) {
+        const jsonStart = jsonStr.indexOf('{');
+        const jsonEnd = jsonStr.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+          jsonStr = jsonStr.substring(jsonStart, jsonEnd + 1);
+        }
+      }
+      
       analysis = JSON.parse(jsonStr);
     } catch (parseErr) {
       console.error('[creative-scale-analyze] JSON parse error:', parseErr);
+      console.error('[creative-scale-analyze] Raw content:', content.substring(0, 500));
       return new Response(
-        JSON.stringify({ error: 'Failed to parse AI response as JSON', raw: content }),
+        JSON.stringify({ error: 'Failed to parse AI response as JSON', raw: content.substring(0, 500) }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
