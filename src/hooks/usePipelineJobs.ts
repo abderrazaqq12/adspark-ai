@@ -10,7 +10,7 @@ interface PipelineJob {
   input_data: any;
   output_data: any;
   error_message?: string | null;
-  n8n_execution_id?: string | null;
+  
   estimated_cost: number;
   actual_cost: number;
   started_at?: string | null;
@@ -67,23 +67,12 @@ export function usePipelineJobs(projectId?: string): UsePipelineJobsReturn {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      // Get user settings for n8n preference
-      const { data: settings } = await supabase
-        .from('user_settings')
-        .select('use_n8n_backend, preferences')
-        .eq('user_id', session.user.id)
-        .single();
-
-      const prefs = settings?.preferences as Record<string, any> | null;
-
       const response = await supabase.functions.invoke('pipeline-stage', {
         body: {
           project_id: projectId,
           stage,
           stage_name: stageName,
           input_data: inputData,
-          use_n8n: settings?.use_n8n_backend,
-          n8n_webhook_url: prefs?.n8n_webhook_url,
         },
       });
 

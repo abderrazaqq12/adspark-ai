@@ -100,8 +100,6 @@ export function UnifiedSceneBuilder({
   // Engine selection state
   const [selectedTier, setSelectedTier] = useState<'free' | 'low' | 'medium' | 'premium' | 'all'>('free');
   const [selectedEngines, setSelectedEngines] = useState<string[]>(['nano-banana']);
-  const [useN8nWebhook, setUseN8nWebhook] = useState(false);
-  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
   const [randomizeEngines, setRandomizeEngines] = useState(true);
   
   // Local assets
@@ -113,26 +111,7 @@ export function UnifiedSceneBuilder({
   }, []);
 
   const loadSettings = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: settings } = await supabase
-        .from('user_settings')
-        .select('preferences, use_n8n_backend')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (settings) {
-        setUseN8nWebhook(settings.use_n8n_backend || false);
-        const prefs = settings.preferences as Record<string, any>;
-        if (prefs?.stage_webhooks?.video_generation?.webhook_url) {
-          setN8nWebhookUrl(prefs.stage_webhooks.video_generation.webhook_url);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading settings:', error);
-    }
+    // Settings loading simplified - n8n removed
   };
 
   const addScene = () => {
@@ -177,7 +156,7 @@ export function UnifiedSceneBuilder({
       return;
     }
 
-    if (!useN8nWebhook && selectedEngines.length === 0) {
+    if (selectedEngines.length === 0) {
       toast.error('Select at least one engine');
       return;
     }
@@ -199,51 +178,22 @@ export function UnifiedSceneBuilder({
           : selectedEngines[0];
 
         try {
-          if (useN8nWebhook && n8nWebhookUrl) {
-            // Call n8n webhook
-            const response = await fetch(n8nWebhookUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'generate_scene_video',
-                sceneId: scene.id,
-                projectId,
-                scriptId,
-                prompt: scene.visualPrompt || scene.text,
-                duration: scene.duration,
-                videoType: scene.videoType,
-                creativeType: scene.creativeType,
-                hookType: scene.hookType,
-              }),
-            });
+          const { data, error } = await supabase.functions.invoke('generate-scene-video', {
+            body: {
+              sceneId: scene.id,
+              engineName: engine,
+              prompt: scene.visualPrompt || scene.text,
+            },
+          });
 
-            if (!response.ok) throw new Error('n8n webhook failed');
-            const data = await response.json();
-            
-            updateScene(scene.id, { 
-              status: 'completed', 
-              videoUrl: data.videoUrl,
-              engine: 'n8n-webhook'
-            });
-          } else {
-            // Use Supabase edge function
-            const { data, error } = await supabase.functions.invoke('generate-scene-video', {
-              body: {
-                sceneId: scene.id,
-                engineName: engine,
-                prompt: scene.visualPrompt || scene.text,
-              },
-            });
+          if (error) throw error;
 
-            if (error) throw error;
-
-            updateScene(scene.id, { 
-              status: data?.error ? 'failed' : 'completed',
-              videoUrl: data?.videoUrl,
-              engine,
-              error: data?.error,
-            });
-          }
+          updateScene(scene.id, { 
+            status: data?.error ? 'failed' : 'completed',
+            videoUrl: data?.videoUrl,
+            engine,
+            error: data?.error,
+          });
         } catch (err: any) {
           updateScene(scene.id, { 
             status: 'failed', 
@@ -409,9 +359,6 @@ export function UnifiedSceneBuilder({
           onTierChange={setSelectedTier}
           selectedEngines={selectedEngines}
           onEnginesChange={setSelectedEngines}
-          useN8nWebhook={useN8nWebhook}
-          onUseN8nWebhookChange={setUseN8nWebhook}
-          n8nWebhookUrl={n8nWebhookUrl}
           randomizeEngines={randomizeEngines}
           onRandomizeEnginesChange={setRandomizeEngines}
         />

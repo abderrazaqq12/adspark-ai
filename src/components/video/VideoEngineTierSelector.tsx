@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Webhook, Zap, DollarSign, Crown, Sparkles } from 'lucide-react';
+import { Zap, DollarSign, Crown, Sparkles } from 'lucide-react';
 
 export interface VideoEngine {
   id: string;
@@ -58,9 +58,6 @@ interface VideoEngineTierSelectorProps {
   onTierChange: (tier: 'free' | 'low' | 'medium' | 'premium' | 'all') => void;
   selectedEngines: string[];
   onEnginesChange: (engines: string[]) => void;
-  useN8nWebhook: boolean;
-  onUseN8nWebhookChange: (use: boolean) => void;
-  n8nWebhookUrl?: string;
   randomizeEngines: boolean;
   onRandomizeEnginesChange: (randomize: boolean) => void;
 }
@@ -70,9 +67,6 @@ export function VideoEngineTierSelector({
   onTierChange,
   selectedEngines,
   onEnginesChange,
-  useN8nWebhook,
-  onUseN8nWebhookChange,
-  n8nWebhookUrl,
   randomizeEngines,
   onRandomizeEnginesChange,
 }: VideoEngineTierSelectorProps) {
@@ -129,90 +123,61 @@ export function VideoEngineTierSelector({
         </RadioGroup>
       </div>
 
-      {/* n8n Webhook Option */}
-      <Card className="p-3 bg-muted/30 border-border">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="use-n8n"
-              checked={useN8nWebhook}
-              onCheckedChange={(checked) => onUseN8nWebhookChange(checked as boolean)}
-            />
-            <Label htmlFor="use-n8n" className="flex items-center gap-2 text-sm cursor-pointer">
-              <Webhook className="w-4 h-4 text-primary" />
-              Generate via n8n Webhook
-            </Label>
-          </div>
-          {useN8nWebhook && n8nWebhookUrl && (
-            <Badge variant="outline" className="text-xs text-green-500 border-green-500/30">
-              Connected
-            </Badge>
-          )}
-        </div>
-        {useN8nWebhook && !n8nWebhookUrl && (
-          <p className="text-xs text-muted-foreground mt-2 ml-6">
-            Configure webhook URL in Settings → Backend Mode
-          </p>
-        )}
-      </Card>
-
       {/* Engine Selection */}
-      {!useN8nWebhook && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label className="text-sm font-medium">Select Engines ({selectedEngines.length})</Label>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5">
-                <Checkbox
-                  id="randomize-engines"
-                  checked={randomizeEngines}
-                  onCheckedChange={(checked) => onRandomizeEnginesChange(checked as boolean)}
-                />
-                <Label htmlFor="randomize-engines" className="text-xs cursor-pointer">
-                  Randomize
-                </Label>
-              </div>
-              <Button variant="ghost" size="sm" onClick={selectAllInTier} className="text-xs h-7">
-                Select All
-              </Button>
-              <Button variant="ghost" size="sm" onClick={clearSelection} className="text-xs h-7">
-                Clear
-              </Button>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="text-sm font-medium">Select Engines ({selectedEngines.length})</Label>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <Checkbox
+                id="randomize-engines"
+                checked={randomizeEngines}
+                onCheckedChange={(checked) => onRandomizeEnginesChange(checked as boolean)}
+              />
+              <Label htmlFor="randomize-engines" className="text-xs cursor-pointer">
+                Randomize
+              </Label>
             </div>
-          </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
-            {filteredEngines.map((engine) => {
-              const tierConfig = TIER_CONFIG[engine.tier];
-              const isSelected = selectedEngines.includes(engine.id);
-              
-              return (
-                <div
-                  key={engine.id}
-                  onClick={() => toggleEngine(engine.id)}
-                  className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
-                    isSelected 
-                      ? 'border-primary bg-primary/10' 
-                      : `${tierConfig.borderColor} ${tierConfig.bgColor} hover:border-primary/50`
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium truncate">{engine.name}</span>
-                    <Checkbox checked={isSelected} className="pointer-events-none" />
-                  </div>
-                  <p className="text-xs text-muted-foreground line-clamp-1">{engine.description}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge variant="outline" className={`text-[10px] ${tierConfig.color}`}>
-                      {engine.tier}
-                    </Badge>
-                    <span className="text-[10px] text-muted-foreground">{engine.maxDuration}s max</span>
-                  </div>
-                </div>
-              );
-            })}
+            <Button variant="ghost" size="sm" onClick={selectAllInTier} className="text-xs h-7">
+              Select All
+            </Button>
+            <Button variant="ghost" size="sm" onClick={clearSelection} className="text-xs h-7">
+              Clear
+            </Button>
           </div>
         </div>
-      )}
+        
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
+          {filteredEngines.map((engine) => {
+            const tierConfig = TIER_CONFIG[engine.tier];
+            const isSelected = selectedEngines.includes(engine.id);
+            
+            return (
+              <div
+                key={engine.id}
+                onClick={() => toggleEngine(engine.id)}
+                className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
+                  isSelected 
+                    ? 'border-primary bg-primary/10' 
+                    : `${tierConfig.borderColor} ${tierConfig.bgColor} hover:border-primary/50`
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium truncate">{engine.name}</span>
+                  <Checkbox checked={isSelected} className="pointer-events-none" />
+                </div>
+                <p className="text-xs text-muted-foreground line-clamp-1">{engine.description}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant="outline" className={`text-[10px] ${tierConfig.color}`}>
+                    {engine.tier}
+                  </Badge>
+                  <span className="text-[10px] text-muted-foreground">{engine.maxDuration}s max</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

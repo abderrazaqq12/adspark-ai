@@ -764,7 +764,7 @@ export default function Settings() {
           <TabsTrigger value="data">Data</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
-          <TabsTrigger value="backend">Backend Mode</TabsTrigger>
+          
           <TabsTrigger value="preferences">Preferences</TabsTrigger>
         </TabsList>
 
@@ -1497,15 +1497,6 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
-        {/* Backend Mode Tab */}
-        <TabsContent value="backend" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>AI Agent Backend</CardTitle>
-              <CardDescription>AI Operator agent is now the default backend for all operations.</CardDescription>
-            </CardHeader>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   );
