@@ -82,8 +82,7 @@ const RATIO_OPTIONS = [
 ];
 
 const LANGUAGES = [
-  { id: "ar-sa", label: "Arabic (Saudi)" },
-  { id: "ar", label: "Arabic (MSA)" },
+  { id: "ar", label: "Arabic" },
   { id: "en", label: "English" },
   { id: "es", label: "Spanish" },
   { id: "fr", label: "French" },
@@ -315,7 +314,7 @@ export const SimplifiedVariationSettings = ({
               <div className="space-y-2">
                 <Label>Language</Label>
                 <Select
-                  value={config.adIntelligence?.language || "ar-sa"}
+                  value={config.adIntelligence?.language || "ar"}
                   onValueChange={(value) =>
                     setConfig((prev) => ({
                       ...prev,

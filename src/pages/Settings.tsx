@@ -1477,9 +1477,7 @@ export default function Settings() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ar">Arabic (Saudi Dialect)</SelectItem>
-                      <SelectItem value="ar-msa">Arabic (Modern Standard)</SelectItem>
-                      <SelectItem value="ar-gulf">Arabic (Gulf)</SelectItem>
+                      <SelectItem value="ar">Arabic</SelectItem>
                       <SelectItem value="en">English</SelectItem>
                       <SelectItem value="es">Spanish</SelectItem>
                       <SelectItem value="fr">French</SelectItem>
