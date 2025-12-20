@@ -16,8 +16,7 @@ import {
   RefreshCw,
   Volume2,
   Clock,
-  Sparkles,
-  Webhook
+  Sparkles
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -69,10 +68,8 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
   const [scriptText, setScriptText] = useState('');
   const [tracks, setTracks] = useState<VoiceoverTrack[]>();
 
-  // N8n backend mode settings
-  const [useN8nBackend, setUseN8nBackend] = useState(false);
+  // AI Operator mode
   const [aiOperatorEnabled, setAiOperatorEnabled] = useState(false);
-  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
   const [audienceTargeting, setAudienceTargeting] = useState<AudienceTargeting>({
     targetMarket: 'gcc',
     language: 'ar-sa',
@@ -91,12 +88,11 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
 
       const { data: settings } = await supabase
         .from('user_settings')
-        .select('preferences, use_n8n_backend, ai_operator_enabled')
+        .select('preferences, ai_operator_enabled')
         .eq('user_id', user.id)
         .maybeSingle();
 
       if (settings) {
-        setUseN8nBackend(settings.use_n8n_backend || false);
         setAiOperatorEnabled(settings.ai_operator_enabled || false);
         
         const prefs = settings.preferences as Record<string, any>;
@@ -109,11 +105,6 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
             audienceAge: prefs.studio_audience_age || '25-34',
             audienceGender: prefs.studio_audience_gender || 'both',
           });
-          // Load webhook URL
-          const stageWebhooks = prefs.stage_webhooks || {};
-          if (stageWebhooks.voiceover?.webhook_url) {
-            setN8nWebhookUrl(stageWebhooks.voiceover.webhook_url);
-          }
         }
       }
     } catch (error) {
@@ -151,56 +142,8 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
 
       setTracks(newTracks);
 
-      // Get prompt if AI Operator is enabled
-      const voiceoverPrompt = aiOperatorEnabled ? getPrompt('voiceover_scripts', {
-        product_name: '',
-        product_description: '',
-      }) : '';
-
-      // If n8n Backend Mode is enabled, use webhook
-      if (useN8nBackend && n8nWebhookUrl) {
-        console.log('Calling Voiceover webhook:', n8nWebhookUrl);
-        
-        const response = await fetch(n8nWebhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'generate_voiceover',
-            segments: segments,
-            voiceId: selectedVoice,
-            model: voiceModel,
-            speed: speed[0],
-            prompt: voiceoverPrompt,
-            audienceTargeting: {
-              targetMarket: audienceTargeting.targetMarket,
-              language: audienceTargeting.language,
-              audienceAge: audienceTargeting.audienceAge,
-              audienceGender: audienceTargeting.audienceGender,
-            },
-            userId: session.user.id,
-            timestamp: new Date().toISOString(),
-          }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          // Update tracks with response data
-          if (data.tracks) {
-            setTracks(data.tracks);
-          } else {
-            // Mark as completed with simulated data
-            setTracks(prev => prev.map(t => ({ ...t, status: 'completed' as const })));
-          }
-          toast({
-            title: "Voiceovers Generated",
-            description: `${segments.length} audio tracks processed via webhook`,
-          });
-        } else {
-          throw new Error(`Webhook error: ${response.status}`);
-        }
-      } else {
-        // Use Supabase function (fallback)
-        for (let i = 0; i < newTracks.length; i++) {
+      // Generate via Supabase edge function
+      for (let i = 0; i < newTracks.length; i++) {
           try {
             const response = await supabase.functions.invoke('generate-voiceover', {
               body: {
@@ -222,17 +165,16 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
                 : t
             ));
           } catch (error) {
-            setTracks(prev => prev.map((t, idx) => 
-              idx === i ? { ...t, status: 'failed' } : t
-            ));
-          }
+          setTracks(prev => prev.map((t, idx) => 
+            idx === i ? { ...t, status: 'failed' } : t
+          ));
         }
-
-        toast({
-          title: "Voiceovers Generated",
-          description: `${segments.length} audio tracks created`,
-        });
       }
+
+      toast({
+        title: "Voiceovers Generated",
+        description: `${segments.length} audio tracks created`,
+      });
     } catch (error: any) {
       toast({
         title: "Error",
@@ -333,14 +275,6 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
         </div>
         <Badge variant="outline" className="text-primary border-primary">Step 5</Badge>
       </div>
-
-      {/* Webhook indicator */}
-      {useN8nBackend && n8nWebhookUrl && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground px-2">
-          <Webhook className="w-3 h-3 text-green-500" />
-          <span>Webhook enabled: {n8nWebhookUrl.substring(0, 50)}...</span>
-        </div>
-      )}
 
       {/* Audience Targeting */}
       <AudienceTargeting

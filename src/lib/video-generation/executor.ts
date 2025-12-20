@@ -31,9 +31,6 @@ export async function executeVideoGeneration(
       case 'agent':
         result = await executeViaAgent(input, selection);
         break;
-      case 'n8n':
-        result = await executeViaN8n(input, selection);
-        break;
       case 'edge':
         result = await executeViaEdge(input, selection);
         break;
@@ -105,67 +102,6 @@ async function executeViaAgent(
       availableEngines: [selection.engine.engine_id],
       filteredBy: [],
       selectionScore: selection.engine.priority,
-    },
-  };
-}
-
-// n8n Mode - Workflow orchestrated execution
-async function executeViaN8n(
-  input: VideoGenerationInput,
-  selection: EngineSelection
-): Promise<VideoGenerationOutput> {
-  console.log('[VideoGeneration] Executing via n8n mode');
-
-  // Get n8n webhook URL from settings
-  const { data: settings } = await supabase
-    .from('user_settings')
-    .select('preferences')
-    .single();
-
-  const webhookUrl = (settings?.preferences as any)?.n8n_video_webhook;
-
-  if (!webhookUrl) {
-    throw new Error('n8n webhook URL not configured. Please set up in Settings.');
-  }
-
-  // Call n8n via proxy to avoid CORS
-  const { data, error } = await supabase.functions.invoke('n8n-proxy', {
-    body: {
-      webhookUrl,
-      payload: {
-        action: 'generate_video',
-        engine: selection.engine.engine_id,
-        input: {
-          script: input.script,
-          voiceoverUrl: input.voiceoverUrl,
-          scenes: input.scenes,
-          images: input.images,
-          aspectRatio: input.aspectRatio,
-          duration: input.duration,
-        },
-        selection: {
-          engineId: selection.engine.engine_id,
-          engineName: selection.engine.name,
-          estimatedCost: selection.estimatedCost,
-        },
-      },
-    },
-  });
-
-  if (error) {
-    throw new Error(`n8n execution failed: ${error.message}`);
-  }
-
-  return {
-    status: data?.status === 'success' ? 'success' : 'processing',
-    videoUrl: data?.videoUrl,
-    meta: {
-      engine: selection.engine.engine_id,
-      engineName: selection.engine.name,
-      executionMode: 'n8n',
-      selectionReason: selection.reason,
-      estimatedCost: selection.estimatedCost,
-      actualCost: data?.actualCost,
     },
   };
 }
