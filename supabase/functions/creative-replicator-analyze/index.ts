@@ -28,11 +28,14 @@ interface FFmpegScene {
 }
 
 // Extract source video ID from filename for RenderFlow compatibility
-function extractSourceVideoId(fileName: string): string {
+function extractSourceVideoId(fileName?: string): string {
+  if (!fileName) {
+    return `video_${Date.now()}`;
+  }
   // Remove extension and path, keep just the ID/name
   const baseName = fileName.split('/').pop() || fileName;
   const withoutExt = baseName.replace(/\.[^/.]+$/, '');
-  return withoutExt;
+  return withoutExt || `video_${Date.now()}`;
 }
 
 // Convert seconds to milliseconds with frame alignment (assuming 30fps)
