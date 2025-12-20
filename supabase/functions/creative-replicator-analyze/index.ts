@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI, isAIAvailable } from "../_shared/ai-gateway.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,9 +43,8 @@ serve(async (req) => {
 
     console.log(`[AI-Brain] Analyzing ${fileName} (${duration}s) for ${market}/${language}`);
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY not configured');
+    if (!isAIAvailable()) {
+      throw new Error('No AI provider configured. Please add Gemini or OpenAI API key.');
     }
 
     // 1. AI BRAIN: PLANNER ONLY
@@ -92,35 +92,16 @@ serve(async (req) => {
       6. Return ONLY valid JSON. No markdown.
     `;
 
-    // Using the configured AI Gateway (Generic OpenAI/Gemini interface)
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash', // Fast, efficient model for analysis
-        messages: [
-          { role: 'system', content: "You are a JSON-only API. You must output minified JSON with no markdown formatting." },
-          { role: 'user', content: analysisPrompt }
-        ],
-        temperature: 0.2, // Low temperature for deterministic output
-      }),
+    // Using the new AI Gateway (Gemini primary, OpenAI fallback)
+    const aiResponse = await callAI({
+      messages: [
+        { role: 'system', content: "You are a JSON-only API. You must output minified JSON with no markdown formatting." },
+        { role: 'user', content: analysisPrompt }
+      ],
+      temperature: 0.2, // Low temperature for deterministic output
     });
 
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error('[AI-Brain] Provider error:', errorText);
-      throw new Error(`AI Provider failed: ${aiResponse.status}`);
-    }
-
-    const aiData = await aiResponse.json();
-    const content = aiData.choices?.[0]?.message?.content;
-
-    if (!content) {
-      throw new Error('Empty response from AI Brain');
-    }
+    const content = aiResponse.content;
 
     // Robust JSON Parsing
     let analysis;
@@ -144,11 +125,12 @@ serve(async (req) => {
       };
     }
 
-    console.log('[AI-Brain] Plan generated successfully');
+    console.log(`[AI-Brain] Plan generated successfully via ${aiResponse.provider}`);
 
     return new Response(JSON.stringify({
       success: true,
-      analysis
+      analysis,
+      provider: aiResponse.provider
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

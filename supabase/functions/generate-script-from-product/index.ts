@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI, isAIAvailable } from "../_shared/ai-gateway.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,7 +15,6 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
     
     const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -44,6 +44,13 @@ serve(async (req) => {
     if (!productName) {
       return new Response(JSON.stringify({ error: 'Product name is required' }), {
         status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!isAIAvailable()) {
+      return new Response(JSON.stringify({ error: 'No AI provider configured. Please add Gemini or OpenAI API key.' }), {
+        status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -90,36 +97,22 @@ Write a ${targetLanguage} voice-over script that sells this product effectively.
 
     console.log('[generate-script-from-product] Calling AI to generate script');
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${lovableApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-      }),
+    const aiResponse = await callAI({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI Gateway error:', errorText);
-      throw new Error('Failed to generate script');
-    }
+    const generatedScript = aiResponse.content.trim();
 
-    const aiData = await response.json();
-    const generatedScript = aiData.choices?.[0]?.message?.content?.trim() || '';
-
-    console.log('[generate-script-from-product] Script generated successfully');
+    console.log(`[generate-script-from-product] Script generated successfully via ${aiResponse.provider}`);
 
     return new Response(JSON.stringify({ 
       success: true, 
       script: generatedScript,
       language: language,
+      provider: aiResponse.provider,
       word_count: generatedScript.split(/\s+/).length,
       estimated_duration_seconds: Math.round(generatedScript.split(/\s+/).length / 2.5),
     }), {

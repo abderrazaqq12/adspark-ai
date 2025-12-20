@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI, isAIAvailable } from "../_shared/ai-gateway.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -45,24 +46,16 @@ serve(async (req) => {
       throw new Error('Script is required and must be a string');
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
+    if (!isAIAvailable()) {
+      throw new Error('No AI provider configured. Please add Gemini or OpenAI API key.');
     }
 
-    // Call Lovable AI to analyze the script and generate scenes
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an expert video production AI assistant. Analyze video ad scripts and break them down into detailed scenes for video generation.
+    // Call AI to analyze the script and generate scenes
+    const aiResponse = await callAI({
+      messages: [
+        {
+          role: 'system',
+          content: `You are an expert video production AI assistant. Analyze video ad scripts and break them down into detailed scenes for video generation.
 
 For each scene, provide:
 - A clear title (2-5 words)
@@ -83,25 +76,17 @@ Example output:
     }
   ]
 }`
-          },
-          {
-            role: 'user',
-            content: `Analyze this video ad script and break it down into 3-7 scenes optimized for AI video generation:\n\n${script}`
-          }
-        ],
-      }),
+        },
+        {
+          role: 'user',
+          content: `Analyze this video ad script and break it down into 3-7 scenes optimized for AI video generation:\n\n${script}`
+        }
+      ],
     });
 
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error('AI Gateway error:', aiResponse.status, errorText);
-      throw new Error(`AI Gateway error: ${aiResponse.status}`);
-    }
+    console.log(`AI response received from ${aiResponse.provider}`);
 
-    const aiData = await aiResponse.json();
-    console.log('AI response received');
-
-    const content = aiData.choices[0].message.content;
+    const content = aiResponse.content;
     
     // Extract JSON from the response (handle markdown code blocks)
     let scenes;
