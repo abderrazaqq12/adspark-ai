@@ -1027,7 +1027,14 @@ function handleExecute(req, res) {
     return jsonError(res, 503, 'FFMPEG_UNAVAILABLE', 'FFmpeg binary not available on server');
   }
 
-  const { sourcePath, inputFileUrl, projectId, outputName, executionPlan, outputFormat } = req.body;
+  let { sourcePath, inputFileUrl, projectId, outputName, executionPlan, outputFormat } = req.body;
+
+  // FIX: Handle URLs in sourcePath (Creative Replicator compatibility)
+  if (typeof sourcePath === 'string' && (sourcePath.startsWith('http://') || sourcePath.startsWith('https://'))) {
+    console.log(`[Execute] Moving URL from sourcePath to inputFileUrl: ${sourcePath}`);
+    inputFileUrl = sourcePath;
+    sourcePath = null;
+  }
 
   // STRICT CONTRACT: sourcePath OR inputFileUrl
   if (!sourcePath && !inputFileUrl) {
