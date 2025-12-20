@@ -3,8 +3,8 @@
  * Supports multiple deployment targets: Lovable Cloud, Self-Hosted, Docker
  */
 
-export type DeploymentTarget = 'lovable-cloud' | 'self-hosted' | 'docker' | 'local';
-export type AIProvider = 'lovable' | 'openai' | 'gemini' | 'ollama' | 'custom';
+export type DeploymentTarget = 'cloud' | 'self-hosted' | 'docker' | 'local';
+export type AIProvider = 'gemini' | 'openai' | 'ollama' | 'custom';
 export type BackendProvider = 'supabase' | 'rest' | 'local';
 
 interface AppConfig {
@@ -23,7 +23,6 @@ interface AppConfig {
   // AI Providers
   ai: {
     defaultProvider: AIProvider;
-    lovableGatewayUrl: string;
     openaiApiUrl: string;
     geminiApiUrl: string;
     ollamaUrl: string;
@@ -57,14 +56,14 @@ const getEnvVar = (key: string, fallback: string = ''): string => {
 const detectDeploymentTarget = (): DeploymentTarget => {
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
   
-  if (hostname.includes('lovable.app') || hostname.includes('lovable.dev')) {
-    return 'lovable-cloud';
-  }
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return 'local';
   }
   if (getEnvVar('VITE_DOCKER_MODE') === 'true') {
     return 'docker';
+  }
+  if (getEnvVar('VITE_SUPABASE_URL')) {
+    return 'cloud';
   }
   return 'self-hosted';
 };
@@ -86,8 +85,7 @@ const buildConfig = (): AppConfig => {
     },
     
     ai: {
-      defaultProvider: (getEnvVar('VITE_AI_PROVIDER', 'lovable') as AIProvider),
-      lovableGatewayUrl: 'https://ai.gateway.lovable.dev/v1/chat/completions',
+      defaultProvider: (getEnvVar('VITE_AI_PROVIDER', 'gemini') as AIProvider),
       openaiApiUrl: getEnvVar('VITE_OPENAI_API_URL', 'https://api.openai.com/v1'),
       geminiApiUrl: getEnvVar('VITE_GEMINI_API_URL', 'https://generativelanguage.googleapis.com/v1beta'),
       ollamaUrl: getEnvVar('VITE_OLLAMA_URL', 'http://localhost:11434'),
@@ -122,7 +120,7 @@ export const getConfig = (): AppConfig => {
 export const config = getConfig();
 
 // Helper functions
-export const isLovableCloud = (): boolean => config.deploymentTarget === 'lovable-cloud';
+export const isCloud = (): boolean => config.deploymentTarget === 'cloud';
 export const isSelfHosted = (): boolean => config.deploymentTarget === 'self-hosted';
 export const isDocker = (): boolean => config.deploymentTarget === 'docker';
 export const isLocal = (): boolean => config.deploymentTarget === 'local';

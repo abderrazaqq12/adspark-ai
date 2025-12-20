@@ -21,7 +21,7 @@ import {
   Info
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { config, isLovableCloud, isSelfHosted, isDocker, isLocal, AIProvider } from '@/config';
+import { config, isCloud, isSelfHosted, isDocker, isLocal, AIProvider } from '@/config';
 import { getAvailableProviders } from '@/lib/ai/provider';
 import { VPSServerStatus } from './VPSServerStatus';
 
@@ -31,10 +31,10 @@ interface DeploymentSettingsProps {
 
 const DEPLOYMENT_MODES = [
   { 
-    id: 'lovable-cloud', 
-    label: 'Lovable Cloud', 
+    id: 'cloud', 
+    label: 'Cloud', 
     icon: Cloud, 
-    description: 'Managed infrastructure with built-in AI',
+    description: 'Managed infrastructure with Supabase',
     color: 'text-primary'
   },
   { 
@@ -62,27 +62,20 @@ const DEPLOYMENT_MODES = [
 
 const AI_PROVIDERS = [
   { 
-    id: 'lovable' as AIProvider, 
-    label: 'Lovable AI', 
-    description: 'Built-in AI gateway (recommended)',
-    requiresKey: false,
-    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gpt-5', 'gpt-5-mini']
+    id: 'gemini' as AIProvider, 
+    label: 'Google Gemini', 
+    description: 'Google AI (recommended)',
+    requiresKey: true,
+    keyPlaceholder: 'AIzaSy...',
+    models: ['gemini-2.0-flash', 'gemini-2.5-pro-preview-06-05']
   },
   { 
     id: 'openai' as AIProvider, 
     label: 'OpenAI', 
-    description: 'Direct OpenAI API access',
+    description: 'OpenAI GPT models',
     requiresKey: true,
     keyPlaceholder: 'sk-proj-...',
     models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo']
-  },
-  { 
-    id: 'gemini' as AIProvider, 
-    label: 'Google Gemini', 
-    description: 'Direct Google AI access',
-    requiresKey: true,
-    keyPlaceholder: 'AIzaSy...',
-    models: ['gemini-1.5-flash', 'gemini-1.5-pro']
   },
   { 
     id: 'ollama' as AIProvider, 
@@ -97,7 +90,7 @@ const AI_PROVIDERS = [
 
 export default function DeploymentSettings({ onSave }: DeploymentSettingsProps) {
   const [currentMode, setCurrentMode] = useState(config.deploymentTarget);
-  const [selectedProvider, setSelectedProvider] = useState<AIProvider>('lovable');
+  const [selectedProvider, setSelectedProvider] = useState<AIProvider>('gemini');
   const [selectedModel, setSelectedModel] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
@@ -115,7 +108,9 @@ export default function DeploymentSettings({ onSave }: DeploymentSettingsProps) 
 
   const loadSettings = () => {
     // Load from localStorage
-    const savedProvider = localStorage.getItem('ai_provider') as AIProvider || 'lovable';
+    const savedProviderRaw = localStorage.getItem('ai_provider') || 'gemini';
+    // Migrate old 'lovable' provider to 'gemini'
+    const savedProvider = (savedProviderRaw === 'lovable' ? 'gemini' : savedProviderRaw) as AIProvider;
     const savedModel = localStorage.getItem('ai_model') || '';
     const savedOllamaUrl = localStorage.getItem('ollama_url') || 'http://localhost:11434';
     const savedDebug = localStorage.getItem('debug_mode') === 'true';
@@ -266,12 +261,12 @@ export default function DeploymentSettings({ onSave }: DeploymentSettingsProps) 
             })}
           </div>
 
-          {isLovableCloud() && (
+          {isCloud() && (
             <div className="mt-4 p-3 rounded-lg bg-primary/10 border border-primary/30 flex items-start gap-3">
               <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
               <div className="text-sm">
-                <p className="font-medium text-foreground">Running on Lovable Cloud</p>
-                <p className="text-muted-foreground">All backend services are managed automatically. Lovable AI is pre-configured.</p>
+                <p className="font-medium text-foreground">Running on Cloud</p>
+                <p className="text-muted-foreground">Backend services are managed via Supabase. Configure your AI provider below.</p>
               </div>
             </div>
           )}
@@ -458,7 +453,7 @@ export default function DeploymentSettings({ onSave }: DeploymentSettingsProps) 
       </Card>
 
       {/* Self-Hosting Info */}
-      {!isLovableCloud() && (
+      {!isCloud() && (
         <Card className="bg-card border-border">
           <CardHeader>
             <CardTitle className="text-lg">Self-Hosting Resources</CardTitle>

@@ -1,6 +1,6 @@
 /**
  * AI Provider Abstraction
- * Supports multiple AI backends: Lovable AI, OpenAI, Gemini, Ollama
+ * Supports multiple AI backends: OpenAI, Gemini, Ollama
  */
 
 import { config, AIProvider } from '@/config';
@@ -46,11 +46,6 @@ const MODEL_MAPPINGS: Record<AIProvider, Record<string, string>> = {
     fast: 'gpt-4o-mini',
     smart: 'gpt-4o',
   },
-  lovable: {
-    default: 'gemini-2.0-flash',
-    fast: 'gemini-2.0-flash',
-    smart: 'gemini-2.5-pro-preview-06-05',
-  },
   ollama: {
     default: 'llama3.2',
     fast: 'llama3.2',
@@ -71,9 +66,6 @@ export const getAIAdapter = async (provider?: AIProvider): Promise<AIProviderAda
   const targetProvider = provider || config.ai.defaultProvider;
   
   switch (targetProvider) {
-    case 'lovable':
-      const { LovableAIAdapter } = await import('./lovable');
-      return new LovableAIAdapter();
     case 'openai':
       const { OpenAIAdapter } = await import('./openai');
       return new OpenAIAdapter();
@@ -84,14 +76,15 @@ export const getAIAdapter = async (provider?: AIProvider): Promise<AIProviderAda
       const { OllamaAdapter } = await import('./ollama');
       return new OllamaAdapter();
     default:
-      const { LovableAIAdapter: DefaultAdapter } = await import('./lovable');
+      // Default to Gemini
+      const { GeminiAdapter: DefaultAdapter } = await import('./gemini');
       return new DefaultAdapter();
   }
 };
 
 // Helper to check which providers are available
 export const getAvailableProviders = async (): Promise<AIProvider[]> => {
-  const providers: AIProvider[] = ['lovable', 'openai', 'gemini', 'ollama'];
+  const providers: AIProvider[] = ['gemini', 'openai', 'ollama'];
   const available: AIProvider[] = [];
   
   for (const provider of providers) {

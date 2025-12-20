@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI } from "../_shared/ai-gateway.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -58,15 +59,6 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'Valid VideoAnalysis with segments is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Get Lovable AI API key
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -192,46 +184,16 @@ Return this exact JSON structure:
 
 IMPORTANT: Generate exactly ${safeVariationCount} items in variation_ideas array!`;
 
-    // Call Lovable AI Gateway
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        temperature: 0.8, // Higher temperature for more creative outputs
-      }),
+    // Call AI Gateway (Gemini primary, OpenAI fallback)
+    const aiResponse = await callAI({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      temperature: 0.8, // Higher temperature for more creative outputs
     });
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Payment required. Please add credits to continue." }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      const errorText = await response.text();
-      console.error('[creative-scale-strategize] AI gateway error:', response.status, errorText);
-      return new Response(
-        JSON.stringify({ error: `AI service error: ${response.status}` }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const aiData = await response.json();
-    const content = aiData.choices?.[0]?.message?.content || '';
+    const content = aiResponse.content || '';
 
     // Parse JSON from response
     let blueprint;
@@ -252,11 +214,11 @@ IMPORTANT: Generate exactly ${safeVariationCount} items in variation_ideas array
       );
     }
 
-    console.log(`[creative-scale-strategize] Success: ${blueprint.variation_ideas?.length || 0} variations generated via Lovable AI`);
+    console.log(`[creative-scale-strategize] Success: ${blueprint.variation_ideas?.length || 0} variations generated via ${aiResponse.provider}`);
 
     // Track cost for successful strategy generation
     if (userId) {
-      await trackCost(userId, 'creative_scale_strategy', 'lovable-ai', 'strategy_generation', 0.002);
+      await trackCost(userId, 'creative_scale_strategy', aiResponse.provider, 'strategy_generation', 0.002);
     }
 
     return new Response(
@@ -267,7 +229,7 @@ IMPORTANT: Generate exactly ${safeVariationCount} items in variation_ideas array
           source_analysis_id: analysis.id,
           framework: blueprint.framework,
           variations_count: blueprint.variation_ideas?.length || 0,
-          provider: 'lovable-ai',
+          provider: aiResponse.provider,
           optimization_goal,
           risk_tolerance,
           platform,
