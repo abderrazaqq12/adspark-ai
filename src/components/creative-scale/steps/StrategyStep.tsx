@@ -192,157 +192,119 @@ export function StrategyStep({
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="mb-6">
-        <h2 className="text-2xl font-bold">Strategy Generation</h2>
+        <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent">
+          Strategy Generation
+        </h2>
         <p className="text-muted-foreground mt-1">
-          Brain V2 generates optimized variation strategies based on your goals.
+          AI Brain V2 generates optimized variation strategies based on your goals.
         </p>
       </div>
 
-      {/* Configuration */}
-      <div className="flex flex-wrap items-center gap-4 mb-6 p-4 bg-muted/30 rounded-lg border border-border">
-        <div className="flex items-center gap-2">
-          <Brain className="w-4 h-4 text-primary" />
-          <span className="text-sm font-medium">Brain V2</span>
+      {/* Configuration - Enhanced Design */}
+      <div className="mb-6 p-5 bg-gradient-to-br from-primary/5 via-muted/30 to-purple-500/5 rounded-xl border border-primary/20 shadow-lg">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center">
+            <Brain className="w-5 h-5 text-primary-foreground" />
+          </div>
+          <div>
+            <span className="text-sm font-semibold">Brain V2 Engine</span>
+            <p className="text-xs text-muted-foreground">AI-powered strategy generation</p>
+          </div>
         </div>
         
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Goal:</span>
-          <Select 
-            value={brainV2State.optimizationGoal} 
-            onValueChange={(value: OptimizationGoal) => onSetGoal(value)}
-          >
-            <SelectTrigger className="w-[100px] h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="retention">Retention</SelectItem>
-              <SelectItem value="ctr">CTR</SelectItem>
-              <SelectItem value="cpa">CPA</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Risk:</span>
-          <Select 
-            value={brainV2State.riskTolerance} 
-            onValueChange={(value: RiskTolerance) => onSetRisk(value)}
-          >
-            <SelectTrigger className="w-[90px] h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="space-y-1.5">
+            <span className="text-xs text-muted-foreground font-medium">Goal</span>
+            <Select 
+              value={brainV2State.optimizationGoal} 
+              onValueChange={(value: OptimizationGoal) => onSetGoal(value)}
+            >
+              <SelectTrigger className="h-9 text-xs bg-background/50">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="retention">Retention</SelectItem>
+                <SelectItem value="ctr">CTR</SelectItem>
+                <SelectItem value="cpa">CPA</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="space-y-1.5">
+            <span className="text-xs text-muted-foreground font-medium">Risk</span>
+            <Select 
+              value={brainV2State.riskTolerance} 
+              onValueChange={(value: RiskTolerance) => onSetRisk(value)}
+            >
+              <SelectTrigger className="h-9 text-xs bg-background/50">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-        {/* Platform Selector */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Platform:</span>
-          <Select 
-            value={brainV2State.platform} 
-            onValueChange={(value: PlatformType) => onSetPlatform(value)}
-          >
-            <SelectTrigger className="w-[120px] h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="tiktok">
-                <div className="flex items-center gap-2">
-                  <Smartphone className="w-3 h-3" />
-                  TikTok
-                </div>
-              </SelectItem>
-              <SelectItem value="reels">
-                <div className="flex items-center gap-2">
-                  <Video className="w-3 h-3" />
-                  Reels
-                </div>
-              </SelectItem>
-              <SelectItem value="youtube">
-                <div className="flex items-center gap-2">
-                  <Youtube className="w-3 h-3" />
-                  YouTube
-                </div>
-              </SelectItem>
-              <SelectItem value="facebook">
-                <div className="flex items-center gap-2">
-                  <Users className="w-3 h-3" />
-                  Facebook
-                </div>
-              </SelectItem>
-              <SelectItem value="snapchat">
-                <div className="flex items-center gap-2">
-                  <MessageCircle className="w-3 h-3" />
-                  Snapchat
-                </div>
-              </SelectItem>
-              <SelectItem value="general">
-                <div className="flex items-center gap-2">
-                  <LayoutGrid className="w-3 h-3" />
-                  General
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+          <div className="space-y-1.5">
+            <span className="text-xs text-muted-foreground font-medium">Platform</span>
+            <Select 
+              value={brainV2State.platform} 
+              onValueChange={(value: PlatformType) => onSetPlatform(value)}
+            >
+              <SelectTrigger className="h-9 text-xs bg-background/50">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="tiktok"><div className="flex items-center gap-2"><Smartphone className="w-3 h-3" />TikTok</div></SelectItem>
+                <SelectItem value="reels"><div className="flex items-center gap-2"><Video className="w-3 h-3" />Reels</div></SelectItem>
+                <SelectItem value="youtube"><div className="flex items-center gap-2"><Youtube className="w-3 h-3" />YouTube</div></SelectItem>
+                <SelectItem value="facebook"><div className="flex items-center gap-2"><Users className="w-3 h-3" />Facebook</div></SelectItem>
+                <SelectItem value="snapchat"><div className="flex items-center gap-2"><MessageCircle className="w-3 h-3" />Snapchat</div></SelectItem>
+                <SelectItem value="general"><div className="flex items-center gap-2"><LayoutGrid className="w-3 h-3" />General</div></SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-        {/* Funnel Stage Selector */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Funnel:</span>
-          <Select 
-            value={brainV2State.funnelStage} 
-            onValueChange={(value: FunnelStageType) => onSetFunnelStage(value)}
-          >
-            <SelectTrigger className="w-[120px] h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-popover border border-border">
-              <SelectItem value="cold">
-                <div className="flex items-center gap-2">
-                  <Thermometer className="w-3 h-3 text-blue-400" />
-                  Cold Traffic
-                </div>
-              </SelectItem>
-              <SelectItem value="warm">
-                <div className="flex items-center gap-2">
-                  <Thermometer className="w-3 h-3 text-amber-400" />
-                  Warm Audience
-                </div>
-              </SelectItem>
-              <SelectItem value="retargeting">
-                <div className="flex items-center gap-2">
-                  <Thermometer className="w-3 h-3 text-red-400" />
-                  Retargeting
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Variations:</span>
-          <Select 
-            value={variationCount.toString()} 
-            onValueChange={(value) => onSetVariationCount(parseInt(value))}
-          >
-            <SelectTrigger className="w-[70px] h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[1, 2, 3, 4, 5, 6, 8, 10, 15, 20].map(n => (
-                <SelectItem key={n} value={n.toString()}>{n}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+          <div className="space-y-1.5">
+            <span className="text-xs text-muted-foreground font-medium">Funnel</span>
+            <Select 
+              value={brainV2State.funnelStage} 
+              onValueChange={(value: FunnelStageType) => onSetFunnelStage(value)}
+            >
+              <SelectTrigger className="h-9 text-xs bg-background/50">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border border-border">
+                <SelectItem value="cold"><div className="flex items-center gap-2"><Thermometer className="w-3 h-3 text-blue-400" />Cold</div></SelectItem>
+                <SelectItem value="warm"><div className="flex items-center gap-2"><Thermometer className="w-3 h-3 text-amber-400" />Warm</div></SelectItem>
+                <SelectItem value="retargeting"><div className="flex items-center gap-2"><Thermometer className="w-3 h-3 text-red-400" />Retargeting</div></SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="space-y-1.5">
+            <span className="text-xs text-muted-foreground font-medium">Variations</span>
+            <Select 
+              value={variationCount.toString()} 
+              onValueChange={(value) => onSetVariationCount(parseInt(value))}
+            >
+              <SelectTrigger className="h-9 text-xs bg-background/50">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[1, 2, 3, 4, 5, 6, 8, 10, 15, 20].map(n => (
+                  <SelectItem key={n} value={n.toString()}>{n}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        {/* Framework Comparison */}
-        <div className="ml-auto">
-          <FrameworkComparisonView compact />
+          <div className="space-y-1.5">
+            <span className="text-xs text-muted-foreground font-medium">Frameworks</span>
+            <FrameworkComparisonView compact />
+          </div>
         </div>
       </div>
 
@@ -350,31 +312,42 @@ export function StrategyStep({
       <div className="flex-1">
         {!hasStrategy && !isGenerating && (
           <div className="flex flex-col items-center justify-center h-full text-center py-12">
-            <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
-              <Sparkles className="w-10 h-10 text-primary" />
+            <div className="relative mb-8">
+              <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center">
+                <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center animate-pulse">
+                  <Sparkles className="w-8 h-8 text-primary-foreground" />
+                </div>
+              </div>
+              <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                <Brain className="w-3 h-3 text-white" />
+              </div>
             </div>
-            <h3 className="text-lg font-semibold mb-2">Ready to Generate Strategy</h3>
-            <p className="text-muted-foreground max-w-md mb-8">
-              Brain V2 will analyze detected problems, score multiple strategies, 
-              and select the optimal approach for your {variationCount} variation{variationCount !== 1 ? 's' : ''}.
+            <h3 className="text-xl font-bold mb-2">Ready to Generate AI Strategy</h3>
+            <p className="text-muted-foreground max-w-md mb-8 text-sm">
+              Brain V2 will analyze your video, detect improvement opportunities, 
+              and create {variationCount} unique AI-powered variation{variationCount !== 1 ? 's' : ''}.
             </p>
             <Button 
               size="lg"
               onClick={onGenerate}
-              className="h-12 px-8"
+              className="h-14 px-10 text-base bg-gradient-to-r from-primary to-purple-500 hover:from-primary/90 hover:to-purple-500/90 shadow-lg shadow-primary/25"
             >
               <Brain className="w-5 h-5 mr-2" />
-              Generate with Brain V2
+              Generate AI Strategy
             </Button>
           </div>
         )}
 
         {isGenerating && (
           <div className="flex flex-col items-center justify-center h-full text-center py-12">
-            <BrainStatus 
-              isProcessing={true} 
-              currentLayer="Running 5-layer decision engine..."
-            />
+            <div className="relative">
+              <div className="w-20 h-20 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Brain className="w-8 h-8 text-primary animate-pulse" />
+              </div>
+            </div>
+            <h3 className="text-lg font-semibold mt-6 mb-2">AI Generating Strategy...</h3>
+            <p className="text-muted-foreground text-sm">Analyzing patterns and creating unique variations</p>
           </div>
         )}
 
