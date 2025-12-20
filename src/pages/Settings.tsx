@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import BatchApiKeyTester from "@/components/BatchApiKeyTester";
-import EngineUsageAnalytics from "@/components/EngineUsageAnalytics";
+
 
 import { StudioDataSettings } from "@/components/studio/StudioDataSettings";
 import StudioPrompts from "@/components/StudioPrompts";
@@ -779,7 +779,6 @@ export default function Settings() {
           <TabsTrigger value="api-keys">API Keys</TabsTrigger>
           <TabsTrigger value="prompts">Prompts</TabsTrigger>
           <TabsTrigger value="data">Data</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
           
           <TabsTrigger value="preferences">Preferences</TabsTrigger>
@@ -1188,11 +1187,6 @@ export default function Settings() {
         {/* Prompts Tab */}
         <TabsContent value="prompts" className="space-y-6">
           <StudioPrompts />
-        </TabsContent>
-
-        {/* Analytics Tab */}
-        <TabsContent value="analytics" className="space-y-6">
-          <EngineUsageAnalytics />
         </TabsContent>
 
         {/* Templates Tab */}
