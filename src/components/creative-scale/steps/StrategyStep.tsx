@@ -2,9 +2,10 @@
  * Step 3: Strategy
  * Brain V2 planning and variation configuration with Ad Director insights
  * + Advertising Policy Compliance Layer
+ * + Strategy Comparison View
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -38,6 +39,7 @@ import { FrameworkComparisonView } from '@/components/creative-scale/FrameworkCo
 import { FrameworkExplainerCard } from '@/components/creative-scale/FrameworkExplainerCard';
 import { ComplianceStatusCard } from '@/components/creative-scale/ComplianceStatusCard';
 import { AutoFrameworkCard } from '@/components/creative-scale/AutoFrameworkCard';
+import { StrategyComparisonView } from '@/components/creative-scale/StrategyComparisonView';
 import { generateAdDirectorReview } from '@/lib/creative-scale/ad-director';
 import { scanVideoAnalysis, scanBlueprint, generateComplianceResult } from '@/lib/creative-scale/compliance-engine';
 import { selectFrameworkAutomatically } from '@/lib/creative-scale/auto-framework-selector';
@@ -121,7 +123,35 @@ export function StrategyStep({
   onContinue
 }: StrategyStepProps) {
   const hasStrategy = blueprint && plans.length > 0;
+  
+  // Track previous blueprint for comparison
+  const [previousBlueprint, setPreviousBlueprint] = useState<CreativeBlueprint | null>(null);
+  const [showComparison, setShowComparison] = useState(false);
+  const prevBlueprintRef = useRef<CreativeBlueprint | null>(null);
 
+  // Update previous blueprint when a new one is generated
+  useEffect(() => {
+    if (blueprint && prevBlueprintRef.current && blueprint.id !== prevBlueprintRef.current.id) {
+      setPreviousBlueprint(prevBlueprintRef.current);
+      setShowComparison(true);
+    }
+    prevBlueprintRef.current = blueprint;
+  }, [blueprint]);
+
+  const handleKeepNew = () => {
+    setShowComparison(false);
+    setPreviousBlueprint(null);
+  };
+
+  const handleRevertToOld = () => {
+    // For now just dismiss - revert would require parent callback
+    setShowComparison(false);
+    setPreviousBlueprint(null);
+  };
+
+  const handleDismissComparison = () => {
+    setShowComparison(false);
+  };
   // Generate Ad Director review from analysis
   const adDirectorReview = useMemo(() => {
     if (!analysis) return null;
@@ -371,6 +401,17 @@ export function StrategyStep({
                     hasProofElements: analysis.segments.some(s => s.type === 'proof'),
                     hookStrength: analysis.overall_scores?.hook_strength || 0.5
                   }}
+                />
+              )}
+
+              {/* Strategy Comparison View */}
+              {showComparison && previousBlueprint && blueprint && (
+                <StrategyComparisonView
+                  previousBlueprint={previousBlueprint}
+                  currentBlueprint={blueprint}
+                  onDismiss={handleDismissComparison}
+                  onKeepNew={handleKeepNew}
+                  onRevertToOld={handleRevertToOld}
                 />
               )}
 
