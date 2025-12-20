@@ -231,22 +231,24 @@ export function StrategyStep({
       </div>
 
       {/* Configuration - Optimized Design */}
-      <div className="mb-8 p-6 bg-slate-900/50 rounded-2xl border border-primary/20 shadow-xl relative overflow-hidden">
-        {/* Subtle background glow */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 blur-3xl -z-10" />
+      <div className="mb-8 p-6 bg-slate-900/40 backdrop-blur-md rounded-2xl border border-primary/20 shadow-2xl relative overflow-hidden group">
+        {/* Animated background elements */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 blur-3xl rounded-full -z-10 animate-pulse" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-purple-500/5 blur-3xl rounded-full -z-10" />
 
-        <div className="flex items-center gap-4 mb-6">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center shadow-lg shadow-primary/20">
-            <Brain className="w-6 h-6 text-white" />
+        <div className="flex items-center gap-4 mb-8">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary via-primary/80 to-purple-600 flex items-center justify-center shadow-xl shadow-primary/20 ring-1 ring-white/20">
+            <Brain className="w-7 h-7 text-white" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
               Brain V2 Engine
-              <Badge variant="secondary" className="bg-primary/20 text-primary border-none text-[10px] h-4">PLATINUM</Badge>
+              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[10px] px-2 py-0 uppercase tracking-widest font-black">Pro</Badge>
             </h3>
-            <p className="text-xs text-muted-foreground">High-performance AI strategy generation</p>
+            <p className="text-xs text-slate-400 font-medium">Advanced AI marketing logic & strategic planning</p>
           </div>
         </div>
+
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="space-y-2">
