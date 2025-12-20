@@ -204,6 +204,8 @@ serve(async (req) => {
     `;
 
     // Using the new AI Gateway (Gemini primary, OpenAI fallback)
+    console.log(`[AI-Brain] Calling AI provider...`);
+    
     const aiResponse = await callAI({
       messages: [
         { role: 'system', content: "You are a JSON-only API. You must output minified JSON with no markdown formatting." },
@@ -214,11 +216,50 @@ serve(async (req) => {
 
     const content = aiResponse.content;
 
+    // Enhanced logging for debugging
+    console.log(`[AI-Brain] AI Provider: ${aiResponse.provider}`);
+    console.log(`[AI-Brain] Response length: ${content?.length || 0} chars`);
+    console.log(`[AI-Brain] Response type: ${typeof content}`);
+    console.log(`[AI-Brain] Response preview (first 300 chars): ${content?.substring(0, 300) || 'EMPTY'}`);
+    console.log(`[AI-Brain] Response preview (last 200 chars): ${content?.substring((content?.length || 0) - 200) || 'EMPTY'}`);
+
+    if (!content) {
+      console.error('[AI-Brain] Empty response from AI');
+      console.error('[AI-Brain] Full AI response object:', JSON.stringify(aiResponse, null, 2));
+      throw new Error('AI returned empty response');
+    }
+
     // Robust JSON Parsing
     let analysis;
     try {
-      const cleanContent = content.replace(/```json\n?|\n?```/g, '').trim();
+      console.log(`[AI-Brain] Parsing JSON response...`);
+      let cleanContent = content.trim();
+      
+      // Check for markdown blocks
+      if (cleanContent.includes('```json')) {
+        console.log(`[AI-Brain] Detected markdown json block`);
+        cleanContent = cleanContent.replace(/```json\n?|\n?```/g, '').trim();
+      } else if (cleanContent.includes('```')) {
+        console.log(`[AI-Brain] Detected plain markdown block`);
+        cleanContent = cleanContent.replace(/```\n?|\n?```/g, '').trim();
+      }
+      
+      // Try to find JSON object if not starting with {
+      if (!cleanContent.startsWith('{')) {
+        console.log(`[AI-Brain] Content doesn't start with {, searching for JSON object`);
+        const jsonStart = cleanContent.indexOf('{');
+        const jsonEnd = cleanContent.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+          cleanContent = cleanContent.substring(jsonStart, jsonEnd + 1);
+          console.log(`[AI-Brain] Extracted JSON from position ${jsonStart} to ${jsonEnd}`);
+        }
+      }
+      
+      console.log(`[AI-Brain] Final content length: ${cleanContent.length}`);
+      console.log(`[AI-Brain] Final content preview: ${cleanContent.substring(0, 200)}...`);
+      
       const rawAnalysis = JSON.parse(cleanContent);
+      console.log(`[AI-Brain] JSON parsed successfully, keys: ${Object.keys(rawAnalysis).join(', ')}`);
       
       // Normalize scenes for FFmpeg compatibility
       const normalizedScenes = normalizeScenes(rawAnalysis.scenes, duration);
@@ -237,25 +278,30 @@ serve(async (req) => {
       
     } catch (parseError) {
       console.error('[AI-Brain] JSON Parse Error:', parseError);
-      console.log('Raw content:', content);
+      console.error('[AI-Brain] Parse error message:', parseError instanceof Error ? parseError.message : String(parseError));
+      console.error('[AI-Brain] Raw content (full):', content);
+      console.error('[AI-Brain] Content type:', typeof content);
+      console.error('[AI-Brain] Content JSON stringified:', JSON.stringify(content));
 
       // Fallback Plan with frame-accurate timestamps
+      console.log(`[AI-Brain] Using fallback scene plan`);
       const hookEndMs = toFrameAlignedMs(3);
       const ctaStartMs = toFrameAlignedMs(duration - 3);
-      const durationMs = toFrameAlignedMs(duration);
+      const fallbackDurationMs = toFrameAlignedMs(duration);
       
       analysis = {
         scenes: [
           { type: "hook", start: 0, end: 3, start_ms: 0, end_ms: hookEndMs, style: "fast", description: "Hook" },
           { type: "body", start: 3, end: duration - 3, start_ms: hookEndMs, end_ms: ctaStartMs, description: "Main Content" },
-          { type: "cta", start: duration - 3, end: duration, start_ms: ctaStartMs, end_ms: durationMs, description: "Call to Action" }
+          { type: "cta", start: duration - 3, end: duration, start_ms: ctaStartMs, end_ms: fallbackDurationMs, description: "Call to Action" }
         ],
         source_video_id: videoId,
         duration_sec: duration,
-        duration_ms: durationMs,
+        duration_ms: fallbackDurationMs,
         market,
         language,
-        fallback: true
+        fallback: true,
+        parseError: parseError instanceof Error ? parseError.message : String(parseError)
       };
     }
 

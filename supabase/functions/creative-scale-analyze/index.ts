@@ -140,6 +140,8 @@ You must analyze the video content and return this exact JSON structure:
 
 Return ONLY the JSON, no markdown, no explanation.`;
 
+    console.log(`[creative-scale-analyze] Calling AI provider...`);
+    
     const aiResponse = await callAI({
       messages: [
         { role: 'system', content: systemPrompt },
@@ -150,10 +152,17 @@ Return ONLY the JSON, no markdown, no explanation.`;
 
     const content = aiResponse.content || '';
     
+    // Enhanced logging for debugging
+    console.log(`[creative-scale-analyze] AI Provider: ${aiResponse.provider}`);
+    console.log(`[creative-scale-analyze] Response length: ${content.length} chars`);
+    console.log(`[creative-scale-analyze] Response preview (first 300 chars): ${content.substring(0, 300)}`);
+    console.log(`[creative-scale-analyze] Response preview (last 200 chars): ${content.substring(content.length - 200)}`);
+    
     if (!content) {
       console.error('[creative-scale-analyze] Empty response from AI');
+      console.error('[creative-scale-analyze] Full AI response object:', JSON.stringify(aiResponse, null, 2));
       return new Response(
-        JSON.stringify({ error: 'AI returned empty response' }),
+        JSON.stringify({ error: 'AI returned empty response', debug: { provider: aiResponse.provider } }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -162,9 +171,11 @@ Return ONLY the JSON, no markdown, no explanation.`;
     let analysis;
     try {
       let jsonStr = content.trim();
+      console.log(`[creative-scale-analyze] Parsing JSON, initial length: ${jsonStr.length}`);
       
       // Handle ```json blocks
       if (jsonStr.includes('```json')) {
+        console.log(`[creative-scale-analyze] Detected markdown json block`);
         const parts = jsonStr.split('```json');
         if (parts.length > 1 && parts[1]) {
           const innerParts = parts[1].split('```');
@@ -173,6 +184,7 @@ Return ONLY the JSON, no markdown, no explanation.`;
       } 
       // Handle plain ``` blocks
       else if (jsonStr.includes('```')) {
+        console.log(`[creative-scale-analyze] Detected plain markdown block`);
         const parts = jsonStr.split('```');
         if (parts.length > 1 && parts[1]) {
           jsonStr = parts[1].trim();
@@ -181,19 +193,32 @@ Return ONLY the JSON, no markdown, no explanation.`;
       
       // Try to find JSON object if still wrapped
       if (!jsonStr.startsWith('{')) {
+        console.log(`[creative-scale-analyze] JSON doesn't start with {, searching for JSON object`);
         const jsonStart = jsonStr.indexOf('{');
         const jsonEnd = jsonStr.lastIndexOf('}');
         if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
           jsonStr = jsonStr.substring(jsonStart, jsonEnd + 1);
+          console.log(`[creative-scale-analyze] Extracted JSON from position ${jsonStart} to ${jsonEnd}`);
         }
       }
       
+      console.log(`[creative-scale-analyze] Final JSON length before parse: ${jsonStr.length}`);
+      console.log(`[creative-scale-analyze] Final JSON preview: ${jsonStr.substring(0, 200)}...`);
+      
       analysis = JSON.parse(jsonStr);
+      console.log(`[creative-scale-analyze] JSON parsed successfully, keys: ${Object.keys(analysis).join(', ')}`);
     } catch (parseErr) {
       console.error('[creative-scale-analyze] JSON parse error:', parseErr);
-      console.error('[creative-scale-analyze] Raw content:', content.substring(0, 500));
+      console.error('[creative-scale-analyze] Raw content (full):', content);
+      console.error('[creative-scale-analyze] Content type:', typeof content);
+      console.error('[creative-scale-analyze] Content JSON stringified:', JSON.stringify(content));
       return new Response(
-        JSON.stringify({ error: 'Failed to parse AI response as JSON', raw: content.substring(0, 500) }),
+        JSON.stringify({ 
+          error: 'Failed to parse AI response as JSON', 
+          raw: content.substring(0, 1000),
+          parseError: parseErr instanceof Error ? parseErr.message : String(parseErr),
+          provider: aiResponse.provider
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
