@@ -374,12 +374,23 @@ export function StrategyStep({
                 />
               )}
 
-              {/* Strategy Complete Badge */}
-              <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-                <CheckCircle2 className="w-5 h-5 text-green-500" />
-                <span className="text-sm font-medium text-green-600">
-                  {plans.length} Variation{plans.length !== 1 ? 's' : ''} Ready
-                </span>
+              {/* Strategy Complete Badge + Regenerate Button */}
+              <div className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-500" />
+                  <span className="text-sm font-medium text-green-600">
+                    {plans.length} Variation{plans.length !== 1 ? 's' : ''} Ready
+                  </span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onGenerate}
+                  className="gap-2 border-primary/30 hover:bg-primary/10"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Regenerate Strategy
+                </Button>
               </div>
 
               {/* Predictive Metrics */}
