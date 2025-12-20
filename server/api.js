@@ -1104,9 +1104,20 @@ const unifiedJobHandler = (req, res) => {
   if (variations && variations[0] && variations[0].data && (variations[0].data.source_url || variations[0].data.sourcePath)) {
     console.log('[Adapter] Mapping Variations-style Job to Execute');
     const v = variations[0];
+
+    // Fix: Handle URLs in sourcePath (common in some frontend paths)
+    let pPath = v.data.sourcePath;
+    let pUrl = v.data.source_url;
+
+    if (typeof pPath === 'string' && (pPath.startsWith('http://') || pPath.startsWith('https://'))) {
+      console.log('[Adapter] Moving URL from sourcePath to inputFileUrl');
+      pUrl = pPath;
+      pPath = null;
+    }
+
     req.body = {
-      inputFileUrl: v.data.source_url,
-      sourcePath: v.data.sourcePath,
+      inputFileUrl: pUrl,
+      sourcePath: pPath,
       projectId: project_id,
       outputName: v.id
     };
