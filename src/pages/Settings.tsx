@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
-import { Save, Plus, Trash2, FileText, Loader2, Pencil, Webhook, Copy, CheckCircle, XCircle, ExternalLink, Zap, Key, Eye, EyeOff, Bot, RefreshCw, DollarSign, Sparkles, TrendingUp, Crown, ChevronDown, Power, Database, ShieldCheck } from "lucide-react";
+import { Save, Plus, Trash2, FileText, Loader2, Pencil, Copy, CheckCircle, XCircle, ExternalLink, Key, Eye, EyeOff, Bot, RefreshCw, DollarSign, Sparkles, TrendingUp, Crown, ChevronDown, Power, Database, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -368,22 +368,6 @@ const API_KEY_CATEGORIES: APIKeyCategory[] = [
   },
 ];
 
-const DEFAULT_N8N_WEBHOOK_URL = "https://bedeukijnixeihjepbjg.supabase.co/functions/v1/n8n-webhook";
-
-const AVAILABLE_ACTIONS = [
-  { action: "create_project", description: "Create a new project", example: { name: "My Campaign", product_name: "Premium Watch", language: "en" } },
-  { action: "get_projects", description: "List all projects", example: { limit: 10 } },
-  { action: "create_script", description: "Create a new script", example: { projectId: "uuid", raw_text: "Your script text..." } },
-  { action: "generate_scripts", description: "AI generate scripts", example: { projectId: "uuid", templateId: "uuid" } },
-  { action: "breakdown_scenes", description: "Break script into scenes", example: { scriptId: "uuid" } },
-  { action: "batch_generate", description: "Start batch video generation", example: { scriptId: "uuid", variationsPerScene: 5, randomEngines: true } },
-  { action: "process_queue", description: "Process generation queue", example: { limit: 10 } },
-  { action: "generate_voiceover", description: "Generate voiceover audio", example: { scriptId: "uuid", voice: "en-US-Neural2-D" } },
-  { action: "assemble_video", description: "Assemble final video", example: { scriptId: "uuid", format: "mp4", addSubtitles: true } },
-  { action: "get_engines", description: "List AI engines", example: { type: "video", status: "active" } },
-  { action: "route_engine", description: "Auto-route to best engine", example: { sceneType: "product_showcase", complexity: "high" } },
-  { action: "full_pipeline", description: "Run entire workflow", example: { projectName: "Summer Sale", product_name: "Sunglasses", scriptText: "Your script...", variationsPerScene: 3 } },
-];
 
 export default function Settings() {
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
@@ -421,30 +405,6 @@ export default function Settings() {
   const [keyTestResults, setKeyTestResults] = useState<Record<string, { success: boolean; message: string }>>({});
   const [activeApiKeys, setActiveApiKeys] = useState<Record<string, boolean>>({});
 
-  // n8n integration state
-  const [testingConnection, setTestingConnection] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<"idle" | "success" | "error">("idle");
-  const [selectedAction, setSelectedAction] = useState(AVAILABLE_ACTIONS[0]);
-  const [testPayload, setTestPayload] = useState("");
-  const [userId, setUserId] = useState<string | null>(null);
-  const [userN8nWebhook, setUserN8nWebhook] = useState("");
-  const [n8nApiKey, setN8nApiKey] = useState("");
-  const [savingN8nSettings, setSavingN8nSettings] = useState(false);
-  const [testingUserWebhook, setTestingUserWebhook] = useState(false);
-  const [userWebhookStatus, setUserWebhookStatus] = useState<"idle" | "success" | "error">("idle");
-
-  // AI n8n helper state
-  const [aiDialogOpen, setAiDialogOpen] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [aiAction, setAiAction] = useState<"generate_workflow" | "suggest_nodes" | "help">("suggest_nodes");
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiResult, setAiResult] = useState<any>(null);
-
-  // n8n workflow management state
-  const [deployingWorkflow, setDeployingWorkflow] = useState(false);
-  const [loadingWorkflows, setLoadingWorkflows] = useState(false);
-  const [n8nWorkflows, setN8nWorkflows] = useState<any[]>([]);
-  const [showWorkflowManager, setShowWorkflowManager] = useState(false);
 
   // Google Drive integration state
   const [googleDriveFolderUrl, setGoogleDriveFolderUrl] = useState("");
@@ -454,20 +414,11 @@ export default function Settings() {
     fetchData();
   }, []);
 
-  useEffect(() => {
-    setTestPayload(JSON.stringify({
-      action: selectedAction.action,
-      userId: userId || "your-user-id",
-      data: selectedAction.example
-    }, null, 2));
-  }, [selectedAction, userId]);
 
   const fetchData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
-      setUserId(user.id);
 
       const [templatesRes, settingsRes] = await Promise.all([
         supabase.from("prompt_templates").select("*").order("created_at", { ascending: false }),
@@ -497,11 +448,9 @@ export default function Settings() {
 
           setActivatedModels(modelsOnly);
         }
-        // Load n8n settings and Google Drive from preferences
+        // Load Google Drive from preferences
         const prefs = settingsRes.data.preferences as Record<string, any> | null;
         if (prefs) {
-          setUserN8nWebhook(prefs.n8n_webhook_url || "");
-          setN8nApiKey(prefs.n8n_api_key || "");
           setGoogleDriveFolderUrl(prefs.google_drive_folder_url || "");
         }
       }
@@ -750,110 +699,6 @@ export default function Settings() {
     toast.success("Copied to clipboard");
   };
 
-  const testN8NConnection = async () => {
-    setTestingConnection(true);
-    setConnectionStatus("idle");
-
-    try {
-      const payload = JSON.parse(testPayload);
-      const response = await fetch(DEFAULT_N8N_WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setConnectionStatus("success");
-        toast.success("Connection successful!", {
-          description: `Action "${payload.action}" executed successfully`,
-        });
-        console.log("n8n webhook result:", result);
-      } else {
-        setConnectionStatus("error");
-        toast.error("Connection failed", { description: result.error });
-      }
-    } catch (error) {
-      setConnectionStatus("error");
-      toast.error("Connection failed", {
-        description: error instanceof Error ? error.message : "Invalid JSON or network error"
-      });
-    } finally {
-      setTestingConnection(false);
-    }
-  };
-
-  const testUserN8nWebhook = async () => {
-    if (!userN8nWebhook) {
-      toast.error("Please enter your n8n webhook URL first");
-      return;
-    }
-
-    setTestingUserWebhook(true);
-    setUserWebhookStatus("idle");
-
-    try {
-      const response = await fetch(userN8nWebhook, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        mode: "no-cors", // n8n webhooks may not have CORS headers
-        body: JSON.stringify({
-          test: true,
-          timestamp: new Date().toISOString(),
-          source: "VideoAI Platform",
-        }),
-      });
-
-      // Since no-cors doesn't return response data, we assume success if no error
-      setUserWebhookStatus("success");
-      toast.success("Request sent to your n8n webhook", {
-        description: "Check your n8n execution history to confirm receipt",
-      });
-    } catch (error) {
-      setUserWebhookStatus("error");
-      toast.error("Failed to connect to webhook", {
-        description: error instanceof Error ? error.message : "Network error",
-      });
-    } finally {
-      setTestingUserWebhook(false);
-    }
-  };
-
-  const saveN8nSettings = async () => {
-    setSavingN8nSettings(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      // Get current preferences and merge
-      const { data: currentSettings } = await supabase
-        .from("user_settings")
-        .select("preferences")
-        .eq("user_id", user.id)
-        .single();
-
-      const currentPrefs = (currentSettings?.preferences as Record<string, any>) || {};
-      const updatedPrefs = {
-        ...currentPrefs,
-        n8n_webhook_url: userN8nWebhook,
-        n8n_api_key: n8nApiKey,
-      };
-
-      const { error } = await supabase
-        .from("user_settings")
-        .update({ preferences: updatedPrefs })
-        .eq("user_id", user.id);
-
-      if (error) throw error;
-      toast.success("n8n settings saved successfully");
-    } catch (error) {
-      console.error("Error saving n8n settings:", error);
-      toast.error("Failed to save n8n settings");
-    } finally {
-      setSavingN8nSettings(false);
-    }
-  };
 
   const saveGoogleDriveSettings = async () => {
     setSavingGoogleDrive(true);
@@ -889,128 +734,6 @@ export default function Settings() {
     }
   };
 
-  const generateAiN8nHelp = async () => {
-    if (!aiPrompt.trim()) {
-      toast.error("Please enter a description of what you want to automate");
-      return;
-    }
-
-    setAiLoading(true);
-    setAiResult(null);
-
-    try {
-      const { data, error } = await supabase.functions.invoke("n8n-ai-helper", {
-        body: { prompt: aiPrompt, action: aiAction },
-      });
-
-      if (error) throw error;
-
-      if (data.success) {
-        setAiResult(data.content);
-        toast.success("AI generated suggestions!");
-      } else {
-        throw new Error(data.error || "Failed to generate response");
-      }
-    } catch (error) {
-      console.error("AI error:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to get AI help");
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const deployWorkflowToN8n = async (workflow: any) => {
-    if (!userN8nWebhook || !n8nApiKey) {
-      toast.error("Please configure your n8n webhook URL and API key first");
-      return;
-    }
-
-    setDeployingWorkflow(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("n8n-ai-helper", {
-        body: {
-          action: "deploy_workflow",
-          n8nBaseUrl: userN8nWebhook,
-          n8nApiKey: n8nApiKey,
-          workflow: workflow,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data.success) {
-        toast.success(data.message || "Workflow deployed successfully!");
-        await listN8nWorkflows(); // Refresh the list
-      } else {
-        throw new Error(data.error || "Failed to deploy workflow");
-      }
-    } catch (error) {
-      console.error("Deploy error:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to deploy workflow");
-    } finally {
-      setDeployingWorkflow(false);
-    }
-  };
-
-  const listN8nWorkflows = async () => {
-    if (!userN8nWebhook || !n8nApiKey) {
-      toast.error("Please configure your n8n webhook URL and API key first");
-      return;
-    }
-
-    setLoadingWorkflows(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("n8n-ai-helper", {
-        body: {
-          action: "list_workflows",
-          n8nBaseUrl: userN8nWebhook,
-          n8nApiKey: n8nApiKey,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data.success) {
-        setN8nWorkflows(data.workflows || []);
-        setShowWorkflowManager(true);
-        toast.success(`Found ${data.workflows?.length || 0} workflows`);
-      } else {
-        throw new Error(data.error || "Failed to list workflows");
-      }
-    } catch (error) {
-      console.error("List workflows error:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to list workflows");
-    } finally {
-      setLoadingWorkflows(false);
-    }
-  };
-
-  const toggleWorkflowActive = async (workflowId: string, active: boolean) => {
-    if (!userN8nWebhook || !n8nApiKey) return;
-
-    try {
-      const { data, error } = await supabase.functions.invoke("n8n-ai-helper", {
-        body: {
-          action: "activate_workflow",
-          n8nBaseUrl: userN8nWebhook,
-          n8nApiKey: n8nApiKey,
-          workflow: { id: workflowId, active },
-        },
-      });
-
-      if (error) throw error;
-
-      if (data.success) {
-        toast.success(data.message);
-        await listN8nWorkflows(); // Refresh
-      } else {
-        throw new Error(data.error);
-      }
-    } catch (error) {
-      console.error("Toggle workflow error:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to update workflow");
-    }
-  };
 
   const toggleKeyVisibility = (key: string) => {
     setShowKeys(prev => ({ ...prev, [key]: !prev[key] }));
