@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { callAI } from "../_shared/ai-gateway.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -129,38 +130,35 @@ serve(async (req) => {
 
   try {
     const { action, config, productContext, sourceAdAnalysis } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
-    }
+    console.log('AI Ad Intelligence - Action:', action);
 
     console.log('AI Ad Intelligence - Action:', action);
 
     switch (action) {
       case 'generate_ad_structure': {
-        const structure = await generateAdStructure(LOVABLE_API_KEY, config, productContext, sourceAdAnalysis);
+        const structure = await generateAdStructure(config, productContext, sourceAdAnalysis);
         return new Response(JSON.stringify({ success: true, structure }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
 
       case 'generate_hooks': {
-        const hooks = await generateDynamicHooks(LOVABLE_API_KEY, config, productContext);
+        const hooks = await generateDynamicHooks(config, productContext);
         return new Response(JSON.stringify({ success: true, hooks }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
 
       case 'generate_scene_content': {
-        const sceneContent = await generateSceneContent(LOVABLE_API_KEY, config, productContext, sourceAdAnalysis);
+        const sceneContent = await generateSceneContent(config, productContext, sourceAdAnalysis);
         return new Response(JSON.stringify({ success: true, sceneContent }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
 
       case 'optimize_for_market': {
-        const optimized = await optimizeForMarket(LOVABLE_API_KEY, config, productContext);
+        const optimized = await optimizeForMarket(config, productContext);
         return new Response(JSON.stringify({ success: true, optimized }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
@@ -183,7 +181,7 @@ serve(async (req) => {
       }
 
       case 'generate_complete_variation': {
-        const variation = await generateCompleteVariation(LOVABLE_API_KEY, config, productContext, sourceAdAnalysis);
+        const variation = await generateCompleteVariation(config, productContext, sourceAdAnalysis);
         return new Response(JSON.stringify({ success: true, variation }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
@@ -205,7 +203,7 @@ serve(async (req) => {
   }
 });
 
-async function generateAdStructure(apiKey: string, config: any, productContext: any, sourceAdAnalysis: any) {
+async function generateAdStructure(config: any, productContext: any, sourceAdAnalysis: any) {
   const { language, market, videoType, targetAudience, pacing, hookStyle } = config;
   
   const marketProfile = MARKET_PSYCHOLOGY[market as keyof typeof MARKET_PSYCHOLOGY] || MARKET_PSYCHOLOGY['global'];
@@ -240,29 +238,15 @@ ALL TEXT CONTENT MUST BE IN THE SPECIFIED LANGUAGE (${language}).
 Adapt tone and style to the ${market} market psychology.
 Do not include any placeholder or example text - generate real, usable content.`;
 
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.8,
-    }),
+  const aiResponse = await callAI({
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
+    temperature: 0.8,
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`AI API error: ${errorText}`);
-  }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || '';
+  const content = aiResponse.content || '';
   
   try {
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -276,7 +260,7 @@ Do not include any placeholder or example text - generate real, usable content.`
   return { raw: content, scenes: videoStructure.map((type, i) => ({ type, index: i })) };
 }
 
-async function generateDynamicHooks(apiKey: string, config: any, productContext: any) {
+async function generateDynamicHooks(config: any, productContext: any) {
   const { language, market, targetAudience, hookStyles, productCategory } = config;
   
   const marketProfile = MARKET_PSYCHOLOGY[market as keyof typeof MARKET_PSYCHOLOGY] || MARKET_PSYCHOLOGY['global'];
@@ -310,28 +294,15 @@ Generate 5-8 diverse hooks covering different styles.
 ALL HOOKS MUST BE IN ${language.toUpperCase()}.
 Adapt to ${market} market's cultural preferences and buying behavior.`;
 
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.9,
-    }),
+  const aiResponse = await callAI({
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
+    temperature: 0.9,
   });
 
-  if (!response.ok) {
-    throw new Error('Failed to generate hooks');
-  }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || '';
+  const content = aiResponse.content || '';
   
   try {
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -345,7 +316,7 @@ Adapt to ${market} market's cultural preferences and buying behavior.`;
   return { hooks: [], raw: content };
 }
 
-async function generateSceneContent(apiKey: string, config: any, productContext: any, sourceAdAnalysis: any) {
+async function generateSceneContent(config: any, productContext: any, sourceAdAnalysis: any) {
   const { language, market, videoType, pacing, transitions } = config;
   
   const marketProfile = MARKET_PSYCHOLOGY[market as keyof typeof MARKET_PSYCHOLOGY] || MARKET_PSYCHOLOGY['global'];
@@ -388,28 +359,15 @@ Generate a JSON object with:
 ALL TEXT CONTENT IN ${language.toUpperCase()}.
 Match ${market} market cultural preferences.`;
 
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.8,
-    }),
+  const aiResponse = await callAI({
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
+    temperature: 0.8,
   });
 
-  if (!response.ok) {
-    throw new Error('Failed to generate scene content');
-  }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || '';
+  const content = aiResponse.content || '';
   
   try {
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -423,7 +381,7 @@ Match ${market} market cultural preferences.`;
   return { scenes: [], raw: content };
 }
 
-async function optimizeForMarket(apiKey: string, config: any, productContext: any) {
+async function optimizeForMarket(config: any, productContext: any) {
   const { language, market, currentContent } = config;
   
   const marketProfile = MARKET_PSYCHOLOGY[market as keyof typeof MARKET_PSYCHOLOGY] || MARKET_PSYCHOLOGY['global'];
@@ -451,28 +409,15 @@ Generate optimized content with:
 
 ALL CONTENT IN ${language.toUpperCase()}.`;
 
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.7,
-    }),
+  const aiResponse = await callAI({
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
+    temperature: 0.7,
   });
 
-  if (!response.ok) {
-    throw new Error('Failed to optimize for market');
-  }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || '';
+  const content = aiResponse.content || '';
   
   try {
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -486,11 +431,11 @@ ALL CONTENT IN ${language.toUpperCase()}.`;
   return { raw: content };
 }
 
-async function generateCompleteVariation(apiKey: string, config: any, productContext: any, sourceAdAnalysis: any) {
+async function generateCompleteVariation(config: any, productContext: any, sourceAdAnalysis: any) {
   // Generate all components for a complete ad variation
-  const structure = await generateAdStructure(apiKey, config, productContext, sourceAdAnalysis);
-  const hooks = await generateDynamicHooks(apiKey, config, productContext);
-  const sceneContent = await generateSceneContent(apiKey, config, productContext, sourceAdAnalysis);
+  const structure = await generateAdStructure(config, productContext, sourceAdAnalysis);
+  const hooks = await generateDynamicHooks(config, productContext);
+  const sceneContent = await generateSceneContent(config, productContext, sourceAdAnalysis);
 
   return {
     structure,

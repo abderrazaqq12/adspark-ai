@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { callAI } from "../_shared/ai-gateway.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -197,7 +198,7 @@ function applyGulfDialectRules(text: string, includeDialectConversion: boolean =
 }
 
 // Grammar and structure validation
-async function validateScript(text: string, language: string, apiKey: string): Promise<{
+async function validateScript(text: string, language: string): Promise<{
   correctedText: string;
   issues: string[];
 }> {
@@ -218,29 +219,15 @@ Return ONLY a JSON object with:
 }`;
 
   try {
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Validate and correct this script:\n\n${text}` }
-        ],
-        temperature: 0.3,
-      }),
+    const aiResponse = await callAI({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `Validate and correct this script:\n\n${text}` }
+      ],
+      temperature: 0.3,
     });
 
-    if (!response.ok) {
-      console.error('AI validation failed:', response.status);
-      return { correctedText: text, issues: [] };
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
+    const content = aiResponse.content || '';
     
     // Parse JSON response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -280,11 +267,6 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
-    }
-
     console.log(`[arabic-vocalization] Processing ${contentType} with checks: ${checks.join(', ')}`);
 
     let correctedText = content;
@@ -294,7 +276,7 @@ serve(async (req) => {
 
     // Step 1: Grammar and structure validation
     if (checks.includes('grammar') || checks.includes('logic') || checks.includes('cta') || checks.includes('hallucination')) {
-      const validation = await validateScript(content, language, LOVABLE_API_KEY);
+      const validation = await validateScript(content, language);
       correctedText = validation.correctedText;
       allIssues.push(...validation.issues);
     }
