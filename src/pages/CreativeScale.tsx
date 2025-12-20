@@ -441,10 +441,14 @@ export default function CreativeScale() {
         overallProgress: (i / currentPlans.length) * 100
       }));
 
+      const selectedVideo = uploadedVideos[selectedVideoIndex] || uploadedVideos[0];
+      const sourceVideoUrl = selectedVideo?.storageUrl || selectedVideo?.url;
+
       const result = await executeUnifiedStrategy({
         plan,
         analysis: currentAnalysis,
         blueprint: currentBlueprint,
+        sourceVideoUrl, // Pass the source video URL
         variationIndex: i,
         onProgress: (engine: EngineId, progress: number, message: string, metadata?: any) => {
           setExecutionProgress(prev => ({

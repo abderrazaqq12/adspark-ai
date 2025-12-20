@@ -33,6 +33,7 @@ export interface ExecutionContext {
   plan: ExecutionPlan;
   analysis: VideoAnalysis;
   blueprint: CreativeBlueprint;
+  sourceVideoUrl?: string; // Source video URL for rendering
   userId?: string;
   variationIndex?: number;
   onProgress?: (engine: EngineId, progress: number, message: string, metadata?: any) => void;
@@ -63,7 +64,7 @@ export async function executeUnifiedStrategy(ctx: ExecutionContext): Promise<Exe
   try {
     // 1. Submit Job
     ctx.onProgress?.('unified_server', 10, 'Submitting to VPS...');
-    const submitResult = await RenderFlowApi.submitPlan(ctx.plan);
+    const submitResult = await RenderFlowApi.submitPlan(ctx.plan, ctx.sourceVideoUrl);
 
     // 2. Poll for Completion
     const result = await pollJobStatus(submitResult.ids[0], ctx);

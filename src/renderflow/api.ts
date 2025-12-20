@@ -238,12 +238,15 @@ export const RenderFlowApi = {
     },
 
     // Submit Execution Plan - POST /render/jobs
-    submitPlan: async (plan: any): Promise<SubmitJobResponse> => {
+    submitPlan: async (plan: any, sourceVideoUrl?: string): Promise<SubmitJobResponse> => {
         const payload = {
             project_id: plan.project_id || 'unified_plan',
             variations: [{
                 id: plan.id || `var_${Date.now()}`,
-                data: { plan }
+                data: {
+                    plan,
+                    sourcePath: sourceVideoUrl // Add source video URL here
+                }
             }]
         };
 
