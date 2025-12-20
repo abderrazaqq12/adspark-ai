@@ -963,7 +963,8 @@ app.post('/api/upload', (req, res) => {
 // POST /api/execute
 // ============================================
 
-app.post('/api/execute', (req, res) => {
+// Internal Handler for Execute (Modularized)
+function handleExecute(req, res) {
   if (!FFMPEG_AVAILABLE) {
     return jsonError(res, 503, 'FFMPEG_UNAVAILABLE', 'FFmpeg binary not available on server');
   }
@@ -1005,6 +1006,7 @@ app.post('/api/execute', (req, res) => {
 
   res.status(202).json({
     ok: true,
+    ids: [jobId],
     jobId,
     status: 'queued',
     queuePosition: pendingQueue.length,
@@ -1015,13 +1017,17 @@ app.post('/api/execute', (req, res) => {
       executionPlan: jobPayload.executionPlan
     }
   });
-});
+}
+
+// POST /api/execute
+app.post('/api/execute', handleExecute);
 
 // ============================================
 // POST /api/execute-plan
 // ============================================
 
-app.post('/api/execute-plan', (req, res) => {
+// Internal Handler for Execute Plan (Modularized)
+async function handleExecutePlan(req, res) {
   if (!FFMPEG_AVAILABLE) {
     return jsonError(res, 503, 'FFMPEG_UNAVAILABLE', 'FFmpeg binary not available on server');
   }
@@ -1060,11 +1066,86 @@ app.post('/api/execute-plan', (req, res) => {
 
   res.status(202).json({
     ok: true,
+    ids: [jobId], // Variations contract expects 'ids' array
     jobId,
     status: 'queued',
     queuePosition: pendingQueue.length,
     statusUrl: `/api/jobs/${jobId}`,
   });
+}
+
+// POST /api/execute-plan
+app.post('/api/execute-plan', handleExecutePlan);
+
+// ============================================
+// SHARED RENDER/JOBS CONTRACT (Frontend Support)
+// Handles both /api/jobs and /render/jobs
+// ============================================
+
+app.post(['/api/jobs', '/render/jobs'], (req, res) => {
+  const { variations, project_id } = req.body;
+
+  // 1. Check if it's a "Plan" (Unified Engine)
+  if (variations && variations[0] && variations[0].data && variations[0].data.plan) {
+    const plan = variations[0].data.plan;
+    console.log('[Adapter] Mapping Variations-style Plan to Execute-Plan');
+
+    req.body = {
+      plan,
+      projectId: project_id || 'unified_plan',
+      sourceVideoUrl: plan.timeline?.[0]?.asset_url,
+      outputName: variations[0].id
+    };
+    return handleExecutePlan(req, res);
+  }
+
+  // 2. Fallback: Check if it's a simple render request
+  if (variations && variations[0] && variations[0].data && (variations[0].data.source_url || variations[0].data.sourcePath)) {
+    console.log('[Adapter] Mapping Variations-style Job to Execute');
+    const v = variations[0];
+    req.body = {
+      inputFileUrl: v.data.source_url,
+      sourcePath: v.data.sourcePath,
+      projectId: project_id,
+      outputName: v.id
+    };
+    return handleExecute(req, res);
+  }
+
+  return jsonError(res, 400, 'INVALID_PAYLOAD', 'Unsupported job structure. Must contain "variations" with "plan" or "source_url".');
+});
+
+// Alias for Health and Status
+app.get(['/render/health', '/api/render/health'], (req, res) => {
+  res.redirect('/api/health');
+});
+
+app.get(['/render/jobs/:jobId', '/api/render/jobs/:jobId'], (req, res) => {
+  const jobId = req.params.jobId;
+  const job = getJob(jobId);
+  if (job) {
+    // Map internal job to RenderFlow contract if needed
+    const response = {
+      id: job.id,
+      state: job.status === 'queued' ? 'queued' :
+        job.status === 'running' ? 'processing' :
+          job.status === 'done' ? 'done' : 'failed',
+      progress_pct: job.progressPct,
+      created_at: job.createdAt,
+      output: job.status === 'done' ? {
+        output_url: job.output?.outputUrl,
+        file_size: job.output?.outputSize,
+        duration_ms: job.output?.durationMs
+      } : null,
+      error: job.error
+    };
+    return res.json(response);
+  }
+  res.status(404).json({ error: 'Job not found' });
+});
+
+app.get(['/render/jobs'], (req, res) => {
+  res.redirect('/api/health'); // Or return history
 });
 
 // ============================================
