@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI, isAIAvailable } from "../_shared/ai-gateway.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -15,7 +16,6 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // ============ AUTHENTICATION CHECK ============
@@ -106,7 +106,7 @@ serve(async (req) => {
         return await switchEngineForScene(supabase, sceneId, authenticatedUserId);
       
       case 'quality_check':
-        return await qualityCheckScene(supabase, sceneId, lovableApiKey);
+        return await qualityCheckScene(supabase, sceneId);
       
       case 'optimize_cost':
         return await optimizeCostTier(supabase, projectId, authenticatedUserId);
@@ -115,20 +115,20 @@ serve(async (req) => {
         return await generateVariations(supabase, projectId, authenticatedUserId);
       
       case 'auto_generate_prompts':
-        return await autoGenerateVisualPrompts(supabase, projectId, lovableApiKey);
+        return await autoGenerateVisualPrompts(supabase, projectId);
       
       case 'auto_regenerate_low_quality':
-        return await autoRegenerateLowQuality(supabase, projectId, authenticatedUserId, lovableApiKey);
+        return await autoRegenerateLowQuality(supabase, projectId, authenticatedUserId);
       
       case 'full_autonomous_run':
-        return await fullAutonomousRun(supabase, projectId, authenticatedUserId, lovableApiKey);
+        return await fullAutonomousRun(supabase, projectId, authenticatedUserId);
       
       case 'get_status':
         return await getOperatorStatus(supabase, projectId, authenticatedUserId);
       
       case 'generate_images':
         const imageReq = await getImageRequest(req);
-        return await generateProjectImages(supabase, projectId, authenticatedUserId, lovableApiKey, imageReq);
+        return await generateProjectImages(supabase, projectId, authenticatedUserId, imageReq);
       
       case 'check_api_keys':
         return await checkApiKeysStatus(supabase, authenticatedUserId);
@@ -409,7 +409,7 @@ async function switchEngineForScene(supabase: any, sceneId: string, userId: stri
   });
 }
 
-async function qualityCheckScene(supabase: any, sceneId: string, apiKey: string) {
+async function qualityCheckScene(supabase: any, sceneId: string) {
   const { data: scene } = await supabase
     .from('scenes')
     .select('*')
@@ -423,15 +423,12 @@ async function qualityCheckScene(supabase: any, sceneId: string, apiKey: string)
     });
   }
 
-  // Use vision model to analyze video quality
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
+  let qualityScore = 7; // Default
+  let analysis = {};
+
+  try {
+    // Use Gemini/OpenAI gateway for quality analysis
+    const aiResponse = await callAI({
       messages: [
         {
           role: 'user',
@@ -441,15 +438,9 @@ async function qualityCheckScene(supabase: any, sceneId: string, apiKey: string)
           ]
         }
       ],
-    }),
-  });
+    });
 
-  let qualityScore = 7; // Default
-  let analysis = {};
-
-  if (response.ok) {
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
+    const content = aiResponse.content || '';
     try {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -459,6 +450,8 @@ async function qualityCheckScene(supabase: any, sceneId: string, apiKey: string)
     } catch (e) {
       console.error('Failed to parse quality analysis:', e);
     }
+  } catch (error) {
+    console.error('[ai-operator] Quality check AI error:', error);
   }
 
   // Update scene with quality score
@@ -597,7 +590,7 @@ async function generateVariations(supabase: any, projectId: string, userId: stri
   });
 }
 
-async function autoGenerateVisualPrompts(supabase: any, projectId: string, apiKey: string) {
+async function autoGenerateVisualPrompts(supabase: any, projectId: string) {
   // Get scenes without visual prompts
   const { data: project } = await supabase
     .from('projects')
@@ -622,14 +615,8 @@ async function autoGenerateVisualPrompts(supabase: any, projectId: string, apiKe
   const updates = [];
 
   for (const scene of scenes) {
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+    try {
+      const aiResponse = await callAI({
         messages: [
           {
             role: 'system',
@@ -640,18 +627,17 @@ async function autoGenerateVisualPrompts(supabase: any, projectId: string, apiKe
             content: `Generate a visual prompt for a ${scene.scene_type || 'general'} scene with this voice-over text: "${scene.text}"`
           }
         ],
-      }),
-    });
+      });
 
-    if (response.ok) {
-      const data = await response.json();
-      const visualPrompt = data.choices?.[0]?.message?.content || '';
+      const visualPrompt = aiResponse.content || '';
       
       await supabase.from('scenes')
         .update({ visual_prompt: visualPrompt.slice(0, 500) })
         .eq('id', scene.id);
 
       updates.push({ scene_id: scene.id, prompt_generated: true });
+    } catch (error) {
+      console.error(`[ai-operator] Failed to generate prompt for scene ${scene.id}:`, error);
     }
   }
 
@@ -666,7 +652,7 @@ async function autoGenerateVisualPrompts(supabase: any, projectId: string, apiKe
 
 // ============ NEW AUTONOMOUS FUNCTIONS ============
 
-async function autoRegenerateLowQuality(supabase: any, projectId: string, userId: string, apiKey: string) {
+async function autoRegenerateLowQuality(supabase: any, projectId: string, userId: string) {
   // Get project and scenes
   const { data: project } = await supabase
     .from('projects')
@@ -699,7 +685,7 @@ async function autoRegenerateLowQuality(supabase: any, projectId: string, userId
     console.log(`[ai-operator] Auto-regenerating scene ${scene.id} (quality: ${scene.ai_quality_score})`);
 
     // First, try to improve the visual prompt
-    const improvedPrompt = await improveVisualPrompt(scene, apiKey);
+    const improvedPrompt = await improveVisualPrompt(scene);
     
     // Switch to a potentially better engine
     const { data: engines } = await supabase
@@ -756,40 +742,29 @@ async function autoRegenerateLowQuality(supabase: any, projectId: string, userId
   });
 }
 
-async function improveVisualPrompt(scene: any, apiKey: string): Promise<string | null> {
+async function improveVisualPrompt(scene: any): Promise<string | null> {
   try {
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a video production expert. Improve the given visual prompt to be more specific, cinematic, and better suited for AI video generation. Add specific camera angles, lighting details, and motion descriptions.'
-          },
-          {
-            role: 'user',
-            content: `Improve this visual prompt for a ${scene.scene_type || 'general'} scene:\n\nOriginal: "${scene.visual_prompt || scene.text}"\n\nProvide only the improved prompt, no explanations.`
-          }
-        ],
-      }),
+    const aiResponse = await callAI({
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a video production expert. Improve the given visual prompt to be more specific, cinematic, and better suited for AI video generation. Add specific camera angles, lighting details, and motion descriptions.'
+        },
+        {
+          role: 'user',
+          content: `Improve this visual prompt for a ${scene.scene_type || 'general'} scene:\n\nOriginal: "${scene.visual_prompt || scene.text}"\n\nProvide only the improved prompt, no explanations.`
+        }
+      ],
     });
 
-    if (response.ok) {
-      const data = await response.json();
-      return data.choices?.[0]?.message?.content?.slice(0, 500) || null;
-    }
+    return aiResponse.content?.slice(0, 500) || null;
   } catch (e) {
     console.error('[ai-operator] Failed to improve prompt:', e);
   }
   return null;
 }
 
-async function fullAutonomousRun(supabase: any, projectId: string, userId: string, apiKey: string) {
+async function fullAutonomousRun(supabase: any, projectId: string, userId: string) {
   console.log(`[ai-operator] Starting full autonomous run for project ${projectId}`);
 
   const steps = [];
@@ -800,7 +775,7 @@ async function fullAutonomousRun(supabase: any, projectId: string, userId: strin
   steps.push({ step: 'monitor_pipeline', result: monitorData });
 
   // Step 2: Generate visual prompts for scenes without them
-  const promptResult = await autoGenerateVisualPrompts(supabase, projectId, apiKey);
+  const promptResult = await autoGenerateVisualPrompts(supabase, projectId);
   const promptData = await promptResult.clone().json();
   steps.push({ step: 'generate_prompts', result: promptData });
 
@@ -810,7 +785,7 @@ async function fullAutonomousRun(supabase: any, projectId: string, userId: strin
   steps.push({ step: 'retry_failed', result: retryData });
 
   // Step 4: Auto-regenerate low quality scenes
-  const regenerateResult = await autoRegenerateLowQuality(supabase, projectId, userId, apiKey);
+  const regenerateResult = await autoRegenerateLowQuality(supabase, projectId, userId);
   const regenerateData = await regenerateResult.clone().json();
   steps.push({ step: 'regenerate_low_quality', result: regenerateData });
 
@@ -941,7 +916,6 @@ async function generateProjectImages(
   supabase: any, 
   projectId: string, 
   userId: string, 
-  apiKey: string,
   imageRequest: any
 ) {
   console.log(`[ai-operator] Generating images for project ${projectId}`);
@@ -1038,26 +1012,71 @@ async function generateProjectImages(
     try {
       const prompt = buildImagePrompt(project, imageType, imageRequest);
       
-      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash-image-preview',
-          messages: [{ role: 'user', content: prompt }],
-          modalities: ['image', 'text']
-        }),
-      });
+      // Try Gemini image generation first
+      const geminiApiKey = Deno.env.get('Gemini');
+      let imageData: string | null = null;
+      
+      if (geminiApiKey) {
+        try {
+          const geminiResponse = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${geminiApiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                  responseModalities: ['IMAGE', 'TEXT'],
+                }
+              }),
+            }
+          );
 
-      if (!response.ok) {
-        errors.push({ type: imageType, error: `API error: ${response.status}` });
-        continue;
+          if (geminiResponse.ok) {
+            const geminiData = await geminiResponse.json();
+            const imagePart = geminiData.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
+            if (imagePart?.inlineData) {
+              imageData = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
+            }
+          }
+        } catch (geminiError) {
+          console.warn('[ai-operator] Gemini image generation failed:', geminiError);
+        }
       }
 
-      const aiResponse = await response.json();
-      const imageData = aiResponse.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+      // Fallback to OpenAI if Gemini failed
+      if (!imageData) {
+        const openaiApiKey = Deno.env.get('OpenAI');
+        if (openaiApiKey) {
+          try {
+            const openaiResponse = await fetch('https://api.openai.com/v1/images/generations', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${openaiApiKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: 'dall-e-3',
+                prompt: prompt,
+                n: 1,
+                size: '1024x1024',
+              }),
+            });
+
+            if (openaiResponse.ok) {
+              const openaiData = await openaiResponse.json();
+              imageData = openaiData.data?.[0]?.url;
+            }
+          } catch (openaiError) {
+            console.warn('[ai-operator] OpenAI image generation failed:', openaiError);
+          }
+        }
+      }
+
+      if (!imageData) {
+        errors.push({ type: imageType, error: 'No AI provider available for image generation' });
+        continue;
+      }
 
       if (imageData) {
         // Save to database
@@ -1210,8 +1229,7 @@ async function checkApiKeysStatus(supabase: any, userId: string) {
     }
   }
 
-  // Check if Lovable AI is available (always available)
-  const hasLovableAI = true;
+  // Check if AI Gateway is available (Gemini or OpenAI configured)
 
   return new Response(JSON.stringify({
     success: true,
@@ -1233,9 +1251,9 @@ async function checkApiKeysStatus(supabase: any, userId: string) {
       total_available: enginesWithKeys.length,
       total_missing: enginesWithoutKeys.length
     },
-    lovable_ai: {
-      available: hasLovableAI,
-      models: ['google/gemini-2.5-flash', 'google/gemini-2.5-flash-image-preview', 'openai/gpt-5-mini']
+    ai_gateway: {
+      available: isAIAvailable(),
+      models: ['gemini-2.0-flash', 'gemini-2.5-pro-preview-06-05', 'gpt-4o-mini', 'gpt-4o']
     }
   }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
