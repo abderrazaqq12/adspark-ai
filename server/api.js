@@ -24,7 +24,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
-import { trackCost } from './supabase.js';
+// import { trackCost } from './supabase.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
