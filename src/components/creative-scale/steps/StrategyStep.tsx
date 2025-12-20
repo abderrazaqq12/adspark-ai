@@ -24,7 +24,7 @@ import {
   Users,
   LayoutGrid,
   Thermometer,
-  Layers
+  Layers as LayersIcon
 } from 'lucide-react';
 import {
   ProblemDisplay,
@@ -333,7 +333,7 @@ export function StrategyStep({
 
           <div className="space-y-2">
             <label className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1.5 ml-1">
-              <Layers className="w-3 h-3 text-green-400" /> Variations
+              <LayersIcon className="w-3 h-3 text-green-400" /> Variations
             </label>
             <Select
               value={variationCount.toString()}
