@@ -242,14 +242,16 @@ export function StrategyStep({
           </div>
         </div>
         
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div className="space-y-1.5">
-            <span className="text-xs text-muted-foreground font-medium">Goal</span>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:flex lg:flex-wrap items-end gap-4">
+          <div className="flex-1 min-w-[120px] space-y-1.5">
+            <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+              <Target className="w-3 h-3" /> Goal
+            </span>
             <Select 
               value={brainV2State.optimizationGoal} 
               onValueChange={(value: OptimizationGoal) => onSetGoal(value)}
             >
-              <SelectTrigger className="h-9 text-xs bg-background/50">
+              <SelectTrigger className="h-10 text-xs bg-background/50 border-primary/10 hover:border-primary/30 transition-colors">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -260,13 +262,15 @@ export function StrategyStep({
             </Select>
           </div>
           
-          <div className="space-y-1.5">
-            <span className="text-xs text-muted-foreground font-medium">Risk</span>
+          <div className="flex-1 min-w-[120px] space-y-1.5">
+            <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+              <Sparkles className="w-3 h-3" /> Risk
+            </span>
             <Select 
               value={brainV2State.riskTolerance} 
               onValueChange={(value: RiskTolerance) => onSetRisk(value)}
             >
-              <SelectTrigger className="h-9 text-xs bg-background/50">
+              <SelectTrigger className="h-10 text-xs bg-background/50 border-primary/10 hover:border-primary/30 transition-colors">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -277,50 +281,56 @@ export function StrategyStep({
             </Select>
           </div>
 
-          <div className="space-y-1.5">
-            <span className="text-xs text-muted-foreground font-medium">Platform</span>
+          <div className="flex-1 min-w-[150px] space-y-1.5">
+            <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+              <Smartphone className="w-3 h-3" /> Platform
+            </span>
             <Select 
               value={brainV2State.platform} 
               onValueChange={(value: PlatformType) => onSetPlatform(value)}
             >
-              <SelectTrigger className="h-9 text-xs bg-background/50">
+              <SelectTrigger className="h-10 text-xs bg-background/50 border-primary/10 hover:border-primary/30 transition-colors">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="tiktok"><div className="flex items-center gap-2"><Smartphone className="w-3 h-3" />TikTok</div></SelectItem>
-                <SelectItem value="reels"><div className="flex items-center gap-2"><Video className="w-3 h-3" />Reels</div></SelectItem>
-                <SelectItem value="youtube"><div className="flex items-center gap-2"><Youtube className="w-3 h-3" />YouTube</div></SelectItem>
-                <SelectItem value="facebook"><div className="flex items-center gap-2"><Users className="w-3 h-3" />Facebook</div></SelectItem>
-                <SelectItem value="snapchat"><div className="flex items-center gap-2"><MessageCircle className="w-3 h-3" />Snapchat</div></SelectItem>
-                <SelectItem value="general"><div className="flex items-center gap-2"><LayoutGrid className="w-3 h-3" />General</div></SelectItem>
+                <SelectItem value="tiktok"><div className="flex items-center gap-2">TikTok</div></SelectItem>
+                <SelectItem value="reels"><div className="flex items-center gap-2">Reels</div></SelectItem>
+                <SelectItem value="youtube"><div className="flex items-center gap-2">YouTube</div></SelectItem>
+                <SelectItem value="facebook"><div className="flex items-center gap-2">Facebook</div></SelectItem>
+                <SelectItem value="snapchat"><div className="flex items-center gap-2">Snapchat</div></SelectItem>
+                <SelectItem value="general"><div className="flex items-center gap-2">General</div></SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-1.5">
-            <span className="text-xs text-muted-foreground font-medium">Funnel</span>
+          <div className="flex-1 min-w-[150px] space-y-1.5">
+            <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+              <Thermometer className="w-3 h-3" /> Funnel
+            </span>
             <Select 
               value={brainV2State.funnelStage} 
               onValueChange={(value: FunnelStageType) => onSetFunnelStage(value)}
             >
-              <SelectTrigger className="h-9 text-xs bg-background/50">
+              <SelectTrigger className="h-10 text-xs bg-background/50 border-primary/10 hover:border-primary/30 transition-colors">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-popover border border-border">
-                <SelectItem value="cold"><div className="flex items-center gap-2"><Thermometer className="w-3 h-3 text-blue-400" />Cold</div></SelectItem>
-                <SelectItem value="warm"><div className="flex items-center gap-2"><Thermometer className="w-3 h-3 text-amber-400" />Warm</div></SelectItem>
-                <SelectItem value="retargeting"><div className="flex items-center gap-2"><Thermometer className="w-3 h-3 text-red-400" />Retargeting</div></SelectItem>
+                <SelectItem value="cold"><div className="flex items-center gap-2">Cold</div></SelectItem>
+                <SelectItem value="warm"><div className="flex items-center gap-2">Warm</div></SelectItem>
+                <SelectItem value="retargeting"><div className="flex items-center gap-2">Retargeting</div></SelectItem>
               </SelectContent>
             </Select>
           </div>
           
-          <div className="space-y-1.5">
-            <span className="text-xs text-muted-foreground font-medium">Variations</span>
+          <div className="w-[100px] space-y-1.5">
+            <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+              <Layers className="w-3 h-3" /> Variations
+            </span>
             <Select 
               value={variationCount.toString()} 
               onValueChange={(value) => onSetVariationCount(parseInt(value))}
             >
-              <SelectTrigger className="h-9 text-xs bg-background/50">
+              <SelectTrigger className="h-10 text-xs bg-background/50 border-primary/10 hover:border-primary/30 transition-colors">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -331,11 +341,14 @@ export function StrategyStep({
             </Select>
           </div>
 
-          <div className="space-y-1.5">
-            <span className="text-xs text-muted-foreground font-medium">Frameworks</span>
+          <div className="lg:ml-auto space-y-1.5">
+            <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+              <LayoutGrid className="w-3 h-3" /> Frameworks
+            </span>
             <FrameworkComparisonView compact />
           </div>
         </div>
+
       </div>
 
       {/* Content */}
