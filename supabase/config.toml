@@ -125,3 +125,6 @@ verify_jwt = false
 
 [functions.cloudinary-video-render]
 verify_jwt = false
+
+[functions.renderflow-health]
+verify_jwt = false
