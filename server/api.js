@@ -1077,8 +1077,8 @@ function handleExecute(req, res) {
   });
 }
 
-// POST /api/execute
-app.post('/api/execute', unifiedJobHandler);
+// POST /api/execute - Uses flat payload structure (Creative Replicator)
+app.post('/api/execute', handleExecute);
 
 // ============================================
 // POST /api/execute-plan
