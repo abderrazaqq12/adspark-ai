@@ -14,6 +14,98 @@ interface AnalysisRequest {
   duration: number;
   market?: string;
   language?: string;
+  sourceVideoId?: string; // Optional: explicit ID for RenderFlow
+}
+
+interface FFmpegScene {
+  type: string;
+  start: number;      // seconds (legacy)
+  end: number;        // seconds (legacy)
+  start_ms: number;   // milliseconds for frame-accuracy
+  end_ms: number;     // milliseconds for frame-accuracy
+  style?: string;
+  description: string;
+}
+
+// Extract source video ID from filename for RenderFlow compatibility
+function extractSourceVideoId(fileName: string): string {
+  // Remove extension and path, keep just the ID/name
+  const baseName = fileName.split('/').pop() || fileName;
+  const withoutExt = baseName.replace(/\.[^/.]+$/, '');
+  return withoutExt;
+}
+
+// Convert seconds to milliseconds with frame alignment (assuming 30fps)
+function toFrameAlignedMs(seconds: number, fps = 30): number {
+  const frameDurationMs = 1000 / fps;
+  const frames = Math.round(seconds * fps);
+  return Math.round(frames * frameDurationMs);
+}
+
+// Ensure scenes are contiguous and don't exceed duration
+function normalizeScenes(scenes: any[], durationSec: number): FFmpegScene[] {
+  if (!scenes || scenes.length === 0) {
+    // Fallback: single scene covering entire video
+    const durationMs = toFrameAlignedMs(durationSec);
+    return [{
+      type: "full",
+      start: 0,
+      end: durationSec,
+      start_ms: 0,
+      end_ms: durationMs,
+      description: "Full video"
+    }];
+  }
+
+  const normalized: FFmpegScene[] = [];
+  let currentMs = 0;
+  const maxDurationMs = toFrameAlignedMs(durationSec);
+
+  for (let i = 0; i < scenes.length; i++) {
+    const scene = scenes[i];
+    const startSec = scene.start ?? 0;
+    const endSec = scene.end ?? durationSec;
+    
+    // Calculate frame-aligned milliseconds
+    let startMs = toFrameAlignedMs(startSec);
+    let endMs = toFrameAlignedMs(endSec);
+    
+    // Ensure contiguity: this scene starts where the last one ended
+    if (i > 0) {
+      startMs = currentMs;
+    }
+    
+    // Ensure we don't exceed total duration
+    if (endMs > maxDurationMs) {
+      endMs = maxDurationMs;
+    }
+    
+    // Skip invalid scenes (start >= end)
+    if (startMs >= endMs) {
+      continue;
+    }
+    
+    normalized.push({
+      type: scene.type || "segment",
+      start: startMs / 1000,
+      end: endMs / 1000,
+      start_ms: startMs,
+      end_ms: endMs,
+      style: scene.style,
+      description: scene.description || `Segment ${i + 1}`
+    });
+    
+    currentMs = endMs;
+  }
+  
+  // If we have a gap at the end, extend the last scene
+  if (normalized.length > 0 && currentMs < maxDurationMs) {
+    const lastScene = normalized[normalized.length - 1];
+    lastScene.end_ms = maxDurationMs;
+    lastScene.end = maxDurationMs / 1000;
+  }
+  
+  return normalized;
 }
 
 serve(async (req) => {
@@ -39,9 +131,19 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { fileName, duration, market = "Saudi Arabia", language = "Arabic" }: AnalysisRequest = await req.json();
+    const { fileName, duration, market = "Saudi Arabia", language = "Arabic", sourceVideoId }: AnalysisRequest = await req.json();
+    
+    // Validate duration
+    if (!duration || duration <= 0) {
+      throw new Error('Invalid duration: must be a positive number');
+    }
+    
+    // Extract source video ID for RenderFlow compatibility
+    const videoId = sourceVideoId || extractSourceVideoId(fileName);
+    const durationMs = toFrameAlignedMs(duration);
 
-    console.log(`[AI-Brain] Analyzing ${fileName} (${duration}s) for ${market}/${language}`);
+    console.log(`[AI-Brain] Analyzing ${fileName} (${duration}s / ${durationMs}ms) for ${market}/${language}`);
+    console.log(`[AI-Brain] Source Video ID for RenderFlow: ${videoId}`);
 
     if (!isAIAvailable()) {
       throw new Error('No AI provider configured. Please add Gemini or OpenAI API key.');
@@ -107,18 +209,41 @@ serve(async (req) => {
     let analysis;
     try {
       const cleanContent = content.replace(/```json\n?|\n?```/g, '').trim();
-      analysis = JSON.parse(cleanContent);
+      const rawAnalysis = JSON.parse(cleanContent);
+      
+      // Normalize scenes for FFmpeg compatibility
+      const normalizedScenes = normalizeScenes(rawAnalysis.scenes, duration);
+      
+      analysis = {
+        ...rawAnalysis,
+        scenes: normalizedScenes,
+        source_video_id: videoId,
+        duration_sec: duration,
+        duration_ms: durationMs,
+        market,
+        language
+      };
+      
+      console.log(`[AI-Brain] Normalized ${normalizedScenes.length} scenes, total coverage: ${normalizedScenes[normalizedScenes.length - 1]?.end_ms || 0}ms`);
+      
     } catch (parseError) {
       console.error('[AI-Brain] JSON Parse Error:', parseError);
       console.log('Raw content:', content);
 
-      // Fallback Plan for robustness
+      // Fallback Plan with frame-accurate timestamps
+      const hookEndMs = toFrameAlignedMs(3);
+      const ctaStartMs = toFrameAlignedMs(duration - 3);
+      const durationMs = toFrameAlignedMs(duration);
+      
       analysis = {
         scenes: [
-          { type: "hook", start: 0, end: 3, style: "fast", description: "Hook" },
-          { type: "body", start: 3, end: duration - 3, description: "Main Content" },
-          { type: "cta", start: duration - 3, end: duration, description: "Call to Action" }
+          { type: "hook", start: 0, end: 3, start_ms: 0, end_ms: hookEndMs, style: "fast", description: "Hook" },
+          { type: "body", start: 3, end: duration - 3, start_ms: hookEndMs, end_ms: ctaStartMs, description: "Main Content" },
+          { type: "cta", start: duration - 3, end: duration, start_ms: ctaStartMs, end_ms: durationMs, description: "Call to Action" }
         ],
+        source_video_id: videoId,
+        duration_sec: duration,
+        duration_ms: durationMs,
         market,
         language,
         fallback: true
@@ -126,6 +251,7 @@ serve(async (req) => {
     }
 
     console.log(`[AI-Brain] Plan generated successfully via ${aiResponse.provider}`);
+    console.log(`[AI-Brain] Output for RenderFlow: source_video_id=${analysis.source_video_id}, scenes=${analysis.scenes.length}`);
 
     return new Response(JSON.stringify({
       success: true,
