@@ -23,7 +23,8 @@ import {
   MessageCircle,
   Users,
   LayoutGrid,
-  Thermometer
+  Thermometer,
+  Layers
 } from 'lucide-react';
 import {
   ProblemDisplay,
