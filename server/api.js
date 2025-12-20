@@ -980,7 +980,7 @@ const unifiedJobHandler = (req, res) => {
     let srcUrl = plan.timeline?.[0]?.asset_url;
     let srcPath = variations[0].data.sourcePath;
 
-    if (!srcUrl && typeof srcPath === 'string' && (srcPath.startsWith('http') || srcPath.startsWith('https'))) {
+    if (typeof srcPath === 'string' && (srcPath.startsWith('http') || srcPath.startsWith('https'))) {
       console.log('[Adapter] Moving URL from sourcePath to sourceVideoUrl (Plan Mode)');
       srcUrl = srcPath;
       srcPath = null;
