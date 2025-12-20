@@ -94,9 +94,6 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
   const [generationStartTime, setGenerationStartTime] = useState<number | undefined>();
   const generatingCountRef = useRef({ completed: 0, failed: 0, total: 0 });
   
-  // n8n Backend Mode settings
-  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
-  
   // Reference images for generation
   const [referenceImageUrl, setReferenceImageUrl] = useState('');
   const [uploadedReferenceImage, setUploadedReferenceImage] = useState<string | null>(null);
@@ -178,32 +175,17 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
 
       const { data: settings } = await supabase
         .from('user_settings')
-        .select('preferences, use_n8n_backend')
+        .select('preferences')
         .eq('user_id', user.id)
         .maybeSingle();
 
       if (settings) {
-        // Backend mode is now managed by useBackendMode hook
-        
         const prefs = settings.preferences as Record<string, any>;
         if (prefs) {
           setProductInfo({
             name: prefs.studio_product_name || '',
             description: prefs.studio_description || ''
           });
-          
-          // Load webhook URL - prefer per-stage, fallback to global
-          const stageWebhooks = prefs.stage_webhooks || {};
-          const imageGenWebhook = stageWebhooks.image_generation;
-          const globalWebhookUrl = prefs.n8n_global_webhook_url || prefs.global_webhook_url || '';
-          
-          if (imageGenWebhook?.webhook_url) {
-            setN8nWebhookUrl(imageGenWebhook.webhook_url);
-          } else if (globalWebhookUrl) {
-            // Fallback to global webhook if per-stage is not configured
-            setN8nWebhookUrl(globalWebhookUrl);
-            console.log('Using global webhook URL as fallback for image generation:', globalWebhookUrl);
-          }
         }
       }
 

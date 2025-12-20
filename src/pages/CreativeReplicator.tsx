@@ -68,7 +68,6 @@ export interface VariationConfig {
   };
   ratios: string[];
   engineTier: string;
-  useN8nWebhook: boolean;
   randomizeEngines: boolean;
   useAIOperator: boolean;
   adIntelligence: {
@@ -126,7 +125,6 @@ const CreativeReplicator = () => {
     voiceSettings: { language: "ar-sa", tone: "ai-auto" },
     ratios: ["9:16"],
     engineTier: "free",
-    useN8nWebhook: false,
     randomizeEngines: true,
     useAIOperator: true,
     adIntelligence: {

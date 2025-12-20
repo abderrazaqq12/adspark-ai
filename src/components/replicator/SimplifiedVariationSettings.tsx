@@ -477,15 +477,6 @@ export const SimplifiedVariationSettings = ({
               </p>
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center justify-between">
-                  <Label>Use n8n Webhook</Label>
-                  <Switch
-                    checked={config.useN8nWebhook}
-                    onCheckedChange={(checked) =>
-                      setConfig((prev) => ({ ...prev, useN8nWebhook: checked }))
-                    }
-                  />
-                </div>
-                <div className="flex items-center justify-between">
                   <Label>Randomize Engines</Label>
                   <Switch
                     checked={config.randomizeEngines}

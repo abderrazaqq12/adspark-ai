@@ -11,8 +11,6 @@ interface StageRequest {
   stage: number;
   stage_name: string;
   input_data: any;
-  use_n8n?: boolean;
-  n8n_webhook_url?: string;
 }
 
 const STAGE_NAMES: Record<number, string> = {
@@ -48,7 +46,7 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { project_id, stage, stage_name, input_data, use_n8n, n8n_webhook_url }: StageRequest = await req.json();
+    const { project_id, stage, stage_name, input_data }: StageRequest = await req.json();
 
     // Create pipeline job
     const { data: job, error: jobError } = await supabase
@@ -67,41 +65,8 @@ serve(async (req) => {
 
     if (jobError) throw jobError;
 
-    // Check if user wants n8n backend
-    let result: any;
-    
-    if (use_n8n && n8n_webhook_url) {
-      // Trigger n8n workflow
-      result = await triggerN8nWorkflow(n8n_webhook_url, {
-        job_id: job.id,
-        user_id: user.id,
-        project_id,
-        stage,
-        stage_name: stage_name || STAGE_NAMES[stage],
-        input_data,
-      });
-
-      // Update job with n8n execution ID
-      await supabase
-        .from('pipeline_jobs')
-        .update({
-          n8n_execution_id: result.execution_id,
-          status: 'processing',
-        })
-        .eq('id', job.id);
-
-      return new Response(JSON.stringify({
-        success: true,
-        job_id: job.id,
-        n8n_execution_id: result.execution_id,
-        status: 'processing',
-        message: 'Job sent to n8n workflow',
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     // Process internally based on stage
+    let result: any;
     try {
       switch (stage) {
         case 0:
@@ -194,25 +159,6 @@ serve(async (req) => {
   }
 });
 
-async function triggerN8nWorkflow(webhookUrl: string, payload: any): Promise<any> {
-  try {
-    const response = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error(`n8n webhook failed: ${response.status}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('n8n webhook error:', error);
-    throw error;
-  }
-}
-
 function getOperationType(stage: number): string {
   switch (stage) {
     case 1:
@@ -255,13 +201,10 @@ async function processProductInput(supabase: any, userId: string, projectId: str
 }
 
 async function processProductContent(supabase: any, userId: string, projectId: string, input: any) {
-  // This would call the AI to generate marketing content
-  // For now, return the input as stored
   return { success: true, content: input.content, cost: 0.01, engine: 'gemini' };
 }
 
 async function processImageGeneration(supabase: any, userId: string, projectId: string, input: any) {
-  // This would trigger image generation
   return { success: true, images: input.images || [], cost: 0.05, engine: input.engine || 'nanobanana' };
 }
 
@@ -272,7 +215,6 @@ async function processLandingPage(supabase: any, userId: string, projectId: stri
 async function processVideoScript(supabase: any, userId: string, projectId: string, input: any) {
   const { scripts } = input;
   
-  // Insert scripts
   if (scripts?.length > 0) {
     for (const script of scripts) {
       await supabase
@@ -316,7 +258,6 @@ async function processSceneBuilder(supabase: any, userId: string, projectId: str
 async function processVideoGeneration(supabase: any, userId: string, projectId: string, input: any) {
   const { scene_ids, engine } = input;
   
-  // Queue scenes for generation
   for (const sceneId of scene_ids || []) {
     await supabase
       .from('generation_queue')
@@ -335,7 +276,6 @@ async function processVideoGeneration(supabase: any, userId: string, projectId: 
 async function processAssembly(supabase: any, userId: string, projectId: string, input: any) {
   const { script_id, format, include_subtitles, include_music } = input;
 
-  // Create video output record
   const { data: output } = await supabase
     .from('video_outputs')
     .insert({

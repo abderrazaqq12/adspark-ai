@@ -135,7 +135,6 @@ export const GenerationProgress = ({
             </div>
             <div className="flex gap-2">
               <Badge variant="outline">{config.engineTier.toUpperCase()}</Badge>
-              {config.useN8nWebhook && <Badge variant="secondary">n8n</Badge>}
             </div>
           </div>
         </CardContent>

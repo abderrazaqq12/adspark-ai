@@ -869,16 +869,15 @@ async function getOperatorStatus(supabase: any, projectId: string, userId: strin
   const { data: apiKeyProviders } = await supabase.rpc('get_my_api_key_providers');
   const activeProviders = apiKeyProviders?.filter((p: any) => p.is_active).map((p: any) => p.provider) || [];
 
-  // Get user settings for n8n backend mode
+  // Get user settings
   const { data: userSettings } = await supabase
     .from('user_settings')
-    .select('use_n8n_backend, ai_operator_enabled, preferences')
+    .select('ai_operator_enabled, preferences')
     .eq('user_id', userId)
     .maybeSingle();
 
   return new Response(JSON.stringify({ 
     operator_enabled: userSettings?.ai_operator_enabled || false,
-    n8n_backend_enabled: userSettings?.use_n8n_backend || false,
     project_id: projectId,
     scenes: {
       total: scenes?.length || 0,
@@ -920,18 +919,6 @@ async function generateProjectImages(
 ) {
   console.log(`[ai-operator] Generating images for project ${projectId}`);
 
-  // Get user settings to check n8n backend mode
-  const { data: userSettings } = await supabase
-    .from('user_settings')
-    .select('use_n8n_backend, preferences')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  const useN8nBackend = userSettings?.use_n8n_backend || false;
-  const prefs = userSettings?.preferences as any;
-  const stageWebhooks = prefs?.stage_webhooks || {};
-  const imageGenWebhook = stageWebhooks['image_generation'];
-
   // Get project info
   const { data: project } = await supabase
     .from('projects')
@@ -944,61 +931,6 @@ async function generateProjectImages(
       status: 404,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  }
-
-  // If n8n backend mode is enabled and webhook is configured, use n8n
-  if (useN8nBackend && imageGenWebhook?.enabled && imageGenWebhook?.webhook_url) {
-    console.log(`[ai-operator] Routing image generation to n8n webhook`);
-    
-    try {
-      const webhookPayload = {
-        action: 'generate_images',
-        project_id: projectId,
-        user_id: userId,
-        product_name: project.product_name,
-        image_types: imageRequest.imageTypes || ['product', 'lifestyle'],
-        engine: imageRequest.engine || 'nanobanana',
-        market: project.market || 'us',
-        language: project.language || 'en',
-        timestamp: new Date().toISOString()
-      };
-
-      const n8nApiKey = prefs?.n8n_api_key;
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (n8nApiKey) {
-        headers['Authorization'] = `Bearer ${n8nApiKey}`;
-      }
-
-      const response = await fetch(imageGenWebhook.webhook_url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(webhookPayload),
-      });
-
-      // Log the operation
-      await supabase.from('operator_jobs').insert({
-        user_id: userId,
-        project_id: projectId,
-        job_type: 'generate_images_n8n',
-        status: 'completed',
-        input_data: webhookPayload,
-        output_data: { webhook_called: true, status: response.status }
-      });
-
-      return new Response(JSON.stringify({
-        success: true,
-        method: 'n8n_webhook',
-        message: 'Image generation request sent to n8n webhook',
-        webhook_status: response.status
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    } catch (error: any) {
-      console.error('[ai-operator] n8n webhook error:', error);
-      // Fall back to internal generation
-    }
   }
 
   // Use internal image generation
@@ -1192,7 +1124,7 @@ async function checkApiKeysStatus(supabase: any, userId: string) {
   // Get user settings
   const { data: userSettings } = await supabase
     .from('user_settings')
-    .select('pricing_tier, use_free_tier_only, ai_operator_enabled, use_n8n_backend')
+    .select('pricing_tier, use_free_tier_only, ai_operator_enabled')
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -1237,8 +1169,7 @@ async function checkApiKeysStatus(supabase: any, userId: string) {
     settings: {
       pricing_tier: userSettings?.pricing_tier || 'normal',
       use_free_tier_only: userSettings?.use_free_tier_only || false,
-      ai_operator_enabled: userSettings?.ai_operator_enabled || false,
-      n8n_backend_enabled: userSettings?.use_n8n_backend || false
+      ai_operator_enabled: userSettings?.ai_operator_enabled || false
     },
     api_keys: {
       total_configured: apiKeyProviders?.length || 0,
