@@ -1020,7 +1020,7 @@ function handleExecute(req, res) {
 }
 
 // POST /api/execute
-app.post('/api/execute', handleExecute);
+app.post('/api/execute', unifiedJobHandler);
 
 // ============================================
 // POST /api/execute-plan
@@ -1084,6 +1084,8 @@ app.post('/api/execute-plan', handleExecutePlan);
 
 const unifiedJobHandler = (req, res) => {
   console.log(`[Adapter] Incoming Job Request: ${req.path}`);
+  console.log('[Adapter] Payload:', JSON.stringify(req.body, null, 2));
+
   const { variations, project_id } = req.body;
 
   // 1. Check if it's a "Plan" (Unified Engine)
