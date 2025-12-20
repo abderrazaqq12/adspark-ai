@@ -66,10 +66,7 @@ export const StudioVideoCreation = ({ onNext }: StudioVideoCreationProps) => {
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [defaultEngine, setDefaultEngine] = useState('nano-banana');
 
-  // N8n backend mode settings
-  const [useN8nBackend, setUseN8nBackend] = useState(false);
-  const [aiOperatorEnabled, setAiOperatorEnabled] = useState(false);
-  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
+  // Settings state
   const [audienceTargeting, setAudienceTargeting] = useState<AudienceTargeting>({
     targetMarket: 'gcc',
     language: 'ar-sa',
@@ -88,14 +85,11 @@ export const StudioVideoCreation = ({ onNext }: StudioVideoCreationProps) => {
 
       const { data: settings } = await supabase
         .from('user_settings')
-        .select('preferences, use_n8n_backend, ai_operator_enabled')
+        .select('preferences')
         .eq('user_id', user.id)
         .maybeSingle();
 
       if (settings) {
-        setUseN8nBackend(settings.use_n8n_backend || false);
-        setAiOperatorEnabled(settings.ai_operator_enabled || false);
-        
         const prefs = settings.preferences as Record<string, any>;
         if (prefs) {
           setAudienceTargeting({
@@ -104,10 +98,6 @@ export const StudioVideoCreation = ({ onNext }: StudioVideoCreationProps) => {
             audienceAge: prefs.studio_audience_age || '25-34',
             audienceGender: prefs.studio_audience_gender || 'both',
           });
-          const stageWebhooks = prefs.stage_webhooks || {};
-          if (stageWebhooks.video_creation?.webhook_url) {
-            setN8nWebhookUrl(stageWebhooks.video_creation.webhook_url);
-          }
         }
       }
     } catch (error) {
@@ -244,13 +234,6 @@ export const StudioVideoCreation = ({ onNext }: StudioVideoCreationProps) => {
         <Badge variant="outline" className="text-primary border-primary">Step 6</Badge>
       </div>
 
-      {/* Webhook indicator */}
-      {useN8nBackend && n8nWebhookUrl && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground px-2">
-          <Webhook className="w-3 h-3 text-green-500" />
-          <span>Webhook enabled: {n8nWebhookUrl.substring(0, 50)}...</span>
-        </div>
-      )}
 
       {/* Video Settings */}
       <Card className="p-6 bg-card border-border">

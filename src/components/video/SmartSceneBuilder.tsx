@@ -131,8 +131,6 @@ export function SmartSceneBuilder({
   // Simplified settings
   const [videoType, setVideoType] = useState<string>('auto');
   const [engineTier, setEngineTier] = useState<'free' | 'low' | 'medium' | 'premium' | 'all'>('free');
-  const [useN8nWebhook, setUseN8nWebhook] = useState(false);
-  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
   
   // Local assets
   const [localAssets, setLocalAssets] = useState<LocalAsset[]>([]);
@@ -217,26 +215,7 @@ export function SmartSceneBuilder({
   }, [productImages]);
 
   const loadSettings = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: settings } = await supabase
-        .from('user_settings')
-        .select('preferences, use_n8n_backend')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (settings) {
-        setUseN8nWebhook(settings.use_n8n_backend || false);
-        const prefs = settings.preferences as Record<string, any>;
-        if (prefs?.stage_webhooks?.video_generation?.webhook_url) {
-          setN8nWebhookUrl(prefs.stage_webhooks.video_generation.webhook_url);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading settings:', error);
-    }
+    // Settings loading simplified - n8n removed
   };
 
   const getEngineForTier = (tier: string): string => {
@@ -339,52 +318,23 @@ export function SmartSceneBuilder({
         const engine = await getOptimalEngineForScene(scene);
 
         try {
-          if (useN8nWebhook && n8nWebhookUrl) {
-            const response = await fetch(n8nWebhookUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'generate_scene_video',
-                sceneId: scene.id,
-                projectId,
-                scriptId,
-                prompt: scene.visualPrompt || scene.text,
-                duration: scene.duration,
-                videoType: scene.videoType || videoType,
-                creativeType: scene.creativeType,
-                hookType: scene.hookType,
-                productImageUrl: scene.productImageUrl,
-                engine,
-              }),
-            });
+          const { data, error } = await supabase.functions.invoke('generate-scene-video', {
+            body: {
+              sceneId: scene.id,
+              engineName: engine,
+              prompt: scene.visualPrompt || scene.text,
+              imageUrl: scene.productImageUrl,
+            },
+          });
 
-            if (!response.ok) throw new Error('n8n webhook failed');
-            const data = await response.json();
-            
-            updateScene(scene.id, { 
-              status: 'completed', 
-              videoUrl: data.videoUrl,
-              engine: 'n8n-webhook'
-            });
-          } else {
-            const { data, error } = await supabase.functions.invoke('generate-scene-video', {
-              body: {
-                sceneId: scene.id,
-                engineName: engine,
-                prompt: scene.visualPrompt || scene.text,
-                imageUrl: scene.productImageUrl,
-              },
-            });
+          if (error) throw error;
 
-            if (error) throw error;
-
-            updateScene(scene.id, { 
-              status: data?.error ? 'failed' : 'completed',
-              videoUrl: data?.videoUrl,
-              engine,
-              error: data?.error,
-            });
-          }
+          updateScene(scene.id, { 
+            status: data?.error ? 'failed' : 'completed',
+            videoUrl: data?.videoUrl,
+            engine,
+            error: data?.error,
+          });
         } catch (err: any) {
           updateScene(scene.id, { status: 'failed', error: err.message });
         }
@@ -776,24 +726,8 @@ export function SmartSceneBuilder({
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-2">
           <Card className="p-4 bg-muted/30 border-border space-y-3">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="n8n-toggle" className="text-sm">Use n8n Webhook</Label>
-              <Switch
-                id="n8n-toggle"
-                checked={useN8nWebhook}
-                onCheckedChange={setUseN8nWebhook}
-              />
-            </div>
-            {useN8nWebhook && (
-              <Input
-                value={n8nWebhookUrl}
-                onChange={(e) => setN8nWebhookUrl(e.target.value)}
-                placeholder="n8n webhook URL..."
-                className="text-sm"
-              />
-            )}
             <p className="text-xs text-muted-foreground">
-              Enable to see individual engine selection per scene
+              Advanced settings for fine-tuned control over scene generation.
             </p>
           </Card>
         </CollapsibleContent>

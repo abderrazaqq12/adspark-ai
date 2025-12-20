@@ -5,7 +5,7 @@
 
 export type DeploymentTarget = 'lovable-cloud' | 'self-hosted' | 'docker' | 'local';
 export type AIProvider = 'lovable' | 'openai' | 'gemini' | 'ollama' | 'custom';
-export type BackendProvider = 'supabase' | 'rest' | 'n8n' | 'local';
+export type BackendProvider = 'supabase' | 'rest' | 'local';
 
 interface AppConfig {
   // Deployment
@@ -18,7 +18,6 @@ interface AppConfig {
     supabaseAnonKey: string;
     supabaseProjectId: string;
     restApiUrl?: string;
-    n8nWebhookUrl?: string;
   };
   
   // AI Providers
@@ -84,7 +83,6 @@ const buildConfig = (): AppConfig => {
       supabaseAnonKey: getEnvVar('VITE_SUPABASE_PUBLISHABLE_KEY', ''),
       supabaseProjectId,
       restApiUrl: getEnvVar('VITE_REST_API_URL'),
-      n8nWebhookUrl: getEnvVar('VITE_N8N_WEBHOOK_URL'),
     },
     
     ai: {
