@@ -131,11 +131,17 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { fileName, duration, market = "Saudi Arabia", language = "Arabic", sourceVideoId }: AnalysisRequest = await req.json();
+    const requestBody = await req.json();
+    const { fileName, market = "Saudi Arabia", language = "Arabic", sourceVideoId } = requestBody;
     
-    // Validate duration
-    if (!duration || duration <= 0) {
-      throw new Error('Invalid duration: must be a positive number');
+    // Parse duration robustly - handle string, number, undefined
+    let duration = requestBody.duration;
+    if (typeof duration === 'string') {
+      duration = parseFloat(duration);
+    }
+    if (typeof duration !== 'number' || isNaN(duration) || duration <= 0) {
+      console.log(`[AI-Brain] Invalid duration received: ${JSON.stringify(requestBody.duration)}, defaulting to 30s`);
+      duration = 30; // Default to 30 seconds if invalid
     }
     
     // Extract source video ID for RenderFlow compatibility
