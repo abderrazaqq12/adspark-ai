@@ -300,7 +300,7 @@ export function useCreativeScale(): UseCreativeScaleReturn {
 
     try {
       const { data, error: fnError } = await invokeWithTimeout<{ analysis: unknown }>(
-        'creative-replicator-analyze',
+        'creative-scale-analyze',
         {
           video_url: videoUrl,
           video_id: videoId,
