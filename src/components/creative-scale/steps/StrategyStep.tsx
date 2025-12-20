@@ -10,9 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  Target, 
-  RefreshCw, 
+import {
+  Target,
+  RefreshCw,
   ArrowRight,
   CheckCircle2,
   Brain,
@@ -25,11 +25,11 @@ import {
   LayoutGrid,
   Thermometer
 } from 'lucide-react';
-import { 
-  ProblemDisplay, 
-  ScoringDisplay, 
+import {
+  ProblemDisplay,
+  ScoringDisplay,
   BlueprintV2Card,
-  BrainStatus 
+  BrainStatus
 } from '@/components/creative-scale/BrainV2Display';
 import { BrainV2DecisionCard } from '@/components/creative-scale/BrainV2DecisionCard';
 import { VariationCard } from '@/components/creative-scale/VariationCard';
@@ -54,12 +54,12 @@ function deriveSignalsFromAnalysis(analysis: VideoAnalysis): ExtractedSignals {
   const ctaSegment = analysis.segments.find(s => s.type === 'cta');
   const benefitSegment = analysis.segments.find(s => s.type === 'benefit');
   const problemSegment = analysis.segments.find(s => s.type === 'problem');
-  
+
   // Calculate average pacing from segments
   const avgPacing = analysis.segments.length > 0
     ? analysis.segments.reduce((sum, s) => sum + s.pacing_score, 0) / analysis.segments.length
     : 0.6;
-  
+
   return {
     hook_strength: hookSegment?.attention_score ?? analysis.overall_scores.hook_strength ?? 0.5,
     pacing_score: avgPacing,
@@ -107,7 +107,7 @@ interface StrategyStepProps {
   onContinue: () => void;
 }
 
-export function StrategyStep({ 
+export function StrategyStep({
   analysis,
   blueprint,
   plans,
@@ -123,7 +123,7 @@ export function StrategyStep({
   onContinue
 }: StrategyStepProps) {
   const hasStrategy = blueprint && plans.length > 0;
-  
+
   // Track previous blueprint for comparison
   const [previousBlueprint, setPreviousBlueprint] = useState<CreativeBlueprint | null>(null);
   const [showComparison, setShowComparison] = useState(false);
@@ -155,10 +155,10 @@ export function StrategyStep({
   // Generate Ad Director review from analysis
   const adDirectorReview = useMemo(() => {
     if (!analysis) return null;
-    
+
     const signals = deriveSignalsFromAnalysis(analysis);
     const hormoziScore = deriveHormoziScore();
-    
+
     return generateAdDirectorReview(
       analysis,
       signals,
@@ -207,7 +207,7 @@ export function StrategyStep({
     const videoDuration = (analysis.metadata?.duration_ms || 15000) / 1000;
     const adPlatform = mapToAdPlatform(brainV2State.platform);
     const hasProof = analysis.segments.some(s => s.type === 'proof');
-    
+
     return selectFrameworkAutomatically({
       platform: adPlatform,
       videoLengthSec: videoDuration,
@@ -230,28 +230,34 @@ export function StrategyStep({
         </p>
       </div>
 
-      {/* Configuration - Enhanced Design */}
-      <div className="mb-6 p-5 bg-gradient-to-br from-primary/5 via-muted/30 to-purple-500/5 rounded-xl border border-primary/20 shadow-lg">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center">
-            <Brain className="w-5 h-5 text-primary-foreground" />
+      {/* Configuration - Optimized Design */}
+      <div className="mb-8 p-6 bg-slate-900/50 rounded-2xl border border-primary/20 shadow-xl relative overflow-hidden">
+        {/* Subtle background glow */}
+        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 blur-3xl -z-10" />
+
+        <div className="flex items-center gap-4 mb-6">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center shadow-lg shadow-primary/20">
+            <Brain className="w-6 h-6 text-white" />
           </div>
           <div>
-            <span className="text-sm font-semibold">Brain V2 Engine</span>
-            <p className="text-xs text-muted-foreground">AI-powered strategy generation</p>
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              Brain V2 Engine
+              <Badge variant="secondary" className="bg-primary/20 text-primary border-none text-[10px] h-4">PLATINUM</Badge>
+            </h3>
+            <p className="text-xs text-muted-foreground">High-performance AI strategy generation</p>
           </div>
         </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:flex lg:flex-wrap items-end gap-4">
-          <div className="flex-1 min-w-[120px] space-y-1.5">
-            <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
-              <Target className="w-3 h-3" /> Goal
-            </span>
-            <Select 
-              value={brainV2State.optimizationGoal} 
+
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="space-y-2">
+            <label className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1.5 ml-1">
+              <Target className="w-3 h-3 text-primary" /> Goal
+            </label>
+            <Select
+              value={brainV2State.optimizationGoal}
               onValueChange={(value: OptimizationGoal) => onSetGoal(value)}
             >
-              <SelectTrigger className="h-10 text-xs bg-background/50 border-primary/10 hover:border-primary/30 transition-colors">
+              <SelectTrigger className="h-10 text-xs bg-black/40 border-white/10 hover:border-primary/50 transition-all rounded-lg">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -261,16 +267,16 @@ export function StrategyStep({
               </SelectContent>
             </Select>
           </div>
-          
-          <div className="flex-1 min-w-[120px] space-y-1.5">
-            <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
-              <Sparkles className="w-3 h-3" /> Risk
-            </span>
-            <Select 
-              value={brainV2State.riskTolerance} 
+
+          <div className="space-y-2">
+            <label className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1.5 ml-1">
+              <Sparkles className="w-3 h-3 text-purple-400" /> Risk
+            </label>
+            <Select
+              value={brainV2State.riskTolerance}
               onValueChange={(value: RiskTolerance) => onSetRisk(value)}
             >
-              <SelectTrigger className="h-10 text-xs bg-background/50 border-primary/10 hover:border-primary/30 transition-colors">
+              <SelectTrigger className="h-10 text-xs bg-black/40 border-white/10 hover:border-primary/50 transition-all rounded-lg">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -281,247 +287,250 @@ export function StrategyStep({
             </Select>
           </div>
 
-          <div className="flex-1 min-w-[150px] space-y-1.5">
-            <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
-              <Smartphone className="w-3 h-3" /> Platform
-            </span>
-            <Select 
-              value={brainV2State.platform} 
+          <div className="space-y-2">
+            <label className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1.5 ml-1">
+              <Smartphone className="w-3 h-3 text-blue-400" /> Platform
+            </label>
+            <Select
+              value={brainV2State.platform}
               onValueChange={(value: PlatformType) => onSetPlatform(value)}
             >
-              <SelectTrigger className="h-10 text-xs bg-background/50 border-primary/10 hover:border-primary/30 transition-colors">
+              <SelectTrigger className="h-10 text-xs bg-black/40 border-white/10 hover:border-primary/50 transition-all rounded-lg">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="tiktok"><div className="flex items-center gap-2">TikTok</div></SelectItem>
-                <SelectItem value="reels"><div className="flex items-center gap-2">Reels</div></SelectItem>
-                <SelectItem value="youtube"><div className="flex items-center gap-2">YouTube</div></SelectItem>
-                <SelectItem value="facebook"><div className="flex items-center gap-2">Facebook</div></SelectItem>
-                <SelectItem value="snapchat"><div className="flex items-center gap-2">Snapchat</div></SelectItem>
-                <SelectItem value="general"><div className="flex items-center gap-2">General</div></SelectItem>
+                <SelectItem value="tiktok">TikTok</SelectItem>
+                <SelectItem value="reels">Reels</SelectItem>
+                <SelectItem value="youtube">YouTube</SelectItem>
+                <SelectItem value="facebook">Facebook</SelectItem>
+                <SelectItem value="snapchat">Snapchat</SelectItem>
+                <SelectItem value="general">General</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          <div className="flex-1 min-w-[150px] space-y-1.5">
-            <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
-              <Thermometer className="w-3 h-3" /> Funnel
-            </span>
-            <Select 
-              value={brainV2State.funnelStage} 
+          <div className="space-y-2">
+            <label className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1.5 ml-1">
+              <Thermometer className="w-3 h-3 text-orange-400" /> Funnel
+            </label>
+            <Select
+              value={brainV2State.funnelStage}
               onValueChange={(value: FunnelStageType) => onSetFunnelStage(value)}
             >
-              <SelectTrigger className="h-10 text-xs bg-background/50 border-primary/10 hover:border-primary/30 transition-colors">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border border-border">
-                <SelectItem value="cold"><div className="flex items-center gap-2">Cold</div></SelectItem>
-                <SelectItem value="warm"><div className="flex items-center gap-2">Warm</div></SelectItem>
-                <SelectItem value="retargeting"><div className="flex items-center gap-2">Retargeting</div></SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div className="w-[100px] space-y-1.5">
-            <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
-              <Layers className="w-3 h-3" /> Variations
-            </span>
-            <Select 
-              value={variationCount.toString()} 
-              onValueChange={(value) => onSetVariationCount(parseInt(value))}
-            >
-              <SelectTrigger className="h-10 text-xs bg-background/50 border-primary/10 hover:border-primary/30 transition-colors">
+              <SelectTrigger className="h-10 text-xs bg-black/40 border-white/10 hover:border-primary/50 transition-all rounded-lg">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {[1, 2, 3, 4, 5, 6, 8, 10, 15, 20].map(n => (
-                  <SelectItem key={n} value={n.toString()}>{n}</SelectItem>
+                <SelectItem value="cold">Cold</SelectItem>
+                <SelectItem value="warm">Warm</SelectItem>
+                <SelectItem value="retargeting">Retargeting</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1.5 ml-1">
+              <Layers className="w-3 h-3 text-green-400" /> Variations
+            </label>
+            <Select
+              value={variationCount.toString()}
+              onValueChange={(value) => onSetVariationCount(parseInt(value))}
+            >
+              <SelectTrigger className="h-10 text-xs bg-black/40 border-white/10 hover:border-primary/50 transition-all rounded-lg">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[1, 2, 3, 4, 5, 10].map(n => (
+                  <SelectItem key={n} value={n.toString()}>{n} Ideas</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          <div className="lg:ml-auto space-y-1.5">
-            <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
-              <LayoutGrid className="w-3 h-3" /> Frameworks
-            </span>
-            <FrameworkComparisonView compact />
+          <div className="space-y-2">
+            <label className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1.5 ml-1">
+              <LayoutGrid className="w-3 h-3 text-pink-400" /> Frameworks
+            </label>
+            <div className="h-10 flex items-center">
+              <FrameworkComparisonView compact />
+            </div>
           </div>
         </div>
 
-      </div>
+        {/* Content */}
+        <div className="flex-1">
 
-      {/* Content */}
-      <div className="flex-1">
-        {!hasStrategy && !isGenerating && (
-          <div className="flex flex-col items-center justify-center h-full text-center py-12">
-            <div className="relative mb-8">
-              <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center">
-                <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center animate-pulse">
-                  <Sparkles className="w-8 h-8 text-primary-foreground" />
-                </div>
-              </div>
-              <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
-                <Brain className="w-3 h-3 text-white" />
-              </div>
-            </div>
-            <h3 className="text-xl font-bold mb-2">Ready to Generate AI Strategy</h3>
-            <p className="text-muted-foreground max-w-md mb-8 text-sm">
-              Brain V2 will analyze your video, detect improvement opportunities, 
-              and create {variationCount} unique AI-powered variation{variationCount !== 1 ? 's' : ''}.
-            </p>
-            <Button 
-              size="lg"
-              onClick={onGenerate}
-              className="h-14 px-10 text-base bg-gradient-to-r from-primary to-purple-500 hover:from-primary/90 hover:to-purple-500/90 shadow-lg shadow-primary/25"
-            >
-              <Brain className="w-5 h-5 mr-2" />
-              Generate AI Strategy
-            </Button>
-          </div>
-        )}
-
-        {isGenerating && (
-          <div className="flex flex-col items-center justify-center h-full text-center py-12">
-            <div className="relative">
-              <div className="w-20 h-20 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Brain className="w-8 h-8 text-primary animate-pulse" />
-              </div>
-            </div>
-            <h3 className="text-lg font-semibold mt-6 mb-2">AI Generating Strategy...</h3>
-            <p className="text-muted-foreground text-sm">Analyzing patterns and creating unique variations</p>
-          </div>
-        )}
-
-        {hasStrategy && !isGenerating && (
-          <ScrollArea className="h-[calc(100vh-420px)] min-h-[250px]">
-            <div className="space-y-6">
-              {/* Compliance Status Card */}
-              {complianceResult && (
-                <ComplianceStatusCard result={complianceResult} />
-              )}
-
-              {/* Auto Framework Selection Card */}
-              {autoFrameworkResult && (
-                <AutoFrameworkCard 
-                  result={autoFrameworkResult} 
-                  context={{
-                    platform: mapToAdPlatform(brainV2State.platform),
-                    videoLengthSec: (analysis.metadata?.duration_ms || 15000) / 1000,
-                    riskLevel: complianceResult?.overallRisk || 'safe',
-                    funnelStage: brainV2State.funnelStage as FunnelStage,
-                    hasProofElements: analysis.segments.some(s => s.type === 'proof'),
-                    hookStrength: analysis.overall_scores?.hook_strength || 0.5
-                  }}
-                />
-              )}
-
-              {/* Strategy Comparison View */}
-              {showComparison && previousBlueprint && blueprint && (
-                <StrategyComparisonView
-                  previousBlueprint={previousBlueprint}
-                  currentBlueprint={blueprint}
-                  onDismiss={handleDismissComparison}
-                  onKeepNew={handleKeepNew}
-                  onRevertToOld={handleRevertToOld}
-                />
-              )}
-
-              {/* Strategy Complete Badge + Regenerate Button */}
-              <div className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-500" />
-                  <span className="text-sm font-medium text-green-600">
-                    {plans.length} Variation{plans.length !== 1 ? 's' : ''} Ready
-                  </span>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onGenerate}
-                  className="gap-2 border-primary/30 hover:bg-primary/10"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Regenerate Strategy
-                </Button>
-              </div>
-
-              {/* Predictive Metrics */}
-              {predictiveMetrics && (
-                <PredictiveMetrics metrics={predictiveMetrics} />
-              )}
-
-              {/* Problems if any */}
-              {brainV2State.detectedProblems.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium mb-2">Detected Issues</h4>
-                  <ProblemDisplay problems={brainV2State.detectedProblems} />
-                </div>
-              )}
-
-              {/* Framework Explainer Card - Why this framework was chosen */}
-              {brainV2State.blueprintsV2.length > 0 && brainV2State.blueprintsV2[0]?.decision && (
-                <FrameworkExplainerCard
-                  selectedFramework={brainV2State.blueprintsV2[0].decision.framework_decision.primary_framework}
-                  reasoning={brainV2State.blueprintsV2[0].decision.explanation.why_chosen}
-                  rejectedFrameworks={brainV2State.blueprintsV2[0].decision.explanation.why_others_rejected}
-                  confidence={brainV2State.blueprintsV2[0].decision.framework_decision.confidence}
-                  goal={brainV2State.optimizationGoal}
-                  detectedProblems={brainV2State.detectedProblems.map(p => p.type)}
-                />
-              )}
-
-              {/* Brain V2 Decision Card - Framework, Hormozi, Optimization Plan */}
-              {brainV2State.blueprintsV2.length > 0 && brainV2State.blueprintsV2[0]?.decision && (
-                <div className="space-y-4">
-                  <h4 className="text-sm font-medium">AI Brain v2 Decision</h4>
-                  <BrainV2DecisionCard decision={brainV2State.blueprintsV2[0].decision} />
-                </div>
-              )}
-
-              {/* Ad Director Marketing Suggestions */}
-              {adDirectorReview && (
-                <AdDirectorPanel review={adDirectorReview} />
-              )}
-
-              {/* Brain V2 Blueprints */}
-              {brainV2State.blueprintsV2.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium mb-2">AI Strategy</h4>
-                  {brainV2State.blueprintsV2.map((bp, idx) => (
-                    <BlueprintV2Card key={idx} blueprint={bp} index={idx} />
-                  ))}
-                </div>
-              )}
-
-              {/* Variation Preview */}
-              {blueprint && (
-                <div>
-                  <h4 className="text-sm font-medium mb-3">Planned Variations</h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    {blueprint.variation_ideas.slice(0, plans.length).map((variation, idx) => (
-                      <VariationCard
-                        key={variation.id}
-                        variation={variation}
-                        index={idx}
-                        framework={blueprint.framework}
-                        expectedLiftPct={10 + idx * 5}
-                        aiReasoning={variation.reasoning}
-                      />
-                    ))}
+          {!hasStrategy && !isGenerating && (
+            <div className="flex flex-col items-center justify-center h-full text-center py-12">
+              <div className="relative mb-8">
+                <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center">
+                  <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center animate-pulse">
+                    <Sparkles className="w-8 h-8 text-primary-foreground" />
                   </div>
                 </div>
-              )}
+                <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                  <Brain className="w-3 h-3 text-white" />
+                </div>
+              </div>
+              <h3 className="text-xl font-bold mb-2">Ready to Generate AI Strategy</h3>
+              <p className="text-muted-foreground max-w-md mb-8 text-sm">
+                Brain V2 will analyze your video, detect improvement opportunities,
+                and create {variationCount} unique AI-powered variation{variationCount !== 1 ? 's' : ''}.
+              </p>
+              <Button
+                size="lg"
+                onClick={onGenerate}
+                className="h-14 px-10 text-base bg-gradient-to-r from-primary to-purple-500 hover:from-primary/90 hover:to-purple-500/90 shadow-lg shadow-primary/25"
+              >
+                <Brain className="w-5 h-5 mr-2" />
+                Generate AI Strategy
+              </Button>
             </div>
-          </ScrollArea>
-        )}
+          )}
+
+          {isGenerating && (
+            <div className="flex flex-col items-center justify-center h-full text-center py-12">
+              <div className="relative">
+                <div className="w-20 h-20 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Brain className="w-8 h-8 text-primary animate-pulse" />
+                </div>
+              </div>
+              <h3 className="text-lg font-semibold mt-6 mb-2">AI Generating Strategy...</h3>
+              <p className="text-muted-foreground text-sm">Analyzing patterns and creating unique variations</p>
+            </div>
+          )}
+
+          {hasStrategy && !isGenerating && (
+            <ScrollArea className="h-[calc(100vh-420px)] min-h-[250px]">
+              <div className="space-y-6">
+                {/* Compliance Status Card */}
+                {complianceResult && (
+                  <ComplianceStatusCard result={complianceResult} />
+                )}
+
+                {/* Auto Framework Selection Card */}
+                {autoFrameworkResult && (
+                  <AutoFrameworkCard
+                    result={autoFrameworkResult}
+                    context={{
+                      platform: mapToAdPlatform(brainV2State.platform),
+                      videoLengthSec: (analysis.metadata?.duration_ms || 15000) / 1000,
+                      riskLevel: complianceResult?.overallRisk || 'safe',
+                      funnelStage: brainV2State.funnelStage as FunnelStage,
+                      hasProofElements: analysis.segments.some(s => s.type === 'proof'),
+                      hookStrength: analysis.overall_scores?.hook_strength || 0.5
+                    }}
+                  />
+                )}
+
+                {/* Strategy Comparison View */}
+                {showComparison && previousBlueprint && blueprint && (
+                  <StrategyComparisonView
+                    previousBlueprint={previousBlueprint}
+                    currentBlueprint={blueprint}
+                    onDismiss={handleDismissComparison}
+                    onKeepNew={handleKeepNew}
+                    onRevertToOld={handleRevertToOld}
+                  />
+                )}
+
+                {/* Strategy Complete Badge + Regenerate Button */}
+                <div className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                    <span className="text-sm font-medium text-green-600">
+                      {plans.length} Variation{plans.length !== 1 ? 's' : ''} Ready
+                    </span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onGenerate}
+                    className="gap-2 border-primary/30 hover:bg-primary/10"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Regenerate Strategy
+                  </Button>
+                </div>
+
+                {/* Predictive Metrics */}
+                {predictiveMetrics && (
+                  <PredictiveMetrics metrics={predictiveMetrics} />
+                )}
+
+                {/* Problems if any */}
+                {brainV2State.detectedProblems.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">Detected Issues</h4>
+                    <ProblemDisplay problems={brainV2State.detectedProblems} />
+                  </div>
+                )}
+
+                {/* Framework Explainer Card - Why this framework was chosen */}
+                {brainV2State.blueprintsV2.length > 0 && brainV2State.blueprintsV2[0]?.decision && (
+                  <FrameworkExplainerCard
+                    selectedFramework={brainV2State.blueprintsV2[0].decision.framework_decision.primary_framework}
+                    reasoning={brainV2State.blueprintsV2[0].decision.explanation.why_chosen}
+                    rejectedFrameworks={brainV2State.blueprintsV2[0].decision.explanation.why_others_rejected}
+                    confidence={brainV2State.blueprintsV2[0].decision.framework_decision.confidence}
+                    goal={brainV2State.optimizationGoal}
+                    detectedProblems={brainV2State.detectedProblems.map(p => p.type)}
+                  />
+                )}
+
+                {/* Brain V2 Decision Card - Framework, Hormozi, Optimization Plan */}
+                {brainV2State.blueprintsV2.length > 0 && brainV2State.blueprintsV2[0]?.decision && (
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-medium">AI Brain v2 Decision</h4>
+                    <BrainV2DecisionCard decision={brainV2State.blueprintsV2[0].decision} />
+                  </div>
+                )}
+
+                {/* Ad Director Marketing Suggestions */}
+                {adDirectorReview && (
+                  <AdDirectorPanel review={adDirectorReview} />
+                )}
+
+                {/* Brain V2 Blueprints */}
+                {brainV2State.blueprintsV2.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">AI Strategy</h4>
+                    {brainV2State.blueprintsV2.map((bp, idx) => (
+                      <BlueprintV2Card key={idx} blueprint={bp} index={idx} />
+                    ))}
+                  </div>
+                )}
+
+                {/* Variation Preview */}
+                {blueprint && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-3">Planned Variations</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      {blueprint.variation_ideas.slice(0, plans.length).map((variation, idx) => (
+                        <VariationCard
+                          key={variation.id}
+                          variation={variation}
+                          index={idx}
+                          framework={blueprint.framework}
+                          expectedLiftPct={10 + idx * 5}
+                          aiReasoning={variation.reasoning}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          )}
+        </div>
+
       </div>
 
       {/* Continue CTA */}
       {hasStrategy && (
         <div className="pt-6 border-t border-border mt-auto">
-          <Button 
+          <Button
             className="w-full h-12 text-base"
             onClick={onContinue}
           >
