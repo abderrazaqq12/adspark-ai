@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Upload, Link2, FileText, ArrowRight, Loader2, Sheet, Database, Image as ImageIcon, Webhook, X, Video, File } from 'lucide-react';
+import { Upload, Link2, FileText, ArrowRight, Loader2, Sheet, Database, Image as ImageIcon, X, Video, File } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -41,10 +41,8 @@ export const StudioProductInput = ({
   const [sheetConnected, setSheetConnected] = useState(false);
   const [isLoadingSheet, setIsLoadingSheet] = useState(false);
   
-  // Webhook settings from Backend Mode
-  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
-  const [useN8nBackend, setUseN8nBackend] = useState(false);
-  const [webhookResponse, setWebhookResponse] = useState<any>(null);
+  // AI Operator mode
+  const [aiOperatorEnabled, setAiOperatorEnabled] = useState(false);
   
   // Media file uploads
   const [uploadedFiles, setUploadedFiles] = useState<{ name: string; url: string; type: 'image' | 'video' }[]>([]);
@@ -101,13 +99,12 @@ export const StudioProductInput = ({
 
       const { data: settings } = await supabase
         .from('user_settings')
-        .select('preferences, use_n8n_backend')
+        .select('preferences, ai_operator_enabled')
         .eq('user_id', user.id)
         .maybeSingle();
 
       if (settings) {
-        // Load Backend Mode setting from column
-        setUseN8nBackend(settings.use_n8n_backend || false);
+        setAiOperatorEnabled(settings.ai_operator_enabled || false);
         
         const prefs = settings.preferences as Record<string, any>;
         if (prefs) {
@@ -124,13 +121,6 @@ export const StudioProductInput = ({
           setAudienceGender(prefs.studio_audience_gender || 'both');
           setSheetUrl(prefs.google_sheet_url || '');
           if (prefs.google_sheet_url) setSheetConnected(true);
-          
-          // Load webhook URL from per-stage webhooks
-          const stageWebhooks = prefs.stage_webhooks || {};
-          const productInputWebhook = stageWebhooks.product_input;
-          if (productInputWebhook?.webhook_url) {
-            setN8nWebhookUrl(productInputWebhook.webhook_url);
-          }
         }
       }
     } catch (error) {
@@ -284,49 +274,6 @@ export const StudioProductInput = ({
         // Notify parent of project creation
         if (onProjectCreated && projectId) {
           onProjectCreated(projectId);
-        }
-      }
-
-      // Call webhook if n8n Backend Mode is enabled
-      if (useN8nBackend && n8nWebhookUrl) {
-        try {
-          console.log('Calling Product Input webhook:', n8nWebhookUrl);
-          const fetchResponse = await fetch(n8nWebhookUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              action: 'product_input',
-              productName,
-              productDescription: description,
-              productUrl,
-              mediaLinks: mediaLinks.split('\n').filter(Boolean),
-              targetMarket,
-              language,
-              audienceAge,
-              audienceGender,
-              projectId,
-              userId: user.id,
-              timestamp: new Date().toISOString(),
-            }),
-          });
-
-          if (fetchResponse.ok) {
-            const webhookData = await fetchResponse.json();
-            console.log('Webhook response:', webhookData);
-            setWebhookResponse(webhookData);
-            toast({
-              title: "Webhook Triggered",
-              description: "Product data sent to n8n workflow",
-            });
-          } else {
-            console.error('Webhook error:', fetchResponse.status);
-            setWebhookResponse({ error: `HTTP ${fetchResponse.status}` });
-          }
-        } catch (webhookError) {
-          console.error('Webhook call failed:', webhookError);
-          // Don't block the flow if webhook fails
         }
       }
 
@@ -685,27 +632,6 @@ export const StudioProductInput = ({
           </div>
         </div>
       </Card>
-
-      {/* Webhook indicator */}
-      {useN8nBackend && n8nWebhookUrl && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground px-2">
-          <Webhook className="w-3 h-3 text-green-500" />
-          <span>Webhook enabled: {n8nWebhookUrl.substring(0, 50)}...</span>
-        </div>
-      )}
-
-      {/* Webhook Response Preview */}
-      {webhookResponse && (
-        <Card className="p-4 bg-card/50 border-border">
-          <div className="flex items-center gap-2 mb-3">
-            <Webhook className="w-4 h-4 text-primary" />
-            <h4 className="font-medium text-sm text-foreground">Webhook Response</h4>
-          </div>
-          <pre className="text-xs bg-background p-3 rounded-md overflow-auto max-h-48 text-muted-foreground">
-            {JSON.stringify(webhookResponse, null, 2)}
-          </pre>
-        </Card>
-      )}
 
       {/* Submit */}
       <div className="flex justify-end">

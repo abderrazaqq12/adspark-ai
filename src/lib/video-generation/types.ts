@@ -2,7 +2,7 @@
 
 export type CostMode = 'free' | 'budget' | 'premium' | 'ai-chooses';
 export type QualityPreference = 'fast' | 'balanced' | 'cinematic';
-export type ExecutionMode = 'agent' | 'n8n' | 'edge';
+export type ExecutionMode = 'agent' | 'edge';
 export type EngineCapability = 'text-to-video' | 'image-to-video' | 'video-to-video' | 'avatar';
 
 export interface VideoEngine {

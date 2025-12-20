@@ -13,7 +13,6 @@ import {
   Film, 
   DollarSign,
   Cpu,
-  Workflow,
   Server,
   ChevronDown,
   Play,
@@ -260,7 +259,7 @@ export const UnifiedVideoCreation: React.FC<UnifiedVideoCreationProps> = ({
             <RadioGroup 
               value={executionMode} 
               onValueChange={(v) => setExecutionMode(v as ExecutionMode)}
-              className="grid grid-cols-3 gap-3"
+              className="grid grid-cols-2 gap-3"
             >
               <Label 
                 htmlFor="exec-agent" 
@@ -275,21 +274,6 @@ export const UnifiedVideoCreation: React.FC<UnifiedVideoCreationProps> = ({
                     <span className="font-medium">AI Agent</span>
                   </div>
                   <p className="text-xs text-muted-foreground">Recommended</p>
-                </div>
-              </Label>
-              <Label 
-                htmlFor="exec-n8n" 
-                className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  executionMode === 'n8n' ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted/50'
-                }`}
-              >
-                <RadioGroupItem value="n8n" id="exec-n8n" />
-                <div>
-                  <div className="flex items-center gap-1">
-                    <Workflow className="h-4 w-4 text-orange-500" />
-                    <span className="font-medium">Automation</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">n8n workflows</p>
                 </div>
               </Label>
               <Label 
