@@ -14,8 +14,8 @@ import { Layout } from "@/components/Layout";
 import AutopilotProgress from "@/components/AutopilotProgress";
 
 const LANGUAGES = [
+  { value: 'ar', label: 'Arabic' },
   { value: 'en', label: 'English' },
-  { value: 'ar', label: 'Arabic (Saudi)' },
   { value: 'es', label: 'Spanish' },
   { value: 'fr', label: 'French' },
   { value: 'de', label: 'German' },

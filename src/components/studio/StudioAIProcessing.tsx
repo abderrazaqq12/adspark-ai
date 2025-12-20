@@ -243,8 +243,8 @@ export const StudioAIProcessing = ({ onNext }: StudioAIProcessingProps) => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="ar">Arabic</SelectItem>
                 <SelectItem value="en">English</SelectItem>
-                <SelectItem value="ar">Arabic (Saudi)</SelectItem>
                 <SelectItem value="es">Spanish</SelectItem>
                 <SelectItem value="fr">French</SelectItem>
               </SelectContent>

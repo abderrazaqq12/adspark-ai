@@ -25,9 +25,7 @@ import { useAdIntelligence, MARKET_PROFILES, VIDEO_TYPE_STRUCTURES, PLATFORM_IDE
 
 // Language options
 const LANGUAGES = [
-  { id: "ar-sa", label: "Arabic (Saudi)", flag: "🇸🇦" },
-  { id: "ar", label: "Arabic (MSA)", flag: "🌍" },
-  { id: "ar-gulf", label: "Arabic (Gulf)", flag: "🇦🇪" },
+  { id: "ar", label: "Arabic", flag: "🌍" },
   { id: "en", label: "English", flag: "🇺🇸" },
   { id: "es", label: "Spanish", flag: "🇪🇸" },
   { id: "fr", label: "French", flag: "🇫🇷" },

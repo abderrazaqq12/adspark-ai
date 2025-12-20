@@ -72,7 +72,7 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
   const [aiOperatorEnabled, setAiOperatorEnabled] = useState(false);
   const [audienceTargeting, setAudienceTargeting] = useState<AudienceTargeting>({
     targetMarket: 'gcc',
-    language: 'ar-sa',
+    language: 'ar',
     audienceAge: '25-34',
     audienceGender: 'both',
   });
@@ -101,7 +101,7 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
           // Load audience targeting
           setAudienceTargeting({
             targetMarket: prefs.studio_target_market || 'gcc',
-            language: prefs.studio_language || 'ar-sa',
+            language: prefs.studio_language || 'ar',
             audienceAge: prefs.studio_audience_age || '25-34',
             audienceGender: prefs.studio_audience_gender || 'both',
           });

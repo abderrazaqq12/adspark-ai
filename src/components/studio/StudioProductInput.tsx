@@ -31,7 +31,7 @@ export const StudioProductInput = ({
   const [description, setDescription] = useState('');
   const [mediaLinks, setMediaLinks] = useState('');
   const [targetMarket, setTargetMarket] = useState('sa');
-  const [language, setLanguage] = useState('ar-sa');
+  const [language, setLanguage] = useState('ar');
   const [audienceAge, setAudienceAge] = useState('25-34');
   const [audienceGender, setAudienceGender] = useState('both');
   
@@ -116,7 +116,7 @@ export const StudioProductInput = ({
             setMediaLinks(prefs.studio_media_links || '');
           }
           setTargetMarket(prefs.studio_target_market || 'sa');
-          setLanguage(prefs.studio_language || 'ar-sa');
+          setLanguage(prefs.studio_language || 'ar');
           setAudienceAge(prefs.studio_audience_age || '25-34');
           setAudienceGender(prefs.studio_audience_gender || 'both');
           setSheetUrl(prefs.google_sheet_url || '');
@@ -330,9 +330,7 @@ export const StudioProductInput = ({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ar-sa">Arabic...</SelectItem>
-                <SelectItem value="ar-msa">Arabic (MSA)</SelectItem>
-                <SelectItem value="ar-gulf">Arabic (Gulf)</SelectItem>
+                <SelectItem value="ar">Arabic</SelectItem>
                 <SelectItem value="en">English</SelectItem>
                 <SelectItem value="es">Spanish</SelectItem>
                 <SelectItem value="fr">French</SelectItem>
