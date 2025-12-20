@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Zap, Upload, Settings2, Play, FolderOpen, Brain } from "lucide-react";
+import { Zap, Upload, Settings2, Play, FolderOpen, Brain, Server, Cloud, CheckCircle2, Loader2 } from "lucide-react";
 import { AdUploader } from "@/components/replicator/AdUploader";
 import { SimplifiedVariationSettings } from "@/components/replicator/SimplifiedVariationSettings";
 import { GenerationProgress } from "@/components/replicator/GenerationProgress";
@@ -18,13 +18,8 @@ import { ScenePlan } from "@/lib/video-engines/registry-types";
 import { RenderDebugPanel } from "@/components/replicator/RenderDebugPanel";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useRenderBackendStatus } from "@/hooks/useRenderBackendStatus";
 
 export interface UploadedAd {
   id: string;
@@ -110,6 +105,9 @@ const ENGINE_BY_TIER: Record<string, string[]> = {
 };
 
 const CreativeReplicator = () => {
+  // Auto-detect available backends
+  const backendStatus = useRenderBackendStatus();
+  
   const [activeStep, setActiveStep] = useState<string>("upload");
   const [projectName, setProjectName] = useState<string>("");
   const [uploadedAds, setUploadedAds] = useState<UploadedAd[]>([]);
@@ -142,9 +140,7 @@ const CreativeReplicator = () => {
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
 
-  // Advanced Mode State
-  const [isAdvancedMode, setIsAdvancedMode] = useState(false);
-  const [renderingMode, setRenderingMode] = useState<RenderingMode>('auto');
+  // Debug state
   const [debugInfo, setDebugInfo] = useState<any>(null);
 
   // Real-time subscription for video status updates
@@ -306,12 +302,18 @@ const CreativeReplicator = () => {
           requiredCapabilities: ["trim", "merge", "text_overlay"]
         };
 
-        // 2b. ROUTE TO ENGINE
+        // 2b. ROUTE TO ENGINE (Auto-detect based on available backends)
+        const autoRenderingMode: RenderingMode = backendStatus.vpsServer.available 
+          ? 'server_only' 
+          : backendStatus.edgeFunctions.available 
+            ? 'auto' 
+            : 'cloudinary_only';
+
         const routingReq: RoutingRequest = {
           plan,
           userTier: variationConfig.engineTier as any,
-          preferLocal: true,
-          renderingMode: renderingMode // User override
+          preferLocal: backendStatus.vpsServer.available,
+          renderingMode: autoRenderingMode
         };
 
         const engineSpec = AdvancedEngineRouter.selectEngine(routingReq);
@@ -320,9 +322,13 @@ const CreativeReplicator = () => {
         // Update Debug Info
         setDebugInfo({
           engine: engineSpec.name,
-          executionPath: `Router(${renderingMode}) -> ${engineSpec.id}`,
+          executionPath: `Auto(${backendStatus.recommended}) -> ${engineSpec.id}`,
           status: 'pending',
-          logs: ['Selecting engine...', `Chosen: ${engineSpec.name}`],
+          logs: [
+            `Backend detection: VPS=${backendStatus.vpsServer.available}, Edge=${backendStatus.edgeFunctions.available}`,
+            `Auto-selected: ${autoRenderingMode}`,
+            `Engine: ${engineSpec.name}`
+          ],
           payload: routingReq
         });
 
@@ -502,29 +508,62 @@ const CreativeReplicator = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-4 bg-muted/50 p-2 rounded-lg border border-border/50">
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="adv-mode"
-                  checked={isAdvancedMode}
-                  onCheckedChange={setIsAdvancedMode}
-                />
-                <Label htmlFor="adv-mode" className="text-xs cursor-pointer">Advanced</Label>
-              </div>
-
-              {isAdvancedMode && (
-                <Select value={renderingMode} onValueChange={(v: any) => setRenderingMode(v)}>
-                  <SelectTrigger className="h-8 w-[140px] text-xs">
-                    <SelectValue placeholder="Render Mode" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="auto">Auto (Smart)</SelectItem>
-                    <SelectItem value="server_only">Force Server</SelectItem>
-                    <SelectItem value="cloudinary_only">Cloudinary Only</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
+            {/* Auto-detected Backend Status */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 border border-border/50">
+                    {backendStatus.loading ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    ) : backendStatus.vpsServer.available ? (
+                      <>
+                        <Server className="w-4 h-4 text-green-500" />
+                        <span className="text-xs text-green-500 font-medium">VPS Active</span>
+                        {backendStatus.vpsServer.latency && (
+                          <Badge variant="outline" className="text-[10px] h-5 text-muted-foreground">
+                            {backendStatus.vpsServer.latency}ms
+                          </Badge>
+                        )}
+                      </>
+                    ) : backendStatus.edgeFunctions.available ? (
+                      <>
+                        <Cloud className="w-4 h-4 text-blue-500" />
+                        <span className="text-xs text-blue-500 font-medium">Edge Functions</span>
+                      </>
+                    ) : (
+                      <>
+                        <Cloud className="w-4 h-4 text-amber-500" />
+                        <span className="text-xs text-amber-500 font-medium">Cloud Only</span>
+                      </>
+                    )}
+                    <CheckCircle2 className="w-3 h-3 text-green-500" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  <div className="space-y-1 text-xs">
+                    <p className="font-medium">Auto-detected Render Backends</p>
+                    <div className="flex items-center gap-2">
+                      <span className={backendStatus.vpsServer.available ? 'text-green-500' : 'text-muted-foreground'}>
+                        VPS Server: {backendStatus.vpsServer.available ? '✓ Online' : '✗ Offline'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={backendStatus.edgeFunctions.available ? 'text-green-500' : 'text-muted-foreground'}>
+                        Edge Functions: {backendStatus.edgeFunctions.available ? '✓ Ready' : '✗ Unavailable'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={backendStatus.cloudinaryApi.available ? 'text-green-500' : 'text-muted-foreground'}>
+                        Cloudinary: {backendStatus.cloudinaryApi.configured ? '✓ Configured' : '✗ Not configured'}
+                      </span>
+                    </div>
+                    <p className="text-muted-foreground pt-1">
+                      Using: <span className="font-medium capitalize">{backendStatus.recommended}</span> (auto-selected)
+                    </p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
 
             <Button
               onClick={handleStartGeneration}
@@ -628,7 +667,7 @@ const CreativeReplicator = () => {
           </CardContent>
         </Card>
 
-        {isAdvancedMode && (
+        {debugInfo && (
           <RenderDebugPanel debugInfo={debugInfo} isOpen={true} />
         )}
 
