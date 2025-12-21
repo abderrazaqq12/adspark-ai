@@ -704,8 +704,12 @@ export function useCreativeScale(): UseCreativeScaleReturn {
     setIsCompiling(true);
     setError(null);
 
+    // IMPORTANT: Set the blueprint so it's available for execution step
+    setCurrentBlueprint(blueprint);
+
     try {
       console.log('[useCreativeScale] Compiling with source video URL:', sourceVideoUrl ? 'provided' : 'missing');
+      console.log('[useCreativeScale] Blueprint has', blueprint.variation_ideas?.length || 0, 'variations');
 
       const { data, error: fnError } = await supabase.functions.invoke('creative-scale-compile', {
         body: {
@@ -720,6 +724,8 @@ export function useCreativeScale(): UseCreativeScaleReturn {
       if (!data?.plans) throw new Error('No execution plans returned');
 
       const plans = data.plans as ExecutionPlan[];
+
+      console.log('[useCreativeScale] Compiled', plans.length, 'plans');
 
       // Log first plan's asset_url for debugging
       if (plans[0]?.timeline?.[0]) {

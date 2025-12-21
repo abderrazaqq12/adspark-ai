@@ -117,6 +117,16 @@ CRITICAL - LONG VIDEO DETECTED (${(durationMs / 1000).toFixed(1)}s):
 - Your goal is to REDUCE duration to under 35 seconds.`;
     }
 
+    // Map optimization goal to prompt-friendly names
+    const goalMapping: Record<string, string> = {
+      'retention': 'RETENTION (keep viewers watching longer)',
+      'ctr': 'CTR (maximize click-through rate)',
+      'conversions': 'CONVERSIONS (drive purchases/signups)',
+      'conversion': 'CONVERSIONS (drive purchases/signups)',
+      'awareness': 'AWARENESS (maximize reach and brand recall)'
+    };
+    const mappedGoal = goalMapping[optimization_goal] || optimization_goal.toUpperCase();
+
     const systemPrompt = `You are an elite performance marketing strategist and creative director. Your ONLY job is to analyze video ads and generate INNOVATIVE, ACTIONABLE strategies to improve them.
 
 CRITICAL RULES:
@@ -137,7 +147,7 @@ CRITICAL RULES:
 - NEVER create variations that would result in videos longer than 35 seconds
 ##############################################################
 
-OPTIMIZATION GOAL: ${optimization_goal.toUpperCase()} (Only: Conversion or Awareness)
+OPTIMIZATION GOAL: ${mappedGoal}
 RISK TOLERANCE: ${risk_tolerance.toUpperCase()}
 PLATFORM: ${platform.toUpperCase()} (Only valid platforms: TikTok, Meta, Snapchat, YouTube)
 FUNNEL STAGE: ${funnel_stage.toUpperCase()}
@@ -172,6 +182,16 @@ CURRENT VIDEO DURATION: ${(durationMs / 1000).toFixed(1)} seconds
 ${durationMs < 15000 ? `⚠️ VIDEO IS TOO SHORT! You MUST use duplicate_segment or emphasize_segment to extend to at least 15 seconds.` : ''}
 ${durationMs > 35000 ? `⚠️ VIDEO IS TOO LONG! You MUST use remove_segment or compress_segment to reduce to under 35 seconds.` : ''}
 ${durationMs >= 15000 && durationMs <= 35000 ? `✓ Video is within target range. Focus on optimizing content while maintaining duration.` : ''}
+
+CRITICAL: You MUST generate EXACTLY ${safeVariationCount} variation_ideas in your response. Each variation must have:
+- id: unique identifier (var_0, var_1, etc.)
+- action: one of the available actions
+- target_segment_type: hook, problem, solution, benefit, proof, cta, or filler
+- intent: what this action aims to achieve
+- priority: high, medium, or low
+- reasoning: why this action was chosen
+- expected_impact: expected result
+- risk_level: low, medium, or high
 `;
 
     const userPrompt = `Analyze this video ad and generate ${safeVariationCount} UNIQUE improvement strategies:

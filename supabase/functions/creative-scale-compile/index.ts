@@ -527,13 +527,18 @@ serve(async (req) => {
     }
 
     console.log(`[creative-scale-compile] Compiling: analysis=${analysis.id}, blueprint=${blueprint.id}, videoUrl=${videoUrl ? 'provided' : 'missing'}`);
+    console.log(`[creative-scale-compile] Blueprint has ${blueprint.variation_ideas?.length || 0} variation_ideas`);
 
     let plans: any[];
 
     if (compile_all) {
       // Compile all variations
       plans = [];
-      for (let i = 0; i < (blueprint.variation_ideas?.length || 0); i++) {
+      const variationCount = blueprint.variation_ideas?.length || 0;
+      console.log(`[creative-scale-compile] Compiling all ${variationCount} variations`);
+      
+      for (let i = 0; i < variationCount; i++) {
+        console.log(`[creative-scale-compile] Compiling variation ${i}:`, blueprint.variation_ideas[i]);
         const plan = compile(analysis, blueprint, i, videoUrl);
         plans.push(plan);
       }
@@ -547,7 +552,7 @@ serve(async (req) => {
     const compilableCount = plans.filter(p => p.status === 'compilable').length;
     const uncompilableCount = plans.filter(p => p.status === 'uncompilable').length;
 
-    console.log(`[creative-scale-compile] Complete: ${compilableCount} compilable, ${uncompilableCount} uncompilable`);
+    console.log(`[creative-scale-compile] Complete: ${compilableCount} compilable, ${uncompilableCount} uncompilable out of ${plans.length} total`);
 
     return new Response(
       JSON.stringify({
