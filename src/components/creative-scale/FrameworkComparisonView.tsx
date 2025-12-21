@@ -43,7 +43,7 @@ export function FrameworkComparisonView({ onSelectFramework, compact = false }: 
         <DialogTrigger asChild>
           <Button variant="outline" size="sm">
             <LayoutGrid className="w-4 h-4 mr-2" />
-            Compare Frameworks
+            Frameworks
           </Button>
         </DialogTrigger>
         <DialogContent className="max-w-4xl max-h-[85vh]">
