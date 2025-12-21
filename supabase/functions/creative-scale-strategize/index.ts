@@ -195,7 +195,7 @@ Return this exact JSON structure:
   }
 }
 
-IMPORTANT: You MUST generate exactly ${safeVariationCount} items in the 'variation_ideas' array. Do not fail this constraint.
+IMPORTANT: You MUST generate exactly ${safeVariationCount} items in the 'variation_ideas' array. Do not fail this constraint.`;
 
     // Call AI Gateway (Gemini primary, OpenAI fallback)
     const aiResponse = await callAI({
