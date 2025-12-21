@@ -235,6 +235,39 @@ Return ONLY the JSON, no markdown, no explanation.`;
 
       analysis = JSON.parse(jsonStr);
       console.log(`[creative-scale-analyze] JSON parsed successfully, keys: ${Object.keys(analysis).join(', ')}`);
+
+      // ==========================================
+      // SAFEGUARD: Normalize Timestamps (Sec -> MS)
+      // ==========================================
+      // AI often outputs seconds (e.g. 5.5) even when asked for ms. Detect and fix.
+      const isSeconds = (val: number) => typeof val === 'number' && val > 0 && val < 600; // Assuming ad is < 10 mins (600s). If it was ms, 600ms is tiny.
+
+      let maxEnd = 0;
+      if (analysis.segments) {
+        analysis.segments.forEach((s: any) => {
+          if (s.end_ms > maxEnd) maxEnd = s.end_ms;
+        });
+      }
+
+      // If max timestamp is small (e.g. < 1000), it's definitely seconds.
+      // If it's e.g. 60, it's 60s or 60ms. Unlikely to be 60ms for a whole ad.
+      if (maxEnd > 0 && maxEnd < 1000) {
+        console.log(`[creative-scale-analyze] Detected timestamps in SECONDS (max ${maxEnd}). converting to MS...`);
+        analysis.metadata.duration_ms = (analysis.metadata.duration_ms || 0) * 1000;
+        analysis.segments.forEach((s: any) => {
+          s.start_ms = s.start_ms * 1000;
+          s.end_ms = s.end_ms * 1000;
+        });
+      } else if (analysis.metadata?.duration_ms && analysis.metadata.duration_ms < 1000) {
+        // Fallback check on metadata
+        console.log(`[creative-scale-analyze] Detected metadata duration in SECONDS (${analysis.metadata.duration_ms}). converting to MS...`);
+        analysis.metadata.duration_ms = analysis.metadata.duration_ms * 1000;
+        analysis.segments.forEach((s: any) => {
+          s.start_ms = s.start_ms * 1000;
+          s.end_ms = s.end_ms * 1000;
+        });
+      }
+
     } catch (parseErr) {
       console.error('[creative-scale-analyze] JSON parse error:', parseErr);
       console.error('[creative-scale-analyze] Raw content (full):', content);

@@ -27,13 +27,15 @@ function resolveAction(idea: any, segments: any[]): any {
   const targetSegments = segments.filter((s: any) => s.type === idea.target_segment_type);
 
   if (targetSegments.length === 0) {
+    // If AI suggests an action for a segment type that doesn't exist, just ignore it (no-op).
+    // This allows the variation to succeed rather than failing entirely.
     return {
       action_id: idea.id,
       source_action: idea.action,
       target_segments: [],
       transformation: {},
-      resolved: false,
-      resolution_error: `No segments of type "${idea.target_segment_type}" found in source`
+      resolved: true,
+      resolution_error: undefined // No error, just no targets
     };
   }
 
