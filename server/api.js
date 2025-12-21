@@ -349,6 +349,27 @@ async function processNextJob() {
 async function resolveJobSource(job) {
   const { input } = job;
 
+  // HANDLE MULTIPLE INPUTS (Complex Jobs)
+  if (input.sources && Array.isArray(input.sources)) {
+    appendLog(job.id, `Resolving ${input.sources.length} sources...`);
+    input.sourcePaths = [];
+
+    for (let i = 0; i < input.sources.length; i++) {
+      const url = input.sources[i];
+      if (!url) continue;
+
+      try {
+        const localPath = await downloadRemoteFile(url, `${job.id}_src_${i}`);
+        input.sourcePaths.push(localPath);
+        job.tempFiles.push(localPath);
+        appendLog(job.id, `Source ${i} ready: ${localPath}`);
+      } catch (err) {
+        throw new Error(`Failed to download source ${i} (${url}): ${err.message}`);
+      }
+    }
+    return;
+  }
+
   // Decide which field holds the remote URL based on job type/payload
   let remoteUrl = input.inputFileUrl || input.sourceVideoUrl;
 
@@ -386,8 +407,12 @@ async function executeFFmpegJob(job, encoder = bestEncoder) {
   }
 
   // Pre-flight checks
-  if (!input.sourcePath || !fs.existsSync(input.sourcePath)) {
+  if (type !== 'complex' && (!input.sourcePath || !fs.existsSync(input.sourcePath))) {
     throw new Error(`Source file not found: ${input.sourcePath}`);
+  }
+
+  if (type === 'complex' && (!input.sourcePaths || input.sourcePaths.length === 0)) {
+    throw new Error('No source files resolved for complex job');
   }
 
   const sourceStats = fs.statSync(input.sourcePath);
@@ -400,7 +425,7 @@ async function executeFFmpegJob(job, encoder = bestEncoder) {
 
   let args;
   // Ensure sourcePath is set (by resolveJobSource)
-  if (!input.sourcePath) {
+  if (type !== 'complex' && !input.sourcePath) {
     throw new Error('Internal Error: Source path not resolved before execution');
   }
 
@@ -409,6 +434,8 @@ async function executeFFmpegJob(job, encoder = bestEncoder) {
       args = buildFFmpegArgs(input, outputPath, encoder);
     } else if (type === 'execute-plan') {
       args = buildPlanArgs(input, outputPath, encoder);
+    } else if (type === 'complex') {
+      args = buildComplexArgs(input, outputPath, encoder);
     } else {
       throw new Error(`Unknown job type: ${type}`);
     }
@@ -669,6 +696,68 @@ function buildPlanArgs(input, outputPath, encoder = 'libx264') {
   } else if (encoder === 'libx264') {
     args.push('-preset', 'fast', '-crf', '23');
   }
+
+  args.push('-c:a', 'aac', '-movflags', '+faststart');
+  args.push(outputPath);
+
+  return args;
+}
+
+function buildComplexArgs(input, outputPath, encoder = 'libx264') {
+  const { sourcePaths, transitions, clipDuration, maxDuration } = input;
+
+  // Validate inputs
+  if (!sourcePaths || sourcePaths.length === 0) throw new Error('No source paths for complex build');
+
+  // Inputs
+  const inputArgs = [];
+  sourcePaths.forEach(p => inputArgs.push('-i', p));
+
+  // Filter Complex Construction
+  let filterComplex = '';
+  const transitionDuration = 0.5;
+  const durationPerClip = clipDuration || 3;
+  const totalMax = maxDuration || 30;
+
+  // 1. Prepare Inputs (Scale/Pad/Trim)
+  for (let i = 0; i < sourcePaths.length; i++) {
+    filterComplex += `[${i}:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,trim=duration=${durationPerClip},setpts=PTS-STARTPTS[v${i}];`;
+  }
+
+  // 2. Apply Transitions (if > 1 clip)
+  if (sourcePaths.length > 1) {
+    let lastOutput = 'v0';
+    for (let i = 1; i < sourcePaths.length; i++) {
+      const transType = transitions && transitions[(i - 1) % transitions.length] ? transitions[(i - 1) % transitions.length] : 'fade';
+      const xfade = transType === 'whip-pan' ? 'wipeleft' :
+        transType === 'slide' ? 'slideleft' :
+          transType === 'zoom' ? 'circlecrop' : 'fade';
+
+      const offset = (i * durationPerClip) - (i * transitionDuration);
+      const outputLabel = (i === sourcePaths.length - 1) ? 'vout' : `t${i}`;
+
+      filterComplex += `[${lastOutput}][v${i}]xfade=transition=${xfade}:duration=${transitionDuration}:offset=${offset}[${outputLabel}];`;
+      lastOutput = outputLabel;
+    }
+  } else {
+    filterComplex = filterComplex.slice(0, -1); // remove trailing ; usually [v0] remains
+  }
+
+  const args = ['-y', ...inputArgs, '-filter_complex', filterComplex];
+
+  // Map
+  if (sourcePaths.length > 1) {
+    args.push('-map', '[vout]');
+  } else {
+    args.push('-map', '[v0]');
+  }
+
+  // Encoding Options
+  args.push('-t', String(totalMax));
+  args.push('-c:v', encoder);
+
+  if (encoder === 'h264_nvenc') args.push('-preset', 'p4');
+  else args.push('-preset', 'fast', '-crf', '23');
 
   args.push('-c:a', 'aac', '-movflags', '+faststart');
   args.push(outputPath);
@@ -1093,7 +1182,10 @@ function handleExecute(req, res) {
     outputFormat: outputFormat || { format: 'mp4' } // Default format
   };
 
-  createJob(jobId, 'execute', jobPayload);
+  // Detect Complex Job (Multi-source)
+  const jobType = (req.body.sources && Array.isArray(req.body.sources)) ? 'complex' : 'execute';
+
+  createJob(jobId, jobType, jobPayload);
   pendingQueue.push(jobId);
 
   console.log(`[Queue] Job ${jobId} queued (queue length: ${pendingQueue.length})`);
