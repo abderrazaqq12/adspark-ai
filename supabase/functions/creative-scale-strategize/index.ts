@@ -35,7 +35,7 @@ serve(async (req) => {
 
   try {
     const { analysis, target_framework, variation_count = 3, optimization_goal = 'retention', risk_tolerance = 'medium', platform = 'general', funnel_stage = 'cold' } = await req.json();
-    
+
     // Clamp variation count to safe limits (1-20)
     const safeVariationCount = Math.max(1, Math.min(20, variation_count));
 
@@ -65,7 +65,7 @@ serve(async (req) => {
     console.log(`[creative-scale-strategize] Creating blueprint for analysis: ${analysis.id}, goal: ${optimization_goal}`);
 
     // Summarize segments for prompt
-    const segmentsSummary = analysis.segments.map((s: any) => 
+    const segmentsSummary = analysis.segments.map((s: any) =>
       `${s.type}(${s.start_ms}-${s.end_ms}ms, attention:${s.attention_score?.toFixed(2) || 'N/A'}, clarity:${s.clarity_score?.toFixed(2) || 'N/A'})`
     ).join('\n- ');
 
@@ -110,7 +110,8 @@ ABSTRACT ACTIONS (use exactly):
 - merge_segments: Combine adjacent segments
 - add_segment: Insert new content
 
-ALWAYS GENERATE ${safeVariationCount} UNIQUE VARIATIONS with different strategies!`;
+ALWAYS GENERATE ${safeVariationCount} UNIQUE VARIATIONS with different strategies!
+TARGET DURATION: 15 to 30 SECONDS (Strictly enforce this)`;
 
     const userPrompt = `Analyze this video ad and generate ${safeVariationCount} UNIQUE improvement strategies:
 
@@ -119,6 +120,7 @@ VIDEO ANALYSIS:
 - Duration: ${analysis.metadata?.duration_ms}ms
 - Detected Style: ${analysis.detected_style}
 - Format: ${analysis.metadata?.format || '9:16'}
+- Duration Constraints: 15s - 30s
 
 SEGMENTS:
 - ${segmentsSummary}
@@ -222,8 +224,8 @@ IMPORTANT: Generate exactly ${safeVariationCount} items in variation_ideas array
     }
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         blueprint,
         meta: {
           source_analysis_id: analysis.id,

@@ -25,7 +25,7 @@ const DEFAULT_OUTPUT_FORMAT = {
 
 function resolveAction(idea: any, segments: any[]): any {
   const targetSegments = segments.filter((s: any) => s.type === idea.target_segment_type);
-  
+
   if (targetSegments.length === 0) {
     return {
       action_id: idea.id,
@@ -38,7 +38,7 @@ function resolveAction(idea: any, segments: any[]): any {
   }
 
   const segmentIds = targetSegments.map((s: any) => s.id);
-  
+
   switch (idea.action) {
     case 'remove_segment':
       return {
@@ -54,7 +54,7 @@ function resolveAction(idea: any, segments: any[]): any {
         action_id: idea.id,
         source_action: idea.action,
         target_segments: segmentIds,
-        transformation: { 
+        transformation: {
           speed_multiplier: 1.25,
           trim_percent_start: 0.1,
           trim_percent_end: 0.1
@@ -67,7 +67,7 @@ function resolveAction(idea: any, segments: any[]): any {
         action_id: idea.id,
         source_action: idea.action,
         target_segments: segmentIds,
-        transformation: { 
+        transformation: {
           speed_multiplier: 0.9
         },
         resolved: true
@@ -78,7 +78,7 @@ function resolveAction(idea: any, segments: any[]): any {
         action_id: idea.id,
         source_action: idea.action,
         target_segments: segmentIds,
-        transformation: { 
+        transformation: {
           timeline_offset_ms: -1
         },
         resolved: true
@@ -138,7 +138,7 @@ function buildTimeline(
 ): { timeline: any[]; warnings: string[] } {
   const warnings: string[] = [];
   const timeline: any[] = [];
-  
+
   const removeSet = new Set<string>();
   for (const action of resolvedActions) {
     if (action.transformation.remove) {
@@ -156,7 +156,7 @@ function buildTimeline(
   }
 
   const sortedSegments = [...analysis.segments].sort((a: any, b: any) => a.start_ms - b.start_ms);
-  
+
   let currentTimelineMs = 0;
   let segmentIndex = 0;
 
@@ -174,7 +174,7 @@ function buildTimeline(
     const sourceDuration = segment.end_ms - segment.start_ms;
     const trimStartMs = Math.round(sourceDuration * trimStartPercent);
     const trimEndMs = Math.round(sourceDuration * trimEndPercent);
-    
+
     const trimmedDuration = sourceDuration - trimStartMs - trimEndMs;
     const outputDuration = Math.round(trimmedDuration / speedMultiplier);
 
@@ -184,17 +184,17 @@ function buildTimeline(
       source_video_id: analysis.source_video_id,
       source_segment_id: segment.id,
       asset_url: sourceVideoUrl || null,
-      
+
       trim_start_ms: segment.start_ms + trimStartMs,
       trim_end_ms: segment.end_ms - trimEndMs,
       source_duration_ms: trimmedDuration,
-      
+
       timeline_start_ms: currentTimelineMs,
       timeline_end_ms: currentTimelineMs + outputDuration,
       output_duration_ms: outputDuration,
-      
+
       speed_multiplier: speedMultiplier,
-      
+
       track: 'video',
       layer: 0
     };
@@ -222,8 +222,8 @@ function buildAudioTracks(
     return audioTracks;
   }
 
-  const totalDuration = timeline.length > 0 
-    ? timeline[timeline.length - 1].timeline_end_ms 
+  const totalDuration = timeline.length > 0
+    ? timeline[timeline.length - 1].timeline_end_ms
     : 0;
 
   if (totalDuration === 0) {
@@ -235,17 +235,17 @@ function buildAudioTracks(
     audio_id: 'audio_0',
     source_video_id: analysis.source_video_id,
     asset_url: sourceVideoUrl || null,
-    
+
     trim_start_ms: 0,
     trim_end_ms: analysis.metadata.duration_ms,
-    
+
     timeline_start_ms: 0,
     timeline_end_ms: totalDuration,
-    
+
     volume: 1.0,
     fade_in_ms: 0,
     fade_out_ms: Math.min(500, Math.round(totalDuration * 0.05)),
-    
+
     track: 'voiceover'
   };
 
@@ -260,9 +260,9 @@ function buildAudioTracks(
 
 function validateTimeline(timeline: any[], audioTracks: any[]): any {
   const warnings: string[] = [];
-  
-  const totalDuration = timeline.length > 0 
-    ? timeline[timeline.length - 1].timeline_end_ms 
+
+  const totalDuration = timeline.length > 0
+    ? timeline[timeline.length - 1].timeline_end_ms
     : 0;
 
   let hasGaps = false;
@@ -285,11 +285,11 @@ function validateTimeline(timeline: any[], audioTracks: any[]): any {
     }
   }
 
-  if (totalDuration < 1000) {
-    warnings.push(`Very short output: ${totalDuration}ms`);
+  if (totalDuration < 15000) {
+    warnings.push(`Very short output: ${totalDuration}ms (min 15s)`);
   }
-  if (totalDuration > 120000) {
-    warnings.push(`Very long output: ${totalDuration}ms (>2 minutes)`);
+  if (totalDuration > 30000) {
+    warnings.push(`Very long output: ${totalDuration}ms (>30s)`);
   }
 
   return {
@@ -333,7 +333,7 @@ function compile(analysis: any, blueprint: any, variationIndex: number, sourceVi
   }
 
   const resolvedAction = resolveAction(variationIdea, analysis.segments);
-  
+
   if (!resolvedAction.resolved) {
     return {
       plan_id: `exec_${crypto.randomUUID()}`,
@@ -358,8 +358,8 @@ function compile(analysis: any, blueprint: any, variationIndex: number, sourceVi
   }
 
   const { timeline, warnings: timelineWarnings } = buildTimeline(
-    analysis, 
-    [resolvedAction], 
+    analysis,
+    [resolvedAction],
     sourceVideoUrl
   );
 
@@ -399,10 +399,10 @@ serve(async (req) => {
   }
 
   try {
-    const { 
-      analysis, 
-      blueprint, 
-      variation_index, 
+    const {
+      analysis,
+      blueprint,
+      variation_index,
       compile_all = false,
       asset_base_url,
       source_video_url
@@ -442,7 +442,7 @@ serve(async (req) => {
     console.log(`[creative-scale-compile] Complete: ${compilableCount} compilable, ${uncompilableCount} uncompilable`);
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         success: true,
         plans,
         meta: {

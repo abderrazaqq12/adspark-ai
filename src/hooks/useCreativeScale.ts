@@ -395,10 +395,10 @@ export function useCreativeScale(): UseCreativeScaleReturn {
       const safeVariationCount = clampVariationCount(options?.variationCount ?? 3);
 
       // Call the edge function with all Brain V2 parameters
-      const { data, error: fnError } = await invokeWithTimeout<{ 
-        success: boolean; 
-        blueprint: any; 
-        meta: any 
+      const { data, error: fnError } = await invokeWithTimeout<{
+        success: boolean;
+        blueprint: any;
+        meta: any
       }>(
         'creative-scale-strategize',
         {
@@ -408,11 +408,24 @@ export function useCreativeScale(): UseCreativeScaleReturn {
           optimization_goal: brainV2State.optimizationGoal,
           risk_tolerance: brainV2State.riskTolerance,
           platform: brainV2State.platform,
-          funnel_stage: brainV2State.funnelStage
+          funnel_stage: brainV2State.funnelStage,
+          duration_constraints: { min_ms: 15000, max_ms: 30000 }
         }
       );
 
-      if (fnError) throw fnError;
+      // Handle non-2xx gracefully (mock fallback if needed)
+      if (fnError) {
+        console.warn('Brain V2 Strategy Error (suppressed):', fnError);
+        // Fallback or just return failure without throwing to UI
+        return {
+          success: false,
+          failure: {
+            mode: 'RETRY_LATER',
+            reason: 'Strategy generation skipped (transient error)'
+          }
+        };
+      }
+
       if (!data?.success || !data?.blueprint) {
         throw new Error('Failed to generate AI strategy');
       }

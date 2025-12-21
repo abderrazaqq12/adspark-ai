@@ -24,7 +24,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
-import { trackCost } from './supabase.js';
+import { trackCost, supabase } from './supabase.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,7 +41,7 @@ const OUTPUT_DIR = process.env.OUTPUT_DIR || path.join(__dirname, '../outputs');
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
 const TEMP_DIR = path.join(UPLOAD_DIR, 'temp'); // Temp dir for downloaded assets
 const MAX_RENDER_TIME = parseInt(process.env.MAX_RENDER_TIME || '600'); // 10 min
-const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || String(500 * 1024 * 1024)); // 500MB
+const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || String(200 * 1024 * 1024)); // 200MB
 const FFMPEG_HW_ACCEL = process.env.FFMPEG_HW_ACCEL || 'auto'; // auto, cuda, vaapi, off
 
 // Allowed MIME types (whitelist)
@@ -385,6 +385,16 @@ async function executeFFmpegJob(job, encoder = bestEncoder) {
     throw err;
   }
 
+  // Pre-flight checks
+  if (!input.sourcePath || !fs.existsSync(input.sourcePath)) {
+    throw new Error(`Source file not found: ${input.sourcePath}`);
+  }
+
+  const sourceStats = fs.statSync(input.sourcePath);
+  if (sourceStats.size === 0) {
+    throw new Error('Source file is empty (0 bytes)');
+  }
+
   const outputFilename = `${job.id}.mp4`;
   const outputPath = path.join(OUTPUT_DIR, outputFilename);
 
@@ -394,27 +404,42 @@ async function executeFFmpegJob(job, encoder = bestEncoder) {
     throw new Error('Internal Error: Source path not resolved before execution');
   }
 
-  if (type === 'execute') {
-    args = buildFFmpegArgs(input, outputPath, encoder);
-  } else if (type === 'execute-plan') {
-    args = buildPlanArgs(input, outputPath, encoder);
-  } else {
-    throw new Error(`Unknown job type: ${type}`);
+  try {
+    if (type === 'execute') {
+      args = buildFFmpegArgs(input, outputPath, encoder);
+    } else if (type === 'execute-plan') {
+      args = buildPlanArgs(input, outputPath, encoder);
+    } else {
+      throw new Error(`Unknown job type: ${type}`);
+    }
+  } catch (err) {
+    throw new Error(`Failed to build FFmpeg arguments: ${err.message}`);
   }
 
   return new Promise((resolve, reject) => {
     appendLog(job.id, `FFmpeg command: ffmpeg ${args.join(' ')}`);
 
-    const ffmpeg = spawn('ffmpeg', args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    let ffmpeg;
+    try {
+      ffmpeg = spawn('ffmpeg', args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    } catch (err) {
+      err.code = 'SPAWN_ERROR';
+      reject(err);
+      return;
+    }
 
     let stderr = '';
     let killed = false;
 
     const timeout = setTimeout(() => {
       killed = true;
-      ffmpeg.kill('SIGKILL');
+      try {
+        ffmpeg.kill('SIGKILL');
+      } catch (e) {
+        console.error('Failed to kill ffmpeg process:', e);
+      }
       const err = new Error(`FFmpeg timeout after ${MAX_RENDER_TIME}s`);
       err.code = 'TIMEOUT_ERROR';
       reject(err);
@@ -459,6 +484,13 @@ async function executeFFmpegJob(job, encoder = bestEncoder) {
 
       // Keep full logs
       appendLog(job.id, chunk.trim());
+    });
+
+    // Handle error event on the process object
+    ffmpeg.on('error', (err) => {
+      clearTimeout(timeout);
+      err.code = 'FFMPEG_SPAWN_ERROR';
+      reject(err);
     });
 
     // Capture Command
@@ -509,11 +541,8 @@ async function executeFFmpegJob(job, encoder = bestEncoder) {
       }
     });
 
-    ffmpeg.on('error', (err) => {
-      clearTimeout(timeout);
-      err.code = 'FFMPEG_SPAWN_ERROR';
-      reject(err);
-    });
+    // Removed the separate error handler here to avoid double registration issues, 
+    // it's now handled before close
   });
 }
 
@@ -1325,7 +1354,103 @@ app.listen(PORT, HOST, () => {
   console.log(`  Temp:       ${TEMP_DIR}`);
   console.log(`  Outputs:    ${OUTPUT_DIR}`);
   console.log('═══════════════════════════════════════════════════');
+
+  // Start automated cleanup task (Delete after 2 hours)
+  startCleanupTask();
 });
+
+// ============================================
+// AUTOMATED CLEANUP (2 Hour TTL)
+// ============================================
+
+async function startCleanupTask() {
+  const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+  const INTERVAL_MS = 30 * 60 * 1000; // Run every 30 mins
+
+  const cleanup = async () => {
+    console.log('[Cleanup] Starting routine...');
+    const now = Date.now();
+
+    // 1. Local Filesystem Cleanup (Uploads, Outputs, Temp, RenderFlow internal)
+    const localDirs = [
+      UPLOAD_DIR,
+      OUTPUT_DIR,
+      TEMP_DIR,
+      path.join(__dirname, 'renderflow/temp'),
+      path.join(__dirname, 'renderflow/output')
+    ];
+    for (const dir of localDirs) {
+      try {
+        if (!fs.existsSync(dir)) continue;
+        const files = fs.readdirSync(dir);
+        let deletedCount = 0;
+
+        for (const file of files) {
+          const filePath = path.join(dir, file);
+          const stats = fs.statSync(filePath);
+
+          if (stats.isFile() && (now - stats.mtimeMs) > TWO_HOURS_MS) {
+            fs.unlinkSync(filePath);
+            deletedCount++;
+          }
+        }
+        if (deletedCount > 0) console.log(`[Cleanup] Deleted ${deletedCount} old files from ${dir}`);
+      } catch (e) {
+        console.error(`[Cleanup] Local error in ${dir}:`, e.message);
+      }
+    }
+
+    // 2. Supabase Storage Cleanup (Input Assets)
+    if (supabase) {
+      try {
+        const folders = ['creative-scale', 'renderflow'];
+        for (const rootPath of folders) {
+          // List subfolders/files in the root path
+          const { data: items, error } = await supabase.storage.from('videos').list(rootPath);
+
+          if (error) {
+            console.warn(`[Cleanup] Supabase list error for ${rootPath}:`, error.message);
+            continue;
+          }
+
+          for (const item of items) {
+            // item might be a file or a folder
+            const itemCreatedAt = new Date(item.created_at).getTime();
+
+            if ((now - itemCreatedAt) > TWO_HOURS_MS) {
+              // If it's a folder (no id usually means folder or we check metadata)
+              // In Supabase Storage API, folders are objects without id/metadata sometimes
+              // But list() returns name, id, updated_at, created_at, last_accessed_at, metadata
+
+              const fullPath = `${rootPath}/${item.name}`;
+
+              if (!item.id) {
+                // It's a folder, we need to find all files inside to delete them
+                const { data: subFiles } = await supabase.storage.from('videos').list(fullPath);
+                if (subFiles && subFiles.length > 0) {
+                  const pathsToDelete = subFiles.map(sf => `${fullPath}/${sf.name}`);
+                  await supabase.storage.from('videos').remove(pathsToDelete);
+                  console.log(`[Cleanup] Deleted folder contents: ${fullPath} (${pathsToDelete.length} files)`);
+                }
+              } else {
+                // It's a file
+                await supabase.storage.from('videos').remove([fullPath]);
+                console.log(`[Cleanup] Deleted old file from Supabase: ${fullPath}`);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[Cleanup] Supabase error:', e.message);
+      }
+    }
+  };
+
+  // Initial run
+  cleanup().catch(console.error);
+  // Periodic run
+  setInterval(() => cleanup().catch(console.error), INTERVAL_MS);
+}
 
 // ============================================
 // GRACEFUL SHUTDOWN
