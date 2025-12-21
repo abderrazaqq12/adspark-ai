@@ -3,6 +3,7 @@
  * Brain V2 planning and variation configuration with Ad Director insights
  * + Advertising Policy Compliance Layer
  * + Strategy Comparison View
+ * + Real-time SSE Progress Tracking
  */
 
 import { useMemo, useState, useEffect, useRef } from 'react';
@@ -10,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Progress } from '@/components/ui/progress';
 import {
   Target,
   RefreshCw,
@@ -24,7 +26,8 @@ import {
   Users,
   LayoutGrid,
   Thermometer,
-  Layers as LayersIcon
+  Layers as LayersIcon,
+  Zap
 } from 'lucide-react';
 import {
   ProblemDisplay,
@@ -48,6 +51,7 @@ import type { AdPlatform, FunnelStage } from '@/lib/creative-scale/compliance-ty
 import type { VideoAnalysis, CreativeBlueprint } from '@/lib/creative-scale/types';
 import type { OptimizationGoal, RiskTolerance, CreativeBlueprintV2, DetectedProblem, ExtractedSignals, HormoziValueScore } from '@/lib/creative-scale/brain-v2-types';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
+import type { StrategyProgress, VariationProgress } from '@/hooks/useStreamingStrategy';
 
 // Helper to derive signals from analysis
 function deriveSignalsFromAnalysis(analysis: VideoAnalysis): ExtractedSignals {
@@ -99,6 +103,9 @@ interface StrategyStepProps {
   };
   variationCount: number;
   isGenerating: boolean;
+  // SSE Progress props
+  streamProgress?: StrategyProgress | null;
+  variationProgress?: VariationProgress | null;
   onSetGoal: (goal: OptimizationGoal) => void;
   onSetRisk: (risk: RiskTolerance) => void;
   onSetPlatform: (platform: PlatformType) => void;
@@ -115,6 +122,8 @@ export function StrategyStep({
   brainV2State,
   variationCount,
   isGenerating,
+  streamProgress,
+  variationProgress,
   onSetGoal,
   onSetRisk,
   onSetPlatform,
@@ -393,7 +402,7 @@ export function StrategyStep({
 
           {isGenerating && (
             <div className="space-y-6 py-6">
-              {/* Progress Header with animated bar */}
+              {/* Real-time Progress Header */}
               <div className="space-y-4">
                 <div className="flex flex-col items-center text-center">
                   <div className="relative mb-4">
@@ -402,76 +411,114 @@ export function StrategyStep({
                       <Brain className="w-6 h-6 text-primary animate-pulse" />
                     </div>
                   </div>
-                  <h3 className="text-lg font-semibold mb-1">AI Generating {variationCount} Variations...</h3>
-                  <p className="text-muted-foreground text-sm">Analyzing patterns and creating unique strategies</p>
+                  <h3 className="text-lg font-semibold mb-1">
+                    {streamProgress?.message || `AI Generating ${variationCount} Variations...`}
+                  </h3>
+                  <p className="text-muted-foreground text-sm">
+                    {streamProgress?.generating 
+                      ? `Step ${streamProgress.step}/${streamProgress.totalSteps}: Creating unique strategies`
+                      : 'Analyzing patterns and creating unique strategies'
+                    }
+                  </p>
                 </div>
 
-                {/* Animated Progress Bar */}
+                {/* Real Progress Bar */}
                 <div className="w-full max-w-md mx-auto space-y-2">
                   <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Progress</span>
-                    <span className="font-mono">Generating...</span>
+                    <span className="flex items-center gap-1">
+                      <Zap className="w-3 h-3 text-primary" />
+                      {streamProgress ? `Step ${streamProgress.step}/${streamProgress.totalSteps}` : 'Initializing...'}
+                    </span>
+                    <span className="font-mono font-medium text-primary">
+                      {streamProgress?.percentage || 0}%
+                    </span>
                   </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-primary via-purple-500 to-primary rounded-full animate-pulse"
-                      style={{ 
-                        width: '100%',
-                        animation: 'shimmer 2s linear infinite',
-                        backgroundSize: '200% 100%'
-                      }}
-                    />
-                  </div>
-                  <style>{`
-                    @keyframes shimmer {
-                      0% { background-position: -200% 0; }
-                      100% { background-position: 200% 0; }
-                    }
-                  `}</style>
+                  <Progress 
+                    value={streamProgress?.percentage || 0} 
+                    className="h-3 bg-muted"
+                  />
+                  {variationProgress && (
+                    <div className="flex items-center justify-center gap-2 text-xs text-primary mt-2">
+                      <Sparkles className="w-3 h-3 animate-pulse" />
+                      <span className="font-medium">
+                        Creating variation {variationProgress.current}/{variationProgress.total}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Skeleton Variation Cards with staggered animation */}
+              {/* Skeleton Variation Cards with real-time completion indicators */}
               <div>
                 <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-primary animate-pulse" />
                   Generating Planned Variations ({variationCount})
                 </h4>
                 <div className="grid grid-cols-2 gap-3">
-                  {Array.from({ length: variationCount }).map((_, idx) => (
-                    <div
-                      key={idx}
-                      className="p-4 rounded-xl border border-border/50 bg-card/50 space-y-3 transition-all"
-                      style={{ 
-                        animation: `fadeInUp 0.5s ease-out ${idx * 0.1}s both`,
-                        opacity: 0
-                      }}
-                    >
-                      {/* Progress indicator per card */}
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
-                            <span className="text-xs font-bold text-primary">{idx + 1}</span>
+                  {Array.from({ length: variationCount }).map((_, idx) => {
+                    const isComplete = variationProgress && idx < variationProgress.current;
+                    const isActive = variationProgress && idx === variationProgress.current - 1;
+                    
+                    return (
+                      <div
+                        key={idx}
+                        className={`p-4 rounded-xl border space-y-3 transition-all ${
+                          isComplete 
+                            ? 'border-green-500/50 bg-green-500/5' 
+                            : isActive 
+                              ? 'border-primary/50 bg-primary/5' 
+                              : 'border-border/50 bg-card/50'
+                        }`}
+                        style={{ 
+                          animation: `fadeInUp 0.5s ease-out ${idx * 0.1}s both`,
+                          opacity: 0
+                        }}
+                      >
+                        {/* Progress indicator per card */}
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                              isComplete 
+                                ? 'bg-green-500 text-white' 
+                                : 'bg-primary/20'
+                            }`}>
+                              {isComplete ? (
+                                <CheckCircle2 className="w-4 h-4" />
+                              ) : (
+                                <span className="text-xs font-bold text-primary">{idx + 1}</span>
+                              )}
+                            </div>
+                            <span className={`text-xs ${isComplete ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}>
+                              Variation {idx + 1}/{variationCount}
+                            </span>
                           </div>
-                          <span className="text-xs text-muted-foreground">Variation {idx + 1}/{variationCount}</span>
+                          {!isComplete && (
+                            <div className={`h-4 w-4 rounded-full border-2 ${
+                              isActive 
+                                ? 'border-primary border-t-transparent animate-spin' 
+                                : 'border-muted-foreground/30'
+                            }`} />
+                          )}
+                          {isComplete && (
+                            <Badge className="bg-green-500/10 text-green-600 text-[10px]">Ready</Badge>
+                          )}
                         </div>
-                        <div className="h-4 w-4 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-                      </div>
-                      <div className="flex items-center justify-between animate-pulse">
-                        <div className="flex items-center gap-2">
-                          <div className="h-5 w-20 bg-muted rounded" />
-                          <div className="h-5 w-12 bg-primary/20 rounded" />
+                        <div className={`flex items-center justify-between ${!isComplete && 'animate-pulse'}`}>
+                          <div className="flex items-center gap-2">
+                            <div className={`h-5 w-20 rounded ${isComplete ? 'bg-green-500/20' : 'bg-muted'}`} />
+                            <div className={`h-5 w-12 rounded ${isComplete ? 'bg-green-500/10' : 'bg-primary/20'}`} />
+                          </div>
+                          <div className={`h-5 w-14 rounded ${isComplete ? 'bg-blue-500/30' : 'bg-blue-500/20'}`} />
                         </div>
-                        <div className="h-5 w-14 bg-blue-500/20 rounded" />
+                        <div className={`h-4 w-3/4 rounded ${isComplete ? 'bg-green-500/10' : 'bg-muted'} ${!isComplete && 'animate-pulse'}`} />
+                        <div className={`h-3 w-1/2 rounded ${isComplete ? 'bg-green-500/5' : 'bg-muted/60'} ${!isComplete && 'animate-pulse'}`} />
+                        <div className={`flex gap-2 mt-2 ${!isComplete && 'animate-pulse'}`}>
+                          <div className={`h-6 w-20 rounded ${isComplete ? 'bg-green-500/20' : 'bg-green-500/10'}`} />
+                          <div className={`h-6 w-16 rounded ${isComplete ? 'bg-muted/60' : 'bg-muted/40'}`} />
+                        </div>
                       </div>
-                      <div className="h-4 w-3/4 bg-muted rounded animate-pulse" />
-                      <div className="h-3 w-1/2 bg-muted/60 rounded animate-pulse" />
-                      <div className="flex gap-2 mt-2 animate-pulse">
-                        <div className="h-6 w-20 bg-green-500/20 rounded" />
-                        <div className="h-6 w-16 bg-muted/40 rounded" />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <style>{`
                   @keyframes fadeInUp {
