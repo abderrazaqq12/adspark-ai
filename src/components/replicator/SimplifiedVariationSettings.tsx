@@ -8,9 +8,11 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
   ArrowLeft, Zap, Sparkles, Globe, Bot, Brain,
-  Film, Wand2, DollarSign, Info
+  Film, Wand2, DollarSign, Info, LayoutGrid, Check, X, Clock, Star
 } from "lucide-react";
 import { toast } from "sonner";
 import type { VariationConfig } from "@/pages/CreativeReplicator";
@@ -77,6 +79,22 @@ const ENGINE_TIERS = [
     tooltip: "State-of-the-art cinematic quality with photorealistic results. Superior physics simulation, complex camera movements, and Hollywood-grade output. Best for hero content and premium campaigns. Processing time: 2-5 minutes per clip.",
   },
 ];
+
+// Comparison table data
+const TIER_COMPARISON = {
+  features: [
+    { name: "Cost per video", free: "$0.00", low: "$0.05-0.15", medium: "$0.25-0.50", premium: "$1.00-2.50" },
+    { name: "Processing time", free: "5-10 sec", low: "30-60 sec", medium: "1-2 min", premium: "2-5 min" },
+    { name: "AI video generation", free: false, low: true, medium: true, premium: true },
+    { name: "Motion effects", free: true, low: true, medium: true, premium: true },
+    { name: "Text rendering", free: "Basic", low: "Good", medium: "Excellent", premium: "Perfect" },
+    { name: "Character consistency", free: "N/A", low: "Good", medium: "Very Good", premium: "Excellent" },
+    { name: "Physics simulation", free: "N/A", low: "Basic", medium: "Good", premium: "Photorealistic" },
+    { name: "Camera movements", free: "Pan/Zoom", low: "Standard", medium: "Advanced", premium: "Cinematic" },
+    { name: "Best for", free: "Testing & iterations", low: "Social media ads", medium: "Brand campaigns", premium: "Hero content" },
+    { name: "Quality rating", free: 2, low: 3, medium: 4, premium: 5 },
+  ],
+};
 
 const RATIO_OPTIONS = [
   { id: "9:16", label: "9:16", description: "TikTok, Reels" },
@@ -367,10 +385,116 @@ export const SimplifiedVariationSettings = ({
           {/* Engine Tier */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Bot className="w-4 h-4 text-primary" />
-                Engine Tier
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Bot className="w-4 h-4 text-primary" />
+                  Engine Tier
+                </CardTitle>
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button variant="ghost" size="sm" className="text-xs h-7 gap-1">
+                      <LayoutGrid className="w-3.5 h-3.5" />
+                      Compare All
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <Bot className="w-5 h-5 text-primary" />
+                        Engine Tier Comparison
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div className="mt-4">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-[180px]">Feature</TableHead>
+                            <TableHead className="text-center">
+                              <div className="flex flex-col items-center gap-1">
+                                <span className="text-green-500 font-bold">FREE</span>
+                                <Badge className="bg-green-500/20 text-green-400 text-[10px]">100% FREE</Badge>
+                              </div>
+                            </TableHead>
+                            <TableHead className="text-center">
+                              <div className="flex flex-col items-center gap-1">
+                                <span className="text-blue-500 font-bold">LOW COST</span>
+                                <span className="text-[10px] text-muted-foreground">$0.05-0.15</span>
+                              </div>
+                            </TableHead>
+                            <TableHead className="text-center">
+                              <div className="flex flex-col items-center gap-1">
+                                <span className="text-orange-500 font-bold">MEDIUM</span>
+                                <span className="text-[10px] text-muted-foreground">$0.25-0.50</span>
+                              </div>
+                            </TableHead>
+                            <TableHead className="text-center">
+                              <div className="flex flex-col items-center gap-1">
+                                <span className="text-purple-500 font-bold">PREMIUM</span>
+                                <span className="text-[10px] text-muted-foreground">$1.00-2.50</span>
+                              </div>
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {TIER_COMPARISON.features.map((feature) => (
+                            <TableRow key={feature.name}>
+                              <TableCell className="font-medium text-sm">{feature.name}</TableCell>
+                              {(['free', 'low', 'medium', 'premium'] as const).map((tier) => {
+                                const value = feature[tier];
+                                return (
+                                  <TableCell key={tier} className="text-center">
+                                    {typeof value === 'boolean' ? (
+                                      value ? (
+                                        <Check className="w-4 h-4 text-green-500 mx-auto" />
+                                      ) : (
+                                        <X className="w-4 h-4 text-muted-foreground mx-auto" />
+                                      )
+                                    ) : typeof value === 'number' ? (
+                                      <div className="flex justify-center gap-0.5">
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                          <Star
+                                            key={star}
+                                            className={`w-3 h-3 ${
+                                              star <= value
+                                                ? tier === 'free' ? 'text-green-500 fill-green-500' :
+                                                  tier === 'low' ? 'text-blue-500 fill-blue-500' :
+                                                  tier === 'medium' ? 'text-orange-500 fill-orange-500' :
+                                                  'text-purple-500 fill-purple-500'
+                                                : 'text-muted-foreground/30'
+                                            }`}
+                                          />
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs">{value}</span>
+                                    )}
+                                  </TableCell>
+                                );
+                              })}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      
+                      {/* Engines List */}
+                      <div className="mt-6 grid grid-cols-4 gap-4">
+                        {ENGINE_TIERS.map((tier) => (
+                          <div key={tier.id} className="space-y-2">
+                            <h4 className={`font-bold text-sm ${tier.color}`}>{tier.label}</h4>
+                            <div className="space-y-1">
+                              {tier.engines.map((engine) => (
+                                <Badge key={engine} variant="secondary" className="text-[10px] block w-fit">
+                                  {engine}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <TooltipProvider>
