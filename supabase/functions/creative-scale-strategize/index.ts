@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callAI } from "../_shared/ai-gateway.ts";
+import { callAI, AIError } from "../_shared/ai-gateway.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -244,9 +244,41 @@ IMPORTANT: Generate exactly ${safeVariationCount} items in variation_ideas array
 
   } catch (err) {
     console.error('[creative-scale-strategize] Error:', err);
+    
+    // Handle AIError with specific status codes and user-friendly messages
+    if (err instanceof AIError) {
+      const statusCode = err.type === 'QUOTA_EXCEEDED' || err.type === 'RATE_LIMIT' ? 429 : 
+                         err.type === 'AUTH_ERROR' ? 401 : 500;
+      
+      return new Response(
+        JSON.stringify({ 
+          error: err.message,
+          errorType: err.type,
+          provider: err.provider,
+          retryAfterSeconds: err.retryAfterSeconds,
+          userMessage: getUserFriendlyMessage(err)
+        }),
+        { status: statusCode, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
+
+// Helper to generate user-friendly error messages
+function getUserFriendlyMessage(err: AIError): string {
+  switch (err.type) {
+    case 'QUOTA_EXCEEDED':
+      return 'AI service quota exceeded. Your daily/monthly limit has been reached. Please try again later or upgrade your plan.';
+    case 'RATE_LIMIT':
+      return `Too many requests. Please wait ${err.retryAfterSeconds || 'a few'} seconds and try again.`;
+    case 'AUTH_ERROR':
+      return 'AI service authentication failed. Please check your API key configuration in Settings.';
+    default:
+      return 'AI service temporarily unavailable. Please try again in a moment.';
+  }
+}

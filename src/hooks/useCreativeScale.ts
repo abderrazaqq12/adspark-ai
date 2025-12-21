@@ -6,6 +6,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 import type {
   VideoAnalysis,
   CreativeBlueprint,
@@ -95,7 +96,7 @@ async function invokeWithTimeout<T>(
   functionName: string,
   body: Record<string, unknown>,
   timeoutMs: number = LIMITS.REQUEST_TIMEOUT_MS
-): Promise<{ data: T | null; error: Error | null }> {
+): Promise<{ data: T | null; error: Error | null; errorType?: string }> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -109,12 +110,40 @@ async function invokeWithTimeout<T>(
     if (error) {
       // Handle specific error codes
       if (error.message?.includes('402') || error.message?.includes('payment')) {
-        return { data: null, error: new Error('Payment required. Please add credits to continue.') };
+        return { data: null, error: new Error('Payment required. Please add credits to continue.'), errorType: 'PAYMENT_REQUIRED' };
       }
       if (error.message?.includes('429') || error.message?.includes('rate')) {
-        return { data: null, error: new Error('Rate limit exceeded. Please wait a moment.') };
+        return { data: null, error: new Error('Rate limit exceeded. Please wait a moment.'), errorType: 'RATE_LIMIT' };
       }
       return { data: null, error: new Error(error.message) };
+    }
+
+    // Check for error response in data (edge function returned error with 2xx status for backwards compat)
+    if (data && typeof data === 'object' && 'error' in data && !('success' in data)) {
+      const errorData = data as { error: string; errorType?: string; userMessage?: string; retryAfterSeconds?: number };
+      const userMessage = errorData.userMessage || errorData.error;
+      const errorType = errorData.errorType;
+      
+      // Show toast for rate limit/quota errors
+      if (errorType === 'QUOTA_EXCEEDED' || errorType === 'RATE_LIMIT') {
+        toast({
+          title: errorType === 'QUOTA_EXCEEDED' ? 'AI Quota Exceeded' : 'Rate Limited',
+          description: userMessage,
+          variant: 'destructive',
+        });
+        return { data: null, error: new Error(userMessage), errorType };
+      }
+      
+      if (errorType === 'AUTH_ERROR') {
+        toast({
+          title: 'API Key Error',
+          description: userMessage,
+          variant: 'destructive',
+        });
+        return { data: null, error: new Error(userMessage), errorType };
+      }
+      
+      return { data: null, error: new Error(errorData.error), errorType };
     }
 
     return { data: data as T, error: null };

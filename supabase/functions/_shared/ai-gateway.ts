@@ -30,6 +30,23 @@ export interface AIResponse {
   };
 }
 
+// Error types for better handling
+export type AIErrorType = 'RATE_LIMIT' | 'QUOTA_EXCEEDED' | 'AUTH_ERROR' | 'API_ERROR' | 'UNKNOWN';
+
+export class AIError extends Error {
+  type: AIErrorType;
+  provider: 'gemini' | 'openai';
+  retryAfterSeconds?: number;
+  
+  constructor(message: string, type: AIErrorType, provider: 'gemini' | 'openai', retryAfterSeconds?: number) {
+    super(message);
+    this.name = 'AIError';
+    this.type = type;
+    this.provider = provider;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
 // Model mappings
 const GEMINI_MODELS: Record<string, string> = {
   'default': 'gemini-2.0-flash',
@@ -46,12 +63,31 @@ const OPENAI_MODELS: Record<string, string> = {
 };
 
 /**
+ * Parse error response and extract retry delay if available
+ */
+function parseRetryDelay(errorText: string): number | undefined {
+  try {
+    const data = JSON.parse(errorText);
+    // Gemini format
+    const retryInfo = data.error?.details?.find((d: any) => d['@type']?.includes('RetryInfo'));
+    if (retryInfo?.retryDelay) {
+      const seconds = parseFloat(retryInfo.retryDelay.replace('s', ''));
+      return isNaN(seconds) ? undefined : Math.ceil(seconds);
+    }
+    // OpenAI format - check headers would be better but we parse text here
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Call Google Gemini API
  */
 async function callGemini(options: AIRequestOptions): Promise<AIResponse> {
   const apiKey = Deno.env.get('Gemini');
   if (!apiKey) {
-    throw new Error('Gemini API key not configured');
+    throw new AIError('Gemini API key not configured', 'AUTH_ERROR', 'gemini');
   }
 
   const model = GEMINI_MODELS[options.model || 'default'] || GEMINI_MODELS.default;
@@ -89,7 +125,29 @@ async function callGemini(options: AIRequestOptions): Promise<AIResponse> {
   if (!response.ok) {
     const errorText = await response.text();
     console.error('[Gemini] Error:', response.status, errorText);
-    throw new Error(`Gemini API error: ${response.status}`);
+    
+    const retryAfter = parseRetryDelay(errorText);
+    
+    if (response.status === 429) {
+      // Check if it's quota exceeded vs rate limit
+      const isQuotaExceeded = errorText.includes('RESOURCE_EXHAUSTED') || 
+                               errorText.includes('quota') ||
+                               errorText.includes('exceeded');
+      throw new AIError(
+        isQuotaExceeded 
+          ? 'Gemini API quota exceeded. Please try again later or check your billing settings.'
+          : 'Gemini API rate limited. Please wait a moment and try again.',
+        isQuotaExceeded ? 'QUOTA_EXCEEDED' : 'RATE_LIMIT',
+        'gemini',
+        retryAfter
+      );
+    }
+    
+    if (response.status === 401 || response.status === 403) {
+      throw new AIError('Gemini API key is invalid or expired', 'AUTH_ERROR', 'gemini');
+    }
+    
+    throw new AIError(`Gemini API error: ${response.status}`, 'API_ERROR', 'gemini');
   }
 
   const data = await response.json();
@@ -113,7 +171,7 @@ async function callGemini(options: AIRequestOptions): Promise<AIResponse> {
 async function callOpenAI(options: AIRequestOptions): Promise<AIResponse> {
   const apiKey = Deno.env.get('OpenAI');
   if (!apiKey) {
-    throw new Error('OpenAI API key not configured');
+    throw new AIError('OpenAI API key not configured', 'AUTH_ERROR', 'openai');
   }
 
   const model = OPENAI_MODELS[options.model || 'default'] || OPENAI_MODELS.default;
@@ -135,7 +193,22 @@ async function callOpenAI(options: AIRequestOptions): Promise<AIResponse> {
   if (!response.ok) {
     const errorText = await response.text();
     console.error('[OpenAI] Error:', response.status, errorText);
-    throw new Error(`OpenAI API error: ${response.status}`);
+    
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('retry-after');
+      throw new AIError(
+        'OpenAI API rate limited. Please wait a moment and try again.',
+        'RATE_LIMIT',
+        'openai',
+        retryAfter ? parseInt(retryAfter) : undefined
+      );
+    }
+    
+    if (response.status === 401) {
+      throw new AIError('OpenAI API key is invalid or expired', 'AUTH_ERROR', 'openai');
+    }
+    
+    throw new AIError(`OpenAI API error: ${response.status}`, 'API_ERROR', 'openai');
   }
 
   const data = await response.json();
@@ -157,22 +230,54 @@ async function callOpenAI(options: AIRequestOptions): Promise<AIResponse> {
  * Main AI Gateway function - tries Gemini first, falls back to OpenAI
  */
 export async function callAI(options: AIRequestOptions): Promise<AIResponse> {
+  let geminiError: AIError | Error | null = null;
+  let openAIError: AIError | Error | null = null;
+
   // Try Gemini first
   try {
     console.log('[AI-Gateway] Trying Gemini...');
     return await callGemini(options);
-  } catch (geminiError) {
-    console.warn('[AI-Gateway] Gemini failed, trying OpenAI fallback:', geminiError);
-    
-    // Try OpenAI as fallback
-    try {
-      console.log('[AI-Gateway] Trying OpenAI fallback...');
-      return await callOpenAI(options);
-    } catch (openAIError) {
-      console.error('[AI-Gateway] Both providers failed');
-      throw new Error(`AI providers failed. Gemini: ${geminiError}. OpenAI: ${openAIError}`);
-    }
+  } catch (err) {
+    geminiError = err as AIError | Error;
+    console.warn('[AI-Gateway] Gemini failed, trying OpenAI fallback:', err);
   }
+    
+  // Try OpenAI as fallback
+  try {
+    console.log('[AI-Gateway] Trying OpenAI fallback...');
+    return await callOpenAI(options);
+  } catch (err) {
+    openAIError = err as AIError | Error;
+    console.error('[AI-Gateway] Both providers failed');
+  }
+
+  // Both failed - return the most informative error
+  // Prioritize quota/rate limit errors as they're actionable
+  if (geminiError instanceof AIError && (geminiError.type === 'QUOTA_EXCEEDED' || geminiError.type === 'RATE_LIMIT')) {
+    if (openAIError instanceof AIError && openAIError.type === 'AUTH_ERROR') {
+      // Gemini is rate limited and OpenAI key is invalid
+      throw new AIError(
+        'AI service temporarily unavailable. Gemini quota exceeded and backup service unavailable. Please try again later.',
+        'QUOTA_EXCEEDED',
+        'gemini',
+        geminiError.retryAfterSeconds
+      );
+    }
+    throw geminiError;
+  }
+  
+  if (openAIError instanceof AIError && (openAIError.type === 'QUOTA_EXCEEDED' || openAIError.type === 'RATE_LIMIT')) {
+    throw openAIError;
+  }
+
+  // Generic error combining both
+  const geminiMsg = geminiError instanceof AIError ? geminiError.message : String(geminiError);
+  const openAIMsg = openAIError instanceof AIError ? openAIError.message : String(openAIError);
+  throw new AIError(
+    `AI providers unavailable. Please check your API keys and try again.`,
+    'API_ERROR',
+    'gemini'
+  );
 }
 
 /**
