@@ -353,11 +353,17 @@ export function useCreativeScale(): UseCreativeScaleReturn {
         {
           analysis,
           target_framework: options?.targetFramework,
-          variation_count: safeVariationCount
+          variation_count: safeVariationCount,
+          duration_constraints: { min_ms: 15000, max_ms: 30000 } // Enforce here too
         }
       );
 
-      if (fnError) throw fnError;
+      // Handle non-2xx gracefully (legacy fallback)
+      if (fnError) {
+        console.warn('Legacy Strategy Error (suppressed):', fnError);
+        return null; // Return null so UI handles it as "failed but safe" or we can set specific error state
+      }
+
       if (!data?.blueprint) throw new Error('No blueprint returned from AI');
 
       // Schema validation

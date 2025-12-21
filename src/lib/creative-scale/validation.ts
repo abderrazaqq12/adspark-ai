@@ -10,8 +10,8 @@ import { z } from 'zod';
 // ============================================
 
 export const LIMITS = {
-  MAX_FILE_SIZE_MB: 50,
-  MAX_FILE_SIZE_BYTES: 50 * 1024 * 1024,
+  MAX_FILE_SIZE_MB: 200,
+  MAX_FILE_SIZE_BYTES: 200 * 1024 * 1024,
   MAX_DURATION_SEC: 60,
   MAX_VIDEOS: 20,
   MAX_VARIATIONS: 20,
@@ -132,9 +132,9 @@ export const CreativeBlueprintSchema = z.object({
 // VALIDATION HELPERS
 // ============================================
 
-export function validateVideoAnalysis(data: unknown): { 
-  success: boolean; 
-  data?: z.infer<typeof VideoAnalysisSchema>; 
+export function validateVideoAnalysis(data: unknown): {
+  success: boolean;
+  data?: z.infer<typeof VideoAnalysisSchema>;
   error?: string;
 } {
   const result = VideoAnalysisSchema.safeParse(data);
@@ -142,9 +142,9 @@ export function validateVideoAnalysis(data: unknown): {
     return { success: true, data: result.data };
   }
   const firstError = result.error.errors[0];
-  return { 
-    success: false, 
-    error: `Invalid analysis: ${firstError?.path.join('.')} - ${firstError?.message}` 
+  return {
+    success: false,
+    error: `Invalid analysis: ${firstError?.path.join('.')} - ${firstError?.message}`
   };
 }
 
@@ -171,18 +171,18 @@ export function validateCreativeBlueprint(data: unknown): {
 export function validateVideoFile(file: File): { valid: boolean; error?: string } {
   // Check file size
   if (file.size > LIMITS.MAX_FILE_SIZE_BYTES) {
-    return { 
-      valid: false, 
-      error: `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum is ${LIMITS.MAX_FILE_SIZE_MB}MB.` 
+    return {
+      valid: false,
+      error: `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum is ${LIMITS.MAX_FILE_SIZE_MB}MB.`
     };
   }
 
   // Check MIME type
   const validTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
   if (!validTypes.includes(file.type)) {
-    return { 
-      valid: false, 
-      error: `Invalid format: ${file.type || 'unknown'}. Use MP4, WebM, or MOV.` 
+    return {
+      valid: false,
+      error: `Invalid format: ${file.type || 'unknown'}. Use MP4, WebM, or MOV.`
     };
   }
 
