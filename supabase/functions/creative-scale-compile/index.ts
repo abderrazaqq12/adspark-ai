@@ -196,7 +196,8 @@ function buildTimeline(
     }
 
     const action = transformMap.get(segment.id);
-    const speedMultiplier = action?.transformation.speed_multiplier ?? 1.0;
+    // Security: Prevent division by zero with minimum speed multiplier
+    const speedMultiplier = Math.max(0.1, action?.transformation.speed_multiplier ?? 1.0);
     const trimStartPercent = action?.transformation.trim_percent_start ?? 0;
     const trimEndPercent = action?.transformation.trim_percent_end ?? 0;
 
@@ -398,22 +399,34 @@ function compile(analysis: any, blueprint: any, variationIndex: number, sourceVi
 
   if (currentTotalDuration > 0 && currentTotalDuration < MIN_DURATION_MS) {
     const originalTimeline = JSON.parse(JSON.stringify(timeline)); // Deep copy
-    let loopCount = 0;
 
-    // Loop until we exceed minimum duration (cap at 10 loops to be safe)
-    while (currentTotalDuration < MIN_DURATION_MS && loopCount < 10) {
-      loopCount++;
-      timelineWarnings.push(`Auto-looping: Content too short (${currentTotalDuration}ms), appending copy ${loopCount}`);
+    // Security: Guard against infinite loop if timeline is empty or all segments are 0ms
+    if (originalTimeline.length === 0) {
+      timelineWarnings.push('Cannot auto-loop: timeline is empty');
+    } else {
+      const totalOriginalDuration = originalTimeline[originalTimeline.length - 1]?.timeline_end_ms || 0;
 
-      for (const segment of originalTimeline) {
-        const newSegment = { ...segment, segment_id: `${segment.segment_id}_loop_${loopCount}` };
+      if (totalOriginalDuration === 0) {
+        timelineWarnings.push('Cannot auto-loop: all segments have 0 duration');
+      } else {
+        let loopCount = 0;
 
-        // Offset time
-        newSegment.timeline_start_ms = currentTotalDuration;
-        newSegment.timeline_end_ms = currentTotalDuration + newSegment.output_duration_ms;
+        // Loop until we exceed minimum duration (cap at 10 loops to be safe)
+        while (currentTotalDuration < MIN_DURATION_MS && loopCount < 10) {
+          loopCount++;
+          timelineWarnings.push(`Auto-looping: Content too short (${currentTotalDuration}ms), appending copy ${loopCount}`);
 
-        timeline.push(newSegment);
-        currentTotalDuration += newSegment.output_duration_ms;
+          for (const segment of originalTimeline) {
+            const newSegment = { ...segment, segment_id: `${segment.segment_id}_loop_${loopCount}` };
+
+            // Offset time
+            newSegment.timeline_start_ms = currentTotalDuration;
+            newSegment.timeline_end_ms = currentTotalDuration + newSegment.output_duration_ms;
+
+            timeline.push(newSegment);
+            currentTotalDuration += newSegment.output_duration_ms;
+          }
+        }
       }
     }
   }

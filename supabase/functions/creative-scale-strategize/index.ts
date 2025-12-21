@@ -234,17 +234,25 @@ IMPORTANT: You MUST generate exactly ${safeVariationCount} items in the 'variati
 
     // Duplicate existing variations with slight modifications to ensure uniqueness
     for (let i = 0; i < needed; i++) {
-      const sourceIdx = i % Math.max(1, variations.length);
-      const sourceVariation = variations[sourceIdx] || {
-        id: `var_fallback_${i}`,
-        action: 'emphasize_segment',
-        target_segment_type: 'hook',
-        intent: 'Increase engagement',
-        priority: 'medium',
-        reasoning: 'Automated variation to meet count requirement',
-        expected_impact: 'Moderate improvement',
-        risk_level: 'low'
-      };
+      let sourceVariation;
+
+      if (variations.length > 0) {
+        // Use existing variation as template
+        const sourceIdx = i % variations.length;
+        sourceVariation = variations[sourceIdx];
+      } else {
+        // AI returned no variations, use fallback template
+        sourceVariation = {
+          id: `var_fallback_${i}`,
+          action: 'emphasize_segment',
+          target_segment_type: 'hook',
+          intent: 'Increase engagement',
+          priority: 'medium',
+          reasoning: 'Automated variation to meet count requirement',
+          expected_impact: 'Moderate improvement',
+          risk_level: 'low'
+        };
+      }
 
       // Create a modified copy
       const newVariation = {

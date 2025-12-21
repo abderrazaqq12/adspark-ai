@@ -59,6 +59,36 @@ serve(async (req) => {
       );
     }
 
+    // Security: Validate URL to prevent SSRF attacks
+    try {
+      const url = new URL(video_url);
+      const blockedProtocols = ['file:', 'ftp:', 'data:'];
+      const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'];
+
+      if (blockedProtocols.includes(url.protocol)) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid URL protocol. Only HTTP/HTTPS allowed.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Block private IP ranges
+      if (blockedHosts.includes(url.hostname) ||
+        url.hostname.startsWith('192.168.') ||
+        url.hostname.startsWith('10.') ||
+        url.hostname.match(/^172\.(1[6-9]|2[0-9]|3[01])\./)) {
+        return new Response(
+          JSON.stringify({ error: 'Private or internal URLs are not allowed.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } catch (e) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid URL format' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Fetch user-provided API keys from database
     const apiKeys: Record<string, string> = {};
     if (userId) {
@@ -240,32 +270,53 @@ Return ONLY the JSON, no markdown, no explanation.`;
       // SAFEGUARD: Normalize Timestamps (Sec -> MS)
       // ==========================================
       // AI often outputs seconds (e.g. 5.5) even when asked for ms. Detect and fix.
-      const isSeconds = (val: number) => typeof val === 'number' && val > 0 && val < 600; // Assuming ad is < 10 mins (600s). If it was ms, 600ms is tiny.
+      const MAX_REASONABLE_DURATION_MS = 600000; // 10 minutes max
 
       let maxEnd = 0;
-      if (analysis.segments) {
+      if (analysis.segments && Array.isArray(analysis.segments)) {
         analysis.segments.forEach((s: any) => {
-          if (s.end_ms > maxEnd) maxEnd = s.end_ms;
+          if (s?.end_ms && typeof s.end_ms === 'number' && s.end_ms > maxEnd) {
+            maxEnd = s.end_ms;
+          }
         });
       }
 
       // If max timestamp is small (e.g. < 1000), it's definitely seconds.
-      // If it's e.g. 60, it's 60s or 60ms. Unlikely to be 60ms for a whole ad.
       if (maxEnd > 0 && maxEnd < 1000) {
         console.log(`[creative-scale-analyze] Detected timestamps in SECONDS (max ${maxEnd}). converting to MS...`);
-        analysis.metadata.duration_ms = (analysis.metadata.duration_ms || 0) * 1000;
-        analysis.segments.forEach((s: any) => {
-          s.start_ms = s.start_ms * 1000;
-          s.end_ms = s.end_ms * 1000;
-        });
+
+        const convertedDuration = (analysis.metadata?.duration_ms || 0) * 1000;
+        if (convertedDuration > MAX_REASONABLE_DURATION_MS) {
+          console.warn(`[creative-scale-analyze] Converted duration ${convertedDuration}ms exceeds limit. Capping to ${MAX_REASONABLE_DURATION_MS}ms.`);
+          analysis.metadata.duration_ms = MAX_REASONABLE_DURATION_MS;
+        } else {
+          analysis.metadata.duration_ms = convertedDuration;
+        }
+
+        if (Array.isArray(analysis.segments)) {
+          analysis.segments.forEach((s: any) => {
+            s.start_ms = Math.min(s.start_ms * 1000, MAX_REASONABLE_DURATION_MS);
+            s.end_ms = Math.min(s.end_ms * 1000, MAX_REASONABLE_DURATION_MS);
+          });
+        }
       } else if (analysis.metadata?.duration_ms && analysis.metadata.duration_ms < 1000) {
         // Fallback check on metadata
         console.log(`[creative-scale-analyze] Detected metadata duration in SECONDS (${analysis.metadata.duration_ms}). converting to MS...`);
-        analysis.metadata.duration_ms = analysis.metadata.duration_ms * 1000;
-        analysis.segments.forEach((s: any) => {
-          s.start_ms = s.start_ms * 1000;
-          s.end_ms = s.end_ms * 1000;
-        });
+
+        const convertedDuration = analysis.metadata.duration_ms * 1000;
+        if (convertedDuration > MAX_REASONABLE_DURATION_MS) {
+          console.warn(`[creative-scale-analyze] Converted duration ${convertedDuration}ms exceeds limit. Capping to ${MAX_REASONABLE_DURATION_MS}ms.`);
+          analysis.metadata.duration_ms = MAX_REASONABLE_DURATION_MS;
+        } else {
+          analysis.metadata.duration_ms = convertedDuration;
+        }
+
+        if (Array.isArray(analysis.segments)) {
+          analysis.segments.forEach((s: any) => {
+            s.start_ms = Math.min(s.start_ms * 1000, MAX_REASONABLE_DURATION_MS);
+            s.end_ms = Math.min(s.end_ms * 1000, MAX_REASONABLE_DURATION_MS);
+          });
+        }
       }
 
     } catch (parseErr) {
