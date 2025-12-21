@@ -392,15 +392,48 @@ export function StrategyStep({
           )}
 
           {isGenerating && (
-            <div className="flex flex-col items-center justify-center h-full text-center py-12">
-              <div className="relative">
-                <div className="w-20 h-20 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Brain className="w-8 h-8 text-primary animate-pulse" />
+            <div className="space-y-6 py-6">
+              {/* Loading Header */}
+              <div className="flex flex-col items-center text-center mb-6">
+                <div className="relative mb-4">
+                  <div className="w-16 h-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Brain className="w-6 h-6 text-primary animate-pulse" />
+                  </div>
+                </div>
+                <h3 className="text-lg font-semibold mb-1">AI Generating {variationCount} Variations...</h3>
+                <p className="text-muted-foreground text-sm">Analyzing patterns and creating unique strategies</p>
+              </div>
+
+              {/* Skeleton Variation Cards */}
+              <div>
+                <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-primary animate-pulse" />
+                  Generating Planned Variations ({variationCount})
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  {Array.from({ length: variationCount }).map((_, idx) => (
+                    <div
+                      key={idx}
+                      className="p-4 rounded-xl border border-border/50 bg-card/50 animate-pulse space-y-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="h-5 w-20 bg-muted rounded" />
+                          <div className="h-5 w-12 bg-primary/20 rounded" />
+                        </div>
+                        <div className="h-5 w-16 bg-green-500/20 rounded" />
+                      </div>
+                      <div className="h-4 w-3/4 bg-muted rounded" />
+                      <div className="h-3 w-1/2 bg-muted/60 rounded" />
+                      <div className="flex gap-2 mt-2">
+                        <div className="h-6 w-20 bg-muted/40 rounded" />
+                        <div className="h-6 w-16 bg-muted/40 rounded" />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-              <h3 className="text-lg font-semibold mt-6 mb-2">AI Generating Strategy...</h3>
-              <p className="text-muted-foreground text-sm">Analyzing patterns and creating unique variations</p>
             </div>
           )}
 
