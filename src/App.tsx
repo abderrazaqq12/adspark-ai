@@ -18,7 +18,6 @@ import Analytics from "./pages/Analytics";
 import Templates from "./pages/Templates";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
-import AgencyMode from "./pages/AgencyMode";
 import AITools from "./pages/AITools";
 import CreativeReplicator from "./pages/CreativeReplicator";
 import CreativeScale from "./pages/CreativeScale";
@@ -41,7 +40,6 @@ const App = () => (
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/create" element={<CreateVideo />} />
                     <Route path="/quick-generate" element={<CreateVideo />} />
-                    <Route path="/agency" element={<AgencyMode />} />
                     <Route path="/creative-replicator" element={<CreativeReplicator />} />
                     <Route path="/creative-replicator" element={<CreativeReplicator />} />
                     <Route path="/creative-scale" element={<CreativeScale />} />
