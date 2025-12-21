@@ -19,6 +19,7 @@ export interface AIRequestOptions {
   temperature?: number;
   maxTokens?: number;
   stream?: boolean;
+  apiKeys?: Record<string, string>;
 }
 
 export interface AIResponse {
@@ -94,7 +95,7 @@ function parseRetryDelay(errorText: string): number | undefined {
  * Call Google Gemini API
  */
 async function callGemini(options: AIRequestOptions): Promise<AIResponse> {
-  const apiKey = Deno.env.get('Gemini');
+  const apiKey = options.apiKeys?.['GEMINI_API_KEY'] || Deno.env.get('Gemini');
   if (!apiKey) {
     throw new AIError('Gemini API key not configured', 'AUTH_ERROR', 'gemini');
   }
@@ -178,7 +179,7 @@ async function callGemini(options: AIRequestOptions): Promise<AIResponse> {
  * Call OpenAI API
  */
 async function callOpenAI(options: AIRequestOptions): Promise<AIResponse> {
-  const apiKey = Deno.env.get('OpenAI');
+  const apiKey = options.apiKeys?.['OPENAI_API_KEY'] || Deno.env.get('OpenAI');
   if (!apiKey) {
     throw new AIError('OpenAI API key not configured', 'AUTH_ERROR', 'openai');
   }
@@ -244,7 +245,7 @@ async function callOpenAI(options: AIRequestOptions): Promise<AIResponse> {
  * Call OpenRouter API (third fallback)
  */
 async function callOpenRouter(options: AIRequestOptions): Promise<AIResponse> {
-  const apiKey = Deno.env.get('OPENROUTER_API_KEY');
+  const apiKey = options.apiKeys?.['OPENROUTER_API_KEY'] || Deno.env.get('OPENROUTER_API_KEY');
   if (!apiKey) {
     throw new AIError('OpenRouter API key not configured', 'AUTH_ERROR', 'openrouter');
   }
@@ -315,7 +316,7 @@ type ProviderFunction = (options: AIRequestOptions) => Promise<AIResponse>;
 interface ProviderConfig {
   name: ProviderName;
   call: ProviderFunction;
-  isConfigured: () => boolean;
+  isConfigured: (keys?: Record<string, string>) => boolean;
 }
 
 /**
@@ -327,17 +328,17 @@ export async function callAI(options: AIRequestOptions): Promise<AIResponse> {
     { 
       name: 'gemini', 
       call: callGemini, 
-      isConfigured: () => !!Deno.env.get('Gemini') 
+      isConfigured: (keys) => !!(keys?.['GEMINI_API_KEY'] || Deno.env.get('Gemini'))
     },
     { 
       name: 'openai', 
       call: callOpenAI, 
-      isConfigured: () => !!Deno.env.get('OpenAI') 
+      isConfigured: (keys) => !!(keys?.['OPENAI_API_KEY'] || Deno.env.get('OpenAI'))
     },
     { 
       name: 'openrouter', 
       call: callOpenRouter, 
-      isConfigured: () => !!Deno.env.get('OPENROUTER_API_KEY') 
+      isConfigured: (keys) => !!(keys?.['OPENROUTER_API_KEY'] || Deno.env.get('OPENROUTER_API_KEY'))
     },
   ];
 
@@ -345,7 +346,7 @@ export async function callAI(options: AIRequestOptions): Promise<AIResponse> {
   
   // Try each provider in order
   for (const provider of providers) {
-    if (!provider.isConfigured()) {
+    if (!provider.isConfigured(options.apiKeys)) {
       console.log(`[AI-Gateway] Skipping ${provider.name} - not configured`);
       continue;
     }
@@ -384,7 +385,7 @@ export async function callAI(options: AIRequestOptions): Promise<AIResponse> {
   console.error('[AI-Gateway] All providers failed');
   
   // Build informative error message
-  const configuredProviders = providers.filter(p => p.isConfigured()).map(p => p.name);
+  const configuredProviders = providers.filter(p => p.isConfigured(options.apiKeys)).map(p => p.name);
   
   if (configuredProviders.length === 0) {
     throw new AIError(
@@ -431,17 +432,21 @@ export async function callAI(options: AIRequestOptions): Promise<AIResponse> {
 /**
  * Check if AI is available (at least one provider configured)
  */
-export function isAIAvailable(): boolean {
-  return !!(Deno.env.get('Gemini') || Deno.env.get('OpenAI') || Deno.env.get('OPENROUTER_API_KEY'));
+export function isAIAvailable(apiKeys?: Record<string, string>): boolean {
+  return !!(
+    (apiKeys?.['GEMINI_API_KEY'] || Deno.env.get('Gemini')) || 
+    (apiKeys?.['OPENAI_API_KEY'] || Deno.env.get('OpenAI')) || 
+    (apiKeys?.['OPENROUTER_API_KEY'] || Deno.env.get('OPENROUTER_API_KEY'))
+  );
 }
 
 /**
  * Get available providers
  */
-export function getAvailableProviders(): string[] {
+export function getAvailableProviders(apiKeys?: Record<string, string>): string[] {
   const providers: string[] = [];
-  if (Deno.env.get('Gemini')) providers.push('gemini');
-  if (Deno.env.get('OpenAI')) providers.push('openai');
-  if (Deno.env.get('OPENROUTER_API_KEY')) providers.push('openrouter');
+  if (apiKeys?.['GEMINI_API_KEY'] || Deno.env.get('Gemini')) providers.push('gemini');
+  if (apiKeys?.['OPENAI_API_KEY'] || Deno.env.get('OpenAI')) providers.push('openai');
+  if (apiKeys?.['OPENROUTER_API_KEY'] || Deno.env.get('OPENROUTER_API_KEY')) providers.push('openrouter');
   return providers;
 }

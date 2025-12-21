@@ -59,9 +59,36 @@ serve(async (req) => {
       );
     }
 
-    if (!isAIAvailable()) {
+    // Fetch user-provided API keys from database
+    const apiKeys: Record<string, string> = {};
+    if (userId) {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Define keys to fetch
+        const providers = ['GEMINI_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY'];
+
+        await Promise.all(providers.map(async (provider) => {
+          const { data, error } = await supabase.rpc('get_user_api_key', {
+            p_user_id: userId,
+            p_provider: provider
+          });
+
+          if (!error && data) {
+            apiKeys[provider] = data;
+            console.log(`[creative-scale-analyze] Loaded user key for ${provider}`);
+          }
+        }));
+      } catch (e) {
+        console.warn('[creative-scale-analyze] Failed to fetch user API keys:', e);
+      }
+    }
+
+    if (!isAIAvailable(apiKeys)) {
       return new Response(
-        JSON.stringify({ error: 'No AI provider configured. Please add Gemini or OpenAI API key.' }),
+        JSON.stringify({ error: 'No AI provider configured. Please add Gemini or OpenAI API key in Settings.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -141,23 +168,24 @@ You must analyze the video content and return this exact JSON structure:
 Return ONLY the JSON, no markdown, no explanation.`;
 
     console.log(`[creative-scale-analyze] Calling AI provider...`);
-    
+
     const aiResponse = await callAI({
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
       temperature: 0.3,
+      apiKeys,
     });
 
     const content = aiResponse.content || '';
-    
+
     // Enhanced logging for debugging
     console.log(`[creative-scale-analyze] AI Provider: ${aiResponse.provider}`);
     console.log(`[creative-scale-analyze] Response length: ${content.length} chars`);
     console.log(`[creative-scale-analyze] Response preview (first 300 chars): ${content.substring(0, 300)}`);
     console.log(`[creative-scale-analyze] Response preview (last 200 chars): ${content.substring(content.length - 200)}`);
-    
+
     if (!content) {
       console.error('[creative-scale-analyze] Empty response from AI');
       console.error('[creative-scale-analyze] Full AI response object:', JSON.stringify(aiResponse, null, 2));
@@ -172,7 +200,7 @@ Return ONLY the JSON, no markdown, no explanation.`;
     try {
       let jsonStr = content.trim();
       console.log(`[creative-scale-analyze] Parsing JSON, initial length: ${jsonStr.length}`);
-      
+
       // Handle ```json blocks
       if (jsonStr.includes('```json')) {
         console.log(`[creative-scale-analyze] Detected markdown json block`);
@@ -181,7 +209,7 @@ Return ONLY the JSON, no markdown, no explanation.`;
           const innerParts = parts[1].split('```');
           jsonStr = innerParts[0]?.trim() || jsonStr;
         }
-      } 
+      }
       // Handle plain ``` blocks
       else if (jsonStr.includes('```')) {
         console.log(`[creative-scale-analyze] Detected plain markdown block`);
@@ -190,7 +218,7 @@ Return ONLY the JSON, no markdown, no explanation.`;
           jsonStr = parts[1].trim();
         }
       }
-      
+
       // Try to find JSON object if still wrapped
       if (!jsonStr.startsWith('{')) {
         console.log(`[creative-scale-analyze] JSON doesn't start with {, searching for JSON object`);
@@ -201,10 +229,10 @@ Return ONLY the JSON, no markdown, no explanation.`;
           console.log(`[creative-scale-analyze] Extracted JSON from position ${jsonStart} to ${jsonEnd}`);
         }
       }
-      
+
       console.log(`[creative-scale-analyze] Final JSON length before parse: ${jsonStr.length}`);
       console.log(`[creative-scale-analyze] Final JSON preview: ${jsonStr.substring(0, 200)}...`);
-      
+
       analysis = JSON.parse(jsonStr);
       console.log(`[creative-scale-analyze] JSON parsed successfully, keys: ${Object.keys(analysis).join(', ')}`);
     } catch (parseErr) {
@@ -213,8 +241,8 @@ Return ONLY the JSON, no markdown, no explanation.`;
       console.error('[creative-scale-analyze] Content type:', typeof content);
       console.error('[creative-scale-analyze] Content JSON stringified:', JSON.stringify(content));
       return new Response(
-        JSON.stringify({ 
-          error: 'Failed to parse AI response as JSON', 
+        JSON.stringify({
+          error: 'Failed to parse AI response as JSON',
           raw: content.substring(0, 1000),
           parseError: parseErr instanceof Error ? parseErr.message : String(parseErr),
           provider: aiResponse.provider
@@ -231,8 +259,8 @@ Return ONLY the JSON, no markdown, no explanation.`;
     }
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         analysis,
         meta: {
           video_id,
@@ -246,14 +274,14 @@ Return ONLY the JSON, no markdown, no explanation.`;
 
   } catch (err) {
     console.error('[creative-scale-analyze] Error:', err);
-    
+
     // Handle AIError with specific status codes and user-friendly messages
     if (err instanceof AIError) {
-      const statusCode = err.type === 'QUOTA_EXCEEDED' || err.type === 'RATE_LIMIT' ? 429 : 
-                         err.type === 'AUTH_ERROR' ? 401 : 500;
-      
+      const statusCode = err.type === 'QUOTA_EXCEEDED' || err.type === 'RATE_LIMIT' ? 429 :
+        err.type === 'AUTH_ERROR' ? 401 : 500;
+
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           error: err.message,
           errorType: err.type,
           provider: err.provider,
@@ -263,7 +291,7 @@ Return ONLY the JSON, no markdown, no explanation.`;
         { status: statusCode, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    
+
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
