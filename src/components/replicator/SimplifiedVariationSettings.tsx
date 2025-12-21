@@ -292,43 +292,16 @@ export const SimplifiedVariationSettings = ({
             </CardContent>
           </Card>
 
-          {/* Export Ratios */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Globe className="w-4 h-4 text-primary" />
-                Export Ratios
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-3">
-                {RATIO_OPTIONS.map((ratio) => (
-                  <button
-                    key={ratio.id}
-                    onClick={() => toggleRatio(ratio.id)}
-                    className={`p-3 rounded-lg text-center transition-all border ${
-                      config.ratios.includes(ratio.id)
-                        ? "bg-primary/10 border-primary text-primary"
-                        : "bg-accent border-transparent hover:border-border"
-                    }`}
-                  >
-                    <div className="font-bold">{ratio.label}</div>
-                    <div className="text-xs text-muted-foreground">{ratio.description}</div>
-                  </button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Right Column */}
         <div className="space-y-6">
-          {/* Language & Market */}
+          {/* Language, Market & Platforms */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Globe className="w-4 h-4 text-primary" />
-                Language & Market
+                Language, Market & Platforms
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -347,7 +320,7 @@ export const SimplifiedVariationSettings = ({
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-popover z-50">
                     {LANGUAGES.map((lang) => (
                       <SelectItem key={lang.id} value={lang.id}>
                         {lang.label}
@@ -370,7 +343,7 @@ export const SimplifiedVariationSettings = ({
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-popover z-50">
                     {MARKETS.map((market) => (
                       <SelectItem key={market.id} value={market.id}>
                         {market.label}
@@ -378,6 +351,27 @@ export const SimplifiedVariationSettings = ({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Export Platforms</Label>
+                <div className="flex flex-wrap gap-2">
+                  {RATIO_OPTIONS.map((ratio) => (
+                    <button
+                      key={ratio.id}
+                      onClick={() => toggleRatio(ratio.id)}
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all border ${
+                        config.ratios.includes(ratio.id)
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-accent border-border hover:border-primary/50"
+                      }`}
+                    >
+                      {ratio.label} <span className="text-[10px] opacity-70">({ratio.description})</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Click to select multiple platforms
+                </p>
               </div>
             </CardContent>
           </Card>
