@@ -128,3 +128,6 @@ verify_jwt = false
 
 [functions.renderflow-health]
 verify_jwt = false
+
+[functions.test-ai-providers]
+verify_jwt = true

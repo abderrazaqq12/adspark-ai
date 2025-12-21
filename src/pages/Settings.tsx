@@ -22,6 +22,7 @@ import StudioPrompts from "@/components/StudioPrompts";
 import DeploymentSettings from "@/components/DeploymentSettings";
 import { useSecureApiKeys } from "@/hooks/useSecureApiKeys";
 import { BackendHealthDashboard } from "@/components/BackendHealthDashboard";
+import { AIProviderStatus } from "@/components/AIProviderStatus";
 
 
 interface PromptTemplate {
@@ -846,6 +847,9 @@ export default function Settings() {
                   {!hasApiKey('GEMINI_API_KEY') && <Badge variant="outline">Gemini (needs key)</Badge>}
                 </div>
               </div>
+
+              {/* AI Provider Status - Test All Providers */}
+              <AIProviderStatus />
 
               {/* Global API Keys Section */}
               <div className="space-y-4">
