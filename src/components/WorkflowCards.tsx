@@ -5,7 +5,6 @@ import { useNavigate } from "react-router-dom";
 import { 
   Rocket, 
   Layers, 
-  Building2, 
   ArrowRight,
   Zap,
   Clock,
@@ -39,19 +38,6 @@ const workflows = [
     gradient: "from-secondary/20 via-secondary/10 to-transparent",
     iconBg: "bg-secondary/20",
     iconColor: "text-secondary"
-  },
-  {
-    id: "agency",
-    title: "Agency Mode",
-    description: "Batch generation for 100+ products and 1000+ videos.",
-    icon: Building2,
-    url: "/agency",
-    badge: "Enterprise",
-    badgeVariant: "outline" as const,
-    features: ["CSV/Sheets import", "Parallel processing", "Team collaboration"],
-    gradient: "from-accent/20 via-accent/10 to-transparent",
-    iconBg: "bg-accent/20",
-    iconColor: "text-accent"
   }
 ];
 
