@@ -25,7 +25,7 @@ export interface AIRequestOptions {
 export interface AIResponse {
   content: string;
   model: string;
-  provider: 'gemini' | 'openai' | 'openrouter';
+  provider: 'gemini' | 'openai' | 'openrouter' | 'lovable';
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -38,10 +38,10 @@ export type AIErrorType = 'RATE_LIMIT' | 'QUOTA_EXCEEDED' | 'AUTH_ERROR' | 'API_
 
 export class AIError extends Error {
   type: AIErrorType;
-  provider: 'gemini' | 'openai' | 'openrouter';
+  provider: 'gemini' | 'openai' | 'openrouter' | 'lovable';
   retryAfterSeconds?: number;
   
-  constructor(message: string, type: AIErrorType, provider: 'gemini' | 'openai' | 'openrouter', retryAfterSeconds?: number) {
+  constructor(message: string, type: AIErrorType, provider: 'gemini' | 'openai' | 'openrouter' | 'lovable', retryAfterSeconds?: number) {
     super(message);
     this.name = 'AIError';
     this.type = type;
@@ -309,8 +309,75 @@ async function callOpenRouter(options: AIRequestOptions): Promise<AIResponse> {
   };
 }
 
+/**
+ * Call Lovable AI Gateway (final fallback - always available)
+ * Uses LOVABLE_API_KEY which is auto-provisioned by Lovable Cloud
+ */
+async function callLovable(options: AIRequestOptions): Promise<AIResponse> {
+  const apiKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!apiKey) {
+    throw new AIError('Lovable API key not configured', 'AUTH_ERROR', 'lovable');
+  }
+
+  const model = 'google/gemini-2.5-flash'; // Default Lovable AI model
+
+  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages: options.messages,
+      // Note: Lovable AI doesn't support temperature for some models
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('[Lovable] Error:', response.status, errorText);
+    
+    if (response.status === 429) {
+      throw new AIError(
+        'Lovable AI rate limited. Please try again later.',
+        'RATE_LIMIT',
+        'lovable'
+      );
+    }
+    
+    if (response.status === 402) {
+      throw new AIError(
+        'Lovable AI credits exhausted. Please add credits to your workspace.',
+        'QUOTA_EXCEEDED',
+        'lovable'
+      );
+    }
+    
+    if (response.status === 401) {
+      throw new AIError('Lovable API key is invalid', 'AUTH_ERROR', 'lovable');
+    }
+    
+    throw new AIError(`Lovable AI error: ${response.status}`, 'API_ERROR', 'lovable');
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content || '';
+
+  return {
+    content,
+    model,
+    provider: 'lovable',
+    usage: data.usage ? {
+      promptTokens: data.usage.prompt_tokens || 0,
+      completionTokens: data.usage.completion_tokens || 0,
+      totalTokens: data.usage.total_tokens || 0,
+    } : undefined,
+  };
+}
+
 // Provider info for logging
-type ProviderName = 'gemini' | 'openai' | 'openrouter';
+type ProviderName = 'gemini' | 'openai' | 'openrouter' | 'lovable';
 type ProviderFunction = (options: AIRequestOptions) => Promise<AIResponse>;
 
 interface ProviderConfig {
@@ -321,7 +388,7 @@ interface ProviderConfig {
 
 /**
  * Main AI Gateway function - tries providers in order with automatic fallback
- * Order: Gemini → OpenAI → OpenRouter
+ * Order: Gemini → OpenAI → OpenRouter → Lovable AI (final fallback)
  */
 export async function callAI(options: AIRequestOptions): Promise<AIResponse> {
   const providers: ProviderConfig[] = [
@@ -339,6 +406,11 @@ export async function callAI(options: AIRequestOptions): Promise<AIResponse> {
       name: 'openrouter', 
       call: callOpenRouter, 
       isConfigured: (keys) => !!(keys?.['OPENROUTER_API_KEY'] || Deno.env.get('OPENROUTER_API_KEY'))
+    },
+    { 
+      name: 'lovable', 
+      call: callLovable, 
+      isConfigured: () => !!Deno.env.get('LOVABLE_API_KEY')
     },
   ];
 
@@ -431,12 +503,14 @@ export async function callAI(options: AIRequestOptions): Promise<AIResponse> {
 
 /**
  * Check if AI is available (at least one provider configured)
+ * Lovable AI is always available if LOVABLE_API_KEY is set
  */
 export function isAIAvailable(apiKeys?: Record<string, string>): boolean {
   return !!(
     (apiKeys?.['GEMINI_API_KEY'] || Deno.env.get('Gemini')) || 
     (apiKeys?.['OPENAI_API_KEY'] || Deno.env.get('OpenAI')) || 
-    (apiKeys?.['OPENROUTER_API_KEY'] || Deno.env.get('OPENROUTER_API_KEY'))
+    (apiKeys?.['OPENROUTER_API_KEY'] || Deno.env.get('OPENROUTER_API_KEY')) ||
+    Deno.env.get('LOVABLE_API_KEY')
   );
 }
 
@@ -448,5 +522,6 @@ export function getAvailableProviders(apiKeys?: Record<string, string>): string[
   if (apiKeys?.['GEMINI_API_KEY'] || Deno.env.get('Gemini')) providers.push('gemini');
   if (apiKeys?.['OPENAI_API_KEY'] || Deno.env.get('OpenAI')) providers.push('openai');
   if (apiKeys?.['OPENROUTER_API_KEY'] || Deno.env.get('OPENROUTER_API_KEY')) providers.push('openrouter');
+  if (Deno.env.get('LOVABLE_API_KEY')) providers.push('lovable');
   return providers;
 }
