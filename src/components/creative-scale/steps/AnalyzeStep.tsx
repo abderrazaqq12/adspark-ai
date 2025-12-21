@@ -6,12 +6,14 @@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { 
   Search, 
   RefreshCw, 
   ArrowRight,
   CheckCircle2,
-  Brain
+  Brain,
+  AlertCircle
 } from 'lucide-react';
 import { SignalsDisplay } from '@/components/creative-scale/SignalsDisplay';
 import type { VideoAnalysis } from '@/lib/creative-scale/types';
@@ -19,6 +21,7 @@ import type { VideoAnalysis } from '@/lib/creative-scale/types';
 interface AnalyzeStepProps {
   analysis: VideoAnalysis | null;
   isAnalyzing: boolean;
+  error?: string | null;
   onAnalyze: () => void;
   onContinue: () => void;
 }
@@ -26,6 +29,7 @@ interface AnalyzeStepProps {
 export function AnalyzeStep({ 
   analysis, 
   isAnalyzing, 
+  error,
   onAnalyze,
   onContinue 
 }: AnalyzeStepProps) {
@@ -41,7 +45,26 @@ export function AnalyzeStep({
 
       {/* Content */}
       <div className="flex-1">
-        {!analysis && !isAnalyzing && (
+        {/* Error State */}
+        {error && !isAnalyzing && (
+          <div className="flex flex-col items-center justify-center h-full text-center py-12">
+            <Alert variant="destructive" className="mb-6 max-w-md">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Analysis Failed</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+            <Button 
+              size="lg"
+              onClick={onAnalyze}
+              className="h-12 px-8"
+            >
+              <RefreshCw className="w-5 h-5 mr-2" />
+              Try Again
+            </Button>
+          </div>
+        )}
+
+        {!analysis && !isAnalyzing && !error && (
           <div className="flex flex-col items-center justify-center h-full text-center py-12">
             <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
               <Search className="w-10 h-10 text-primary" />

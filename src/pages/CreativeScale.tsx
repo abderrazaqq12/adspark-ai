@@ -591,6 +591,7 @@ export default function CreativeScale() {
             <AnalyzeStep
               analysis={currentAnalysis}
               isAnalyzing={isAnalyzing}
+              error={error}
               onAnalyze={handleAnalyze}
               onContinue={handleAnalyzeContinue}
             />
