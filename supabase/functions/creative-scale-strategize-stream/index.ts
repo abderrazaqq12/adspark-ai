@@ -128,10 +128,20 @@ serve(async (req) => {
           generating: true
         });
 
+        // Map optimization goal to prompt-friendly names
+        const goalMapping: Record<string, string> = {
+          'retention': 'RETENTION (keep viewers watching longer)',
+          'ctr': 'CTR (maximize click-through rate)',
+          'conversions': 'CONVERSIONS (drive purchases/signups)',
+          'conversion': 'CONVERSIONS (drive purchases/signups)',
+          'awareness': 'AWARENESS (maximize reach and brand recall)'
+        };
+        const mappedGoal = goalMapping[optimization_goal] || optimization_goal.toUpperCase();
+
         const systemPrompt = `You are an elite performance marketing strategist. Generate EXACTLY ${safeVariationCount} UNIQUE strategies.
 
 MANDATORY DURATION: 15-35 seconds. ${strategySpecifics}
-OPTIMIZATION GOAL: ${optimization_goal.toUpperCase()}
+OPTIMIZATION GOAL: ${mappedGoal}
 RISK TOLERANCE: ${risk_tolerance.toUpperCase()}
 PLATFORM: ${platform.toUpperCase()} (Only valid platforms: TikTok, Meta, Snapchat, YouTube)
 FUNNEL STAGE: ${funnel_stage.toUpperCase()}
@@ -152,6 +162,16 @@ AVAILABLE FRAMEWORKS (13 total):
 - THREE_WHYS: Why You? Why This? Why Now? (minimalist, urgent)
 
 ACTIONS: duplicate_segment, reorder_segments, emphasize_segment, split_segment, merge_segments, remove_segment, compress_segment
+
+CRITICAL: You MUST generate EXACTLY ${safeVariationCount} variation_ideas in your response. Each variation must have:
+- id: unique identifier (var_0, var_1, etc.)
+- action: one of the available actions
+- target_segment_type: hook, problem, solution, benefit, proof, cta, or filler
+- intent: what this action aims to achieve
+- priority: high, medium, or low
+- reasoning: why this action was chosen
+- expected_impact: expected result
+- risk_level: low, medium, or high
 
 Output valid JSON ONLY with exactly ${safeVariationCount} variation_ideas.`;
 

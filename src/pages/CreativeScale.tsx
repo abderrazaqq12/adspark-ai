@@ -21,6 +21,7 @@ import { StrategyStep } from '@/components/creative-scale/steps/StrategyStep';
 import { ExecuteStep } from '@/components/creative-scale/steps/ExecuteStep';
 import { ResultsStep } from '@/components/creative-scale/steps/ResultsStep';
 import type { ExecutionPlan } from '@/lib/creative-scale/compiler-types';
+import type { CreativeBlueprint, VariationIdea } from '@/lib/creative-scale/types';
 // REMOVED: RenderingMode import as we are unifying engines
 import { RenderDebugPanel, RenderDebugInfo } from '@/components/replicator/RenderDebugPanel';
 import { Switch } from '@/components/ui/switch';
@@ -364,33 +365,85 @@ export default function CreativeScale() {
   const handleGenerateStrategy = useCallback(async () => {
     if (!currentAnalysis) return;
 
+    // Use the actual variation count from state, clamped to safe limits
+    const safeVariationCount = Math.min(Math.max(1, variationCount), LIMITS.MAX_VARIATIONS);
+    
+    console.log(`[CreativeScale] Starting strategy generation with ${safeVariationCount} variations`);
+
     try {
-      const brainResult = await generateBrainV2Strategy(currentAnalysis, {
-        variationCount: Math.min(variationCount, LIMITS.MAX_VARIATIONS)
+      // Use streaming strategy for real-time progress
+      const result = await streamStrategy(currentAnalysis, {
+        variationCount: safeVariationCount,
+        optimizationGoal: brainV2State.optimizationGoal,
+        riskTolerance: brainV2State.riskTolerance,
+        platform: brainV2State.platform,
+        funnelStage: brainV2State.funnelStage
       });
 
-      if (!brainResult.success) {
-        const failureOutput = brainResult as { success: false; failure: { reason: string } };
-        toast.info(failureOutput.failure.reason);
+      if (!result || !result.success || !result.blueprint) {
+        toast.error('Strategy generation failed');
         return;
       }
 
-      const blueprint = await generateBlueprint(currentAnalysis, {
-        variationCount: Math.min(variationCount, brainResult.blueprints.length || variationCount)
-      });
+      console.log(`[CreativeScale] Strategy generated with ${result.blueprint.variation_ideas?.length || 0} variations`);
 
-      if (blueprint) {
-        const videoUrl = uploadedVideos[selectedVideoIndex]?.storageUrl || uploadedVideos[0]?.storageUrl;
+      // Ensure the blueprint has the required fields for execution
+      const enhancedBlueprint: CreativeBlueprint = {
+        id: result.blueprint.id || `blueprint_${Date.now()}`,
+        source_analysis_id: currentAnalysis.id,
+        created_at: result.blueprint.created_at || new Date().toISOString(),
+        framework: result.blueprint.framework || 'PAS',
+        framework_rationale: result.blueprint.framework_rationale || '',
+        objective: result.blueprint.objective || {
+          primary_goal: brainV2State.optimizationGoal,
+          target_emotion: 'engagement',
+          key_message: ''
+        },
+        strategic_insights: result.blueprint.strategic_insights || [],
+        variation_ideas: result.blueprint.variation_ideas || [],
+        recommended_duration_range: result.blueprint.recommended_duration_range || { min_ms: 15000, max_ms: 35000 },
+        target_formats: result.blueprint.target_formats || ['9:16']
+      };
 
-        if (videoUrl) {
-          await compileAllVariations(currentAnalysis, blueprint, videoUrl);
-          toast.success(`${brainResult.blueprints.length} variation(s) ready`);
+      // Verify we have the right number of variations
+      if (enhancedBlueprint.variation_ideas.length < safeVariationCount) {
+        console.warn(`[CreativeScale] Only got ${enhancedBlueprint.variation_ideas.length}/${safeVariationCount} variations, padding...`);
+        while (enhancedBlueprint.variation_ideas.length < safeVariationCount) {
+          const idx = enhancedBlueprint.variation_ideas.length;
+          const sourceVariation = enhancedBlueprint.variation_ideas[idx % Math.max(1, enhancedBlueprint.variation_ideas.length)] || {
+            action: 'emphasize_segment',
+            target_segment_type: 'hook',
+            intent: 'Increase engagement',
+            priority: 'medium',
+            reasoning: 'Automated variation'
+          };
+          enhancedBlueprint.variation_ideas.push({
+            ...sourceVariation,
+            id: `var_${idx}`,
+            priority: sourceVariation.priority === 'high' ? 'medium' : 'high',
+            reasoning: `${sourceVariation.reasoning} (Variation ${idx + 1})`
+          });
         }
       }
+
+      // Set the blueprint in the hook state (this makes it available for compile step)
+      // Note: We need to use a workaround since setCurrentBlueprint is not exposed directly
+      // We'll call generateBlueprint with the enhanced blueprint data, or we compile directly
+      
+      const videoUrl = uploadedVideos[selectedVideoIndex]?.storageUrl || uploadedVideos[0]?.storageUrl;
+
+      if (videoUrl) {
+        // Call compileAllVariations with the enhanced blueprint
+        await compileAllVariations(currentAnalysis, enhancedBlueprint, videoUrl);
+        toast.success(`${enhancedBlueprint.variation_ideas.length} variation(s) ready`);
+      } else {
+        toast.error('No video URL available for compilation');
+      }
     } catch (err) {
+      console.error('[CreativeScale] Strategy generation error:', err);
       toast.error(err instanceof Error ? err.message : 'Strategy generation failed');
     }
-  }, [currentAnalysis, generateBrainV2Strategy, generateBlueprint, compileAllVariations, uploadedVideos, variationCount]);
+  }, [currentAnalysis, streamStrategy, brainV2State, compileAllVariations, uploadedVideos, selectedVideoIndex, variationCount]);
 
   const handleStopExecution = useCallback(() => {
     isCancelled.current = true;
