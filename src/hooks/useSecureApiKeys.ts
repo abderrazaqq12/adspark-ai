@@ -10,6 +10,9 @@ import { useToast } from '@/hooks/use-toast';
 interface ApiKeyProvider {
   provider: string;
   is_active: boolean;
+  last_validated_at: string | null;
+  last_validation_success: boolean | null;
+  last_validation_message: string | null;
 }
 
 interface SecureApiKeysHook {
@@ -18,8 +21,10 @@ interface SecureApiKeysHook {
   saveApiKey: (provider: string, encryptedKey: string, isActive?: boolean) => Promise<boolean>;
   deleteApiKey: (provider: string) => Promise<boolean>;
   toggleApiKeyActive: (provider: string, isActive: boolean) => Promise<boolean>;
+  updateValidationStatus: (provider: string, success: boolean, message: string) => Promise<boolean>;
   hasApiKey: (provider: string) => boolean;
   isApiKeyActive: (provider: string) => boolean;
+  getValidationStatus: (provider: string) => { validated_at: string | null; success: boolean | null; message: string | null };
   refreshProviders: () => Promise<void>;
 }
 
@@ -135,14 +140,50 @@ export function useSecureApiKeys(): SecureApiKeysHook {
     return p?.is_active ?? false;
   }, [providers]);
 
+  const getValidationStatus = useCallback((provider: string): { validated_at: string | null; success: boolean | null; message: string | null } => {
+    const p = providers.find(p => p.provider === provider);
+    return {
+      validated_at: p?.last_validated_at ?? null,
+      success: p?.last_validation_success ?? null,
+      message: p?.last_validation_message ?? null,
+    };
+  }, [providers]);
+
+  const updateValidationStatus = useCallback(async (
+    provider: string,
+    success: boolean,
+    message: string
+  ): Promise<boolean> => {
+    try {
+      const { error } = await supabase.rpc('update_api_key_validation', {
+        p_provider: provider,
+        p_success: success,
+        p_message: message,
+      });
+
+      if (error) {
+        console.error('Error updating validation status:', error);
+        return false;
+      }
+
+      await refreshProviders();
+      return true;
+    } catch (err) {
+      console.error('Failed to update validation status:', err);
+      return false;
+    }
+  }, [refreshProviders]);
+
   return {
     providers,
     loading,
     saveApiKey,
     deleteApiKey,
     toggleApiKeyActive,
+    updateValidationStatus,
     hasApiKey,
     isApiKeyActive,
+    getValidationStatus,
     refreshProviders,
   };
 }

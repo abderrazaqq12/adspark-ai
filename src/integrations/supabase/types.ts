@@ -1288,6 +1288,9 @@ export type Database = {
           encrypted_key: string
           id: string
           is_active: boolean | null
+          last_validated_at: string | null
+          last_validation_message: string | null
+          last_validation_success: boolean | null
           provider: string
           updated_at: string | null
           user_id: string
@@ -1297,6 +1300,9 @@ export type Database = {
           encrypted_key: string
           id?: string
           is_active?: boolean | null
+          last_validated_at?: string | null
+          last_validation_message?: string | null
+          last_validation_success?: boolean | null
           provider: string
           updated_at?: string | null
           user_id: string
@@ -1306,6 +1312,9 @@ export type Database = {
           encrypted_key?: string
           id?: string
           is_active?: boolean | null
+          last_validated_at?: string | null
+          last_validation_message?: string | null
+          last_validation_success?: boolean | null
           provider?: string
           updated_at?: string | null
           user_id?: string
@@ -1592,6 +1601,9 @@ export type Database = {
         Args: never
         Returns: {
           is_active: boolean
+          last_validated_at: string
+          last_validation_message: string
+          last_validation_success: boolean
           provider: string
         }[]
       }
@@ -1601,6 +1613,10 @@ export type Database = {
       }
       toggle_api_key_active: {
         Args: { p_is_active: boolean; p_provider: string }
+        Returns: boolean
+      }
+      update_api_key_validation: {
+        Args: { p_message: string; p_provider: string; p_success: boolean }
         Returns: boolean
       }
       upsert_secure_api_key: {
