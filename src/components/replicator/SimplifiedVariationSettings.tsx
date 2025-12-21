@@ -7,10 +7,9 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
-  ArrowLeft, Zap, Sparkles, Globe, Bot, Brain, ChevronDown, ChevronUp,
-  Settings2, Film, Wand2, DollarSign, BarChart3
+  ArrowLeft, Zap, Sparkles, Globe, Bot, Brain,
+  Film, Wand2, DollarSign
 } from "lucide-react";
 import { toast } from "sonner";
 import type { VariationConfig } from "@/pages/CreativeReplicator";
@@ -104,7 +103,6 @@ export const SimplifiedVariationSettings = ({
   onBack,
   onGenerate,
 }: SimplifiedVariationSettingsProps) => {
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [aiAutoEnabled, setAiAutoEnabled] = useState(true);
 
   const toggleRatio = (id: string) => {
@@ -430,74 +428,8 @@ export const SimplifiedVariationSettings = ({
             </CardContent>
           </Card>
 
-          {/* Prioritize Free Tools */}
-          <Card className="border-green-500/30 bg-green-500/5">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Zap className="w-5 h-5 text-green-500" />
-                  <div>
-                    <Label className="font-medium">Prioritize Free Tools</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Use FFMPEG transformations & re-editing over new generations
-                    </p>
-                  </div>
-                </div>
-                <Switch
-                  checked={config.engineTier === "free"}
-                  onCheckedChange={(checked) => {
-                    if (checked) {
-                      setConfig((prev) => ({ ...prev, engineTier: "free" }));
-                    }
-                  }}
-                />
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
-
-      {/* Advanced Mode Toggle */}
-      <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
-        <CollapsibleTrigger asChild>
-          <Button variant="ghost" className="w-full justify-between">
-            <span className="flex items-center gap-2">
-              <Settings2 className="w-4 h-4" />
-              Advanced Mode
-            </span>
-            {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="pt-4">
-          <Card className="border-dashed">
-            <CardContent className="p-4 space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Manual controls override AI decisions. Only use if you need specific settings.
-              </p>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center justify-between">
-                  <Label>Randomize Engines</Label>
-                  <Switch
-                    checked={config.randomizeEngines}
-                    onCheckedChange={(checked) =>
-                      setConfig((prev) => ({ ...prev, randomizeEngines: checked }))
-                    }
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label>AI Operator Agent</Label>
-                  <Switch
-                    checked={config.useAIOperator}
-                    onCheckedChange={(checked) =>
-                      setConfig((prev) => ({ ...prev, useAIOperator: checked }))
-                    }
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </CollapsibleContent>
-      </Collapsible>
 
       {/* Generate Button */}
       <div className="flex justify-end pt-4 border-t">
