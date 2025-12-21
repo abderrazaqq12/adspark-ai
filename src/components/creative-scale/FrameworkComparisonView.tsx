@@ -76,7 +76,7 @@ export function FrameworkComparisonView({ onSelectFramework, compact = false }: 
           Marketing Frameworks
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          8 proven ad frameworks — each optimized for different goals and platforms
+          13 proven ad frameworks — each optimized for different goals and platforms
         </p>
       </CardHeader>
       <CardContent>
@@ -147,7 +147,8 @@ function FrameworkCard({ framework, isSelected, onSelect }: FrameworkCardProps) 
   const pacingColor = {
     slow: 'text-blue-500',
     medium: 'text-amber-500',
-    fast: 'text-green-500'
+    fast: 'text-green-500',
+    very_fast: 'text-red-500'
   }[framework.idealPacing];
 
   return (
@@ -255,11 +256,9 @@ function FrameworkCard({ framework, isSelected, onSelect }: FrameworkCardProps) 
 function PlatformIcon({ platform }: { platform: PlatformType }) {
   const iconMap: Record<PlatformType, { icon: React.ReactNode; label: string }> = {
     tiktok: { icon: <Smartphone className="w-3 h-3" />, label: 'TikTok' },
-    reels: { icon: <Video className="w-3 h-3" />, label: 'Reels' },
+    meta: { icon: <Users className="w-3 h-3" />, label: 'Meta' },
     snapchat: { icon: <MessageCircle className="w-3 h-3" />, label: 'Snap' },
-    youtube: { icon: <Youtube className="w-3 h-3" />, label: 'YouTube' },
-    facebook: { icon: <Users className="w-3 h-3" />, label: 'FB' },
-    general: { icon: <LayoutGrid className="w-3 h-3" />, label: 'All' }
+    youtube: { icon: <Youtube className="w-3 h-3" />, label: 'YouTube' }
   };
 
   const { icon, label } = iconMap[platform];

@@ -17,9 +17,16 @@ export type ExtendedFrameworkType =
   | 'HOOK_BENEFIT_CTA'        // Simple direct flow
   | 'ACC'                     // Awareness-Comprehension-Conviction
   | 'UGC_NATIVE_STORY'        // TikTok/Snapchat native style
-  | 'HOOK_BENEFIT_OBJECTION_CTA'; // Hook → Benefit → Objection → CTA
+  | 'HOOK_BENEFIT_OBJECTION_CTA' // Hook → Benefit → Objection → CTA
+  | 'HELP'                    // Help-Educate-Listen-Promote
+  | 'QUEST'                   // Qualify-Understand-Educate-Stimulate-Transition
+  | 'US_VS_THEM'              // Disruptor positioning
+  | 'PASTOR'                  // Person-Ache-Solution-Transformation-Offer-Response
+  | 'THREE_WHYS';             // Why You? Why This? Why Now?
 
-export type PlatformType = 'tiktok' | 'reels' | 'snapchat' | 'youtube' | 'facebook' | 'general';
+export type PlatformType = 'tiktok' | 'meta' | 'snapchat' | 'youtube';
+
+export type GoalType = 'conversion' | 'awareness';
 
 export interface FrameworkDefinition {
   id: ExtendedFrameworkType;
@@ -30,9 +37,10 @@ export interface FrameworkDefinition {
   bestFor: string[];
   hookAggressiveness: 'low' | 'medium' | 'high';
   ctaPlacement: 'early' | 'middle' | 'end' | 'multiple';
-  idealPacing: 'slow' | 'medium' | 'fast';
+  idealPacing: 'slow' | 'medium' | 'fast' | 'very_fast';
   platforms: PlatformType[];
   hormoziAlignment: string;
+  keyFocus?: string;
 }
 
 export const FRAMEWORK_DEFINITIONS: Record<ExtendedFrameworkType, FrameworkDefinition> = {
@@ -46,8 +54,9 @@ export const FRAMEWORK_DEFINITIONS: Record<ExtendedFrameworkType, FrameworkDefin
     hookAggressiveness: 'high',
     ctaPlacement: 'end',
     idealPacing: 'medium',
-    platforms: ['facebook', 'youtube', 'general'],
-    hormoziAlignment: 'Emphasizes Dream Outcome by contrasting current pain'
+    platforms: ['meta', 'youtube'],
+    hormoziAlignment: 'Emphasizes Dream Outcome by contrasting current pain',
+    keyFocus: 'Empathy & Pain'
   },
   'AIDA': {
     id: 'AIDA',
@@ -59,8 +68,9 @@ export const FRAMEWORK_DEFINITIONS: Record<ExtendedFrameworkType, FrameworkDefin
     hookAggressiveness: 'medium',
     ctaPlacement: 'end',
     idealPacing: 'medium',
-    platforms: ['youtube', 'facebook', 'general'],
-    hormoziAlignment: 'Balanced approach across all Value Equation factors'
+    platforms: ['youtube', 'meta'],
+    hormoziAlignment: 'Balanced approach across all Value Equation factors',
+    keyFocus: 'Classic Funnel'
   },
   'BAB': {
     id: 'BAB',
@@ -72,8 +82,9 @@ export const FRAMEWORK_DEFINITIONS: Record<ExtendedFrameworkType, FrameworkDefin
     hookAggressiveness: 'medium',
     ctaPlacement: 'end',
     idealPacing: 'medium',
-    platforms: ['facebook', 'youtube', 'reels'],
-    hormoziAlignment: 'Maximizes Dream Outcome and Perceived Likelihood'
+    platforms: ['meta', 'youtube', 'tiktok'],
+    hormoziAlignment: 'Maximizes Dream Outcome and Perceived Likelihood',
+    keyFocus: 'Transformation'
   },
   '4Ps': {
     id: '4Ps',
@@ -85,8 +96,9 @@ export const FRAMEWORK_DEFINITIONS: Record<ExtendedFrameworkType, FrameworkDefin
     hookAggressiveness: 'high',
     ctaPlacement: 'end',
     idealPacing: 'medium',
-    platforms: ['facebook', 'youtube', 'general'],
-    hormoziAlignment: 'Strong on Perceived Likelihood through proof elements'
+    platforms: ['meta', 'youtube'],
+    hormoziAlignment: 'Strong on Perceived Likelihood through proof elements',
+    keyFocus: 'Proof & Results'
   },
   'HOOK_BENEFIT_CTA': {
     id: 'HOOK_BENEFIT_CTA',
@@ -98,8 +110,9 @@ export const FRAMEWORK_DEFINITIONS: Record<ExtendedFrameworkType, FrameworkDefin
     hookAggressiveness: 'high',
     ctaPlacement: 'early',
     idealPacing: 'fast',
-    platforms: ['tiktok', 'reels', 'snapchat'],
-    hormoziAlignment: 'Minimizes Time Delay and Effort perception'
+    platforms: ['tiktok', 'snapchat', 'meta'],
+    hormoziAlignment: 'Minimizes Time Delay and Effort perception',
+    keyFocus: 'Speed & Simplicity'
   },
   'ACC': {
     id: 'ACC',
@@ -111,8 +124,9 @@ export const FRAMEWORK_DEFINITIONS: Record<ExtendedFrameworkType, FrameworkDefin
     hookAggressiveness: 'low',
     ctaPlacement: 'end',
     idealPacing: 'slow',
-    platforms: ['youtube', 'facebook', 'general'],
-    hormoziAlignment: 'Builds Perceived Likelihood through education'
+    platforms: ['youtube', 'meta'],
+    hormoziAlignment: 'Builds Perceived Likelihood through education',
+    keyFocus: 'Education'
   },
   'UGC_NATIVE_STORY': {
     id: 'UGC_NATIVE_STORY',
@@ -124,8 +138,9 @@ export const FRAMEWORK_DEFINITIONS: Record<ExtendedFrameworkType, FrameworkDefin
     hookAggressiveness: 'medium',
     ctaPlacement: 'multiple',
     idealPacing: 'fast',
-    platforms: ['tiktok', 'reels', 'snapchat'],
-    hormoziAlignment: 'Increases Perceived Likelihood through relatability'
+    platforms: ['tiktok', 'snapchat', 'meta'],
+    hormoziAlignment: 'Increases Perceived Likelihood through relatability',
+    keyFocus: 'Authenticity'
   },
   'HOOK_BENEFIT_OBJECTION_CTA': {
     id: 'HOOK_BENEFIT_OBJECTION_CTA',
@@ -137,8 +152,79 @@ export const FRAMEWORK_DEFINITIONS: Record<ExtendedFrameworkType, FrameworkDefin
     hookAggressiveness: 'high',
     ctaPlacement: 'end',
     idealPacing: 'medium',
-    platforms: ['facebook', 'youtube', 'general'],
-    hormoziAlignment: 'Reduces Effort & Sacrifice perception'
+    platforms: ['meta', 'youtube', 'tiktok'],
+    hormoziAlignment: 'Reduces Effort & Sacrifice perception',
+    keyFocus: 'Objection Handling'
+  },
+  'HELP': {
+    id: 'HELP',
+    name: 'Help-Educate-Listen-Promote',
+    shortName: 'H.E.L.P.',
+    description: 'Service-first framework: build goodwill before asking for sale',
+    segmentOrder: ['help', 'educate', 'listen', 'promote'],
+    bestFor: ['Coaches', 'SaaS', 'B2B', 'Personal Brand'],
+    hookAggressiveness: 'low',
+    ctaPlacement: 'end',
+    idealPacing: 'slow',
+    platforms: ['youtube', 'meta'],
+    hormoziAlignment: 'Decreases Effort/Sacrifice via education',
+    keyFocus: 'Relationship/Trust'
+  },
+  'QUEST': {
+    id: 'QUEST',
+    name: 'Qualify-Understand-Educate-Stimulate-Transition',
+    shortName: 'QUEST',
+    description: 'Sophisticated AIDA/PAS hybrid for high-ticket offers',
+    segmentOrder: ['qualify', 'understand', 'educate', 'stimulate', 'transition'],
+    bestFor: ['High-ticket', 'Sales Letters', 'Email sequences'],
+    hookAggressiveness: 'medium',
+    ctaPlacement: 'end',
+    idealPacing: 'medium',
+    platforms: ['youtube', 'meta'],
+    hormoziAlignment: 'Boosts Perceived Likelihood of Success',
+    keyFocus: 'Qualification'
+  },
+  'US_VS_THEM': {
+    id: 'US_VS_THEM',
+    name: 'Us vs. Them',
+    shortName: 'Disruptor',
+    description: 'Position brand as rebel or only logical choice in crowded market',
+    segmentOrder: ['status_quo', 'villain', 'epiphany', 'result'],
+    bestFor: ['Disruptor Brands', 'DTC', 'Market challengers'],
+    hookAggressiveness: 'high',
+    ctaPlacement: 'middle',
+    idealPacing: 'fast',
+    platforms: ['youtube', 'tiktok', 'meta'],
+    hormoziAlignment: 'Increases Dream Outcome through contrast',
+    keyFocus: 'Competitive Edge'
+  },
+  'PASTOR': {
+    id: 'PASTOR',
+    name: 'Person-Ache-Solution-Transformation-Offer-Response',
+    shortName: 'P.A.S.T.O.R.',
+    description: 'Story-driven copy that sells without being salesy',
+    segmentOrder: ['person', 'ache', 'story_solution', 'transformation', 'offer', 'response'],
+    bestFor: ['Info-Products', 'Courses', 'Webinars'],
+    hookAggressiveness: 'medium',
+    ctaPlacement: 'end',
+    idealPacing: 'slow',
+    platforms: ['youtube', 'meta'],
+    hormoziAlignment: 'Maximizes Dream Outcome via Story',
+    keyFocus: 'Empathy & Story'
+  },
+  'THREE_WHYS': {
+    id: 'THREE_WHYS',
+    name: 'Why You? Why This? Why Now?',
+    shortName: '3 Whys',
+    description: 'Minimalist framework for quick-hitting ads with limited attention',
+    segmentOrder: ['why_you', 'why_this', 'why_now', 'cta'],
+    bestFor: ['Cold Outreach', 'Retargeting', 'Quick ads'],
+    hookAggressiveness: 'high',
+    ctaPlacement: 'early',
+    idealPacing: 'very_fast',
+    platforms: ['tiktok', 'snapchat', 'meta'],
+    hormoziAlignment: 'Minimizes Time Delay',
+    keyFocus: 'Logic & Urgency'
   }
 };
 
@@ -152,59 +238,59 @@ export interface PlatformPreferences {
   preferredFrameworks: ExtendedFrameworkType[];
   pacingMultiplier: number;
   ctaStyle: 'hard' | 'soft' | 'native';
+  displayName: string;
 }
 
 export const PLATFORM_PREFERENCES: Record<PlatformType, PlatformPreferences> = {
   tiktok: {
-    idealDuration: { min: 8, max: 30 },
+    idealDuration: { min: 15, max: 35 },
     hookWindow: 1.5,
-    preferredFrameworks: ['HOOK_BENEFIT_CTA', 'UGC_NATIVE_STORY', 'HOOK_BENEFIT_OBJECTION_CTA'],
+    preferredFrameworks: ['HOOK_BENEFIT_CTA', 'UGC_NATIVE_STORY', 'THREE_WHYS', 'US_VS_THEM'],
     pacingMultiplier: 1.3,
-    ctaStyle: 'native'
+    ctaStyle: 'native',
+    displayName: 'TikTok'
   },
-  reels: {
-    idealDuration: { min: 8, max: 30 },
-    hookWindow: 2,
-    preferredFrameworks: ['HOOK_BENEFIT_CTA', 'UGC_NATIVE_STORY', 'BAB'],
-    pacingMultiplier: 1.2,
-    ctaStyle: 'native'
+  meta: {
+    idealDuration: { min: 15, max: 35 },
+    hookWindow: 3,
+    preferredFrameworks: ['PAS', 'BAB', '4Ps', 'HOOK_BENEFIT_OBJECTION_CTA', 'PASTOR'],
+    pacingMultiplier: 1.0,
+    ctaStyle: 'hard',
+    displayName: 'Meta (Facebook/Instagram)'
   },
   snapchat: {
-    idealDuration: { min: 6, max: 15 },
+    idealDuration: { min: 15, max: 30 },
     hookWindow: 1,
-    preferredFrameworks: ['HOOK_BENEFIT_CTA', 'UGC_NATIVE_STORY'],
+    preferredFrameworks: ['HOOK_BENEFIT_CTA', 'UGC_NATIVE_STORY', 'THREE_WHYS'],
     pacingMultiplier: 1.4,
-    ctaStyle: 'soft'
+    ctaStyle: 'soft',
+    displayName: 'Snapchat'
   },
   youtube: {
     idealDuration: { min: 15, max: 60 },
     hookWindow: 5,
-    preferredFrameworks: ['PAS', '4Ps', 'ACC', 'AIDA'],
+    preferredFrameworks: ['PAS', '4Ps', 'ACC', 'AIDA', 'HELP', 'QUEST', 'PASTOR'],
     pacingMultiplier: 0.9,
-    ctaStyle: 'hard'
-  },
-  facebook: {
-    idealDuration: { min: 10, max: 45 },
-    hookWindow: 3,
-    preferredFrameworks: ['PAS', 'BAB', '4Ps', 'HOOK_BENEFIT_OBJECTION_CTA'],
-    pacingMultiplier: 1.0,
-    ctaStyle: 'hard'
-  },
-  general: {
-    idealDuration: { min: 10, max: 45 },
-    hookWindow: 3,
-    preferredFrameworks: ['PAS', 'BAB', 'HOOK_BENEFIT_CTA', '4Ps'],
-    pacingMultiplier: 1.0,
-    ctaStyle: 'hard'
+    ctaStyle: 'hard',
+    displayName: 'YouTube'
   }
 };
+
+// Available platforms for UI
+export const AVAILABLE_PLATFORMS: PlatformType[] = ['tiktok', 'meta', 'snapchat', 'youtube'];
+
+// Available goals for UI
+export const AVAILABLE_GOALS: { value: GoalType; label: string; description: string }[] = [
+  { value: 'conversion', label: 'Conversion', description: 'Drive purchases, signups, or other actions' },
+  { value: 'awareness', label: 'Awareness', description: 'Increase brand visibility and reach' }
+];
 
 // ============================================
 // FRAMEWORK SELECTION LOGIC
 // ============================================
 
 export interface FrameworkSelectionInput {
-  goal: 'retention' | 'ctr' | 'conversions';
+  goal: GoalType;
   platform: PlatformType;
   videoDuration: number; // seconds
   detectedStructure: string[]; // segment types found
@@ -233,29 +319,37 @@ export function selectOptimalFramework(input: FrameworkSelectionInput): Framewor
     // Platform fit bonus (highest weight)
     if (platformPrefs.preferredFrameworks.includes(framework)) {
       score += 30;
-      reasons.push(`Optimized for ${input.platform}`);
+      reasons.push(`Optimized for ${platformPrefs.displayName}`);
+    }
+    
+    // Check if framework supports the platform
+    if (fw.platforms.includes(input.platform)) {
+      score += 15;
     }
     
     // Duration fit
     const isShortForm = input.videoDuration < 20;
-    if (isShortForm && fw.idealPacing === 'fast') {
+    if (isShortForm && (fw.idealPacing === 'fast' || fw.idealPacing === 'very_fast')) {
       score += 20;
       reasons.push('Fast pacing matches short-form');
-    } else if (!isShortForm && fw.idealPacing !== 'fast') {
+    } else if (!isShortForm && fw.idealPacing !== 'fast' && fw.idealPacing !== 'very_fast') {
       score += 15;
       reasons.push('Pacing appropriate for length');
     }
     
     // Goal alignment
-    if (input.goal === 'ctr' && fw.hookAggressiveness === 'high') {
-      score += 25;
-      reasons.push('Aggressive hook drives CTR');
-    } else if (input.goal === 'retention' && fw.idealPacing !== 'fast') {
-      score += 20;
-      reasons.push('Measured pacing improves retention');
-    } else if (input.goal === 'conversions' && fw.ctaPlacement === 'end') {
-      score += 20;
-      reasons.push('End CTA maximizes intent');
+    if (input.goal === 'awareness' && fw.hookAggressiveness !== 'high') {
+      score += 15;
+      reasons.push('Softer approach for awareness');
+    } else if (input.goal === 'conversion') {
+      if (fw.ctaPlacement === 'end' || fw.ctaPlacement === 'multiple') {
+        score += 25;
+        reasons.push('Strong CTA placement for conversions');
+      }
+      if (fw.hookAggressiveness === 'high') {
+        score += 10;
+        reasons.push('Aggressive hook drives action');
+      }
     }
     
     // Structure match
@@ -288,9 +382,9 @@ export function selectOptimalFramework(input: FrameworkSelectionInput): Framewor
       reasons.push('Framework will strengthen weak hook');
     }
     
-    // AIDA de-prioritization (as per existing logic)
+    // Slight de-prioritization for very generic frameworks
     if (framework === 'AIDA') {
-      score -= 15;
+      score -= 10;
     }
     
     scores.push({ framework, score, reasons });
@@ -355,9 +449,13 @@ export function getEditingGuidance(framework: ExtendedFrameworkType): FrameworkE
     ? 'CTA should appear within first 30% of video. Direct and clear.'
     : fw.ctaPlacement === 'multiple'
     ? 'Sprinkle soft CTAs throughout. Main CTA at end feels organic.'
+    : fw.ctaPlacement === 'middle'
+    ? 'Place primary CTA in middle with reinforcement at end.'
     : 'Build to CTA at end. Make it the natural conclusion of your argument.';
   
-  const pacingRecommendation = fw.idealPacing === 'fast'
+  const pacingRecommendation = fw.idealPacing === 'very_fast'
+    ? 'Ultra-quick cuts (0.5-2 sec). Maximum energy. Constant motion.'
+    : fw.idealPacing === 'fast'
     ? 'Quick cuts (1-3 sec). High energy. Never let viewer settle.'
     : fw.idealPacing === 'medium'
     ? 'Balanced pacing (2-5 sec per cut). Allow key points to land.'
@@ -368,6 +466,24 @@ export function getEditingGuidance(framework: ExtendedFrameworkType): FrameworkE
     pacingRecommendation,
     hookGuidance,
     ctaGuidance,
-    overallTone: fw.bestFor[0]
+    overallTone: fw.keyFocus || fw.bestFor[0]
   };
+}
+
+// Get all frameworks for UI display
+export function getAllFrameworks(): FrameworkDefinition[] {
+  return Object.values(FRAMEWORK_DEFINITIONS);
+}
+
+// Get frameworks by platform
+export function getFrameworksByPlatform(platform: PlatformType): FrameworkDefinition[] {
+  return Object.values(FRAMEWORK_DEFINITIONS).filter(fw => 
+    fw.platforms.includes(platform)
+  );
+}
+
+// Get preferred frameworks for platform
+export function getPreferredFrameworks(platform: PlatformType): FrameworkDefinition[] {
+  const prefs = PLATFORM_PREFERENCES[platform];
+  return prefs.preferredFrameworks.map(id => FRAMEWORK_DEFINITIONS[id]);
 }
