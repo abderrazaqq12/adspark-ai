@@ -44,7 +44,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { sceneRouting, videoTypes, exportFormats } from "@/data/aiModels";
 import BatchGeneration from "@/components/BatchGeneration";
-import AIAssistant from "@/components/AIAssistant";
+
 import VoicePreview from "@/components/VoicePreview";
 import { VideoUploadPreview, generateVideoId } from "@/components/VideoUploadPreview";
 import BatchAssembly from "@/components/BatchAssembly";
@@ -1235,25 +1235,6 @@ export default function CreateVideo() {
         </div>
       </div>
 
-      {/* AI Assistant */}
-      <AIAssistant
-        context="video ad creation with scripts, hooks, and marketing copy"
-        currentState={{
-          productName: productInfo.name,
-          scripts: scriptSlots.map(s => s.text).filter(t => t.trim()),
-          scenes: scenes,
-          stage: currentStage,
-        }}
-        onSuggestion={(suggestion) => {
-          // Auto-fill script with AI suggestion
-          if (suggestion && scriptSlots.length > 0) {
-            const updatedSlots = [...scriptSlots];
-            updatedSlots[0] = { ...updatedSlots[0], text: suggestion };
-            setScriptSlots(updatedSlots);
-            toast.success("AI suggestion applied to script!");
-          }
-        }}
-      />
 
       {/* Timeline Editor Dialog */}
       <Dialog open={showTimelineEditor} onOpenChange={setShowTimelineEditor}>
