@@ -84,18 +84,48 @@ export const getAIAdapter = async (provider?: AIProvider): Promise<AIProviderAda
 
 // Helper to check which providers are available
 export const getAvailableProviders = async (): Promise<AIProvider[]> => {
-  const providers: AIProvider[] = ['gemini', 'openai', 'ollama'];
+  const providers: AIProvider[] = ['gemini', 'openai'];
   const available: AIProvider[] = [];
   
-  for (const provider of providers) {
+  // Check providers in parallel with individual timeouts
+  const checkPromises = providers.map(async (provider) => {
     try {
       const adapter = await getAIAdapter(provider);
-      if (await adapter.isAvailable()) {
-        available.push(provider);
+      const timeoutPromise = new Promise<boolean>((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout')), 3000)
+      );
+      const isAvailable = await Promise.race([adapter.isAvailable(), timeoutPromise]);
+      if (isAvailable) {
+        return provider;
       }
     } catch {
-      // Provider not available
+      // Provider not available or timed out
     }
+    return null;
+  });
+
+  const results = await Promise.all(checkPromises);
+  results.forEach(result => {
+    if (result) available.push(result);
+  });
+
+  // Check Ollama separately with shorter timeout (local-only)
+  try {
+    const ollamaUrl = localStorage.getItem('ollama_url') || 'http://localhost:11434';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1500);
+    
+    const response = await fetch(`${ollamaUrl}/api/tags`, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    
+    if (response.ok) {
+      available.push('ollama');
+    }
+  } catch {
+    // Ollama not available
   }
   
   return available;

@@ -133,10 +133,15 @@ export default function DeploymentSettings({ onSave }: DeploymentSettingsProps) 
   const checkProviders = async () => {
     setCheckingProviders(true);
     try {
-      const available = await getAvailableProviders();
+      // Use a timeout to prevent hanging
+      const timeoutPromise = new Promise<AIProvider[]>((resolve) => 
+        setTimeout(() => resolve([]), 5000)
+      );
+      const available = await Promise.race([getAvailableProviders(), timeoutPromise]);
       setAvailableProviders(available);
     } catch (error) {
       console.error('Error checking providers:', error);
+      setAvailableProviders([]);
     } finally {
       setCheckingProviders(false);
     }
