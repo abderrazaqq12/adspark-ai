@@ -87,7 +87,8 @@ function deriveHormoziScore(): HormoziValueScore {
   };
 }
 
-type PlatformType = 'tiktok' | 'reels' | 'snapchat' | 'youtube' | 'facebook' | 'general';
+type PlatformType = 'tiktok' | 'meta' | 'snapchat' | 'youtube';
+type GoalType = 'conversion' | 'awareness';
 type FunnelStageType = 'cold' | 'warm' | 'retargeting';
 interface StrategyStepProps {
   analysis: VideoAnalysis;
@@ -191,15 +192,13 @@ export function StrategyStep({
 
   // Map platform type to AdPlatform for compliance
   const mapToAdPlatform = (platform: PlatformType): AdPlatform => {
-    const mapping: Record<string, AdPlatform> = {
+    const mapping: Record<PlatformType, AdPlatform> = {
       'tiktok': 'tiktok',
       'snapchat': 'snapchat',
-      'facebook': 'meta',
-      'reels': 'meta',
-      'youtube': 'google',
-      'general': 'general'
+      'meta': 'meta',
+      'youtube': 'google'
     };
-    return mapping[platform] || 'general';
+    return mapping[platform];
   };
 
   // Compliance scanning
@@ -273,9 +272,8 @@ export function StrategyStep({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="retention">Retention</SelectItem>
-                <SelectItem value="ctr">CTR</SelectItem>
-                <SelectItem value="cpa">CPA</SelectItem>
+                <SelectItem value="conversion">Conversion</SelectItem>
+                <SelectItem value="awareness">Awareness</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -312,11 +310,9 @@ export function StrategyStep({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="tiktok">TikTok</SelectItem>
-                <SelectItem value="reels">Reels</SelectItem>
+                <SelectItem value="meta">Meta (Facebook/Instagram)</SelectItem>
                 <SelectItem value="youtube">YouTube</SelectItem>
-                <SelectItem value="facebook">Facebook</SelectItem>
                 <SelectItem value="snapchat">Snapchat</SelectItem>
-                <SelectItem value="general">General</SelectItem>
               </SelectContent>
             </Select>
           </div>

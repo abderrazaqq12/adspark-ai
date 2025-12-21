@@ -137,13 +137,25 @@ CRITICAL RULES:
 - NEVER create variations that would result in videos longer than 35 seconds
 ##############################################################
 
-OPTIMIZATION GOAL: ${optimization_goal.toUpperCase()}
+OPTIMIZATION GOAL: ${optimization_goal.toUpperCase()} (Only: Conversion or Awareness)
 RISK TOLERANCE: ${risk_tolerance.toUpperCase()}
-PLATFORM: ${platform.toUpperCase()}
+PLATFORM: ${platform.toUpperCase()} (Only valid platforms: TikTok, Meta, Snapchat, YouTube)
 FUNNEL STAGE: ${funnel_stage.toUpperCase()}
 
-FRAMEWORKS (pick ONE primary):
-- AIDA, PAS, BAB, HOOK_BENEFIT_CTA, 4Ps, UGC, OFFER_STACK
+AVAILABLE FRAMEWORKS (13 total - pick ONE primary):
+- AIDA: Attention-Interest-Desire-Action (classic funnel)
+- PAS: Problem-Agitate-Solution (pain-driven)
+- BAB: Before-After-Bridge (transformation)
+- 4Ps: Promise-Picture-Proof-Push (high-ticket)
+- HOOK_BENEFIT_CTA: Fast direct flow (short-form)
+- ACC: Awareness-Comprehension-Conviction (complex products)
+- UGC_NATIVE_STORY: Authentic UGC style (Gen Z, DTC)
+- HOOK_BENEFIT_OBJECTION_CTA: Handle objections
+- HELP: Help-Educate-Listen-Promote (service-first, trust building)
+- QUEST: Qualify-Understand-Educate-Stimulate-Transition (high-ticket sales)
+- US_VS_THEM: Disruptor positioning (market challengers)
+- PASTOR: Person-Ache-Solution-Transformation-Offer-Response (story-driven)
+- THREE_WHYS: Why You? Why This? Why Now? (minimalist, urgent)
 
 ABSTRACT ACTIONS (select carefully based on duration needs):
 - duplicate_segment: Repeat a high-performing segment (USE THIS to extend short videos)

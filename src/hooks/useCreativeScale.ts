@@ -161,7 +161,8 @@ interface FullPipelineOutput extends PhaseAOutput {
 }
 
 // Brain V2 state
-export type PlatformType = 'tiktok' | 'reels' | 'snapchat' | 'youtube' | 'facebook' | 'general';
+export type PlatformType = 'tiktok' | 'meta' | 'snapchat' | 'youtube';
+export type GoalType = 'conversion' | 'awareness';
 export type FunnelStageType = 'cold' | 'warm' | 'retargeting';
 
 interface BrainV2State {
@@ -275,7 +276,7 @@ export function useCreativeScale(): UseCreativeScaleReturn {
     brainOutput: null,
     optimizationGoal: 'retention',
     riskTolerance: 'medium',
-    platform: 'general',
+    platform: 'tiktok',
     funnelStage: 'cold'
   });
 
@@ -864,7 +865,7 @@ export function useCreativeScale(): UseCreativeScaleReturn {
       brainOutput: null,
       optimizationGoal: 'retention',
       riskTolerance: 'medium',
-      platform: 'general',
+      platform: 'tiktok',
       funnelStage: 'cold'
     });
     clearSession();
