@@ -416,6 +416,46 @@ function compile(analysis: any, blueprint: any, variationIndex: number, sourceVi
     }
   }
 
+  // 2. DURATION CLAMP: Ensure strict maximum duration of 35s
+  const MAX_DURATION_MS = 35000;
+
+  // Re-calculate after looping
+  currentTotalDuration = timeline.length > 0 ? timeline[timeline.length - 1].timeline_end_ms : 0;
+
+  if (currentTotalDuration > MAX_DURATION_MS) {
+    timelineWarnings.push(`Auto-trimming: Content too long (${currentTotalDuration}ms), cropped to ${MAX_DURATION_MS}ms`);
+
+    const newTimeline: any[] = [];
+    let accumulatedMs = 0;
+
+    for (const seg of timeline) {
+      if (accumulatedMs >= MAX_DURATION_MS) break;
+
+      const availableRoom = MAX_DURATION_MS - accumulatedMs;
+
+      if (seg.output_duration_ms <= availableRoom) {
+        // Fit entirely
+        newTimeline.push(seg);
+        accumulatedMs += seg.output_duration_ms;
+      } else {
+        // Need to crop this segment
+        const croppedDuration = availableRoom;
+        const newSeg = { ...seg };
+        newSeg.output_duration_ms = croppedDuration;
+        newSeg.timeline_end_ms = newSeg.timeline_start_ms + croppedDuration;
+
+        // Adjust usage of source
+        newSeg.source_duration_ms = Math.round(croppedDuration * newSeg.speed_multiplier);
+        newSeg.trim_end_ms = newSeg.trim_start_ms + newSeg.source_duration_ms;
+
+        newTimeline.push(newSeg);
+        accumulatedMs += croppedDuration;
+        break;
+      }
+    }
+    timeline = newTimeline;
+  }
+
   const audioTracks = buildAudioTracks(analysis, timeline, sourceVideoUrl);
   const validation = validateTimeline(timeline, audioTracks);
   validation.warnings.push(...timelineWarnings);
