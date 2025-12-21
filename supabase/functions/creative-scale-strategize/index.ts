@@ -62,6 +62,34 @@ serve(async (req) => {
       );
     }
 
+
+    // Fetch user-provided API keys from database
+    const apiKeys: Record<string, string> = {};
+    if (userId) {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Define keys to fetch
+        const providers = ['GEMINI_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY'];
+
+        await Promise.all(providers.map(async (provider) => {
+          const { data, error } = await supabase.rpc('get_user_api_key', {
+            p_user_id: userId,
+            p_provider: provider
+          });
+
+          if (!error && data) {
+            apiKeys[provider] = data;
+            console.log(`[creative-scale-strategize] Loaded user key for ${provider}`);
+          }
+        }));
+      } catch (e) {
+        console.warn('[creative-scale-strategize] Failed to fetch user API keys:', e);
+      }
+    }
+
     console.log(`[creative-scale-strategize] Creating blueprint for analysis: ${analysis.id}, goal: ${optimization_goal}`);
 
     // Summarize segments for prompt
@@ -69,71 +97,69 @@ serve(async (req) => {
       `${s.type}(${s.start_ms}-${s.end_ms}ms, attention:${s.attention_score?.toFixed(2) || 'N/A'}, clarity:${s.clarity_score?.toFixed(2) || 'N/A'})`
     ).join('\n- ');
 
+    const durationMs = analysis.metadata?.duration_ms || 0;
+    const isShortVideo = durationMs < 15000;
+    const isLongVideo = durationMs > 35000;
+
+    let strategySpecifics = '';
+    if (isShortVideo) {
+      strategySpecifics = `
+CRITICAL - SHORT VIDEO DETECTED (${(durationMs / 1000).toFixed(1)}s):
+- The video is TOO SHORT (under 15s).
+- DO NOT use 'remove_segment' or 'compress_segment' - it will be too short!
+- YOU MUST use 'duplicate_segment' to loop key moments or 'emphasize_segment' to slow down.
+- Your goal is to EXTEND the duration to at least 15 seconds.`;
+    } else if (isLongVideo) {
+      strategySpecifics = `
+CRITICAL - LONG VIDEO DETECTED (${(durationMs / 1000).toFixed(1)}s):
+- The video is TOO LONG (over 35s).
+- Favor 'remove_segment' (cut boring parts) and 'compress_segment' (speed up).
+- Your goal is to REDUCE duration to under 35 seconds.`;
+    }
+
     const systemPrompt = `You are an elite performance marketing strategist and creative director. Your ONLY job is to analyze video ads and generate INNOVATIVE, ACTIONABLE strategies to improve them.
 
 CRITICAL RULES:
-1. ALWAYS generate NEW, CREATIVE strategies - never generic advice
-2. Each variation must be UNIQUE and SPECIFIC to the video analyzed
-3. Focus on PERFORMANCE IMPROVEMENTS - CTR, retention, conversions
-4. Include specific timing recommendations when relevant
-5. Output valid JSON ONLY - no markdown, no explanations outside JSON
+1. ALWAYS generate EXACTLY ${safeVariationCount} UNIQUE strategies.
+2. Each variation must be UNIQUE and SPECIFIC to the video analyzed.
+3. Focus on PERFORMANCE - CTR, retention, conversions.
+4. Output valid JSON ONLY.
 
 OPTIMIZATION GOAL: ${optimization_goal.toUpperCase()}
-${optimization_goal === 'retention' ? '- Focus on keeping viewers watching longer, reduce drop-off points' : ''}
-${optimization_goal === 'ctr' ? '- Focus on driving clicks, strong CTAs, curiosity gaps' : ''}
-${optimization_goal === 'cpa' ? '- Focus on qualified leads, clear value props, trust signals' : ''}
-
 RISK TOLERANCE: ${risk_tolerance.toUpperCase()}
-${risk_tolerance === 'low' ? '- Safe optimizations, proven patterns' : ''}
-${risk_tolerance === 'medium' ? '- Balanced approach, some experimentation' : ''}
-${risk_tolerance === 'high' ? '- Bold changes, test disruptive formats' : ''}
-
 PLATFORM: ${platform.toUpperCase()}
 FUNNEL STAGE: ${funnel_stage.toUpperCase()}
 
-FRAMEWORKS TO CHOOSE FROM (pick ONE primary):
-- AIDA: Attention → Interest → Desire → Action
-- PAS: Problem → Agitate → Solution  
-- BAB: Before → After → Bridge
-- HOOK_BENEFIT_CTA: Direct hook to benefit to action
-- 4Ps: Picture → Promise → Prove → Push
-- UGC: User-generated content style
-- OFFER_STACK: Value stacking approach
+FRAMEWORKS (pick ONE primary):
+- AIDA, PAS, BAB, HOOK_BENEFIT_CTA, 4Ps, UGC, OFFER_STACK
 
-ABSTRACT ACTIONS (use exactly):
-- replace_segment: Swap content while keeping timing
-- remove_segment: Cut entirely
-- compress_segment: Shorten without removing
+ABSTRACT ACTIONS (select carefully):
+- duplicate_segment: Repeat a high-performing segment (good for short videos/looping)
 - reorder_segments: Change sequence
-- emphasize_segment: Make more prominent
+- emphasize_segment: Make more prominent (effectively slows it down)
 - split_segment: Divide into parts
 - merge_segments: Combine adjacent segments
-- add_segment: Insert new content
+- remove_segment: Cut entirely (ONLY for long videos)
+- compress_segment: Shorten (ONLY for long videos)
+${strategySpecifics}
 
-ALWAYS GENERATE ${safeVariationCount} UNIQUE VARIATIONS with different strategies!
-TARGET DURATION: 15 to 30 SECONDS (Strictly enforce this)`;
+TARGET DURATION: 15 to 35 SECONDS (Strictly enforce this range!)
+`;
 
     const userPrompt = `Analyze this video ad and generate ${safeVariationCount} UNIQUE improvement strategies:
 
 VIDEO ANALYSIS:
 - ID: ${analysis.id}
-- Duration: ${analysis.metadata?.duration_ms}ms
+- Duration: ${durationMs}ms
 - Detected Style: ${analysis.detected_style}
 - Format: ${analysis.metadata?.format || '9:16'}
-- Duration Constraints: 15s - 30s
 
 SEGMENTS:
 - ${segmentsSummary}
 
-CURRENT SCORES:
-- Hook Strength: ${(analysis.overall_scores?.hook_strength * 100)?.toFixed(0) || '?'}%
-- Message Clarity: ${(analysis.overall_scores?.message_clarity * 100)?.toFixed(0) || '?'}%
-- Pacing Consistency: ${(analysis.overall_scores?.pacing_consistency * 100)?.toFixed(0) || '?'}%
-- CTA Effectiveness: ${(analysis.overall_scores?.cta_effectiveness * 100)?.toFixed(0) || '?'}%
-
 ${target_framework ? `PREFERRED FRAMEWORK: ${target_framework}` : 'Choose the best framework based on analysis.'}
 
-Generate EXACTLY ${safeVariationCount} unique variation strategies. Each must have a DIFFERENT approach!
+Generate EXACTLY ${safeVariationCount} unique variation strategies.
 
 Return this exact JSON structure:
 {
@@ -141,50 +167,35 @@ Return this exact JSON structure:
   "source_analysis_id": "${analysis.id}",
   "created_at": "${new Date().toISOString()}",
   "framework": "<AIDA|PAS|BAB|HOOK_BENEFIT_CTA|4Ps|UGC|OFFER_STACK>",
-  "framework_rationale": "<2-3 sentences explaining why this framework was chosen based on the specific video content>",
+  "framework_rationale": "<reasoning>",
   "detected_problems": [
-    {
-      "type": "<HOOK_WEAK|MID_PACING_DROP|CTA_WEAK|PROOF_MISSING|BENEFIT_UNCLEAR|DURATION_TOO_LONG|etc>",
-      "severity": "<high|medium|low>",
-      "segment_affected": "<segment type>",
-      "description": "<specific observation>"
-    }
+    { "type": "<problem_type>", "severity": "<high|medium|low>", "segment_affected": "<type>", "description": "<desc>" }
   ],
-  "objective": {
-    "primary_goal": "<specific goal based on ${optimization_goal}>",
-    "target_emotion": "<primary emotion to evoke>",
-    "key_message": "<core value proposition>"
-  },
-  "strategic_insights": [
-    "<insight 1: specific observation about current strengths>",
-    "<insight 2: specific opportunity for improvement>",
-    "<insight 3: platform-specific recommendation for ${platform}>"
-  ],
+  "objective": { "primary_goal": "${optimization_goal}", "target_emotion": "<emotion>", "key_message": "<message>" },
+  "strategic_insights": ["<insight1>", "<insight2>"],
   "variation_ideas": [
     {
       "id": "var_0",
       "action": "<action from list>",
-      "target_segment_type": "<hook|problem|solution|benefit|proof|cta|filler>",
-      "intent": "<specific, creative strategy description>",
+      "target_segment_type": "<target>",
+      "intent": "<intent>",
       "priority": "<high|medium|low>",
-      "reasoning": "<why this will improve ${optimization_goal}>",
-      "expected_impact": "<predicted improvement, e.g. '+15% retention'>",
-      "risk_level": "<low|medium|high>"
+      "reasoning": "<reasoning>",
+      "expected_impact": "<impact>",
+      "risk_level": "<risk>"
     }
+    // ... exactly ${safeVariationCount} items
   ],
-  "recommended_duration_range": {
-    "min_ms": <number>,
-    "max_ms": <number>
-  },
+  "recommended_duration_range": { "min_ms": 15000, "max_ms": 35000 },
   "target_formats": ["9:16", "1:1"],
   "brain_v2_decision": {
-    "confidence_score": <0.0-1.0>,
-    "alternative_frameworks_considered": ["<framework1>", "<framework2>"],
+    "confidence_score": 0.95,
+    "alternative_frameworks_considered": [],
     "optimization_focus": "${optimization_goal}"
   }
 }
 
-IMPORTANT: Generate exactly ${safeVariationCount} items in variation_ideas array!`;
+IMPORTANT: You MUST generate exactly ${safeVariationCount} items in the 'variation_ideas' array. Do not fail this constraint.
 
     // Call AI Gateway (Gemini primary, OpenAI fallback)
     const aiResponse = await callAI({
@@ -193,6 +204,7 @@ IMPORTANT: Generate exactly ${safeVariationCount} items in variation_ideas array
         { role: "user", content: userPrompt }
       ],
       temperature: 0.8, // Higher temperature for more creative outputs
+      apiKeys,
     });
 
     const content = aiResponse.content || '';
@@ -202,71 +214,71 @@ IMPORTANT: Generate exactly ${safeVariationCount} items in variation_ideas array
     try {
       let jsonStr = content;
       if (content.includes('```json')) {
-        jsonStr = content.split('```json')[1].split('```')[0].trim();
-      } else if (content.includes('```')) {
-        jsonStr = content.split('```')[1].split('```')[0].trim();
-      }
-      blueprint = JSON.parse(jsonStr);
-    } catch (parseErr) {
-      console.error('[creative-scale-strategize] JSON parse error:', parseErr);
-      console.error('[creative-scale-strategize] Raw content:', content.substring(0, 500));
-      return new Response(
-        JSON.stringify({ error: 'Failed to parse AI response as JSON', raw: content.substring(0, 500) }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    jsonStr = content.split('```json')[1].split('```')[0].trim();
+  } else if (content.includes('```')) {
+    jsonStr = content.split('```')[1].split('```')[0].trim();
+  }
+  blueprint = JSON.parse(jsonStr);
+} catch (parseErr) {
+  console.error('[creative-scale-strategize] JSON parse error:', parseErr);
+  console.error('[creative-scale-strategize] Raw content:', content.substring(0, 500));
+  return new Response(
+    JSON.stringify({ error: 'Failed to parse AI response as JSON', raw: content.substring(0, 500) }),
+    { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
 
-    console.log(`[creative-scale-strategize] Success: ${blueprint.variation_ideas?.length || 0} variations generated via ${aiResponse.provider}`);
+console.log(`[creative-scale-strategize] Success: ${blueprint.variation_ideas?.length || 0} variations generated via ${aiResponse.provider}`);
 
-    // Track cost for successful strategy generation
-    if (userId) {
-      await trackCost(userId, 'creative_scale_strategy', aiResponse.provider, 'strategy_generation', 0.002);
+// Track cost for successful strategy generation
+if (userId) {
+  await trackCost(userId, 'creative_scale_strategy', aiResponse.provider, 'strategy_generation', 0.002);
+}
+
+return new Response(
+  JSON.stringify({
+    success: true,
+    blueprint,
+    meta: {
+      source_analysis_id: analysis.id,
+      framework: blueprint.framework,
+      variations_count: blueprint.variation_ideas?.length || 0,
+      provider: aiResponse.provider,
+      optimization_goal,
+      risk_tolerance,
+      platform,
+      funnel_stage,
+      processed_at: new Date().toISOString()
     }
+  }),
+  { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+);
+
+  } catch (err) {
+  console.error('[creative-scale-strategize] Error:', err);
+
+  // Handle AIError with specific status codes and user-friendly messages
+  if (err instanceof AIError) {
+    const statusCode = err.type === 'QUOTA_EXCEEDED' || err.type === 'RATE_LIMIT' ? 429 :
+      err.type === 'AUTH_ERROR' ? 401 : 500;
 
     return new Response(
       JSON.stringify({
-        success: true,
-        blueprint,
-        meta: {
-          source_analysis_id: analysis.id,
-          framework: blueprint.framework,
-          variations_count: blueprint.variation_ideas?.length || 0,
-          provider: aiResponse.provider,
-          optimization_goal,
-          risk_tolerance,
-          platform,
-          funnel_stage,
-          processed_at: new Date().toISOString()
-        }
+        error: err.message,
+        errorType: err.type,
+        provider: err.provider,
+        retryAfterSeconds: err.retryAfterSeconds,
+        userMessage: getUserFriendlyMessage(err)
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-
-  } catch (err) {
-    console.error('[creative-scale-strategize] Error:', err);
-    
-    // Handle AIError with specific status codes and user-friendly messages
-    if (err instanceof AIError) {
-      const statusCode = err.type === 'QUOTA_EXCEEDED' || err.type === 'RATE_LIMIT' ? 429 : 
-                         err.type === 'AUTH_ERROR' ? 401 : 500;
-      
-      return new Response(
-        JSON.stringify({ 
-          error: err.message,
-          errorType: err.type,
-          provider: err.provider,
-          retryAfterSeconds: err.retryAfterSeconds,
-          userMessage: getUserFriendlyMessage(err)
-        }),
-        { status: statusCode, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: statusCode, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
+
+  return new Response(
+    JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error' }),
+    { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
 });
 
 // Helper to generate user-friendly error messages

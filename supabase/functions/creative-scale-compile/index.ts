@@ -94,6 +94,30 @@ function resolveAction(idea: any, segments: any[]): any {
         resolution_error: 'replace_segment requires external asset reference'
       };
 
+    case 'duplicate_segment':
+      return {
+        action_id: idea.id,
+        source_action: idea.action,
+        target_segments: segmentIds,
+        transformation: {
+          // No specific transformation needed, just reuse the segment
+          // Logic in buildTimeline or separate handler might be needed if we want it "inserted"
+          // effectively duplicate_segment usually means "insert another copy". 
+          // But effectively, 'buildTimeline' iterates analysis.segments.
+          // To strictly support 'duplicate_segment' as an insertion, we'd need to change buildTimeline structure to iterate a playlist.
+          // However, for valid looping of the *whole* video, we handle that in post-processing.
+          // If the AI wants to duplicate a specific segment *in place* (like loop a scene), we would need more complex logic.
+          // For now, let's treat duplicate_segment as 'emphasize' (slow down) to keep it simple, 
+          // OR we can make it a "noop" here and let the global looper handle the duration extension.
+          // Let's treat it as a NO-OP on the segment itself (leave it be) but it ensures the segment isn't removed.
+          // ACTUALLY, if the AI says 'duplicate', it probably wants it to appear twice.
+          // Simpler approach: Map 'duplicate_segment' to 'emphasize_segment' (0.5x speed = 2x duration) 
+          // causing it to take up more time.
+          speed_multiplier: 0.5
+        },
+        resolved: true
+      };
+
     case 'split_segment':
       return {
         action_id: idea.id,
@@ -357,11 +381,37 @@ function compile(analysis: any, blueprint: any, variationIndex: number, sourceVi
     };
   }
 
-  const { timeline, warnings: timelineWarnings } = buildTimeline(
+  let { timeline, warnings: timelineWarnings } = buildTimeline(
     analysis,
     [resolvedAction],
     sourceVideoUrl
   );
+
+  // AUTO-LOOPING: Ensure strict minimum duration of 15s
+  const MIN_DURATION_MS = 15000;
+  let currentTotalDuration = timeline.length > 0 ? timeline[timeline.length - 1].timeline_end_ms : 0;
+
+  if (currentTotalDuration > 0 && currentTotalDuration < MIN_DURATION_MS) {
+    const originalTimeline = JSON.parse(JSON.stringify(timeline)); // Deep copy
+    let loopCount = 0;
+
+    // Loop until we exceed minimum duration (cap at 10 loops to be safe)
+    while (currentTotalDuration < MIN_DURATION_MS && loopCount < 10) {
+      loopCount++;
+      timelineWarnings.push(`Auto-looping: Content too short (${currentTotalDuration}ms), appending copy ${loopCount}`);
+
+      for (const segment of originalTimeline) {
+        const newSegment = { ...segment, segment_id: `${segment.segment_id}_loop_${loopCount}` };
+
+        // Offset time
+        newSegment.timeline_start_ms = currentTotalDuration;
+        newSegment.timeline_end_ms = currentTotalDuration + newSegment.output_duration_ms;
+
+        timeline.push(newSegment);
+        currentTotalDuration += newSegment.output_duration_ms;
+      }
+    }
+  }
 
   const audioTracks = buildAudioTracks(analysis, timeline, sourceVideoUrl);
   const validation = validateTimeline(timeline, audioTracks);
