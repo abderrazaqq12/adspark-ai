@@ -240,7 +240,7 @@ export function StrategyStep({
       </div>
 
       {/* Configuration - Optimized Design */}
-      <div className="mb-8 p-6 bg-slate-900/40 backdrop-blur-md rounded-2xl border border-primary/20 shadow-2xl relative overflow-hidden group">
+      <div className="mb-10 p-8 bg-slate-900/40 backdrop-blur-md rounded-2xl border border-primary/20 shadow-2xl relative overflow-hidden group">
         {/* Animated background elements */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 blur-3xl rounded-full -z-10 animate-pulse" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-purple-500/5 blur-3xl rounded-full -z-10" />
@@ -259,7 +259,7 @@ export function StrategyStep({
         </div>
 
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
           <div className="space-y-2">
             <label className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1.5 ml-1">
               <Target className="w-3 h-3 text-primary" /> Goal
