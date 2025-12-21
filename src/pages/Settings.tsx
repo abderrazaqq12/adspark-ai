@@ -651,25 +651,39 @@ export default function Settings() {
 
     setTestingKey(keyType);
 
-    // NUCLEAR OPTION: Pure Client-Side Validation
-    // Since backend deployment is not possible for the user, we bypass ALL backend checks.
-    // We strictly check if the key looks length-valid (> 10 chars) and return success.
-    setTimeout(() => {
-      if (apiKey.length > 10) {
-        setKeyTestResults(prev => ({
-          ...prev,
-          [keyType]: { success: true, message: "Valid Format (Client Verified)" },
-        }));
-        toast.success(`${keyType.split('_')[0]} connection verified!`);
+    try {
+      const { data, error } = await supabase.functions.invoke('test-api-connection', {
+        body: { apiKeyType: keyType, apiKey: apiKey },
+      });
+
+      if (error) throw error;
+
+      setKeyTestResults(prev => ({
+        ...prev,
+        [keyType]: { success: data.success, message: data.message },
+      }));
+
+      if (data.success) {
+        toast.success(`${keyType.split('_')[0]} API key is valid!`, {
+          description: data.message,
+        });
       } else {
-        setKeyTestResults(prev => ({
-          ...prev,
-          [keyType]: { success: false, message: "Key too short" },
-        }));
-        toast.error("Invalid key format (too short)");
+        toast.error(`${keyType.split('_')[0]} API key validation failed`, {
+          description: data.message,
+        });
       }
+    } catch (error) {
+      console.error("Error testing API key:", error);
+      setKeyTestResults(prev => ({
+        ...prev,
+        [keyType]: { success: false, message: "Connection test failed" },
+      }));
+      toast.error("Failed to test API key", {
+        description: "Could not connect to the test service",
+      });
+    } finally {
       setTestingKey(null);
-    }, 800);
+    }
   };
 
   const handleSaveSettings = async () => {
