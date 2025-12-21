@@ -278,13 +278,13 @@ export function UnifiedSceneBuilder({
         <div>
           <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
             <Wand2 className="w-5 h-5 text-primary" />
-            Scene Builder & Video Generation
+            Scene Builder
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Build scenes, select engines, and generate videos in one unified workflow
+            AI-driven scene generation with automatic engine selection
           </p>
         </div>
-        <Badge variant="outline" className="text-primary border-primary">Step 5-6</Badge>
+        <Badge variant="outline" className="text-primary border-primary">Step 5</Badge>
       </div>
 
       {/* Stats Row */}
