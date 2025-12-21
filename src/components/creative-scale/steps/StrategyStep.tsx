@@ -506,13 +506,13 @@ export function StrategyStep({
                 )}
 
                 {/* Variation Preview */}
-                {blueprint && (
+                {blueprint && blueprint.variation_ideas.length > 0 && (
                   <div>
-                    <h4 className="text-sm font-medium mb-3">Planned Variations</h4>
+                    <h4 className="text-sm font-medium mb-3">Planned Variations ({blueprint.variation_ideas.length})</h4>
                     <div className="grid grid-cols-2 gap-3">
-                      {blueprint.variation_ideas.slice(0, plans.length).map((variation, idx) => (
+                      {blueprint.variation_ideas.map((variation, idx) => (
                         <VariationCard
-                          key={variation.id}
+                          key={variation.id || `var-${idx}`}
                           variation={variation}
                           index={idx}
                           framework={blueprint.framework}
