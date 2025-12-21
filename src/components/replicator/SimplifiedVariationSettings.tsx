@@ -353,25 +353,27 @@ export const SimplifiedVariationSettings = ({
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Export Platforms</Label>
-                <div className="flex flex-wrap gap-2">
-                  {RATIO_OPTIONS.map((ratio) => (
-                    <button
-                      key={ratio.id}
-                      onClick={() => toggleRatio(ratio.id)}
-                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all border ${
-                        config.ratios.includes(ratio.id)
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-accent border-border hover:border-primary/50"
-                      }`}
-                    >
-                      {ratio.label} <span className="text-[10px] opacity-70">({ratio.description})</span>
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[10px] text-muted-foreground">
-                  Click to select multiple platforms
-                </p>
+                <Label>Export Platform</Label>
+                <Select
+                  value={config.ratios[0] || "9:16"}
+                  onValueChange={(value) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      ratios: [value],
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover z-50">
+                    {RATIO_OPTIONS.map((ratio) => (
+                      <SelectItem key={ratio.id} value={ratio.id}>
+                        {ratio.label} — {ratio.description}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </CardContent>
           </Card>
