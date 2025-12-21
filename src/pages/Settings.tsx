@@ -391,8 +391,10 @@ export default function Settings() {
     saveApiKey: saveSecureApiKey,
     deleteApiKey: deleteSecureApiKey,
     toggleApiKeyActive: toggleSecureKeyActive,
+    updateValidationStatus,
     hasApiKey,
     isApiKeyActive,
+    getValidationStatus,
     refreshProviders,
   } = useSecureApiKeys();
 
@@ -663,6 +665,11 @@ export default function Settings() {
         [keyType]: { success: data.success, message: data.message },
       }));
 
+      // Save validation result to database if key is saved
+      if (hasApiKey(keyType)) {
+        await updateValidationStatus(keyType, data.success, data.message);
+      }
+
       if (data.success) {
         toast.success(`${keyType.split('_')[0]} API key is valid!`, {
           description: data.message,
@@ -678,6 +685,12 @@ export default function Settings() {
         ...prev,
         [keyType]: { success: false, message: "Connection test failed" },
       }));
+      
+      // Save failed validation to database if key is saved
+      if (hasApiKey(keyType)) {
+        await updateValidationStatus(keyType, false, "Connection test failed");
+      }
+
       toast.error("Failed to test API key", {
         description: "Could not connect to the test service",
       });
@@ -853,6 +866,8 @@ export default function Settings() {
                     const isSecurelyStored = hasApiKey(provider.key);
                     const hasInputValue = !!apiKeys[provider.key];
                     const keyStatus = isSecurelyStored || hasInputValue;
+                    const validationStatus = getValidationStatus(provider.key);
+                    const testResult = keyTestResults[provider.key];
 
                     return (
                       <div key={provider.key} className="border border-border rounded-lg overflow-hidden">
@@ -866,6 +881,22 @@ export default function Settings() {
                               <div>
                                 <Label className="text-foreground font-medium cursor-pointer">{provider.label}</Label>
                                 <p className="text-xs text-muted-foreground">{provider.description}</p>
+                                {/* Validation status line */}
+                                {isSecurelyStored && validationStatus.validated_at && (
+                                  <div className="flex items-center gap-2 mt-1">
+                                    {validationStatus.success ? (
+                                      <CheckCircle className="w-3 h-3 text-green-500" />
+                                    ) : (
+                                      <XCircle className="w-3 h-3 text-destructive" />
+                                    )}
+                                    <span className={`text-xs ${validationStatus.success ? 'text-green-600' : 'text-destructive'}`}>
+                                      {validationStatus.success ? 'Valid' : 'Failed'} · {new Date(validationStatus.validated_at).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                )}
+                                {isSecurelyStored && !validationStatus.validated_at && (
+                                  <span className="text-xs text-muted-foreground mt-1 block">Not validated yet</span>
+                                )}
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -874,7 +905,19 @@ export default function Settings() {
                                   {selectedModels.length} models active
                                 </Badge>
                               )}
-                              {isSecurelyStored && (
+                              {isSecurelyStored && validationStatus.success === true && (
+                                <Badge variant="outline" className="text-green-500 border-green-500 text-xs">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Valid
+                                </Badge>
+                              )}
+                              {isSecurelyStored && validationStatus.success === false && (
+                                <Badge variant="outline" className="text-destructive border-destructive text-xs">
+                                  <XCircle className="w-3 h-3 mr-1" />
+                                  Invalid
+                                </Badge>
+                              )}
+                              {isSecurelyStored && validationStatus.success === null && (
                                 <Badge variant="outline" className="text-green-500 border-green-500 text-xs">
                                   <ShieldCheck className="w-3 h-3 mr-1" />
                                   Secured
@@ -1020,6 +1063,9 @@ export default function Settings() {
                     {category.keys.map((config) => {
                       const isKlingKey = config.key === 'KLING_ACCESS_KEY' || config.key === 'KLING_SECRET_KEY';
                       const isActive = activeApiKeys[config.key] !== false; // Default to active
+                      const isSecurelyStored = hasApiKey(config.key);
+                      const validationStatus = getValidationStatus(config.key);
+                      const testResult = keyTestResults[config.key];
 
                       return (
                         <div
@@ -1036,24 +1082,51 @@ export default function Settings() {
                                 onCheckedChange={() => toggleApiKeyActive(config.key)}
                                 className="data-[state=checked]:bg-primary"
                               />
-                              <Label className={`font-medium ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}>
-                                {config.label}
-                              </Label>
+                              <div>
+                                <Label className={`font-medium ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}>
+                                  {config.label}
+                                </Label>
+                                {/* Show saved validation status */}
+                                {isSecurelyStored && validationStatus.validated_at && (
+                                  <div className="flex items-center gap-1 mt-0.5">
+                                    {validationStatus.success ? (
+                                      <CheckCircle className="w-3 h-3 text-green-500" />
+                                    ) : (
+                                      <XCircle className="w-3 h-3 text-destructive" />
+                                    )}
+                                    <span className={`text-xs ${validationStatus.success ? 'text-green-600' : 'text-destructive'}`}>
+                                      {validationStatus.success ? 'Valid' : 'Failed'} · {new Date(validationStatus.validated_at).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              {isActive && keyTestResults[config.key] && (
-                                <Badge
-                                  variant="outline"
-                                  className={`text-xs ${keyTestResults[config.key].success ? "text-green-500 border-green-500" : "text-red-500 border-red-500"}`}
-                                >
-                                  {keyTestResults[config.key].success ? <CheckCircle className="w-3 h-3 mr-1" /> : <XCircle className="w-3 h-3 mr-1" />}
-                                  {keyTestResults[config.key].success ? "Verified" : "Failed"}
-                                </Badge>
-                              )}
-                              {isActive && apiKeys[config.key] && !keyTestResults[config.key] && (
+                              {isSecurelyStored && validationStatus.success === true && (
                                 <Badge variant="outline" className="text-green-500 border-green-500 text-xs">
                                   <CheckCircle className="w-3 h-3 mr-1" />
-                                  Connected
+                                  Valid
+                                </Badge>
+                              )}
+                              {isSecurelyStored && validationStatus.success === false && (
+                                <Badge variant="outline" className="text-destructive border-destructive text-xs">
+                                  <XCircle className="w-3 h-3 mr-1" />
+                                  Invalid
+                                </Badge>
+                              )}
+                              {isSecurelyStored && validationStatus.success === null && (
+                                <Badge variant="outline" className="text-green-500 border-green-500 text-xs">
+                                  <ShieldCheck className="w-3 h-3 mr-1" />
+                                  Saved
+                                </Badge>
+                              )}
+                              {!isSecurelyStored && testResult && (
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs ${testResult.success ? "text-green-500 border-green-500" : "text-red-500 border-red-500"}`}
+                                >
+                                  {testResult.success ? <CheckCircle className="w-3 h-3 mr-1" /> : <XCircle className="w-3 h-3 mr-1" />}
+                                  {testResult.success ? "Verified" : "Failed"}
                                 </Badge>
                               )}
                               {!isActive && (
