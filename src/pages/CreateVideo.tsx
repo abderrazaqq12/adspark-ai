@@ -64,7 +64,7 @@ import AIToolsSelector from "@/components/AIToolsSelector";
 import { useRealTimeCost } from "@/hooks/useRealTimeCost";
 import { UnifiedSceneBuilder, UnifiedScene } from "@/components/video/UnifiedSceneBuilder";
 import { AutoAdFactory } from "@/components/video/AutoAdFactory";
-import { SmartSceneBuilder } from "@/components/video/SmartSceneBuilder";
+import { SmartSceneBuilderV2 } from "@/components/smart-scene-builder";
 import { UnifiedVideoCreation } from "@/components/video/UnifiedVideoCreation";
 
 // ElevenLabs voices - expanded list with categories
@@ -175,7 +175,7 @@ const pipelineStages = [
   { id: 1, key: 'studio-images', name: "Image Generation", icon: Image, description: "Product images & mockups", required: false },
   { id: 2, key: 'studio-landing', name: "Landing Page", icon: Layout, description: "Marketing angles & landing page", required: false },
   { id: 3, key: 'scripts', name: "Voiceover", icon: Mic, description: "Video Script Text & Audio", required: true },
-  { id: 4, key: 'unified-scene-video', name: "Scene Builder & Video Generation", icon: Wand2, description: "Build scenes, select engines, generate videos", required: true },
+  { id: 4, key: 'unified-scene-video', name: "Scene Builder", icon: Wand2, description: "AI-driven scene generation with automatic engine selection", required: true },
   { id: 5, key: 'auto-ad-factory', name: "Auto-Ad Factory", icon: Palette, description: "Mass-produce <30s ads with one click", required: true },
   { id: 6, key: 'export', name: "Export", icon: Globe, description: "Multi-format export", required: true },
 ];
@@ -1096,51 +1096,35 @@ export default function CreateVideo() {
                 onFreeOnlyChange={setFreeEnginesOnly}
               />
 
-              {/* Smart Scene Builder - for scene management */}
+              {/* Smart Scene Builder V2 - AI-driven scene generation */}
               {projectId && (
-                <SmartSceneBuilder
+                <SmartSceneBuilderV2
                   projectId={projectId}
-                  scriptId={scriptId || undefined}
-                  scenes={unifiedScenes.length > 0 ? unifiedScenes.map(s => ({
-                    id: s.id,
-                    index: s.index,
-                    text: s.text,
-                    visualPrompt: s.visualPrompt,
-                    duration: s.duration,
-                    status: s.status as 'pending' | 'generating' | 'completed' | 'failed',
-                    engine: s.engine || 'auto',
-                    videoUrl: s.videoUrl,
-                    thumbnailUrl: s.thumbnailUrl,
-                  })) : scenes.map((s, i) => ({
-                    id: s.id || `scene-${i}`,
-                    index: i,
-                    text: s.description || s.text || '',
-                    visualPrompt: s.visualPrompt || s.visual_prompt || '',
-                    duration: s.duration || s.duration_sec || 5,
-                    status: 'pending' as const,
-                    engine: 'auto',
-                  }))}
-                  onScenesChange={(newScenes) => {
-                    setUnifiedScenes(newScenes.map(s => ({
-                      ...s,
-                      engine: s.engine || 'auto',
-                      status: s.status as 'pending' | 'generating' | 'completed' | 'failed',
-                    })));
-                    setScenes(newScenes.map((s) => ({
-                      id: s.id,
-                      title: `Scene ${s.index + 1}`,
-                      description: s.text,
-                      visualPrompt: s.visualPrompt,
-                      duration: s.duration,
-                    })));
-                  }}
-                  onProceedToAssembly={() => {
+                  onProceedToAssembly={(scenePlan) => {
+                    // Convert scene plan to unified scenes format
+                    if (scenePlan?.scenes) {
+                      setUnifiedScenes(scenePlan.scenes.map((s: any) => ({
+                        id: s.id,
+                        index: s.index,
+                        text: s.visualIntent || '',
+                        visualPrompt: s.visualIntent || '',
+                        duration: s.duration,
+                        status: s.status,
+                        engine: s.selectedEngine?.engineName || 'auto',
+                        videoUrl: s.videoUrl,
+                        thumbnailUrl: s.thumbnailUrl,
+                      })));
+                      setScenes(scenePlan.scenes.map((s: any, i: number) => ({
+                        id: s.id,
+                        title: `Scene ${i + 1}`,
+                        description: s.visualIntent,
+                        visualPrompt: s.visualIntent,
+                        duration: s.duration,
+                      })));
+                    }
                     setExpandedStage(5);
                     setCurrentStage(5);
                   }}
-                  videosToGenerate={videosToGenerate}
-                  onVideosToGenerateChange={setVideosToGenerate}
-                  productImages={productInfo.imageUrl ? [productInfo.imageUrl] : []}
                 />
               )}
 

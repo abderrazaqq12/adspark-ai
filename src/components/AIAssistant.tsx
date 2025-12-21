@@ -84,7 +84,7 @@ export default function AIAssistant({ context, onSuggestion, currentState }: AIA
         contextInfo += `\nProduct: ${currentState.productName}`;
       }
       if (currentState.stage !== undefined) {
-        const stages = ["Product Info", "Script & Audio", "Scene Builder", "Video Generation", "Assembly", "Export"];
+        const stages = ["Product Info", "Script & Audio", "Scene Builder", "Assembly", "Export"];
         contextInfo += `\nCurrent Stage: ${stages[currentState.stage] || `Stage ${currentState.stage}`}`;
       }
       if (currentState.scripts && currentState.scripts.length > 0) {
