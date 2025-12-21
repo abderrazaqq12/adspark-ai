@@ -259,7 +259,7 @@ export function StrategyStep({
         </div>
 
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 mb-6">
           <div className="space-y-2">
             <label className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1.5 ml-1">
               <Target className="w-3 h-3 text-primary" /> Goal
