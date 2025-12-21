@@ -393,19 +393,45 @@ export function StrategyStep({
 
           {isGenerating && (
             <div className="space-y-6 py-6">
-              {/* Loading Header */}
-              <div className="flex flex-col items-center text-center mb-6">
-                <div className="relative mb-4">
-                  <div className="w-16 h-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Brain className="w-6 h-6 text-primary animate-pulse" />
+              {/* Progress Header with animated bar */}
+              <div className="space-y-4">
+                <div className="flex flex-col items-center text-center">
+                  <div className="relative mb-4">
+                    <div className="w-16 h-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Brain className="w-6 h-6 text-primary animate-pulse" />
+                    </div>
                   </div>
+                  <h3 className="text-lg font-semibold mb-1">AI Generating {variationCount} Variations...</h3>
+                  <p className="text-muted-foreground text-sm">Analyzing patterns and creating unique strategies</p>
                 </div>
-                <h3 className="text-lg font-semibold mb-1">AI Generating {variationCount} Variations...</h3>
-                <p className="text-muted-foreground text-sm">Analyzing patterns and creating unique strategies</p>
+
+                {/* Animated Progress Bar */}
+                <div className="w-full max-w-md mx-auto space-y-2">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Progress</span>
+                    <span className="font-mono">Generating...</span>
+                  </div>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-primary via-purple-500 to-primary rounded-full animate-pulse"
+                      style={{ 
+                        width: '100%',
+                        animation: 'shimmer 2s linear infinite',
+                        backgroundSize: '200% 100%'
+                      }}
+                    />
+                  </div>
+                  <style>{`
+                    @keyframes shimmer {
+                      0% { background-position: -200% 0; }
+                      100% { background-position: 200% 0; }
+                    }
+                  `}</style>
+                </div>
               </div>
 
-              {/* Skeleton Variation Cards */}
+              {/* Skeleton Variation Cards with staggered animation */}
               <div>
                 <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-primary animate-pulse" />
@@ -415,24 +441,50 @@ export function StrategyStep({
                   {Array.from({ length: variationCount }).map((_, idx) => (
                     <div
                       key={idx}
-                      className="p-4 rounded-xl border border-border/50 bg-card/50 animate-pulse space-y-3"
+                      className="p-4 rounded-xl border border-border/50 bg-card/50 space-y-3 transition-all"
+                      style={{ 
+                        animation: `fadeInUp 0.5s ease-out ${idx * 0.1}s both`,
+                        opacity: 0
+                      }}
                     >
-                      <div className="flex items-center justify-between">
+                      {/* Progress indicator per card */}
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
+                            <span className="text-xs font-bold text-primary">{idx + 1}</span>
+                          </div>
+                          <span className="text-xs text-muted-foreground">Variation {idx + 1}/{variationCount}</span>
+                        </div>
+                        <div className="h-4 w-4 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+                      </div>
+                      <div className="flex items-center justify-between animate-pulse">
                         <div className="flex items-center gap-2">
                           <div className="h-5 w-20 bg-muted rounded" />
                           <div className="h-5 w-12 bg-primary/20 rounded" />
                         </div>
-                        <div className="h-5 w-16 bg-green-500/20 rounded" />
+                        <div className="h-5 w-14 bg-blue-500/20 rounded" />
                       </div>
-                      <div className="h-4 w-3/4 bg-muted rounded" />
-                      <div className="h-3 w-1/2 bg-muted/60 rounded" />
-                      <div className="flex gap-2 mt-2">
-                        <div className="h-6 w-20 bg-muted/40 rounded" />
+                      <div className="h-4 w-3/4 bg-muted rounded animate-pulse" />
+                      <div className="h-3 w-1/2 bg-muted/60 rounded animate-pulse" />
+                      <div className="flex gap-2 mt-2 animate-pulse">
+                        <div className="h-6 w-20 bg-green-500/20 rounded" />
                         <div className="h-6 w-16 bg-muted/40 rounded" />
                       </div>
                     </div>
                   ))}
                 </div>
+                <style>{`
+                  @keyframes fadeInUp {
+                    from {
+                      opacity: 0;
+                      transform: translateY(10px);
+                    }
+                    to {
+                      opacity: 1;
+                      transform: translateY(0);
+                    }
+                  }
+                `}</style>
               </div>
             </div>
           )}
@@ -551,6 +603,7 @@ export function StrategyStep({
                           framework={blueprint.framework}
                           expectedLiftPct={10 + idx * 5}
                           aiReasoning={variation.reasoning}
+                          originalDurationMs={analysis.metadata?.duration_ms}
                         />
                       ))}
                     </div>
