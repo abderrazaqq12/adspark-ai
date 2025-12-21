@@ -10,6 +10,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useCreativeScale } from '@/hooks/useCreativeScale';
+import { useStreamingStrategy } from '@/hooks/useStreamingStrategy';
 import { executeUnifiedStrategy, ExecutionResult, EngineId, executionDebugLogger } from '@/lib/creative-scale/execution-engine';
 import { validateVideoFile, sanitizeFilename, LIMITS } from '@/lib/creative-scale/validation';
 import { createInitialProgressState, ExecutionProgressState } from '@/components/creative-scale/ExecutionProgressPanel';
@@ -112,6 +113,14 @@ export default function CreativeScale() {
     compileAllVariations,
     reset: resetHook
   } = useCreativeScale();
+
+  // Streaming strategy hook for real-time progress
+  const {
+    isStreaming,
+    progress: streamProgress,
+    variationProgress,
+    streamStrategy
+  } = useStreamingStrategy();
 
   // Restore state on mount
   useEffect(() => {
@@ -605,7 +614,9 @@ export default function CreativeScale() {
               plans={currentPlans}
               brainV2State={brainV2State}
               variationCount={variationCount}
-              isGenerating={isGeneratingBlueprint || isCompiling}
+              isGenerating={isGeneratingBlueprint || isCompiling || isStreaming}
+              streamProgress={streamProgress}
+              variationProgress={variationProgress}
               onSetGoal={(goal) => setBrainV2Options({ goal })}
               onSetRisk={(risk) => setBrainV2Options({ risk })}
               onSetPlatform={(platform) => setBrainV2Options({ platform })}
