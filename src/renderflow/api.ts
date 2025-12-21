@@ -239,6 +239,25 @@ export const RenderFlowApi = {
 
     // Submit Execution Plan - POST /render/jobs
     submitPlan: async (plan: any, sourceVideoUrl?: string): Promise<SubmitJobResponse> => {
+        console.log('[RenderFlowApi] ========== SUBMIT PLAN ==========');
+        console.log('[RenderFlowApi] Source Video URL:', sourceVideoUrl || 'NOT PROVIDED');
+        console.log('[RenderFlowApi] Plan ID:', plan.id);
+        console.log('[RenderFlowApi] Plan Timeline Segments:', plan.timeline?.length || 0);
+        console.log('[RenderFlowApi] Plan Audio Tracks:', plan.audio_tracks?.length || 0);
+        
+        // Log timeline details
+        if (plan.timeline) {
+            plan.timeline.forEach((seg: any, i: number) => {
+                console.log(`[RenderFlowApi] Timeline[${i}]:`, {
+                    asset_url: seg.asset_url,
+                    segment_type: seg.segment_type,
+                    start_ms: seg.start_ms,
+                    end_ms: seg.end_ms,
+                    duration: seg.end_ms - seg.start_ms
+                });
+            });
+        }
+
         const payload = {
             project_id: plan.project_id || 'unified_plan',
             variations: [{
@@ -250,6 +269,9 @@ export const RenderFlowApi = {
             }]
         };
 
+        console.log('[RenderFlowApi] Full Payload:', JSON.stringify(payload, null, 2));
+        console.log('[RenderFlowApi] Posting to:', `${getBaseUrl()}/jobs`);
+
         try {
             const res = await fetch(`${getBaseUrl()}/jobs`, {
                 method: 'POST',
@@ -258,12 +280,17 @@ export const RenderFlowApi = {
                 signal: AbortSignal.timeout(10000)
             });
 
+            console.log('[RenderFlowApi] Response Status:', res.status);
+
             if (!res.ok) {
                 const text = await res.text();
+                console.error('[RenderFlowApi] Error Response:', text);
                 throw new Error(`Submission failed: ${res.status} - ${text}`);
             }
 
-            return res.json();
+            const result = await res.json();
+            console.log('[RenderFlowApi] Success Response:', result);
+            return result;
         } catch (e: any) {
             // Strict Mode: Re-throw all errors.
             console.error('[RenderFlowApi] Plan submission failed:', e);

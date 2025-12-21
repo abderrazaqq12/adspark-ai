@@ -47,7 +47,14 @@ export async function executeUnifiedStrategy(ctx: ExecutionContext): Promise<Exe
   const start = Date.now();
   const index = ctx.variationIndex || 0;
 
-  console.log(`[UnifiedEngine] Starting variation ${index}`);
+  console.log(`[UnifiedEngine] ========== EXECUTION START ==========`);
+  console.log(`[UnifiedEngine] Variation Index: ${index}`);
+  console.log(`[UnifiedEngine] Source Video URL: ${ctx.sourceVideoUrl || 'NOT PROVIDED'}`);
+  console.log(`[UnifiedEngine] Plan ID: ${ctx.plan.plan_id}`);
+  console.log(`[UnifiedEngine] Timeline Segments: ${ctx.plan.timeline?.length || 0}`);
+  console.log(`[UnifiedEngine] Audio Tracks: ${ctx.plan.audio_tracks?.length || 0}`);
+  console.log(`[UnifiedEngine] Full Plan:`, JSON.stringify(ctx.plan, null, 2));
+  
   ctx.onProgress?.('unified_server', 0, 'Initializing Unified Engine...');
 
   executionDebugLogger.logEngineDispatch(
@@ -56,15 +63,17 @@ export async function executeUnifiedStrategy(ctx: ExecutionContext): Promise<Exe
     'POST /render/submit',
     'POST',
     {
-      planSegments: ctx.plan.timeline.length,
-      audioTracks: ctx.plan.audio_tracks.length
+      planSegments: ctx.plan.timeline?.length || 0,
+      audioTracks: ctx.plan.audio_tracks?.length || 0
     }
   );
 
   try {
     // 1. Submit Job
+    console.log(`[UnifiedEngine] Submitting plan to VPS...`);
     ctx.onProgress?.('unified_server', 10, 'Submitting to VPS...');
     const submitResult = await RenderFlowApi.submitPlan(ctx.plan, ctx.sourceVideoUrl);
+    console.log(`[UnifiedEngine] Submit Result:`, submitResult);
 
     // 2. Poll for Completion
     const result = await pollJobStatus(submitResult.ids[0], ctx);
