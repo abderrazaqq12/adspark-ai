@@ -172,6 +172,46 @@ export default function Projects() {
 
   const deleteProject = async (projectId: string) => {
     try {
+      // Delete all related records first to avoid foreign key constraint errors
+      const deletionPromises = [
+        supabase.from("autopilot_jobs").delete().eq("project_id", projectId),
+        supabase.from("pipeline_jobs").delete().eq("project_id", projectId),
+        supabase.from("video_variations").delete().eq("project_id", projectId),
+        supabase.from("video_outputs").delete().eq("project_id", projectId),
+        supabase.from("generated_images").delete().eq("project_id", projectId),
+        supabase.from("landing_pages").delete().eq("project_id", projectId),
+        supabase.from("marketing_content").delete().eq("project_id", projectId),
+        supabase.from("uploads").delete().eq("project_id", projectId),
+        supabase.from("ai_costs").delete().eq("project_id", projectId),
+        supabase.from("ai_failures").delete().eq("project_id", projectId),
+        supabase.from("analytics_events").delete().eq("project_id", projectId),
+        supabase.from("cost_transactions").delete().eq("project_id", projectId),
+        supabase.from("operator_jobs").delete().eq("project_id", projectId),
+      ];
+
+      // Delete scripts and their related data (scenes, audio_tracks)
+      const { data: scripts } = await supabase
+        .from("scripts")
+        .select("id")
+        .eq("project_id", projectId);
+
+      if (scripts && scripts.length > 0) {
+        const scriptIds = scripts.map(s => s.id);
+        
+        // Delete scenes for these scripts
+        for (const scriptId of scriptIds) {
+          await supabase.from("scenes").delete().eq("script_id", scriptId);
+          await supabase.from("audio_tracks").delete().eq("script_id", scriptId);
+        }
+        
+        // Delete scripts
+        await supabase.from("scripts").delete().eq("project_id", projectId);
+      }
+
+      // Wait for all other deletions
+      await Promise.all(deletionPromises);
+
+      // Now delete the project
       const { error } = await supabase
         .from("projects")
         .delete()
@@ -181,7 +221,8 @@ export default function Projects() {
       setProjects(projects.filter(p => p.id !== projectId));
       toast.success("Project deleted");
     } catch (error: any) {
-      toast.error("Failed to delete project");
+      console.error("Delete project error:", error);
+      toast.error("Failed to delete project: " + (error.message || "Unknown error"));
     }
   };
 
