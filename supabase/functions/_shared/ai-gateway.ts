@@ -1,9 +1,11 @@
 /**
- * AI Gateway Helper - Google Gemini (primary) + OpenAI ChatGPT (fallback)
+ * AI Gateway Helper - Multi-provider with automatic fallback
  * 
- * This module replaces Lovable AI Gateway with direct API calls to:
- * 1. Google Gemini API (primary)
- * 2. OpenAI API (fallback if Gemini fails)
+ * Priority order: Gemini → OpenAI → OpenRouter
+ * Automatically switches providers when quota/rate limits are hit
+ * 
+ * NOTE: This is for TEXT-BASED operations only (analysis, content generation, strategy)
+ * Video generation and image generation use separate APIs and are NOT affected by this gateway
  */
 
 export interface AIMessage {
@@ -22,7 +24,7 @@ export interface AIRequestOptions {
 export interface AIResponse {
   content: string;
   model: string;
-  provider: 'gemini' | 'openai';
+  provider: 'gemini' | 'openai' | 'openrouter';
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -35,10 +37,10 @@ export type AIErrorType = 'RATE_LIMIT' | 'QUOTA_EXCEEDED' | 'AUTH_ERROR' | 'API_
 
 export class AIError extends Error {
   type: AIErrorType;
-  provider: 'gemini' | 'openai';
+  provider: 'gemini' | 'openai' | 'openrouter';
   retryAfterSeconds?: number;
   
-  constructor(message: string, type: AIErrorType, provider: 'gemini' | 'openai', retryAfterSeconds?: number) {
+  constructor(message: string, type: AIErrorType, provider: 'gemini' | 'openai' | 'openrouter', retryAfterSeconds?: number) {
     super(message);
     this.name = 'AIError';
     this.type = type;
@@ -47,7 +49,7 @@ export class AIError extends Error {
   }
 }
 
-// Model mappings
+// Model mappings for each provider
 const GEMINI_MODELS: Record<string, string> = {
   'default': 'gemini-2.0-flash',
   'fast': 'gemini-2.0-flash',
@@ -60,6 +62,13 @@ const OPENAI_MODELS: Record<string, string> = {
   'fast': 'gpt-4o-mini',
   'pro': 'gpt-4o',
   'flash': 'gpt-4o-mini',
+};
+
+const OPENROUTER_MODELS: Record<string, string> = {
+  'default': 'google/gemini-2.0-flash-001',
+  'fast': 'google/gemini-2.0-flash-001',
+  'pro': 'anthropic/claude-3.5-sonnet',
+  'flash': 'google/gemini-2.0-flash-001',
 };
 
 /**
@@ -135,8 +144,8 @@ async function callGemini(options: AIRequestOptions): Promise<AIResponse> {
                                errorText.includes('exceeded');
       throw new AIError(
         isQuotaExceeded 
-          ? 'Gemini API quota exceeded. Please try again later or check your billing settings.'
-          : 'Gemini API rate limited. Please wait a moment and try again.',
+          ? 'Gemini API quota exceeded. Trying fallback provider...'
+          : 'Gemini API rate limited. Trying fallback provider...',
         isQuotaExceeded ? 'QUOTA_EXCEEDED' : 'RATE_LIMIT',
         'gemini',
         retryAfter
@@ -166,7 +175,7 @@ async function callGemini(options: AIRequestOptions): Promise<AIResponse> {
 }
 
 /**
- * Call OpenAI API (fallback)
+ * Call OpenAI API
  */
 async function callOpenAI(options: AIRequestOptions): Promise<AIResponse> {
   const apiKey = Deno.env.get('OpenAI');
@@ -196,9 +205,14 @@ async function callOpenAI(options: AIRequestOptions): Promise<AIResponse> {
     
     if (response.status === 429) {
       const retryAfter = response.headers.get('retry-after');
+      const isQuotaExceeded = errorText.includes('quota') || 
+                               errorText.includes('billing') ||
+                               errorText.includes('exceeded');
       throw new AIError(
-        'OpenAI API rate limited. Please wait a moment and try again.',
-        'RATE_LIMIT',
+        isQuotaExceeded 
+          ? 'OpenAI API quota exceeded. Trying fallback provider...'
+          : 'OpenAI API rate limited. Trying fallback provider...',
+        isQuotaExceeded ? 'QUOTA_EXCEEDED' : 'RATE_LIMIT',
         'openai',
         retryAfter ? parseInt(retryAfter) : undefined
       );
@@ -227,54 +241,188 @@ async function callOpenAI(options: AIRequestOptions): Promise<AIResponse> {
 }
 
 /**
- * Main AI Gateway function - tries Gemini first, falls back to OpenAI
+ * Call OpenRouter API (third fallback)
  */
-export async function callAI(options: AIRequestOptions): Promise<AIResponse> {
-  let geminiError: AIError | Error | null = null;
-  let openAIError: AIError | Error | null = null;
-
-  // Try Gemini first
-  try {
-    console.log('[AI-Gateway] Trying Gemini...');
-    return await callGemini(options);
-  } catch (err) {
-    geminiError = err as AIError | Error;
-    console.warn('[AI-Gateway] Gemini failed, trying OpenAI fallback:', err);
+async function callOpenRouter(options: AIRequestOptions): Promise<AIResponse> {
+  const apiKey = Deno.env.get('OPENROUTER_API_KEY');
+  if (!apiKey) {
+    throw new AIError('OpenRouter API key not configured', 'AUTH_ERROR', 'openrouter');
   }
+
+  const model = OPENROUTER_MODELS[options.model || 'default'] || OPENROUTER_MODELS.default;
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://flowscale.app',
+      'X-Title': 'FlowScale Creative Platform',
+    },
+    body: JSON.stringify({
+      model,
+      messages: options.messages,
+      temperature: options.temperature ?? 0.7,
+      max_tokens: options.maxTokens ?? 4096,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('[OpenRouter] Error:', response.status, errorText);
     
-  // Try OpenAI as fallback
-  try {
-    console.log('[AI-Gateway] Trying OpenAI fallback...');
-    return await callOpenAI(options);
-  } catch (err) {
-    openAIError = err as AIError | Error;
-    console.error('[AI-Gateway] Both providers failed');
-  }
-
-  // Both failed - return the most informative error
-  // Prioritize quota/rate limit errors as they're actionable
-  if (geminiError instanceof AIError && (geminiError.type === 'QUOTA_EXCEEDED' || geminiError.type === 'RATE_LIMIT')) {
-    if (openAIError instanceof AIError && openAIError.type === 'AUTH_ERROR') {
-      // Gemini is rate limited and OpenAI key is invalid
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('retry-after');
+      const isQuotaExceeded = errorText.includes('quota') || 
+                               errorText.includes('credits') ||
+                               errorText.includes('limit');
       throw new AIError(
-        'AI service temporarily unavailable. Gemini quota exceeded and backup service unavailable. Please try again later.',
-        'QUOTA_EXCEEDED',
-        'gemini',
-        geminiError.retryAfterSeconds
+        isQuotaExceeded 
+          ? 'OpenRouter API quota/credits exceeded.'
+          : 'OpenRouter API rate limited.',
+        isQuotaExceeded ? 'QUOTA_EXCEEDED' : 'RATE_LIMIT',
+        'openrouter',
+        retryAfter ? parseInt(retryAfter) : undefined
       );
     }
-    throw geminiError;
-  }
-  
-  if (openAIError instanceof AIError && (openAIError.type === 'QUOTA_EXCEEDED' || openAIError.type === 'RATE_LIMIT')) {
-    throw openAIError;
+    
+    if (response.status === 401 || response.status === 403) {
+      throw new AIError('OpenRouter API key is invalid or expired', 'AUTH_ERROR', 'openrouter');
+    }
+    
+    throw new AIError(`OpenRouter API error: ${response.status}`, 'API_ERROR', 'openrouter');
   }
 
-  // Generic error combining both
-  const geminiMsg = geminiError instanceof AIError ? geminiError.message : String(geminiError);
-  const openAIMsg = openAIError instanceof AIError ? openAIError.message : String(openAIError);
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content || '';
+
+  return {
+    content,
+    model,
+    provider: 'openrouter',
+    usage: data.usage ? {
+      promptTokens: data.usage.prompt_tokens || 0,
+      completionTokens: data.usage.completion_tokens || 0,
+      totalTokens: data.usage.total_tokens || 0,
+    } : undefined,
+  };
+}
+
+// Provider info for logging
+type ProviderName = 'gemini' | 'openai' | 'openrouter';
+type ProviderFunction = (options: AIRequestOptions) => Promise<AIResponse>;
+
+interface ProviderConfig {
+  name: ProviderName;
+  call: ProviderFunction;
+  isConfigured: () => boolean;
+}
+
+/**
+ * Main AI Gateway function - tries providers in order with automatic fallback
+ * Order: Gemini → OpenAI → OpenRouter
+ */
+export async function callAI(options: AIRequestOptions): Promise<AIResponse> {
+  const providers: ProviderConfig[] = [
+    { 
+      name: 'gemini', 
+      call: callGemini, 
+      isConfigured: () => !!Deno.env.get('Gemini') 
+    },
+    { 
+      name: 'openai', 
+      call: callOpenAI, 
+      isConfigured: () => !!Deno.env.get('OpenAI') 
+    },
+    { 
+      name: 'openrouter', 
+      call: callOpenRouter, 
+      isConfigured: () => !!Deno.env.get('OPENROUTER_API_KEY') 
+    },
+  ];
+
+  const errors: { provider: ProviderName; error: AIError | Error }[] = [];
+  
+  // Try each provider in order
+  for (const provider of providers) {
+    if (!provider.isConfigured()) {
+      console.log(`[AI-Gateway] Skipping ${provider.name} - not configured`);
+      continue;
+    }
+
+    try {
+      console.log(`[AI-Gateway] Trying ${provider.name}...`);
+      const response = await provider.call(options);
+      console.log(`[AI-Gateway] Success with ${provider.name}`);
+      return response;
+    } catch (err) {
+      const error = err as AIError | Error;
+      errors.push({ provider: provider.name, error });
+      
+      // Log the failure and continue to next provider
+      if (error instanceof AIError) {
+        console.warn(`[AI-Gateway] ${provider.name} failed (${error.type}): ${error.message}`);
+        
+        // If it's an auth error, this provider won't work - continue to next
+        if (error.type === 'AUTH_ERROR') {
+          console.warn(`[AI-Gateway] ${provider.name} auth failed, trying next provider...`);
+          continue;
+        }
+        
+        // For quota/rate limits, definitely try next provider
+        if (error.type === 'QUOTA_EXCEEDED' || error.type === 'RATE_LIMIT') {
+          console.warn(`[AI-Gateway] ${provider.name} quota/rate limited, trying next provider...`);
+          continue;
+        }
+      } else {
+        console.warn(`[AI-Gateway] ${provider.name} failed with error:`, error);
+      }
+    }
+  }
+
+  // All providers failed
+  console.error('[AI-Gateway] All providers failed');
+  
+  // Build informative error message
+  const configuredProviders = providers.filter(p => p.isConfigured()).map(p => p.name);
+  
+  if (configuredProviders.length === 0) {
+    throw new AIError(
+      'No AI providers configured. Please add at least one API key (Gemini, OpenAI, or OpenRouter) in Settings.',
+      'AUTH_ERROR',
+      'gemini'
+    );
+  }
+
+  // Find the most relevant error to return
+  // Prioritize quota/rate limit errors as they're actionable
+  const quotaError = errors.find(e => e.error instanceof AIError && e.error.type === 'QUOTA_EXCEEDED');
+  const rateLimitError = errors.find(e => e.error instanceof AIError && e.error.type === 'RATE_LIMIT');
+  const authErrors = errors.filter(e => e.error instanceof AIError && e.error.type === 'AUTH_ERROR');
+  
+  // If all configured providers have auth errors, report that
+  if (authErrors.length === configuredProviders.length) {
+    throw new AIError(
+      `All configured AI providers (${configuredProviders.join(', ')}) have invalid API keys. Please check your API key configuration in Settings.`,
+      'AUTH_ERROR',
+      authErrors[0]?.provider || 'gemini'
+    );
+  }
+
+  // If we hit quota/rate limits on all working providers
+  if (quotaError || rateLimitError) {
+    const relevantError = (quotaError?.error || rateLimitError?.error) as AIError;
+    throw new AIError(
+      `All AI providers are currently unavailable (quota exceeded or rate limited). Tried: ${configuredProviders.join(' → ')}. Please wait and try again.`,
+      relevantError.type,
+      relevantError.provider,
+      relevantError.retryAfterSeconds
+    );
+  }
+
+  // Generic error
   throw new AIError(
-    `AI providers unavailable. Please check your API keys and try again.`,
+    `AI service unavailable. All providers failed (${configuredProviders.join(', ')}). Please try again later.`,
     'API_ERROR',
     'gemini'
   );
@@ -284,7 +432,7 @@ export async function callAI(options: AIRequestOptions): Promise<AIResponse> {
  * Check if AI is available (at least one provider configured)
  */
 export function isAIAvailable(): boolean {
-  return !!(Deno.env.get('Gemini') || Deno.env.get('OpenAI'));
+  return !!(Deno.env.get('Gemini') || Deno.env.get('OpenAI') || Deno.env.get('OPENROUTER_API_KEY'));
 }
 
 /**
@@ -294,5 +442,6 @@ export function getAvailableProviders(): string[] {
   const providers: string[] = [];
   if (Deno.env.get('Gemini')) providers.push('gemini');
   if (Deno.env.get('OpenAI')) providers.push('openai');
+  if (Deno.env.get('OPENROUTER_API_KEY')) providers.push('openrouter');
   return providers;
 }
