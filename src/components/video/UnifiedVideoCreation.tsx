@@ -2,13 +2,13 @@ import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { 
   Video, 
-  Zap, 
+  Zap,
   Sparkles, 
   Film, 
   DollarSign,
@@ -128,170 +128,78 @@ export const UnifiedVideoCreation: React.FC<UnifiedVideoCreationProps> = ({
             Video Creation
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Cost Mode */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium flex items-center gap-2">
-              <DollarSign className="h-4 w-4" />
-              Cost Mode
-            </Label>
-            <RadioGroup 
-              value={costMode} 
-              onValueChange={(v) => setCostMode(v as CostMode)}
-              className="grid grid-cols-2 md:grid-cols-4 gap-3"
-            >
-              <Label 
-                htmlFor="cost-free" 
-                className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  costMode === 'free' ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted/50'
-                }`}
-              >
-                <RadioGroupItem value="free" id="cost-free" />
-                <div>
-                  <span className="font-medium">Free</span>
-                  <p className="text-xs text-muted-foreground">$0 cost</p>
-                </div>
+        <CardContent className="space-y-4">
+          {/* Settings Row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Cost Mode */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-1">
+                <DollarSign className="h-3 w-3" />
+                Cost Mode
               </Label>
-              <Label 
-                htmlFor="cost-budget" 
-                className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  costMode === 'budget' ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted/50'
-                }`}
-              >
-                <RadioGroupItem value="budget" id="cost-budget" />
-                <div>
-                  <span className="font-medium">Budget</span>
-                  <p className="text-xs text-muted-foreground">Low cost</p>
-                </div>
-              </Label>
-              <Label 
-                htmlFor="cost-premium" 
-                className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  costMode === 'premium' ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted/50'
-                }`}
-              >
-                <RadioGroupItem value="premium" id="cost-premium" />
-                <div>
-                  <span className="font-medium">Premium</span>
-                  <p className="text-xs text-muted-foreground">Best quality</p>
-                </div>
-              </Label>
-              <Label 
-                htmlFor="cost-ai" 
-                className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  costMode === 'ai-chooses' ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted/50'
-                }`}
-              >
-                <RadioGroupItem value="ai-chooses" id="cost-ai" />
-                <div>
-                  <span className="font-medium">AI Chooses</span>
-                  <p className="text-xs text-muted-foreground">Optimal value</p>
-                </div>
-              </Label>
-            </RadioGroup>
-          </div>
+              <Select value={costMode} onValueChange={(v) => setCostMode(v as CostMode)}>
+                <SelectTrigger className="bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  <SelectItem value="free">Free — $0 cost</SelectItem>
+                  <SelectItem value="budget">Budget — Low cost</SelectItem>
+                  <SelectItem value="premium">Premium — Best quality</SelectItem>
+                  <SelectItem value="ai-chooses">AI Chooses — Optimal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          {/* Quality Preference */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium flex items-center gap-2">
-              <Sparkles className="h-4 w-4" />
-              Quality Preference
-            </Label>
-            <RadioGroup 
-              value={qualityPreference} 
-              onValueChange={(v) => setQualityPreference(v as QualityPreference)}
-              className="grid grid-cols-3 gap-3"
-            >
-              <Label 
-                htmlFor="quality-fast" 
-                className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  qualityPreference === 'fast' ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted/50'
-                }`}
-              >
-                <RadioGroupItem value="fast" id="quality-fast" />
-                <div>
-                  <div className="flex items-center gap-1">
-                    <Zap className="h-4 w-4 text-yellow-500" />
-                    <span className="font-medium">Fast</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Quick generation</p>
-                </div>
+            {/* Quality Preference */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-1">
+                <Sparkles className="h-3 w-3" />
+                Quality
               </Label>
-              <Label 
-                htmlFor="quality-balanced" 
-                className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  qualityPreference === 'balanced' ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted/50'
-                }`}
-              >
-                <RadioGroupItem value="balanced" id="quality-balanced" />
-                <div>
-                  <div className="flex items-center gap-1">
-                    <Sparkles className="h-4 w-4 text-blue-500" />
-                    <span className="font-medium">Balanced</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Good quality</p>
-                </div>
-              </Label>
-              <Label 
-                htmlFor="quality-cinematic" 
-                className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  qualityPreference === 'cinematic' ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted/50'
-                }`}
-              >
-                <RadioGroupItem value="cinematic" id="quality-cinematic" />
-                <div>
-                  <div className="flex items-center gap-1">
-                    <Film className="h-4 w-4 text-purple-500" />
-                    <span className="font-medium">Cinematic</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Premium quality</p>
-                </div>
-              </Label>
-            </RadioGroup>
-          </div>
+              <Select value={qualityPreference} onValueChange={(v) => setQualityPreference(v as QualityPreference)}>
+                <SelectTrigger className="bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  <SelectItem value="fast">Fast — Quick generation</SelectItem>
+                  <SelectItem value="balanced">Balanced — Good quality</SelectItem>
+                  <SelectItem value="cinematic">Cinematic — Premium</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          {/* Execution Mode */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium flex items-center gap-2">
-              <Cpu className="h-4 w-4" />
-              Execution Engine
-            </Label>
-            <RadioGroup 
-              value={executionMode} 
-              onValueChange={(v) => setExecutionMode(v as ExecutionMode)}
-              className="grid grid-cols-2 gap-3"
-            >
-              <Label 
-                htmlFor="exec-agent" 
-                className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  executionMode === 'agent' ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted/50'
-                }`}
-              >
-                <RadioGroupItem value="agent" id="exec-agent" />
-                <div>
-                  <div className="flex items-center gap-1">
-                    <Sparkles className="h-4 w-4 text-primary" />
-                    <span className="font-medium">AI Agent</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Recommended</p>
-                </div>
+            {/* Execution Engine */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-1">
+                <Cpu className="h-3 w-3" />
+                Engine
               </Label>
-              <Label 
-                htmlFor="exec-edge" 
-                className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  executionMode === 'edge' ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted/50'
-                }`}
-              >
-                <RadioGroupItem value="edge" id="exec-edge" />
-                <div>
-                  <div className="flex items-center gap-1">
-                    <Server className="h-4 w-4 text-green-500" />
-                    <span className="font-medium">High-Performance</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Direct API</p>
-                </div>
-              </Label>
-            </RadioGroup>
+              <Select value={executionMode} onValueChange={(v) => setExecutionMode(v as ExecutionMode)}>
+                <SelectTrigger className="bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  <SelectItem value="agent">AI Agent — Recommended</SelectItem>
+                  <SelectItem value="edge">High-Performance — Direct API</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Aspect Ratio */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Aspect Ratio</Label>
+              <Select value={aspectRatio} onValueChange={(v) => setAspectRatio(v as '9:16' | '16:9' | '1:1' | '4:5')}>
+                <SelectTrigger className="bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  <SelectItem value="9:16">9:16 — TikTok/Reels</SelectItem>
+                  <SelectItem value="16:9">16:9 — YouTube</SelectItem>
+                  <SelectItem value="1:1">1:1 — Instagram</SelectItem>
+                  <SelectItem value="4:5">4:5 — Facebook</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Duration */}
@@ -308,23 +216,6 @@ export const UnifiedVideoCreation: React.FC<UnifiedVideoCreationProps> = ({
               step={5}
               className="w-full"
             />
-          </div>
-
-          {/* Aspect Ratio */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium">Aspect Ratio</Label>
-            <div className="flex gap-2 flex-wrap">
-              {(['9:16', '16:9', '1:1', '4:5'] as const).map((ratio) => (
-                <Button
-                  key={ratio}
-                  variant={aspectRatio === ratio ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setAspectRatio(ratio)}
-                >
-                  {ratio}
-                </Button>
-              ))}
-            </div>
           </div>
 
           {/* Cost Preview */}
