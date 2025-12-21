@@ -125,6 +125,18 @@ CRITICAL RULES:
 3. Focus on PERFORMANCE - CTR, retention, conversions.
 4. Output valid JSON ONLY.
 
+##############################################################
+# MANDATORY DURATION CONSTRAINT - THIS IS NON-NEGOTIABLE
+##############################################################
+- MINIMUM DURATION: 15 SECONDS (15000ms)
+- MAXIMUM DURATION: 35 SECONDS (35000ms)
+- ALL variations MUST result in videos between 15-35 seconds
+- If video is under 15s: use 'duplicate_segment' or 'emphasize_segment' to EXTEND it
+- If video is over 35s: use 'remove_segment' or 'compress_segment' to SHORTEN it
+- NEVER create variations that would result in videos shorter than 15 seconds
+- NEVER create variations that would result in videos longer than 35 seconds
+##############################################################
+
 OPTIMIZATION GOAL: ${optimization_goal.toUpperCase()}
 RISK TOLERANCE: ${risk_tolerance.toUpperCase()}
 PLATFORM: ${platform.toUpperCase()}
@@ -133,17 +145,21 @@ FUNNEL STAGE: ${funnel_stage.toUpperCase()}
 FRAMEWORKS (pick ONE primary):
 - AIDA, PAS, BAB, HOOK_BENEFIT_CTA, 4Ps, UGC, OFFER_STACK
 
-ABSTRACT ACTIONS (select carefully):
-- duplicate_segment: Repeat a high-performing segment (good for short videos/looping)
-- reorder_segments: Change sequence
-- emphasize_segment: Make more prominent (effectively slows it down)
-- split_segment: Divide into parts
-- merge_segments: Combine adjacent segments
-- remove_segment: Cut entirely (ONLY for long videos)
-- compress_segment: Shorten (ONLY for long videos)
+ABSTRACT ACTIONS (select carefully based on duration needs):
+- duplicate_segment: Repeat a high-performing segment (USE THIS to extend short videos)
+- reorder_segments: Change sequence (neutral on duration)
+- emphasize_segment: Make more prominent/slow down (USE THIS to extend short videos)
+- split_segment: Divide into parts (neutral on duration)
+- merge_segments: Combine adjacent segments (neutral on duration)
+- remove_segment: Cut entirely (USE THIS ONLY for videos over 35s to shorten)
+- compress_segment: Speed up/shorten (USE THIS ONLY for videos over 35s to shorten)
+
 ${strategySpecifics}
 
-TARGET DURATION: 15 to 35 SECONDS (Strictly enforce this range!)
+CURRENT VIDEO DURATION: ${(durationMs / 1000).toFixed(1)} seconds
+${durationMs < 15000 ? `⚠️ VIDEO IS TOO SHORT! You MUST use duplicate_segment or emphasize_segment to extend to at least 15 seconds.` : ''}
+${durationMs > 35000 ? `⚠️ VIDEO IS TOO LONG! You MUST use remove_segment or compress_segment to reduce to under 35 seconds.` : ''}
+${durationMs >= 15000 && durationMs <= 35000 ? `✓ Video is within target range. Focus on optimizing content while maintaining duration.` : ''}
 `;
 
     const userPrompt = `Analyze this video ad and generate ${safeVariationCount} UNIQUE improvement strategies:
