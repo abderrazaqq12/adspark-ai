@@ -7,9 +7,10 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   ArrowLeft, Zap, Sparkles, Globe, Bot, Brain,
-  Film, Wand2, DollarSign
+  Film, Wand2, DollarSign, Info
 } from "lucide-react";
 import { toast } from "sonner";
 import type { VariationConfig } from "@/pages/CreativeReplicator";
@@ -40,6 +41,7 @@ const ENGINE_TIERS = [
     costPerVideo: "$0.00",
     estimatedTotal: () => "$0.00",
     badge: "100% FREE",
+    tooltip: "Best for quick iterations and testing. Uses local FFMPEG processing with AI-powered motion effects like pan/zoom, parallax, and Ken Burns. Zero cost but limited to transformations of existing footage - no AI video generation.",
   },
   {
     id: "low",
@@ -50,6 +52,7 @@ const ENGINE_TIERS = [
     costPerVideo: "$0.05-0.15",
     estimatedTotal: (count: number) => `$${(count * 0.1).toFixed(2)}`,
     badge: null,
+    tooltip: "Great balance of quality and cost. These AI engines generate new video content with good motion consistency. Ideal for social media ads and product demos. Processing time: 30-60 seconds per clip.",
   },
   {
     id: "medium",
@@ -60,6 +63,7 @@ const ENGINE_TIERS = [
     costPerVideo: "$0.25-0.50",
     estimatedTotal: (count: number) => `$${(count * 0.375).toFixed(2)}`,
     badge: null,
+    tooltip: "Professional-grade AI video generation. Excellent motion quality, better text rendering, and more consistent character movements. Best for brand campaigns and high-visibility content. Processing time: 1-2 minutes per clip.",
   },
   {
     id: "premium",
@@ -70,6 +74,7 @@ const ENGINE_TIERS = [
     costPerVideo: "$1.00-2.50",
     estimatedTotal: (count: number) => `$${(count * 1.75).toFixed(2)}`,
     badge: null,
+    tooltip: "State-of-the-art cinematic quality with photorealistic results. Superior physics simulation, complex camera movements, and Hollywood-grade output. Best for hero content and premium campaigns. Processing time: 2-5 minutes per clip.",
   },
 ];
 
@@ -368,50 +373,60 @@ export const SimplifiedVariationSettings = ({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <RadioGroup
-                value={config.engineTier}
-                onValueChange={(value) => setConfig((prev) => ({ ...prev, engineTier: value }))}
-                className="space-y-3"
-              >
-                {ENGINE_TIERS.map((tier) => (
-                  <div
-                    key={tier.id}
-                    className={`flex items-start space-x-3 p-3 rounded-lg border transition-all ${
-                      config.engineTier === tier.id
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-border/80"
-                    }`}
-                  >
-                    <RadioGroupItem value={tier.id} id={`tier-${tier.id}`} className="mt-1" />
-                    <Label htmlFor={`tier-${tier.id}`} className="flex-1 cursor-pointer">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className={`font-bold ${tier.color}`}>{tier.label}</span>
-                          {tier.badge && (
-                            <Badge className="bg-green-500/20 text-green-400 text-xs">
-                              {tier.badge}
+              <TooltipProvider>
+                <RadioGroup
+                  value={config.engineTier}
+                  onValueChange={(value) => setConfig((prev) => ({ ...prev, engineTier: value }))}
+                  className="space-y-3"
+                >
+                  {ENGINE_TIERS.map((tier) => (
+                    <div
+                      key={tier.id}
+                      className={`flex items-start space-x-3 p-3 rounded-lg border transition-all ${
+                        config.engineTier === tier.id
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-border/80"
+                      }`}
+                    >
+                      <RadioGroupItem value={tier.id} id={`tier-${tier.id}`} className="mt-1" />
+                      <Label htmlFor={`tier-${tier.id}`} className="flex-1 cursor-pointer">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={`font-bold ${tier.color}`}>{tier.label}</span>
+                            {tier.badge && (
+                              <Badge className="bg-green-500/20 text-green-400 text-xs">
+                                {tier.badge}
+                              </Badge>
+                            )}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                {tier.tooltip}
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          <span className="text-xs text-muted-foreground">{tier.costPerVideo}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">{tier.description}</p>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {tier.engines.slice(0, 3).map((engine) => (
+                            <Badge key={engine} variant="secondary" className="text-[10px]">
+                              {engine}
+                            </Badge>
+                          ))}
+                          {tier.engines.length > 3 && (
+                            <Badge variant="outline" className="text-[10px]">
+                              +{tier.engines.length - 3}
                             </Badge>
                           )}
                         </div>
-                        <span className="text-xs text-muted-foreground">{tier.costPerVideo}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">{tier.description}</p>
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {tier.engines.slice(0, 3).map((engine) => (
-                          <Badge key={engine} variant="secondary" className="text-[10px]">
-                            {engine}
-                          </Badge>
-                        ))}
-                        {tier.engines.length > 3 && (
-                          <Badge variant="outline" className="text-[10px]">
-                            +{tier.engines.length - 3}
-                          </Badge>
-                        )}
-                      </div>
-                    </Label>
-                  </div>
-                ))}
-              </RadioGroup>
+                      </Label>
+                    </div>
+                  ))}
+                </RadioGroup>
+              </TooltipProvider>
 
               {/* Cost Summary */}
               <div className="p-3 rounded-lg bg-accent/50 border border-border">
