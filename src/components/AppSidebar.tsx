@@ -18,17 +18,17 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-// Main workflows - Creative Replicator + Creative Scale + AI Tools
+// Main workflows - Studio + Creative Replicator + Creative Scale + AI Tools
 const workflowItems = [
+  { title: "Studio", url: "/create", icon: Clapperboard, description: "Video creation studio" },
   { title: "Creative Replicator", url: "/creative-replicator", icon: SlidersHorizontal, description: "Replicate winning ads" },
   { title: "Creative Scale", url: "/creative-scale", icon: Scale, description: "AI-powered optimization" },
   { title: "AI Tools", url: "/ai-tools", icon: Wand2, description: "AI-powered tools" },
 ];
 
-// Quick access items - Dashboard and Studio
+// Quick access items - Dashboard only
 const quickAccessItems = [
   { title: "Dashboard", url: "/", icon: Home },
-  { title: "Studio", url: "/create", icon: Clapperboard },
 ];
 
 // Library items - Projects and Gallery
