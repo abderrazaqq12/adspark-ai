@@ -219,6 +219,48 @@ IMPORTANT: You MUST generate exactly ${safeVariationCount} items in the 'variati
     jsonStr = content.split('```')[1].split('```')[0].trim();
   }
   blueprint = JSON.parse(jsonStr);
+
+  // ==========================================
+  // GUARANTEE EXACT VARIATION COUNT
+  // ==========================================
+  // If AI generated fewer than requested, pad with variations
+  const generatedCount = blueprint.variation_ideas?.length || 0;
+
+  if (generatedCount < safeVariationCount) {
+    console.log(`[creative-scale-strategize] AI generated ${generatedCount}/${safeVariationCount} variations. Padding...`);
+
+    const variations = blueprint.variation_ideas || [];
+    const needed = safeVariationCount - generatedCount;
+
+    // Duplicate existing variations with slight modifications to ensure uniqueness
+    for (let i = 0; i < needed; i++) {
+      const sourceIdx = i % Math.max(1, variations.length);
+      const sourceVariation = variations[sourceIdx] || {
+        id: `var_fallback_${i}`,
+        action: 'emphasize_segment',
+        target_segment_type: 'hook',
+        intent: 'Increase engagement',
+        priority: 'medium',
+        reasoning: 'Automated variation to meet count requirement',
+        expected_impact: 'Moderate improvement',
+        risk_level: 'low'
+      };
+
+      // Create a modified copy
+      const newVariation = {
+        ...sourceVariation,
+        id: `var_${generatedCount + i}`,
+        priority: sourceVariation.priority === 'high' ? 'medium' : 'high', // Flip priority for distinction
+        reasoning: `${sourceVariation.reasoning} (Variation ${generatedCount + i + 1})`
+      };
+
+      variations.push(newVariation);
+    }
+
+    blueprint.variation_ideas = variations;
+    console.log(`[creative-scale-strategize] Padded to ${blueprint.variation_ideas.length} variations`);
+  }
+
 } catch (parseErr) {
   console.error('[creative-scale-strategize] JSON parse error:', parseErr);
   console.error('[creative-scale-strategize] Raw content:', content.substring(0, 500));
