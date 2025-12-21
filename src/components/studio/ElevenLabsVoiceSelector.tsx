@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Volume2, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -31,7 +31,8 @@ export const ElevenLabsVoiceSelector = ({
   selectedVoice,
   onVoiceSelect,
 }: ElevenLabsVoiceSelectorProps) => {
-  const [allVoices, setAllVoices] = useState<Voice[]>(DEFAULT_LIBRARY_VOICES);
+  const [clonedVoices, setClonedVoices] = useState<Voice[]>([]);
+  const [libraryVoices, setLibraryVoices] = useState<Voice[]>(DEFAULT_LIBRARY_VOICES);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -47,16 +48,11 @@ export const ElevenLabsVoiceSelector = ({
 
       if (error) throw error;
 
-      const voices: Voice[] = [];
       if (data.my_voices) {
-        voices.push(...data.my_voices.map((v: Voice) => ({ ...v, category: 'cloned' })));
+        setClonedVoices(data.my_voices);
       }
       if (data.library_voices) {
-        voices.push(...data.library_voices);
-      }
-      
-      if (voices.length > 0) {
-        setAllVoices(voices);
+        setLibraryVoices(data.library_voices);
       }
     } catch (error: any) {
       console.error('Error fetching voices:', error);
@@ -69,7 +65,6 @@ export const ElevenLabsVoiceSelector = ({
   const getVoiceLabel = (voice: Voice) => {
     const parts = [voice.name];
     if (voice.labels?.accent) parts.push(`(${voice.labels.accent})`);
-    if (voice.category === 'cloned') parts.push('— Cloned');
     return parts.join(' ');
   };
 
@@ -91,11 +86,24 @@ export const ElevenLabsVoiceSelector = ({
           )}
         </SelectTrigger>
         <SelectContent className="bg-popover z-50">
-          {allVoices.map((voice) => (
-            <SelectItem key={voice.id} value={voice.id}>
-              {getVoiceLabel(voice)}
-            </SelectItem>
-          ))}
+          {clonedVoices.length > 0 && (
+            <SelectGroup>
+              <SelectLabel className="text-xs text-muted-foreground">Cloned Voices</SelectLabel>
+              {clonedVoices.map((voice) => (
+                <SelectItem key={voice.id} value={voice.id}>
+                  {getVoiceLabel(voice)}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          )}
+          <SelectGroup>
+            <SelectLabel className="text-xs text-muted-foreground">Library Voices</SelectLabel>
+            {libraryVoices.map((voice) => (
+              <SelectItem key={voice.id} value={voice.id}>
+                {getVoiceLabel(voice)}
+              </SelectItem>
+            ))}
+          </SelectGroup>
         </SelectContent>
       </Select>
     </div>
