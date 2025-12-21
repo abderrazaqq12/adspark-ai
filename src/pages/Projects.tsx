@@ -34,6 +34,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Project {
   id: string;
@@ -101,6 +111,7 @@ export default function Projects() {
   const [activeTab, setActiveTab] = useState("all");
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -673,7 +684,7 @@ export default function Projects() {
                       </DropdownMenuItem>
                       <DropdownMenuItem 
                         className="text-destructive"
-                        onClick={(e) => { e.stopPropagation(); deleteProject(project.id); }}
+                        onClick={(e) => { e.stopPropagation(); setProjectToDelete(project); }}
                       >
                         <Trash2 className="w-4 h-4 mr-2" />
                         Delete
@@ -716,6 +727,32 @@ export default function Projects() {
           ))}
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!projectToDelete} onOpenChange={(open) => !open && setProjectToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Project</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{projectToDelete?.name}"? This will permanently remove all associated videos, images, scripts, and other assets. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (projectToDelete) {
+                  deleteProject(projectToDelete.id);
+                  setProjectToDelete(null);
+                }
+              }}
+            >
+              Delete Project
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
