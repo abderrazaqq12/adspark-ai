@@ -269,7 +269,8 @@ export interface CreativeBlueprintV2 {
 export type BrainFailureMode = 
   | 'NO_ACTION' // No strong problem detected
   | 'SAFE_OPTIMIZATION_ONLY' // All strategies too risky
-  | 'REQUEST_MORE_DATA'; // Input confidence too low
+  | 'REQUEST_MORE_DATA' // Input confidence too low
+  | 'RETRY_LATER'; // Transient error, can retry
 
 export interface BrainFailureOutput {
   mode: BrainFailureMode;

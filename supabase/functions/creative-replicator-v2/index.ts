@@ -254,7 +254,9 @@ serve(async (req) => {
       }
     };
 
-    const vpsUrl = Deno.env.get('RENDERFLOW_URL') || 'https://flowscale.cloud/api';
+    // Generate a real video using VPS pipeline
+    const generateRealVideo = async (videoId: string, config: any, inputUrls: string[]) => {
+      const vpsUrl = Deno.env.get('RENDERFLOW_URL') || 'https://flowscale.cloud/api';
 
     const pipelineStatus: Record<string, string> = {
       deconstruction: 'success',
@@ -585,7 +587,6 @@ serve(async (req) => {
   }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
-
 } catch (error) {
   console.error('[creative-replicator-v2] Error:', error);
   return new Response(JSON.stringify({
