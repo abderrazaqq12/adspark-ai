@@ -1,13 +1,11 @@
 /**
  * AI Creative Config Panel - Simplified Configuration
  * 
- * User only controls:
- * - Number of videos (1-100)
- * - Language
- * - Target market
- * - Export platform
- * 
- * Everything else is handled by AI Brain
+ * ARCHITECTURAL CONTRACT:
+ * - Audience (language/country) is INHERITED from Settings → Preferences
+ * - NO manual language/market selection allowed in this panel
+ * - User only controls: number of videos, export platform
+ * - Everything else is handled by AI Brain
  */
 
 import { useState, useEffect, useMemo } from "react";
@@ -17,41 +15,26 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
-  ArrowLeft, Zap, Sparkles, Globe, Brain, DollarSign,
-  Clock, Cpu, ChevronDown, ChevronUp, Info
+  ArrowLeft, Zap, Sparkles, Brain, DollarSign,
+  Clock, Cpu, ChevronDown, ChevronUp, Info, AlertTriangle
 } from "lucide-react";
 import { AICreativeBrain, estimateCostRange, BrainOutput } from "@/lib/replicator/ai-creative-brain";
 import { AIDecisionDebugPanel } from "./AIDecisionDebugPanel";
+import { AudienceInheritedDisplay } from "./AudienceInheritedDisplay";
 import type { VariationConfig } from "@/pages/CreativeReplicator";
+import { useAudience } from "@/contexts/AudienceContext";
+import { isAudienceConfigured } from "@/lib/replicator/creative-plan-types";
 
 interface AICreativeConfigPanelProps {
   config: VariationConfig;
   setConfig: React.Dispatch<React.SetStateAction<VariationConfig>>;
   sourceVideoDuration: number;
-  availableApiKeys: string[]; // Fetched from secure_api_keys
+  availableApiKeys: string[];
   onBack: () => void;
   onGenerate: (brainOutput: BrainOutput) => void;
 }
-
-const LANGUAGES = [
-  { id: "ar", label: "Arabic", flag: "🇸🇦" },
-  { id: "en", label: "English", flag: "🇺🇸" },
-  { id: "es", label: "Spanish", flag: "🇪🇸" },
-  { id: "fr", label: "French", flag: "🇫🇷" },
-  { id: "de", label: "German", flag: "🇩🇪" },
-  { id: "pt", label: "Portuguese", flag: "🇧🇷" },
-];
-
-const MARKETS = [
-  { id: "saudi", label: "Saudi Arabia", emoji: "🇸🇦" },
-  { id: "uae", label: "UAE", emoji: "🇦🇪" },
-  { id: "kuwait", label: "Kuwait", emoji: "🇰🇼" },
-  { id: "gcc", label: "GCC Region", emoji: "🌍" },
-  { id: "usa", label: "United States", emoji: "🇺🇸" },
-  { id: "europe", label: "Europe", emoji: "🇪🇺" },
-  { id: "latam", label: "Latin America", emoji: "🌎" },
-];
 
 const PLATFORMS = [
   { id: "tiktok", label: "TikTok", ratio: "9:16" },
@@ -71,18 +54,29 @@ export const AICreativeConfigPanel = ({
 }: AICreativeConfigPanelProps) => {
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [brainOutput, setBrainOutput] = useState<BrainOutput | null>(null);
+  
+  // Get audience from global context (inherited from Settings)
+  const { resolved: audience, isLoading: audienceLoading } = useAudience();
+  
+  // Check if audience is configured
+  const audienceConfigured = useMemo(() => 
+    isAudienceConfigured(audience.language, audience.country),
+    [audience.language, audience.country]
+  );
 
   // Quick cost estimation for display
   const costEstimate = useMemo(() => {
     return estimateCostRange(config.count, availableApiKeys);
   }, [config.count, availableApiKeys]);
 
-  // Run brain analysis when config changes
+  // Run brain analysis when config changes - using inherited audience
   useEffect(() => {
+    if (audienceLoading) return;
+    
     const brain = new AICreativeBrain({
       numberOfVideos: config.count,
-      language: config.adIntelligence?.language || 'ar',
-      market: config.adIntelligence?.market || 'saudi',
+      language: audience.language, // Inherited from Settings
+      market: audience.country, // Inherited from Settings
       platform: config.adIntelligence?.platform || 'tiktok',
       sourceVideoDuration: sourceVideoDuration || 30,
       availableApiKeys,
@@ -90,11 +84,12 @@ export const AICreativeConfigPanel = ({
     
     const output = brain.generateDecisions();
     setBrainOutput(output);
-  }, [config.count, config.adIntelligence?.language, config.adIntelligence?.market, config.adIntelligence?.platform, sourceVideoDuration, availableApiKeys]);
-
-  const selectedPlatform = PLATFORMS.find(p => p.id === (config.adIntelligence?.platform || 'tiktok'));
+  }, [config.count, config.adIntelligence?.platform, sourceVideoDuration, availableApiKeys, audience.language, audience.country, audienceLoading]);
 
   const handleGenerate = () => {
+    if (!audienceConfigured) {
+      return; // Blocked by UI
+    }
     if (brainOutput) {
       onGenerate(brainOutput);
     }
@@ -116,7 +111,20 @@ export const AICreativeConfigPanel = ({
         </Button>
       </div>
 
-      {/* AI Auto Banner - Always On */}
+      {/* Audience Contract Display - READ ONLY */}
+      <AudienceInheritedDisplay />
+      
+      {/* Warning if audience not configured */}
+      {!audienceLoading && !audienceConfigured && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Generation Blocked:</strong> Go to Settings → Preferences to configure your default audience.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* AI Auto Banner */}
       <Card className="border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-pink-500/10">
         <CardContent className="p-5">
           <div className="flex items-center justify-between">
@@ -185,72 +193,17 @@ export const AICreativeConfigPanel = ({
           </CardContent>
         </Card>
 
-        {/* Right Column - Language, Market & Platform */}
+        {/* Right Column - Export Platform ONLY */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Globe className="w-4 h-4 text-primary" />
-              Language, Market & Platforms
+              <Zap className="w-4 h-4 text-primary" />
+              Export Platform
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label className="text-sm">Language</Label>
-              <Select
-                value={config.adIntelligence?.language || "ar"}
-                onValueChange={(value) =>
-                  setConfig((prev) => ({
-                    ...prev,
-                    voiceSettings: { ...prev.voiceSettings, language: value },
-                    adIntelligence: { ...prev.adIntelligence, language: value },
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-popover z-50">
-                  {LANGUAGES.map((lang) => (
-                    <SelectItem key={lang.id} value={lang.id}>
-                      <span className="flex items-center gap-2">
-                        <span>{lang.flag}</span>
-                        <span>{lang.label}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm">Target Market</Label>
-              <Select
-                value={config.adIntelligence?.market || "saudi"}
-                onValueChange={(value) =>
-                  setConfig((prev) => ({
-                    ...prev,
-                    adIntelligence: { ...prev.adIntelligence, market: value },
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-popover z-50">
-                  {MARKETS.map((market) => (
-                    <SelectItem key={market.id} value={market.id}>
-                      <span className="flex items-center gap-2">
-                        <span>{market.emoji}</span>
-                        <span>{market.label}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm">Export Platform</Label>
+              <Label className="text-sm">Platform & Aspect Ratio</Label>
               <Select
                 value={config.adIntelligence?.platform || "tiktok"}
                 onValueChange={(value) => {
@@ -273,6 +226,14 @@ export const AICreativeConfigPanel = ({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            
+            {/* Info about inherited audience */}
+            <div className="p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground">
+              <p className="flex items-center gap-2">
+                <Info className="w-3 h-3" />
+                Language & Country are set globally in Settings → Preferences
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -335,10 +296,11 @@ export const AICreativeConfigPanel = ({
         <Button
           onClick={handleGenerate}
           size="lg"
+          disabled={!audienceConfigured || audienceLoading}
           className="bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 px-8"
         >
           <Zap className="w-5 h-5 mr-2" />
-          Generate {config.count} AI Variations
+          Generate Plan ({config.count} variations)
         </Button>
       </div>
     </div>
