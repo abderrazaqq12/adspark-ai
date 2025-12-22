@@ -959,6 +959,8 @@ export type Database = {
         Row: {
           audience: string | null
           created_at: string | null
+          google_drive_folder_id: string | null
+          google_drive_folder_link: string | null
           id: string
           landing_page_html_output: string | null
           landing_page_text_output: Json | null
@@ -978,6 +980,8 @@ export type Database = {
         Insert: {
           audience?: string | null
           created_at?: string | null
+          google_drive_folder_id?: string | null
+          google_drive_folder_link?: string | null
           id?: string
           landing_page_html_output?: string | null
           landing_page_text_output?: Json | null
@@ -997,6 +1001,8 @@ export type Database = {
         Update: {
           audience?: string | null
           created_at?: string | null
+          google_drive_folder_id?: string | null
+          google_drive_folder_link?: string | null
           id?: string
           landing_page_html_output?: string | null
           landing_page_text_output?: Json | null

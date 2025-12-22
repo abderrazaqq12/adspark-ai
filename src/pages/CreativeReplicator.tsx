@@ -27,6 +27,8 @@ import { EnhancedResultsGallery } from "@/components/replicator/EnhancedResultsG
 import { ProcessingTimeline } from "@/components/replicator/ProcessingTimeline";
 import { PipelineProgressPanel } from "@/components/replicator/PipelineProgressPanel";
 import { RenderDebugPanel } from "@/components/replicator/RenderDebugPanel";
+import { ProjectContextBanner } from "@/components/project";
+import { useGlobalProject } from "@/contexts/GlobalProjectContext";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AdvancedEngineRouter, RoutingRequest, RenderingMode } from "@/lib/video-engines/AdvancedRouter";
@@ -126,6 +128,9 @@ export interface GeneratedVideo {
 type StepId = "upload" | "settings" | "plan" | "generate" | "results";
 
 const CreativeReplicator = () => {
+  // Global project context
+  const { activeProject, hasActiveProject } = useGlobalProject();
+  
   // Global audience context (inherited from Settings)
   const { resolved: audience, isLoading: audienceLoading } = useAudience();
   
@@ -611,11 +616,14 @@ const CreativeReplicator = () => {
 
   const backend = getBackendStatus();
 
-  // Generate button disabled conditions
-  const generateDisabled = !creativePlan || creativePlan.status !== 'validated' || isGenerating;
+  // Generate button disabled conditions - also requires active project
+  const generateDisabled = !creativePlan || creativePlan.status !== 'validated' || isGenerating || !hasActiveProject;
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
+      {/* Project Context Banner - REQUIRED */}
+      <ProjectContextBanner toolName="Creative Replicator" />
+
       {/* Audience Warning Banner */}
       {!audienceLoading && !audienceConfigured && (
         <Alert variant="destructive" className="border-destructive/50">

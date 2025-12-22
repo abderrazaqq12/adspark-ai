@@ -8,6 +8,7 @@ import { Layout } from "./components/Layout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ProjectProvider } from "./contexts/ProjectContext";
 import { AudienceProvider } from "./contexts/AudienceContext";
+import { GlobalProjectProvider } from "./contexts/GlobalProjectContext";
 import Dashboard from "./pages/Dashboard";
 import CreateVideo from "./pages/CreateVideo";
 import Projects from "./pages/Projects";
@@ -38,27 +39,29 @@ const App = () => (
             <Route path="/*" element={
               <ProtectedRoute>
                 <AudienceProvider>
-                  <ProjectProvider>
-                    <Layout>
-                    <Routes>
-                      <Route path="/" element={<Dashboard />} />
-                      <Route path="/create" element={<CreateVideo />} />
-                      <Route path="/quick-generate" element={<CreateVideo />} />
-                      <Route path="/creative-replicator" element={<CreativeReplicator />} />
-                      <Route path="/creative-scale" element={<CreativeScale />} />
-                      <Route path="/projects" element={<Projects />} />
-                      <Route path="/gallery" element={<Gallery />} />
-                      <Route path="/videos" element={<Videos />} />
-                      <Route path="/scene-builder" element={<SceneBuilder />} />
-                      <Route path="/engines" element={<Engines />} />
-                      <Route path="/settings" element={<Settings />} />
-                      <Route path="/analytics" element={<Analytics />} />
-                      <Route path="/templates" element={<Templates />} />
-                      <Route path="/ai-tools" element={<AITools />} />
-                      <Route path="*" element={<NotFound />} />
-                      </Routes>
-                    </Layout>
-                  </ProjectProvider>
+                  <GlobalProjectProvider>
+                    <ProjectProvider>
+                      <Layout>
+                      <Routes>
+                        <Route path="/" element={<Dashboard />} />
+                        <Route path="/create" element={<CreateVideo />} />
+                        <Route path="/quick-generate" element={<CreateVideo />} />
+                        <Route path="/creative-replicator" element={<CreativeReplicator />} />
+                        <Route path="/creative-scale" element={<CreativeScale />} />
+                        <Route path="/projects" element={<Projects />} />
+                        <Route path="/gallery" element={<Gallery />} />
+                        <Route path="/videos" element={<Videos />} />
+                        <Route path="/scene-builder" element={<SceneBuilder />} />
+                        <Route path="/engines" element={<Engines />} />
+                        <Route path="/settings" element={<Settings />} />
+                        <Route path="/analytics" element={<Analytics />} />
+                        <Route path="/templates" element={<Templates />} />
+                        <Route path="/ai-tools" element={<AITools />} />
+                        <Route path="*" element={<NotFound />} />
+                        </Routes>
+                      </Layout>
+                    </ProjectProvider>
+                  </GlobalProjectProvider>
                 </AudienceProvider>
               </ProtectedRoute>
             } />
