@@ -59,7 +59,7 @@ interface StatCardProps {
   label: string;
   value: string | number;
   icon?: LucideIcon;
-  trend?: { value: number; isPositive: boolean };
+  trend?: { value: string; positive?: boolean };
   className?: string;
 }
 
@@ -76,11 +76,8 @@ export function StatCard({ label, value, icon: Icon, trend, className }: StatCar
             <p className="text-sm text-muted-foreground">{label}</p>
             <p className="text-2xl font-semibold text-foreground mt-1">{value}</p>
             {trend && (
-              <p className={cn(
-                "text-xs mt-1",
-                trend.isPositive ? "text-success" : "text-destructive"
-              )}>
-                {trend.isPositive ? "+" : ""}{trend.value}%
+              <p className="text-xs text-muted-foreground mt-1">
+                {trend.value}
               </p>
             )}
           </div>
