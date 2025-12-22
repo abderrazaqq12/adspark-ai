@@ -27,6 +27,14 @@ export interface Project {
   updated_at: string | null;
 }
 
+export interface UploadProgress {
+  id: string;
+  fileName: string;
+  assetType: AssetType;
+  status: 'uploading' | 'completed' | 'failed';
+  startedAt: number;
+}
+
 interface GlobalProjectContextType {
   // Current active project
   activeProject: Project | null;
@@ -37,6 +45,11 @@ interface GlobalProjectContextType {
   // Loading states
   isLoading: boolean;
   isCreating: boolean;
+  
+  // Upload tracking
+  activeUploads: UploadProgress[];
+  uploadCount: number;
+  isUploading: boolean;
   
   // Actions
   selectProject: (projectId: string) => Promise<void>;
@@ -63,6 +76,7 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [activeUploads, setActiveUploads] = useState<UploadProgress[]>([]);
 
   // Load projects and restore active project on mount
   useEffect(() => {
@@ -289,7 +303,7 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
     return result.success;
   }, [activeProject]);
 
-  // Upload asset in background (fire and forget)
+  // Upload asset in background with tracking
   const uploadAssetBackground = useCallback((
     assetType: AssetType,
     fileName: string,
@@ -301,6 +315,18 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const uploadId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Add to active uploads
+    setActiveUploads(prev => [...prev, {
+      id: uploadId,
+      fileName,
+      assetType,
+      status: 'uploading',
+      startedAt: Date.now(),
+    }]);
+
+    // Start background upload
     uploadAssetsToDriveBackground([{
       projectId: activeProject.id,
       assetType,
@@ -308,14 +334,41 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
       fileUrl,
       mimeType: getMimeTypeFromUrl(fileUrl),
       metadata,
-    }]);
+    }]).then(() => {
+      // Mark as completed
+      setActiveUploads(prev => prev.map(u => 
+        u.id === uploadId ? { ...u, status: 'completed' } : u
+      ));
+      
+      // Clean up after 10 seconds
+      setTimeout(() => {
+        setActiveUploads(prev => prev.filter(u => u.id !== uploadId));
+      }, 10000);
+    }).catch(() => {
+      // Mark as failed
+      setActiveUploads(prev => prev.map(u => 
+        u.id === uploadId ? { ...u, status: 'failed' } : u
+      ));
+      
+      // Clean up after 30 seconds
+      setTimeout(() => {
+        setActiveUploads(prev => prev.filter(u => u.id !== uploadId));
+      }, 30000);
+    });
   }, [activeProject]);
+
+  // Computed values
+  const isUploading = activeUploads.some(u => u.status === 'uploading');
+  const uploadCount = activeUploads.filter(u => u.status === 'uploading').length;
 
   const value: GlobalProjectContextType = {
     activeProject,
     projects,
     isLoading,
     isCreating,
+    activeUploads,
+    uploadCount,
+    isUploading,
     selectProject,
     createProject,
     refreshProjects,

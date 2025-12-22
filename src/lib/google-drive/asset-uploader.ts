@@ -82,23 +82,24 @@ export async function uploadAssetToDrive(options: UploadOptions): Promise<Upload
 
 /**
  * Upload multiple assets to Google Drive in the background
- * Does not block the calling function
+ * Returns a promise that resolves when all uploads complete
  */
-export function uploadAssetsToDriveBackground(assets: UploadOptions[]): void {
-  // Fire and forget - don't await
-  Promise.all(
+export async function uploadAssetsToDriveBackground(assets: UploadOptions[]): Promise<UploadResult[]> {
+  const results = await Promise.all(
     assets.map(asset => 
       uploadAssetToDrive(asset).catch(err => {
         console.error(`[DriveUploader] Background upload failed for ${asset.fileName}:`, err);
         return { success: false, error: String(err), skipped: false } as UploadResult;
       })
     )
-  ).then(results => {
-    const successful = results.filter(r => r.success).length;
-    const skipped = results.filter(r => r.skipped === true).length;
-    const failed = results.filter(r => !r.success && r.skipped !== true).length;
-    console.log(`[DriveUploader] Background upload complete: ${successful} success, ${skipped} skipped, ${failed} failed`);
-  });
+  );
+  
+  const successful = results.filter(r => r.success).length;
+  const skipped = results.filter(r => r.skipped === true).length;
+  const failed = results.filter(r => !r.success && r.skipped !== true).length;
+  console.log(`[DriveUploader] Background upload complete: ${successful} success, ${skipped} skipped, ${failed} failed`);
+  
+  return results;
 }
 
 /**
