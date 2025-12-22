@@ -186,11 +186,13 @@ export const CREATIVE_REPLICATOR_STEPS: StepConfig[] = [
 ];
 
 export const STUDIO_STEPS: StepConfig[] = [
-  { id: 1, label: 'Product', description: 'Enter product info', icon: Upload },
-  { id: 2, label: 'Script', description: 'Generate scripts', icon: Search },
-  { id: 3, label: 'Assets', description: 'Generate visuals', icon: Target },
-  { id: 4, label: 'Voice', description: 'Add voiceover', icon: Play },
-  { id: 5, label: 'Export', description: 'Final output', icon: CheckCircle2 },
+  { id: 0, label: 'Product Input', description: 'Product details & targeting', icon: Upload },
+  { id: 1, label: 'Images', description: 'Product images & mockups', icon: Target },
+  { id: 2, label: 'Landing Page', description: 'Marketing angles', icon: Search },
+  { id: 3, label: 'Voiceover', description: 'Script text & audio', icon: Play },
+  { id: 4, label: 'Scene Builder', description: 'AI scene generation', icon: Target },
+  { id: 5, label: 'Auto-Ad Factory', description: 'Mass-produce ads', icon: Play },
+  { id: 6, label: 'Export', description: 'Multi-format export', icon: CheckCircle2 },
 ];
 
 export const AI_TOOLS_STEPS: StepConfig[] = [
