@@ -15,6 +15,23 @@
  *   GET  /api/jobs/:id    - Check job status
  */
 
+// ============================================
+// SECURITY: ENV VALIDATION (MUST BE FIRST)
+// ============================================
+import { validateEnvironment } from './env-validator.js';
+
+// Validate environment before starting server
+// This enforces the Architectural Security Contract
+try {
+  validateEnvironment();
+} catch (error) {
+  console.error('[FATAL] Environment validation failed:', error.message);
+  process.exit(1);
+}
+
+// ============================================
+// IMPORTS
+// ============================================
 import express from 'express';
 import multer from 'multer';
 import { spawn, execSync } from 'child_process';
@@ -972,19 +989,19 @@ const CONNECTION_PROVIDERS = {
 function checkProviderConnection(providerId) {
   const provider = CONNECTION_PROVIDERS[providerId];
   if (!provider) return { connected: false, error: 'Unknown provider' };
-  
+
   // Check if ANY of the required env vars are set (some providers have alternatives)
   const hasAnyKey = provider.envVars.some(envVar => {
     const value = process.env[envVar];
     return value && value.trim().length > 0;
   });
-  
+
   // Check which specific vars are set
   const configuredVars = provider.envVars.filter(envVar => {
     const value = process.env[envVar];
     return value && value.trim().length > 0;
   });
-  
+
   return {
     connected: hasAnyKey,
     configuredVars: configuredVars.length > 0 ? configuredVars : undefined,
@@ -998,9 +1015,9 @@ function checkProviderConnection(providerId) {
  */
 app.get('/api/connections/status', (req, res) => {
   console.log('[Connections] Fetching connection status for all providers');
-  
+
   const connections = {};
-  
+
   for (const [providerId, provider] of Object.entries(CONNECTION_PROVIDERS)) {
     const status = checkProviderConnection(providerId);
     connections[providerId] = {
@@ -1013,7 +1030,7 @@ app.get('/api/connections/status', (req, res) => {
       ...(status.error && { error: status.error })
     };
   }
-  
+
   res.json({
     ok: true,
     connections,
@@ -1028,14 +1045,14 @@ app.get('/api/connections/status', (req, res) => {
 app.get('/api/connections/status/:providerId', (req, res) => {
   const { providerId } = req.params;
   console.log(`[Connections] Fetching status for provider: ${providerId}`);
-  
+
   const provider = CONNECTION_PROVIDERS[providerId];
   if (!provider) {
     return jsonError(res, 404, 'PROVIDER_NOT_FOUND', `Unknown provider: ${providerId}`);
   }
-  
+
   const status = checkProviderConnection(providerId);
-  
+
   res.json({
     ok: true,
     connection: {
@@ -1059,15 +1076,15 @@ app.get('/api/connections/status/:providerId', (req, res) => {
 app.post('/api/connections/connect/:providerId', async (req, res) => {
   const { providerId } = req.params;
   console.log(`[Connections] Connect request for provider: ${providerId}`);
-  
+
   const provider = CONNECTION_PROVIDERS[providerId];
   if (!provider) {
     return jsonError(res, 404, 'PROVIDER_NOT_FOUND', `Unknown provider: ${providerId}`);
   }
-  
+
   // Check current status
   const status = checkProviderConnection(providerId);
-  
+
   if (status.connected) {
     return res.json({
       ok: true,
@@ -1075,22 +1092,22 @@ app.post('/api/connections/connect/:providerId', async (req, res) => {
       connected: true
     });
   }
-  
+
   // Handle OAuth providers
   if (providerId === 'google_drive') {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/oauth/google/callback`;
-    
+
     if (!clientId) {
       return jsonError(res, 503, 'NOT_CONFIGURED', 'Google OAuth is not configured on this server. Contact administrator.');
     }
-    
+
     // Build OAuth URL
     const scopes = [
       'https://www.googleapis.com/auth/drive.file',
       'https://www.googleapis.com/auth/drive.metadata.readonly'
     ].join(' ');
-    
+
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
       `client_id=${encodeURIComponent(clientId)}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
@@ -1098,7 +1115,7 @@ app.post('/api/connections/connect/:providerId', async (req, res) => {
       `&scope=${encodeURIComponent(scopes)}` +
       `&access_type=offline` +
       `&prompt=consent`;
-    
+
     return res.json({
       ok: true,
       action: 'redirect',
@@ -1106,9 +1123,9 @@ app.post('/api/connections/connect/:providerId', async (req, res) => {
       message: 'Redirect user to Google OAuth'
     });
   }
-  
+
   // For API key providers, they need to be configured in .env
-  return jsonError(res, 503, 'NOT_CONFIGURED', 
+  return jsonError(res, 503, 'NOT_CONFIGURED',
     `${provider.name} requires API key configuration. Missing: ${status.missingVars?.join(', ')}. Contact administrator.`
   );
 });
@@ -1120,30 +1137,30 @@ app.post('/api/connections/connect/:providerId', async (req, res) => {
 app.post('/api/connections/disconnect/:providerId', async (req, res) => {
   const { providerId } = req.params;
   console.log(`[Connections] Disconnect request for provider: ${providerId}`);
-  
+
   const provider = CONNECTION_PROVIDERS[providerId];
   if (!provider) {
     return jsonError(res, 404, 'PROVIDER_NOT_FOUND', `Unknown provider: ${providerId}`);
   }
-  
+
   // For OAuth providers, we could clear refresh tokens
   // For API key providers, disconnection is handled via .env configuration
-  
+
   if (providerId === 'google_drive') {
     // In a real implementation, this would:
     // 1. Revoke the refresh token with Google
     // 2. Clear the stored refresh token from secure storage
     console.log('[Connections] Google Drive disconnect requested - tokens should be revoked');
-    
+
     return res.json({
       ok: true,
       message: 'Google Drive disconnected. Tokens have been revoked.',
       connected: false
     });
   }
-  
+
   // API key providers can't be "disconnected" without modifying .env
-  return jsonError(res, 400, 'CANNOT_DISCONNECT', 
+  return jsonError(res, 400, 'CANNOT_DISCONNECT',
     `${provider.name} uses API key authentication. To disconnect, remove the API key from server configuration.`
   );
 });
@@ -1154,21 +1171,21 @@ app.post('/api/connections/disconnect/:providerId', async (req, res) => {
  */
 app.get('/api/oauth/google/callback', async (req, res) => {
   const { code, error } = req.query;
-  
+
   if (error) {
     console.error('[OAuth] Google auth error:', error);
     return res.redirect('/?oauth_error=' + encodeURIComponent(error));
   }
-  
+
   if (!code) {
     return res.redirect('/?oauth_error=no_code');
   }
-  
+
   try {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/oauth/google/callback`;
-    
+
     // Exchange code for tokens
     const fetch = (await import('node-fetch')).default;
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
@@ -1182,21 +1199,21 @@ app.get('/api/oauth/google/callback', async (req, res) => {
         grant_type: 'authorization_code'
       })
     });
-    
+
     const tokens = await tokenRes.json();
-    
+
     if (tokens.error) {
       console.error('[OAuth] Token exchange error:', tokens);
       return res.redirect('/?oauth_error=' + encodeURIComponent(tokens.error));
     }
-    
+
     // Store refresh token securely (in production, this would go to secure storage)
     console.log('[OAuth] Google tokens received successfully');
     console.log('[OAuth] Refresh token needs to be stored in GOOGLE_REFRESH_TOKEN env var');
-    
+
     // Redirect to settings page with success
     res.redirect('/settings?oauth_success=google_drive');
-    
+
   } catch (err) {
     console.error('[OAuth] Callback error:', err);
     res.redirect('/?oauth_error=' + encodeURIComponent(err.message));
@@ -1215,7 +1232,7 @@ app.get('/api/oauth/google/callback', async (req, res) => {
 app.get('/api/history', (req, res) => {
   const { projectId, tool } = req.query;
   console.log(`[History] Fetching history for project: ${projectId}, tool: ${tool}`);
-  
+
   // Get relevant jobs from in-memory store
   const allJobs = Array.from(jobs.values());
   const filteredJobs = allJobs.filter(job => {
@@ -1223,7 +1240,7 @@ app.get('/api/history', (req, res) => {
     if (tool && job.type !== tool) return false;
     return true;
   }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  
+
   res.json({
     ok: true,
     history: filteredJobs.map(job => ({
@@ -1247,31 +1264,31 @@ app.get('/api/history', (req, res) => {
 app.delete('/api/history', async (req, res) => {
   const { projectId, tool, scope } = req.body;
   console.log(`[History] Clear request - projectId: ${projectId}, tool: ${tool}, scope: ${scope}`);
-  
+
   const deletedItems = {
     jobs: 0,
     logs: 0,
     pipelines: 0,
     tempFiles: 0
   };
-  
+
   try {
     // 1. Delete jobs from in-memory queue
     const jobsToDelete = [];
     for (const [jobId, job] of jobs.entries()) {
-      const shouldDelete = 
+      const shouldDelete =
         (scope === 'all') ||
         (projectId && job.input?.projectId === projectId) ||
         (tool && job.type === tool);
-      
+
       if (shouldDelete && job.status !== 'running') {
         jobsToDelete.push(jobId);
       }
     }
-    
+
     for (const jobId of jobsToDelete) {
       const job = jobs.get(jobId);
-      
+
       // Clean up temp files associated with this job
       if (job?.tempFiles && Array.isArray(job.tempFiles)) {
         for (const tempFile of job.tempFiles) {
@@ -1286,17 +1303,17 @@ app.delete('/api/history', async (req, res) => {
           }
         }
       }
-      
+
       jobs.delete(jobId);
       deletedItems.jobs++;
     }
-    
+
     // 2. Remove from pending queue
     const pendingBefore = pendingQueue.length;
     pendingQueue.length = 0;
     pendingQueue.push(...pendingQueue.filter(id => !jobsToDelete.includes(id)));
     deletedItems.pipelines = pendingBefore - pendingQueue.length;
-    
+
     // 3. Clean up project-specific temp directory
     if (projectId) {
       const projectTempDir = path.join(TEMP_DIR, projectId);
@@ -1313,15 +1330,15 @@ app.delete('/api/history', async (req, res) => {
         } catch (e) { /* ignore if not empty */ }
       }
     }
-    
+
     console.log(`[History] Cleared: ${deletedItems.jobs} jobs, ${deletedItems.tempFiles} temp files`);
-    
+
     res.json({
       ok: true,
       message: 'History cleared successfully',
       deleted: deletedItems
     });
-    
+
   } catch (err) {
     console.error('[History] Clear failed:', err);
     jsonError(res, 500, 'CLEAR_FAILED', err.message);
@@ -1335,14 +1352,14 @@ app.delete('/api/history', async (req, res) => {
 app.get('/api/files', (req, res) => {
   const { projectId, type } = req.query;
   console.log(`[Files] Listing files for project: ${projectId}, type: ${type}`);
-  
+
   const files = [];
-  
+
   // Scan uploads directory
-  const scanDir = projectId 
+  const scanDir = projectId
     ? path.join(UPLOAD_DIR, projectId)
     : UPLOAD_DIR;
-  
+
   if (fs.existsSync(scanDir)) {
     const dirFiles = fs.readdirSync(scanDir, { withFileTypes: true });
     for (const dirent of dirFiles) {
@@ -1350,11 +1367,11 @@ app.get('/api/files', (req, res) => {
         const filePath = path.join(scanDir, dirent.name);
         const stats = fs.statSync(filePath);
         const ext = path.extname(dirent.name).toLowerCase();
-        const fileType = 
+        const fileType =
           ['.mp4', '.webm', '.mov', '.avi'].includes(ext) ? 'video' :
-          ['.jpg', '.jpeg', '.png', '.webp'].includes(ext) ? 'image' :
-          'other';
-        
+            ['.jpg', '.jpeg', '.png', '.webp'].includes(ext) ? 'image' :
+              'other';
+
         if (!type || type === fileType) {
           files.push({
             name: dirent.name,
@@ -1368,12 +1385,12 @@ app.get('/api/files', (req, res) => {
       }
     }
   }
-  
+
   // Scan outputs directory
-  const outputDir = projectId 
+  const outputDir = projectId
     ? path.join(OUTPUT_DIR, projectId)
     : OUTPUT_DIR;
-  
+
   if (fs.existsSync(outputDir)) {
     const dirFiles = fs.readdirSync(outputDir, { withFileTypes: true });
     for (const dirent of dirFiles) {
@@ -1391,7 +1408,7 @@ app.get('/api/files', (req, res) => {
       }
     }
   }
-  
+
   res.json({
     ok: true,
     files,
@@ -1407,11 +1424,11 @@ app.get('/api/files', (req, res) => {
 app.delete('/api/files', async (req, res) => {
   const { projectId, fileTypes, scope } = req.body;
   console.log(`[Files] Delete request - projectId: ${projectId}, types: ${fileTypes}, scope: ${scope}`);
-  
+
   if (!projectId && scope !== 'orphaned') {
     return jsonError(res, 400, 'PROJECT_REQUIRED', 'projectId is required unless scope is "orphaned"');
   }
-  
+
   const deleted = {
     videos: 0,
     images: 0,
@@ -1419,16 +1436,16 @@ app.delete('/api/files', async (req, res) => {
     orphaned: 0,
     totalBytes: 0
   };
-  
+
   try {
     const typesToDelete = fileTypes || ['video', 'image', 'output'];
-    
+
     // Delete from uploads
     if (typesToDelete.includes('video') || typesToDelete.includes('image')) {
-      const uploadDir = projectId 
+      const uploadDir = projectId
         ? path.join(UPLOAD_DIR, projectId)
         : UPLOAD_DIR;
-      
+
       if (fs.existsSync(uploadDir)) {
         const files = fs.readdirSync(uploadDir);
         for (const file of files) {
@@ -1438,9 +1455,9 @@ app.delete('/api/files', async (req, res) => {
             const ext = path.extname(file).toLowerCase();
             const isVideo = ['.mp4', '.webm', '.mov', '.avi'].includes(ext);
             const isImage = ['.jpg', '.jpeg', '.png', '.webp'].includes(ext);
-            
-            if ((isVideo && typesToDelete.includes('video')) || 
-                (isImage && typesToDelete.includes('image'))) {
+
+            if ((isVideo && typesToDelete.includes('video')) ||
+              (isImage && typesToDelete.includes('image'))) {
               fs.unlinkSync(filePath);
               deleted.totalBytes += stats.size;
               if (isVideo) deleted.videos++;
@@ -1451,13 +1468,13 @@ app.delete('/api/files', async (req, res) => {
         }
       }
     }
-    
+
     // Delete outputs
     if (typesToDelete.includes('output')) {
-      const outputDir = projectId 
+      const outputDir = projectId
         ? path.join(OUTPUT_DIR, projectId)
         : OUTPUT_DIR;
-      
+
       if (fs.existsSync(outputDir)) {
         const files = fs.readdirSync(outputDir);
         for (const file of files) {
@@ -1472,21 +1489,21 @@ app.delete('/api/files', async (req, res) => {
         }
       }
     }
-    
+
     // Handle orphaned files (no active job reference)
     if (scope === 'orphaned') {
       const activeJobIds = new Set(Array.from(jobs.values()).map(j => j.id));
-      
+
       // Scan temp directory for orphans
       if (fs.existsSync(TEMP_DIR)) {
         const tempFiles = fs.readdirSync(TEMP_DIR, { withFileTypes: true });
         for (const dirent of tempFiles) {
           if (dirent.isFile()) {
             // Check if file is referenced by any job
-            const isOrphan = !Array.from(jobs.values()).some(job => 
+            const isOrphan = !Array.from(jobs.values()).some(job =>
               job.tempFiles?.includes(path.join(TEMP_DIR, dirent.name))
             );
-            
+
             if (isOrphan) {
               const filePath = path.join(TEMP_DIR, dirent.name);
               const stats = fs.statSync(filePath);
@@ -1499,15 +1516,15 @@ app.delete('/api/files', async (req, res) => {
         }
       }
     }
-    
+
     console.log(`[Files] Cleanup complete: ${JSON.stringify(deleted)}`);
-    
+
     res.json({
       ok: true,
       message: 'Files deleted successfully',
       deleted
     });
-    
+
   } catch (err) {
     console.error('[Files] Delete failed:', err);
     jsonError(res, 500, 'DELETE_FAILED', err.message);
@@ -1520,10 +1537,10 @@ app.delete('/api/files', async (req, res) => {
  */
 app.get('/api/pipeline/status', (req, res) => {
   const { projectId } = req.query;
-  
+
   const queuedJobs = pendingQueue.length;
   const currentJobInfo = currentJob ? jobs.get(currentJob) : null;
-  
+
   res.json({
     ok: true,
     pipeline: {
@@ -1546,16 +1563,16 @@ app.get('/api/pipeline/status', (req, res) => {
  */
 app.delete('/api/pipeline', (req, res) => {
   const { force } = req.body;
-  
+
   if (currentJob && !force) {
     return jsonError(res, 400, 'JOB_RUNNING', 'A job is currently running. Use force=true to clear anyway.');
   }
-  
+
   const clearedCount = pendingQueue.length;
   pendingQueue.length = 0;
-  
+
   console.log(`[Pipeline] Cleared ${clearedCount} pending jobs`);
-  
+
   res.json({
     ok: true,
     message: `Cleared ${clearedCount} pending jobs`,

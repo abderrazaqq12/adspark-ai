@@ -3,19 +3,29 @@ import { createClient } from '@supabase/supabase-js';
 // Supabase client for cost tracking
 let supabase = null;
 
-// Check for VITE_ prefixed or standard env vars (Docker passes standard, Vite passes VITE_)
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+// ============================================
+// SECURITY: Backend-Only Secret Access
+// ============================================
+// NEVER use VITE_ prefixed vars for service role keys
+// This prevents accidental frontend bundle inclusion
+// ENV validator ensures these exist before server starts
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (supabaseUrl && supabaseKey) {
     try {
         supabase = createClient(supabaseUrl, supabaseKey);
-        console.log('[Supabase] Connected for analytics tracking');
+        console.log('[Supabase] ✅ Connected for analytics tracking');
     } catch (e) {
-        console.error('[Supabase] Failed to initialize:', e.message);
+        console.error('[Supabase] ❌ Failed to initialize:', e.message);
+        // ENV validator should have caught this, but double-check
+        throw new Error('Supabase initialization failed - check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
     }
 } else {
-    console.warn('[Supabase] Not configured - analytics will not be tracked (Missing URL or Service Role Key)');
+    // This should never happen if ENV validator ran
+    console.error('[Supabase] ❌ FATAL: Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+    throw new Error('Supabase configuration missing - ENV validator should have caught this');
 }
 
 // Cost tracking helper
