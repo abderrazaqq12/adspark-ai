@@ -32,6 +32,7 @@ import { ConfigPanel } from './ConfigPanel';
 import { AssetUploader } from './AssetUploader';
 import { SceneCard } from './SceneCard';
 import { DebugPanel } from './DebugPanel';
+import { RealTimeCostEstimator } from './RealTimeCostEstimator';
 import { SmartScenePlan, SceneDuration, SceneStructure } from '@/lib/smart-scene-builder/types';
 
 interface SmartSceneBuilderV2Props {
@@ -260,6 +261,15 @@ export function SmartSceneBuilderV2({ projectId, onProceedToAssembly }: SmartSce
             <h3 className="text-sm font-semibold">Output Settings & Engine Strategy</h3>
           </div>
           <ConfigPanel config={config} onConfigChange={updateConfig} />
+          
+          {/* Real-Time Cost Estimator */}
+          <div className="mt-4">
+            <RealTimeCostEstimator 
+              scenes={scenes} 
+              config={config} 
+              assets={assets} 
+            />
+          </div>
         </section>
 
         <Separator />

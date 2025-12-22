@@ -5,3 +5,4 @@ export { SceneCard } from './SceneCard';
 export { ConfigPanel } from './ConfigPanel';
 export { AssetUploader } from './AssetUploader';
 export { DebugPanel } from './DebugPanel';
+export { RealTimeCostEstimator } from './RealTimeCostEstimator';
