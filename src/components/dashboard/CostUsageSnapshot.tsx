@@ -2,6 +2,9 @@
  * Cost & Usage Snapshot - SECTION 4
  * Shows aggregated AI + infra costs with breakdown
  * READ-ONLY - Estimates only, not invoices
+ * 
+ * SEVERITY SIGNALS:
+ * - Warning: Cost tracking inactive
  */
 
 import { useEffect, useState } from 'react';
@@ -21,6 +24,7 @@ import {
   HardDrive,
   Sparkles
 } from 'lucide-react';
+import { useDashboardSeverity } from '@/hooks/useDashboardSeverity';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
@@ -57,6 +61,7 @@ const categoryConfig: Record<keyof CostBreakdown, {
 };
 
 export function CostUsageSnapshot() {
+  const { addSignal, removeSignal } = useDashboardSeverity();
   const [costData, setCostData] = useState<CostData>({
     todayTotal: 0,
     yesterdayTotal: 0,
@@ -67,6 +72,21 @@ export function CostUsageSnapshot() {
     isAvailable: true
   });
   const [isLoading, setIsLoading] = useState(true);
+
+  // Report cost tracking warning
+  useEffect(() => {
+    if (!isLoading && !costData.isAvailable) {
+      addSignal({
+        id: 'cost-tracking-inactive',
+        component: 'CostUsageSnapshot',
+        level: 'warning',
+        message: 'Cost tracking is inactive - backend not responding',
+        blocksOutput: false
+      });
+    } else {
+      removeSignal('cost-tracking-inactive');
+    }
+  }, [isLoading, costData.isAvailable, addSignal, removeSignal]);
 
   useEffect(() => {
     fetchCostData();

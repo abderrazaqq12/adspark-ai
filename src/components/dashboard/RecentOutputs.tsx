@@ -2,6 +2,9 @@
  * Recent Outputs - SECTION 5
  * Shows last 5 generated outputs
  * READ-ONLY - View links only
+ * 
+ * SEVERITY DISPLAY:
+ * - Shows "LOCAL ONLY" badge when Drive not linked
  */
 
 import { useEffect, useState } from 'react';
@@ -20,6 +23,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useGlobalProject } from '@/contexts/GlobalProjectContext';
 import { formatDistanceToNow } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 interface RecentOutput {
   id: string;
@@ -199,11 +203,17 @@ export function RecentOutputs() {
             {outputs.map(output => {
               const config = typeConfig[output.type];
               const Icon = config.icon;
+              const isSavedLocally = !output.driveLink;
               
               return (
                 <div 
                   key={output.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/50 hover:bg-muted/50 transition-colors"
+                  className={cn(
+                    "flex items-center justify-between p-3 rounded-lg border transition-colors",
+                    isSavedLocally 
+                      ? "bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10"
+                      : "bg-muted/30 border-border/50 hover:bg-muted/50"
+                  )}
                 >
                   <div className="flex items-center gap-3">
                     <div className={`p-1.5 rounded bg-background ${config.color}`}>
@@ -217,6 +227,14 @@ export function RecentOutputs() {
                         {output.duration && (
                           <span className="text-xs text-muted-foreground">{output.duration}</span>
                         )}
+                        {isSavedLocally && (
+                          <Badge 
+                            variant="outline" 
+                            className="text-[9px] h-4 border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                          >
+                            LOCAL ONLY
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {output.projectName} · {output.tool}
@@ -229,7 +247,7 @@ export function RecentOutputs() {
                       <Clock className="w-3 h-3" />
                       {formatDistanceToNow(new Date(output.createdAt), { addSuffix: true })}
                     </div>
-                    {output.driveLink && (
+                    {output.driveLink ? (
                       <a 
                         href={output.driveLink}
                         target="_blank"
@@ -239,6 +257,10 @@ export function RecentOutputs() {
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
+                    ) : (
+                      <span className="text-[10px] text-amber-600/70 dark:text-amber-400/70">
+                        Not saved
+                      </span>
                     )}
                   </div>
                 </div>

@@ -2,8 +2,12 @@
  * Active Project Snapshot - SECTION 2
  * Shows current project context with basic info
  * READ-ONLY - No actions
+ * 
+ * SEVERITY SIGNALS:
+ * - Warning: Google Drive not linked (outputs not saved)
  */
 
+import { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -14,10 +18,31 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { useGlobalProject } from '@/contexts/GlobalProjectContext';
+import { useDashboardSeverity } from '@/hooks/useDashboardSeverity';
 import { formatDistanceToNow } from 'date-fns';
 
 export function ActiveProjectSnapshot() {
   const { activeProject, hasActiveProject, isLoading } = useGlobalProject();
+  const { addSignal, removeSignal } = useDashboardSeverity();
+
+  // Report Google Drive warning
+  useEffect(() => {
+    if (!isLoading && hasActiveProject && activeProject) {
+      if (!activeProject.google_drive_folder_link) {
+        addSignal({
+          id: 'drive-not-linked',
+          component: 'ActiveProjectSnapshot',
+          level: 'warning',
+          message: 'Google Drive not linked - outputs will NOT be saved',
+          blocksOutput: false
+        });
+      } else {
+        removeSignal('drive-not-linked');
+      }
+    } else {
+      removeSignal('drive-not-linked');
+    }
+  }, [isLoading, hasActiveProject, activeProject?.google_drive_folder_link, addSignal, removeSignal]);
 
   if (isLoading) {
     return (
