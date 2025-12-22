@@ -104,14 +104,9 @@ export const StudioGoogleDrive = ({ onNext }: StudioGoogleDriveProps) => {
                   <CheckCircle2 className="w-5 h-5 text-green-500" />
                   <div>
                     <p className="text-sm font-medium text-green-500">Connected</p>
-                    {driveStatus?.metadata?.email && (
-                      <p className="text-xs text-muted-foreground">{driveStatus.metadata.email}</p>
-                    )}
-                    {driveStatus?.metadata?.folderName && (
-                      <p className="text-xs text-muted-foreground font-mono">
-                        Folder: {driveStatus.metadata.folderName}
-                      </p>
-                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Google Drive is configured on the backend
+                    </p>
                   </div>
                 </div>
                 <Button 
