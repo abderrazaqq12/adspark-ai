@@ -22,6 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useStudioPrompts } from '@/hooks/useStudioPrompts';
 import { AudienceTargeting } from './AudienceTargeting';
+import { useAssetUpload } from '@/hooks/useAssetUpload';
 
 interface StudioVoiceoverProps {
   onNext: () => void;
@@ -57,6 +58,7 @@ const voices = [
 export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
   const { toast } = useToast();
   const { getPrompt } = useStudioPrompts();
+  const { uploadVoiceover, isUploadAvailable } = useAssetUpload();
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState('EXAVITQu4vr4xnSDxMaL');
   const [voiceModel, setVoiceModel] = useState('eleven_multilingual_v2');
@@ -154,16 +156,29 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
               }
             });
 
+            const audioUrl = response.data?.audioUrl || null;
+            const duration = response.data?.duration || 0;
+            const hasError = !!response.error;
+
             setTracks(prev => prev.map((t, idx) => 
               idx === i 
                 ? { 
                     ...t, 
-                    audioUrl: response.data?.audioUrl || null,
-                    duration: response.data?.duration || 0,
-                    status: response.error ? 'failed' : 'completed' 
+                    audioUrl,
+                    duration,
+                    status: hasError ? 'failed' : 'completed' 
                   } 
                 : t
             ));
+
+            // Auto-upload to Google Drive if available
+            if (audioUrl && !hasError && isUploadAvailable) {
+              uploadVoiceover(audioUrl, `voiceover_segment_${i + 1}`, {
+                text: newTracks[i].text.substring(0, 100),
+                voiceId: selectedVoice,
+                duration,
+              });
+            }
           } catch (error) {
           setTracks(prev => prev.map((t, idx) => 
             idx === i ? { ...t, status: 'failed' } : t
@@ -247,16 +262,29 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
         }
       });
 
+      const audioUrl = response.data?.audioUrl || null;
+      const duration = response.data?.duration || track.duration;
+      const hasError = !!response.error;
+
       setTracks(prev => prev.map(t => 
         t.id === id 
           ? { 
               ...t, 
-              audioUrl: response.data?.audioUrl || t.audioUrl,
-              duration: response.data?.duration || t.duration,
-              status: response.error ? 'failed' : 'completed' 
+              audioUrl: audioUrl || t.audioUrl,
+              duration,
+              status: hasError ? 'failed' : 'completed' 
             } 
           : t
       ));
+
+      // Auto-upload to Google Drive if available
+      if (audioUrl && !hasError && isUploadAvailable) {
+        uploadVoiceover(audioUrl, `voiceover_regenerated_${track.scriptIndex}`, {
+          text: track.text.substring(0, 100),
+          voiceId: selectedVoice,
+          duration,
+        });
+      }
     } catch (error) {
       setTracks(prev => prev.map(t => 
         t.id === id ? { ...t, status: 'failed' } : t
