@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Upload, Link2, FileText, ArrowRight, Loader2, Sheet, Database, Image as ImageIcon, X, Video, File } from 'lucide-react';
+import { Upload, Link2, FileText, ArrowRight, Loader2, Sheet, Database, Image as ImageIcon, X, Video, File, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,6 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { toast as sonnerToast } from 'sonner';
+import { useAudience } from '@/contexts/AudienceContext';
+import { CountrySelector } from '@/components/audience/CountrySelector';
+import { LANGUAGES } from '@/lib/audience/countries';
 
 interface StudioProductInputProps {
   onNext: () => void;
@@ -25,15 +28,27 @@ export const StudioProductInput = ({
   productInfo: externalProductInfo,
   onProductInfoChange 
 }: StudioProductInputProps) => {
+  // Global audience context
+  const { resolved: audience, isLoading: audienceLoading } = useAudience();
+  
   const [dataSource, setDataSource] = useState<'manual' | 'sheet'>('manual');
   const [productUrl, setProductUrl] = useState('');
   const [productName, setProductName] = useState('');
   const [description, setDescription] = useState('');
   const [mediaLinks, setMediaLinks] = useState('');
-  const [targetMarket, setTargetMarket] = useState('sa');
-  const [language, setLanguage] = useState('ar');
+  // Local overrides - initialized from global defaults
+  const [targetCountry, setTargetCountry] = useState('');
+  const [language, setLanguage] = useState('');
   const [audienceAge, setAudienceAge] = useState('25-34');
   const [audienceGender, setAudienceGender] = useState('both');
+  
+  // Sync local state with global audience when loaded
+  useEffect(() => {
+    if (!audienceLoading && audience) {
+      if (!targetCountry) setTargetCountry(audience.country);
+      if (!language) setLanguage(audience.language);
+    }
+  }, [audience, audienceLoading]);
   
   // Google Sheet state
   const [sheetUrl, setSheetUrl] = useState('');
@@ -115,8 +130,8 @@ export const StudioProductInput = ({
             setDescription(prefs.studio_description || '');
             setMediaLinks(prefs.studio_media_links || '');
           }
-          setTargetMarket(prefs.studio_target_market || 'sa');
-          setLanguage(prefs.studio_language || 'ar');
+          setTargetCountry(prefs.studio_target_country || prefs.studio_target_market || '');
+          setLanguage(prefs.studio_language || '');
           setAudienceAge(prefs.studio_audience_age || '25-34');
           setAudienceGender(prefs.studio_audience_gender || 'both');
           setSheetUrl(prefs.google_sheet_url || '');
@@ -208,7 +223,7 @@ export const StudioProductInput = ({
             studio_product_name: productName,
             studio_description: description,
             studio_media_links: mediaLinks,
-            studio_target_market: targetMarket,
+            studio_target_country: targetCountry || audience.country,
             studio_language: language,
             studio_audience_age: audienceAge,
             studio_audience_gender: audienceGender,
@@ -235,8 +250,8 @@ export const StudioProductInput = ({
               user_id: user.id,
               name: productName,
               product_name: productName,
-              language: language.split('-')[0],
-              market: targetMarket,
+              language: (language || audience.language).split('-')[0],
+              market: targetCountry || audience.country,
               audience: audienceGender,
               status: 'draft',
               settings: {
@@ -258,8 +273,8 @@ export const StudioProductInput = ({
             .update({
               name: productName,
               product_name: productName,
-              language: language.split('-')[0],
-              market: targetMarket,
+              language: (language || audience.language).split('-')[0],
+              market: targetCountry || audience.country,
               audience: audienceGender,
               settings: {
                 product_description: description,
@@ -305,37 +320,36 @@ export const StudioProductInput = ({
 
   return (
     <div className="space-y-6">
-      {/* Audience Targeting Header */}
+      {/* Audience Targeting Header - Uses Global Defaults */}
       <Card className="p-4 bg-card border-border">
-        <h3 className="font-semibold mb-3 text-foreground">Audience Targeting</h3>
+        <div className="flex items-center gap-2 mb-3">
+          <Globe className="w-4 h-4 text-primary" />
+          <h3 className="font-semibold text-foreground">Audience Targeting</h3>
+          <Badge variant="outline" className="text-xs">From Default Settings</Badge>
+        </div>
+        <p className="text-xs text-muted-foreground mb-3">
+          Using your default audience settings. Override below if needed for this session.
+        </p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Target Country</Label>
-            <Select value={targetMarket} onValueChange={setTargetMarket}>
-              <SelectTrigger className="bg-background border-border h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="gcc">🌙 GCC</SelectItem>
-                <SelectItem value="europe">🇪🇺 Europe</SelectItem>
-                <SelectItem value="latam">🌎 LATAM</SelectItem>
-              </SelectContent>
-            </Select>
+            <CountrySelector
+              value={targetCountry || audience.country}
+              onChange={setTargetCountry}
+              className="h-9"
+            />
           </div>
 
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Language</Label>
-            <Select value={language} onValueChange={setLanguage}>
+            <Select value={language || audience.language} onValueChange={setLanguage}>
               <SelectTrigger className="bg-background border-border h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ar">Arabic</SelectItem>
-                <SelectItem value="en">English</SelectItem>
-                <SelectItem value="es">Spanish</SelectItem>
-                <SelectItem value="fr">French</SelectItem>
-                <SelectItem value="de">German</SelectItem>
-                <SelectItem value="pt">Portuguese</SelectItem>
+                {LANGUAGES.map(lang => (
+                  <SelectItem key={lang.code} value={lang.code}>{lang.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
