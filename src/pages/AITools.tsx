@@ -24,7 +24,7 @@ export default function AITools() {
   const { 
     isExecuting, executionProgress, executeTool, getTools, getImageModels, getVideoModels,
     getTalkingActorModels, getPresets, currentDebug, executionTiming, executionHistory,
-    lastOutputUrl, lastOutputType, lastSuccess, estimateCost, clearHistory, getTool
+    lastOutputUrl, lastOutputType, lastSuccess, estimateCost, clearHistory, getTool, lastResults
   } = useExtendedAITools();
 
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
@@ -269,7 +269,13 @@ export default function AITools() {
             />
           )}
 
-          <OutputResultPanel outputUrl={lastOutputUrl} outputType={lastOutputType} isSuccess={lastSuccess} />
+          <OutputResultPanel 
+            outputUrl={lastOutputUrl} 
+            outputType={lastOutputType} 
+            isSuccess={lastSuccess} 
+            toolName={selectedTool ? getTool(selectedTool)?.name : undefined}
+            assetId={selectedTool ? lastResults[selectedTool]?.assetId : undefined}
+          />
           
           <AIToolsDebugPanel debug={currentDebug} selectedTool={selectedTool} estimatedCost={currentEstimatedCost} />
           
