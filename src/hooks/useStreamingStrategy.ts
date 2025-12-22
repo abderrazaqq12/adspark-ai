@@ -1,10 +1,21 @@
 /**
  * Hook for streaming strategy generation with SSE progress updates
+ * 
+ * ARCHITECTURAL CONTRACT:
+ * - NEVER returns failure state to UI
+ * - If SSE fails, uses deterministic fallback
+ * - User is NEVER blocked from proceeding
  */
 
 import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { VideoAnalysis, CreativeBlueprint } from '@/lib/creative-scale/types';
+import { 
+  makeBrainV2DeterministicDecision, 
+  generateBrainV2Variations,
+  type BrainV2StrategyObject,
+  type PlatformType
+} from '@/lib/creative-scale/brain-v2-deterministic';
 
 export interface StrategyProgress {
   step: number;
@@ -23,8 +34,9 @@ export interface VariationProgress {
 }
 
 export interface StreamingStrategyResult {
-  success: boolean;
-  blueprint?: CreativeBlueprint;
+  success: true; // ALWAYS true - we never fail
+  blueprint: CreativeBlueprint;
+  strategies?: BrainV2StrategyObject[]; // Deterministic strategies
   meta?: {
     source_analysis_id: string;
     framework: string;
@@ -35,15 +47,15 @@ export interface StreamingStrategyResult {
     platform: string;
     funnel_stage: string;
     processed_at: string;
+    is_fallback?: boolean; // True if deterministic fallback was used
   };
-  error?: string;
 }
 
 interface UseStreamingStrategyReturn {
   isStreaming: boolean;
   progress: StrategyProgress | null;
   variationProgress: VariationProgress | null;
-  error: string | null;
+  error: null; // NEVER has error - always null
   result: StreamingStrategyResult | null;
   streamStrategy: (
     analysis: VideoAnalysis,
@@ -54,15 +66,54 @@ interface UseStreamingStrategyReturn {
       platform: string;
       funnelStage: string;
     }
-  ) => Promise<StreamingStrategyResult | null>;
+  ) => Promise<StreamingStrategyResult>;
   cancel: () => void;
+}
+
+// Generate fallback blueprint from deterministic strategies
+function createFallbackBlueprint(
+  analysisId: string,
+  strategies: BrainV2StrategyObject[],
+  options: { optimizationGoal: string; platform: string }
+): CreativeBlueprint {
+  const primaryStrategy = strategies[0];
+  
+  return {
+    id: `blueprint_fallback_${Date.now()}`,
+    source_analysis_id: analysisId,
+    created_at: new Date().toISOString(),
+    framework: primaryStrategy.framework as any,
+    framework_rationale: primaryStrategy.decision_reason,
+    objective: {
+      primary_goal: options.optimizationGoal,
+      target_emotion: 'engagement',
+      key_message: `Optimized for ${options.platform}`
+    },
+    strategic_insights: [
+      `Framework: ${primaryStrategy.framework}`,
+      `Hook type: ${primaryStrategy.hook_type}`,
+      `Pacing: ${primaryStrategy.pacing}`,
+      primaryStrategy.confidence_level === 'fallback' 
+        ? 'Fallback strategy applied for reliability'
+        : `High confidence analytical decision`
+    ],
+    variation_ideas: strategies.map((s, idx) => ({
+      id: `var_${idx}`,
+      action: 'emphasize_segment' as const,
+      target_segment_type: 'hook',
+      intent: `Apply ${s.framework} framework with ${s.hook_type} hook`,
+      priority: idx === 0 ? 'high' : 'medium' as 'high' | 'medium' | 'low',
+      reasoning: s.decision_reason
+    })),
+    recommended_duration_range: { min_ms: 20000, max_ms: 35000 },
+    target_formats: ['9:16']
+  };
 }
 
 export function useStreamingStrategy(): UseStreamingStrategyReturn {
   const [isStreaming, setIsStreaming] = useState(false);
   const [progress, setProgress] = useState<StrategyProgress | null>(null);
   const [variationProgress, setVariationProgress] = useState<VariationProgress | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<StreamingStrategyResult | null>(null);
   
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -84,14 +135,48 @@ export function useStreamingStrategy(): UseStreamingStrategyReturn {
       platform: string;
       funnelStage: string;
     }
-  ): Promise<StreamingStrategyResult | null> => {
+  ): Promise<StreamingStrategyResult> => {
     setIsStreaming(true);
     setProgress(null);
     setVariationProgress(null);
-    setError(null);
     setResult(null);
 
     abortControllerRef.current = new AbortController();
+
+    // Helper to create deterministic fallback result
+    const createFallbackResult = (): StreamingStrategyResult => {
+      console.log('[Brain V2] Using deterministic fallback strategy');
+      
+      const strategies = generateBrainV2Variations({
+        platform: options.platform as PlatformType,
+        funnel_stage: options.funnelStage as 'cold' | 'warm' | 'retargeting',
+        variation_count: options.variationCount
+      });
+      
+      const blueprint = createFallbackBlueprint(
+        analysis.id,
+        strategies,
+        { optimizationGoal: options.optimizationGoal, platform: options.platform }
+      );
+      
+      return {
+        success: true,
+        blueprint,
+        strategies,
+        meta: {
+          source_analysis_id: analysis.id,
+          framework: strategies[0].framework,
+          variations_count: strategies.length,
+          provider: 'brain_v2_deterministic',
+          optimization_goal: options.optimizationGoal,
+          risk_tolerance: options.riskTolerance,
+          platform: options.platform,
+          funnel_stage: options.funnelStage,
+          processed_at: new Date().toISOString(),
+          is_fallback: true
+        }
+      };
+    };
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -119,12 +204,22 @@ export function useStreamingStrategy(): UseStreamingStrategyReturn {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        // SSE failed - use deterministic fallback (NO ERROR TO USER)
+        console.warn(`[SSE] HTTP ${response.status} - falling back to deterministic engine`);
+        const fallbackResult = createFallbackResult();
+        setResult(fallbackResult);
+        setIsStreaming(false);
+        return fallbackResult;
       }
 
       const reader = response.body?.getReader();
       if (!reader) {
-        throw new Error('No response body');
+        // No response body - use deterministic fallback
+        console.warn('[SSE] No response body - falling back to deterministic engine');
+        const fallbackResult = createFallbackResult();
+        setResult(fallbackResult);
+        setIsStreaming(false);
+        return fallbackResult;
       }
 
       const decoder = new TextDecoder();
@@ -160,14 +255,18 @@ export function useStreamingStrategy(): UseStreamingStrategyReturn {
                   console.log('[SSE] Variation:', parsed);
                   break;
                 case 'complete':
-                  finalResult = parsed;
-                  setResult(parsed);
+                  // Ensure success is always true
+                  finalResult = { ...parsed, success: true };
+                  setResult(finalResult);
                   console.log('[SSE] Complete:', parsed);
                   break;
                 case 'error':
-                  setError(parsed.message || 'Unknown error');
-                  console.error('[SSE] Error:', parsed);
-                  break;
+                  // SSE error event - use deterministic fallback (NO ERROR TO USER)
+                  console.warn('[SSE] Error event received - falling back to deterministic engine:', parsed);
+                  const fallbackOnError = createFallbackResult();
+                  setResult(fallbackOnError);
+                  setIsStreaming(false);
+                  return fallbackOnError;
               }
             } catch (e) {
               console.warn('[SSE] Parse error:', e, data);
@@ -177,20 +276,32 @@ export function useStreamingStrategy(): UseStreamingStrategyReturn {
       }
 
       setIsStreaming(false);
+      
+      // If no result from SSE, use deterministic fallback
+      if (!finalResult || !finalResult.blueprint) {
+        console.warn('[SSE] No complete event received - falling back to deterministic engine');
+        const fallbackResult = createFallbackResult();
+        setResult(fallbackResult);
+        return fallbackResult;
+      }
+      
       return finalResult;
 
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        console.log('[SSE] Request cancelled');
+        console.log('[SSE] Request cancelled - using deterministic fallback');
+        const fallbackResult = createFallbackResult();
+        setResult(fallbackResult);
         setIsStreaming(false);
-        return null;
+        return fallbackResult;
       }
       
-      const message = err instanceof Error ? err.message : 'Streaming failed';
-      setError(message);
+      // ANY error - use deterministic fallback (NEVER FAIL)
+      console.warn('[SSE] Stream error - falling back to deterministic engine:', err);
+      const fallbackResult = createFallbackResult();
+      setResult(fallbackResult);
       setIsStreaming(false);
-      console.error('[SSE] Stream error:', err);
-      return null;
+      return fallbackResult;
     }
   }, []);
 
@@ -198,7 +309,7 @@ export function useStreamingStrategy(): UseStreamingStrategyReturn {
     isStreaming,
     progress,
     variationProgress,
-    error,
+    error: null, // ALWAYS null - we never fail
     result,
     streamStrategy,
     cancel,
