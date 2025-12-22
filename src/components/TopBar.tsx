@@ -1,8 +1,8 @@
 import { ReactNode } from "react";
 import { useLocation } from "react-router-dom";
-import { Sparkles } from "lucide-react";
 import { UserProfileMenu } from "@/components/UserProfileMenu";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { GlobalProjectIndicator } from "@/components/project";
 
 interface TopBarProps {
   title?: string;
@@ -36,8 +36,10 @@ export function TopBar({ title, actions }: TopBarProps) {
           <h1 className="text-lg font-semibold text-foreground">{pageTitle}</h1>
         </div>
 
-        {/* Right: Actions + Theme + Profile */}
-        <div className="flex items-center gap-2">
+        {/* Right: Project Selector + Actions + Theme + Profile */}
+        <div className="flex items-center gap-3">
+          <GlobalProjectIndicator />
+          <div className="h-5 w-px bg-border" />
           {actions}
           <ThemeToggle />
           <UserProfileMenu />
