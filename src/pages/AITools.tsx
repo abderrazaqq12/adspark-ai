@@ -9,51 +9,40 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { 
-  Wand2, 
-  Video, 
-  Image, 
-  Sparkles, 
-  Upload, 
-  Loader2,
-  ArrowUpCircle,
-  Type,
-  RefreshCw,
-  Users,
-  Zap,
-  Play,
-  Settings2,
-  X,
-  FileVideo,
-  FileImage
+  Wand2, Video, Image, Upload, Loader2, Users, Zap, Settings2, X, FileVideo, FileImage
 } from "lucide-react";
 import { toast } from "sonner";
 import { useExtendedAITools } from "@/hooks/useExtendedAITools";
 import { supabase } from "@/integrations/supabase/client";
 import { AIToolsDebugPanel } from "@/components/ai-tools/AIToolsDebugPanel";
+import { ExecutionStatusTracker } from "@/components/ai-tools/ExecutionStatusTracker";
+import { OutputResultPanel } from "@/components/ai-tools/OutputResultPanel";
+import { OutputControlsPanel, ImageOutputSettings, VideoOutputSettings } from "@/components/ai-tools/OutputControlsPanel";
+import { ExecutionHistoryPanel } from "@/components/ai-tools/ExecutionHistoryPanel";
 
 export default function AITools() {
   const { 
-    isExecuting, 
-    executionProgress, 
-    executeTool, 
-    getTools,
-    getImageModels,
-    getVideoModels,
-    getTalkingActorModels,
-    getPresets,
-    currentDebug
+    isExecuting, executionProgress, executeTool, getTools, getImageModels, getVideoModels,
+    getTalkingActorModels, getPresets, currentDebug, executionTiming, executionHistory,
+    lastOutputUrl, lastOutputType, lastSuccess, estimateCost, clearHistory, getTool
   } = useExtendedAITools();
 
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [inputUrl, setInputUrl] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [outputUrl, setOutputUrl] = useState<string | null>(null);
   const [targetMarket, setTargetMarket] = useState("GCC");
   const [language, setLanguage] = useState("ar");
   const [activeCategory, setActiveCategory] = useState("tools");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  
+  const [imageSettings, setImageSettings] = useState<ImageOutputSettings>({
+    quality: 'standard', aspectRatio: '1:1', resolution: 'auto', numOutputs: 1
+  });
+  const [videoSettings, setVideoSettings] = useState<VideoOutputSettings>({
+    aspectRatio: '16:9', duration: 5, fps: 'auto', qualityTier: 'balanced'
+  });
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -63,64 +52,40 @@ export default function AITools() {
   const talkingActorModels = getTalkingActorModels();
   const presets = getPresets();
 
-  // Determine accepted file types based on active category
   const getAcceptedFileTypes = () => {
     switch (activeCategory) {
-      case "video":
-        return "video/*";
-      case "image":
-        return "image/*";
-      case "actor":
-        return "image/*,audio/*";
-      default:
-        return "image/*,video/*";
+      case "video": return "video/*";
+      case "image": return "image/*";
+      case "actor": return "image/*,audio/*";
+      default: return "image/*,video/*";
     }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    // Validate file type based on category
     if (activeCategory === "video" && !file.type.startsWith("video/")) {
-      toast.error("Please upload a video file for video models");
-      return;
+      toast.error("Please upload a video file"); return;
     }
     if (activeCategory === "image" && !file.type.startsWith("image/")) {
-      toast.error("Please upload an image file for image models");
-      return;
+      toast.error("Please upload an image file"); return;
     }
-
     setUploadedFile(file);
     setIsUploading(true);
-
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error("Please sign in to upload files");
-        setIsUploading(false);
-        return;
-      }
-
+      if (!user) { toast.error("Please sign in"); setIsUploading(false); return; }
       const fileExt = file.name.split(".").pop();
       const fileName = `${user.id}/ai-tools/${Date.now()}.${fileExt}`;
       const bucket = file.type.startsWith("video/") ? "videos" : "custom-scenes";
-
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(fileName, file, { cacheControl: "3600", upsert: false });
-
+      const { data, error } = await supabase.storage.from(bucket).upload(fileName, file, { cacheControl: "3600", upsert: false });
       if (error) throw error;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from(bucket)
-        .getPublicUrl(data.path);
-
+      const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(data.path);
       setUploadedFileUrl(publicUrl);
       setInputUrl(publicUrl);
-      toast.success("File uploaded successfully");
+      toast.success("File uploaded");
     } catch (error: any) {
-      toast.error(error.message || "Failed to upload file");
+      toast.error(error.message || "Upload failed");
       setUploadedFile(null);
     } finally {
       setIsUploading(false);
@@ -130,75 +95,34 @@ export default function AITools() {
   const clearUploadedFile = () => {
     setUploadedFile(null);
     setUploadedFileUrl(null);
-    if (inputUrl === uploadedFileUrl) {
-      setInputUrl("");
-    }
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    if (inputUrl === uploadedFileUrl) setInputUrl("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleExecuteTool = async (toolId: string) => {
-    if (!inputUrl && !prompt) {
-      toast.error("Please provide an input URL or prompt");
-      return;
-    }
-
-    const result = await executeTool({
-      toolId,
-      prompt,
-      language,
-      targetMarket,
+    if (!inputUrl && !prompt) { toast.error("Please provide input or prompt"); return; }
+    await executeTool({
+      toolId, prompt, language, targetMarket,
       inputData: inputUrl ? { imageUrl: inputUrl, videoUrl: inputUrl } : undefined,
+      imageSettings: activeCategory === 'image' ? imageSettings : undefined,
+      videoSettings: activeCategory === 'video' ? videoSettings : undefined,
     });
-
-    if (result.success && result.outputUrl) {
-      setOutputUrl(result.outputUrl);
-      toast.success("Tool executed successfully!");
-    }
   };
 
+  const currentEstimatedCost = selectedTool 
+    ? estimateCost(selectedTool, activeCategory === 'image' ? imageSettings : undefined, activeCategory === 'video' ? videoSettings : undefined)
+    : 0;
+
   const toolCategories = [
-    {
-      id: "tools",
-      name: "Tools",
-      icon: Wand2,
-      items: tools,
-      description: "Apply effects and transformations"
-    },
-    {
-      id: "video",
-      name: "Video Models",
-      icon: Video,
-      items: videoModels,
-      description: "Generate videos with AI"
-    },
-    {
-      id: "image",
-      name: "Image Models",
-      icon: Image,
-      items: imageModels,
-      description: "Generate images with AI"
-    },
-    {
-      id: "actor",
-      name: "Talking Actors",
-      icon: Users,
-      items: talkingActorModels,
-      description: "Create talking avatar videos"
-    },
-    {
-      id: "presets",
-      name: "Presets",
-      icon: Settings2,
-      items: presets,
-      description: "Pre-configured workflows"
-    },
+    { id: "tools", name: "Tools", icon: Wand2, items: tools, description: "Apply effects and transformations" },
+    { id: "video", name: "Video Models", icon: Video, items: videoModels, description: "Generate videos with AI" },
+    { id: "image", name: "Image Models", icon: Image, items: imageModels, description: "Generate images with AI" },
+    { id: "actor", name: "Talking Actors", icon: Users, items: talkingActorModels, description: "Create talking avatar videos" },
+    { id: "presets", name: "Presets", icon: Settings2, items: presets, description: "Pre-configured workflows" },
   ];
 
   return (
     <div className="container mx-auto py-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
@@ -207,28 +131,20 @@ export default function AITools() {
             </div>
             AI Tools
           </h1>
-          <p className="text-muted-foreground mt-1">
-            Apply AI tools to your existing assets - upscale, enhance, add captions, and more
-          </p>
+          <p className="text-muted-foreground mt-1">Apply AI tools to your assets - upscale, enhance, add captions, and more</p>
         </div>
       </div>
 
-      {/* Audience Targeting */}
       <Card className="bg-gradient-card border-border">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Users className="w-4 h-4 text-primary" />
-            Audience Targeting
-          </CardTitle>
+          <CardTitle className="text-base flex items-center gap-2"><Users className="w-4 h-4 text-primary" />Audience Targeting</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label className="text-foreground text-sm">Target Market</Label>
               <Select value={targetMarket} onValueChange={setTargetMarket}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="GCC">GCC</SelectItem>
                   <SelectItem value="EUROPE">Europe</SelectItem>
@@ -239,15 +155,11 @@ export default function AITools() {
             <div className="space-y-2">
               <Label className="text-foreground text-sm">Language</Label>
               <Select value={language} onValueChange={setLanguage}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ar">Arabic</SelectItem>
                   <SelectItem value="en">English</SelectItem>
                   <SelectItem value="es">Spanish</SelectItem>
-                  <SelectItem value="fr">French</SelectItem>
-                  <SelectItem value="pt">Portuguese</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -256,7 +168,6 @@ export default function AITools() {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Tool Selection */}
         <div className="lg:col-span-2">
           <Tabs defaultValue="tools" className="w-full" onValueChange={setActiveCategory}>
             <TabsList className="grid grid-cols-5 bg-muted">
@@ -267,53 +178,30 @@ export default function AITools() {
                 </TabsTrigger>
               ))}
             </TabsList>
-
             {toolCategories.map((category) => (
               <TabsContent key={category.id} value={category.id} className="mt-4">
                 <Card className="bg-gradient-card border-border">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <category.icon className="w-5 h-5 text-primary" />
-                      {category.name}
-                    </CardTitle>
+                    <CardTitle className="flex items-center gap-2"><category.icon className="w-5 h-5 text-primary" />{category.name}</CardTitle>
                     <CardDescription>{category.description}</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {category.items.map((tool) => (
-                        <div
-                          key={tool.id}
-                          onClick={() => setSelectedTool(tool.id)}
-                          className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                            selectedTool === tool.id
-                              ? "bg-primary/10 border-primary"
-                              : "bg-muted/30 border-border hover:border-primary/50"
-                          }`}
-                        >
+                        <div key={tool.id} onClick={() => setSelectedTool(tool.id)}
+                          className={`p-4 rounded-lg border cursor-pointer transition-all ${selectedTool === tool.id ? "bg-primary/10 border-primary" : "bg-muted/30 border-border hover:border-primary/50"}`}>
                           <div className="flex items-start justify-between mb-2">
                             <h4 className="font-semibold text-foreground">{tool.name}</h4>
-                            <Badge variant="outline" className="text-xs">
-                              {tool.pricingTier}
-                            </Badge>
+                            <Badge variant="outline" className="text-xs">{tool.pricingTier}</Badge>
                           </div>
-                          <p className="text-sm text-muted-foreground line-clamp-2">
-                            {tool.description}
-                          </p>
+                          <p className="text-sm text-muted-foreground line-clamp-2">{tool.description}</p>
                           <div className="flex flex-wrap gap-1 mt-2">
-                            {tool.inputTypes.map((type) => (
-                              <Badge key={type} variant="secondary" className="text-xs">
-                                {type}
-                              </Badge>
-                            ))}
+                            {tool.inputTypes.map((type) => (<Badge key={type} variant="secondary" className="text-xs">{type}</Badge>))}
                           </div>
-                          
-                          {/* Progress indicator */}
                           {executionProgress[tool.id] !== undefined && (
                             <div className="mt-3">
                               <Progress value={executionProgress[tool.id]} className="h-1" />
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {executionProgress[tool.id]}% complete
-                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">{executionProgress[tool.id]}% complete</p>
                             </div>
                           )}
                         </div>
@@ -326,196 +214,66 @@ export default function AITools() {
           </Tabs>
         </div>
 
-        {/* Input/Output Panel */}
         <div className="space-y-4">
-          {/* Input Section */}
+          <ExecutionStatusTracker timing={executionTiming} toolName={selectedTool ? getTool(selectedTool)?.name : undefined} />
+          
           <Card className="bg-gradient-card border-border">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Upload className="w-5 h-5 text-primary" />
-                Input
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Upload className="w-5 h-5 text-primary" />Input</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              {/* File Upload Section */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
-                  {activeCategory === "video" ? (
-                    <><FileVideo className="w-4 h-4" /> Upload Video</>
-                  ) : activeCategory === "image" ? (
-                    <><FileImage className="w-4 h-4" /> Upload Image</>
-                  ) : (
-                    <><Upload className="w-4 h-4" /> Upload File</>
-                  )}
+                  {activeCategory === "video" ? <><FileVideo className="w-4 h-4" /> Upload Video</> : activeCategory === "image" ? <><FileImage className="w-4 h-4" /> Upload Image</> : <><Upload className="w-4 h-4" /> Upload File</>}
                 </Label>
-                
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept={getAcceptedFileTypes()}
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  id="file-upload"
-                />
-                
+                <input ref={fileInputRef} type="file" accept={getAcceptedFileTypes()} onChange={handleFileUpload} className="hidden" id="file-upload" />
                 {uploadedFile ? (
                   <div className="relative p-3 bg-muted/50 rounded-lg border border-border">
                     <div className="flex items-center gap-3">
-                      {uploadedFile.type.startsWith("video/") ? (
-                        <FileVideo className="w-8 h-8 text-primary" />
-                      ) : (
-                        <FileImage className="w-8 h-8 text-primary" />
-                      )}
+                      {uploadedFile.type.startsWith("video/") ? <FileVideo className="w-8 h-8 text-primary" /> : <FileImage className="w-8 h-8 text-primary" />}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {uploadedFile.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
-                        </p>
+                        <p className="text-sm font-medium text-foreground truncate">{uploadedFile.name}</p>
+                        <p className="text-xs text-muted-foreground">{(uploadedFile.size / 1024 / 1024).toFixed(2)} MB</p>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={clearUploadedFile}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={clearUploadedFile}><X className="w-4 h-4" /></Button>
                     </div>
-                    {isUploading && (
-                      <div className="mt-2">
-                        <Progress value={50} className="h-1" />
-                        <p className="text-xs text-muted-foreground mt-1">Uploading...</p>
-                      </div>
-                    )}
+                    {isUploading && <Progress value={50} className="h-1 mt-2" />}
                   </div>
                 ) : (
-                  <label
-                    htmlFor="file-upload"
-                    className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
-                  >
-                    {activeCategory === "video" ? (
-                      <FileVideo className="w-8 h-8 text-muted-foreground mb-2" />
-                    ) : activeCategory === "image" ? (
-                      <FileImage className="w-8 h-8 text-muted-foreground mb-2" />
-                    ) : (
-                      <Upload className="w-8 h-8 text-muted-foreground mb-2" />
-                    )}
-                    <span className="text-sm text-muted-foreground text-center">
-                      {activeCategory === "video" 
-                        ? "Click to upload video" 
-                        : activeCategory === "image" 
-                          ? "Click to upload image"
-                          : "Click to upload file"}
-                    </span>
-                    <span className="text-xs text-muted-foreground mt-1">
-                      {activeCategory === "video" 
-                        ? "MP4, MOV, WebM" 
-                        : activeCategory === "image" 
-                          ? "PNG, JPG, WebP"
-                          : "Image or Video"}
-                    </span>
+                  <label htmlFor="file-upload" className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors">
+                    <Upload className="w-8 h-8 text-muted-foreground mb-2" />
+                    <span className="text-sm text-muted-foreground">Click to upload</span>
                   </label>
                 )}
               </div>
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-border" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">Or enter URL</span>
-                </div>
-              </div>
-
               <div className="space-y-2">
                 <Label>Asset URL</Label>
-                <Input
-                  placeholder="https://example.com/video.mp4"
-                  value={inputUrl}
-                  onChange={(e) => setInputUrl(e.target.value)}
-                  className="bg-muted/50"
-                />
+                <Input placeholder="https://example.com/video.mp4" value={inputUrl} onChange={(e) => setInputUrl(e.target.value)} className="bg-muted/50" />
               </div>
-              
               <div className="space-y-2">
                 <Label>Prompt (Optional)</Label>
-                <Textarea
-                  placeholder="Describe what you want..."
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  className="bg-muted/50 min-h-[100px]"
-                />
+                <Textarea placeholder="Describe what you want..." value={prompt} onChange={(e) => setPrompt(e.target.value)} className="bg-muted/50 min-h-[80px]" />
               </div>
-
-              <Button
-                onClick={() => selectedTool && handleExecuteTool(selectedTool)}
-                disabled={isExecuting || !selectedTool}
-                className="w-full bg-gradient-primary text-primary-foreground"
-              >
-                {isExecuting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-4 h-4 mr-2" />
-                    Execute Tool
-                  </>
-                )}
+              <Button onClick={() => selectedTool && handleExecuteTool(selectedTool)} disabled={isExecuting || !selectedTool} className="w-full bg-gradient-primary text-primary-foreground">
+                {isExecuting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing...</> : <><Zap className="w-4 h-4 mr-2" />Execute Tool</>}
               </Button>
             </CardContent>
           </Card>
 
-          {/* Output Section */}
-          <Card className="bg-gradient-card border-border">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-primary" />
-                Output
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {outputUrl ? (
-                <div className="space-y-3">
-                  <div className="aspect-video bg-muted rounded-lg overflow-hidden">
-                    {outputUrl.includes('video') ? (
-                      <video src={outputUrl} controls className="w-full h-full object-cover" />
-                    ) : (
-                      <img src={outputUrl} alt="Output" className="w-full h-full object-cover" />
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="flex-1">
-                      <Play className="w-4 h-4 mr-1" />
-                      Preview
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => window.open(outputUrl, '_blank')}
-                    >
-                      <ArrowUpCircle className="w-4 h-4 mr-1" />
-                      Download
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="aspect-video bg-muted/30 rounded-lg flex items-center justify-center border-2 border-dashed border-border">
-                  <div className="text-center text-muted-foreground">
-                    <Sparkles className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">Output will appear here</p>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {(activeCategory === 'image' || activeCategory === 'video') && (
+            <OutputControlsPanel 
+              type={activeCategory as 'image' | 'video'} 
+              imageSettings={imageSettings} 
+              videoSettings={videoSettings}
+              onImageSettingsChange={setImageSettings}
+              onVideoSettingsChange={setVideoSettings}
+              estimatedCost={currentEstimatedCost}
+            />
+          )}
 
-          {/* Debug Panel */}
-          <AIToolsDebugPanel debug={currentDebug} selectedTool={selectedTool} />
+          <OutputResultPanel outputUrl={lastOutputUrl} outputType={lastOutputType} isSuccess={lastSuccess} />
+          
+          <AIToolsDebugPanel debug={currentDebug} selectedTool={selectedTool} estimatedCost={currentEstimatedCost} />
+          
+          <ExecutionHistoryPanel history={executionHistory} onClear={clearHistory} />
         </div>
       </div>
     </div>
