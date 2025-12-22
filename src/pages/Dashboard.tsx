@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -9,7 +8,6 @@ import {
   Sparkles, 
   FolderOpen, 
   Cpu, 
-  Clock, 
   Plus,
   ArrowRight,
   Zap,
@@ -22,8 +20,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import GenerationDashboard from "@/components/GenerationDashboard";
 import AIOperatorDashboard from "@/components/AIOperatorDashboard";
-import { WorkflowCards, WorkflowStats } from "@/components/WorkflowCards";
+import { WorkflowCards } from "@/components/WorkflowCards";
 import { ContentFactory } from "@/components/ContentFactory";
+import { SectionHeader, EmptyState, LoadingState } from "@/components/ui/page-components";
+import { SectionCard, StatCard } from "@/components/ui/section-card";
 
 interface Stats {
   totalProjects: number;
@@ -92,36 +92,35 @@ export default function Dashboard() {
     }
   };
 
-  const statCards = [
-    { label: "Total Projects", value: stats.totalProjects, icon: FolderOpen, color: "text-primary", bgColor: "bg-primary/20" },
-    { label: "Videos Generated", value: stats.totalVideos, icon: Video, color: "text-secondary", bgColor: "bg-secondary/20" },
-    { label: "Active Engines", value: stats.activeEngines, icon: Cpu, color: "text-accent", bgColor: "bg-accent/20" },
-    { label: "AI Credits", value: stats.credits, icon: Zap, color: "text-primary", bgColor: "bg-primary/20" },
+  const quickActions = [
+    { icon: Video, label: "Create Video Ad", url: "/create" },
+    { icon: FolderOpen, label: "View Projects", url: "/projects" },
+    { icon: Cpu, label: "Explore AI Engines", url: "/engines" },
+    { icon: Sparkles, label: "Manage Templates", url: "/templates" },
   ];
 
   return (
-    <div className="container mx-auto p-8 space-y-8 animate-in fade-in duration-500">
+    <div className="p-6 space-y-6 animate-fade-in">
       {/* Hero Section */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-hero p-8 md:p-12">
+      <div className="relative overflow-hidden rounded-xl bg-gradient-hero p-6 md:p-8">
         <div className="relative z-10">
-          <Badge className="bg-background/20 text-foreground border-0 mb-4">
+          <Badge className="bg-background/20 text-foreground border-0 mb-3">
             <Sparkles className="w-3 h-3 mr-1" />
             AI-Powered Video Generation
           </Badge>
-          <h1 className="text-3xl md:text-5xl font-bold text-foreground mb-4">
+          <h1 className="text-2xl md:text-4xl font-bold text-foreground mb-3">
             Create Stunning Video Ads
           </h1>
-          <p className="text-lg text-foreground/80 max-w-xl mb-6">
-            Generate 10-100+ unique video ads using multiple AI engines. 
-            Multi-language support with automatic scene routing.
+          <p className="text-foreground/80 max-w-xl mb-5">
+            Generate 10-100+ unique video ads using multiple AI engines with multi-language support.
           </p>
           <div className="flex items-center gap-3">
             <Button 
               size="lg" 
-              onClick={() => navigate("/quick-commerce")}
-              className="bg-background text-primary hover:bg-background/90 shadow-lg"
+              onClick={() => navigate("/create")}
+              className="bg-background text-primary hover:bg-background/90"
             >
-              <Rocket className="w-5 h-5 mr-2" />
+              <Rocket className="w-4 h-4 mr-2" />
               Quick Start
             </Button>
             <Button 
@@ -130,175 +129,165 @@ export default function Dashboard() {
               onClick={() => navigate("/create")}
               className="border-background/30 text-foreground hover:bg-background/10"
             >
-              <Plus className="w-5 h-5 mr-2" />
-              Create Video
+              <Plus className="w-4 h-4 mr-2" />
+              New Project
             </Button>
           </div>
         </div>
-        <div className="absolute right-0 top-0 w-1/2 h-full opacity-20" />
-      </div>
-
-      {/* Workflow Cards */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-foreground">Choose Your Workflow</h2>
-            <p className="text-muted-foreground">Select the best approach for your needs</p>
-          </div>
-        </div>
-        <WorkflowCards />
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {statCards.map((stat) => (
-          <Card key={stat.label} className="bg-gradient-card border-border shadow-card">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-xl ${stat.bgColor} flex items-center justify-center`}>
-                  <stat.icon className={`w-6 h-6 ${stat.color}`} />
-                </div>
-                <div>
-                  <p className="text-3xl font-bold text-foreground">{loading ? "-" : stat.value}</p>
-                  <p className="text-sm text-muted-foreground">{stat.label}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        <StatCard 
+          label="Projects" 
+          value={loading ? "-" : stats.totalProjects} 
+          icon={FolderOpen} 
+        />
+        <StatCard 
+          label="Videos Generated" 
+          value={loading ? "-" : stats.totalVideos} 
+          icon={Video} 
+        />
+        <StatCard 
+          label="Active Engines" 
+          value={loading ? "-" : stats.activeEngines} 
+          icon={Cpu} 
+        />
+        <StatCard 
+          label="AI Credits" 
+          value={loading ? "-" : stats.credits} 
+          icon={Zap} 
+        />
       </div>
 
+      {/* Workflow Cards */}
+      <div>
+        <SectionHeader 
+          title="Choose Your Workflow" 
+          description="Select the best approach for your needs" 
+        />
+        <WorkflowCards />
+      </div>
+
+      {/* Quick Actions + Recent Projects */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Quick Actions */}
-        <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader>
-            <CardTitle className="text-foreground">Quick Actions</CardTitle>
-            <CardDescription className="text-muted-foreground">Get started with your next project</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {[
-              { icon: Video, label: "Create Video Ad", url: "/create" },
-              { icon: FolderOpen, label: "View Projects", url: "/projects" },
-              { icon: Cpu, label: "Explore AI Engines", url: "/engines" },
-              { icon: Sparkles, label: "Manage Templates", url: "/settings" },
-            ].map((action) => (
+        <SectionCard 
+          title="Quick Actions" 
+          description="Get started with your next project"
+        >
+          <div className="space-y-2">
+            {quickActions.map((action) => (
               <Button 
                 key={action.label}
                 variant="outline" 
-                className="w-full justify-between border-border hover:bg-primary/10 hover:text-primary"
+                className="w-full justify-between border-border hover:bg-primary/5 hover:border-primary/30"
                 onClick={() => navigate(action.url)}
               >
                 <div className="flex items-center gap-3">
-                  <action.icon className="w-5 h-5" />
+                  <action.icon className="w-4 h-4 text-muted-foreground" />
                   <span>{action.label}</span>
                 </div>
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="w-4 h-4 text-muted-foreground" />
               </Button>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </SectionCard>
 
-        {/* Recent Projects */}
-        <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-foreground">Recent Projects</CardTitle>
-                <CardDescription className="text-muted-foreground">Your latest video ad projects</CardDescription>
-              </div>
-              <Button variant="ghost" size="sm" onClick={() => navigate("/projects")} className="text-primary">
-                View All
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map(i => <div key={i} className="h-16 bg-muted rounded-lg animate-pulse" />)}
-              </div>
-            ) : recentProjects.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No projects yet</p>
-                <Button variant="link" className="text-primary mt-2" onClick={() => navigate("/create")}>
-                  Create your first project
+        <SectionCard 
+          title="Recent Projects" 
+          description="Your latest video ad projects"
+          actions={
+            <Button variant="ghost" size="sm" onClick={() => navigate("/projects")} className="text-primary text-xs">
+              View All
+            </Button>
+          }
+        >
+          {loading ? (
+            <LoadingState message="Loading projects..." />
+          ) : recentProjects.length === 0 ? (
+            <EmptyState 
+              icon={FolderOpen}
+              title="No projects yet"
+              description="Create your first video ad project to get started"
+              action={
+                <Button size="sm" onClick={() => navigate("/create")}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Project
                 </Button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {recentProjects.map((project) => (
-                  <div 
-                    key={project.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
-                    onClick={() => navigate(`/scene-builder?project=${project.id}`)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
-                        <Video className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground">{project.name}</p>
-                        <p className="text-xs text-muted-foreground">{project.output_count} videos • {project.language.toUpperCase()}</p>
-                      </div>
+              }
+            />
+          ) : (
+            <div className="space-y-2">
+              {recentProjects.map((project) => (
+                <div 
+                  key={project.id}
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
+                  onClick={() => navigate(`/scene-builder?project=${project.id}`)}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Video className="w-4 h-4 text-primary" />
                     </div>
-                    <Badge variant="outline" className={project.status === "completed" ? "border-primary/50 text-primary" : "border-border"}>
-                      {project.status}
-                    </Badge>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{project.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {project.output_count || 0} videos • {(project.language || 'en').toUpperCase()}
+                      </p>
+                    </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  <Badge 
+                    variant="outline" 
+                    className={project.status === "completed" ? "border-success/30 text-success bg-success/5" : ""}
+                  >
+                    {project.status || 'draft'}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionCard>
       </div>
 
-      {/* Generation Dashboard with Tabs */}
+      {/* Tabs Section */}
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 mb-6">
-          <TabsTrigger value="overview" className="flex items-center gap-2">
+        <TabsList className="w-full max-w-lg mb-4">
+          <TabsTrigger value="overview" className="flex-1 gap-2">
             <Sparkles className="w-4 h-4" />
-            Overview
+            <span className="hidden sm:inline">Overview</span>
           </TabsTrigger>
-          <TabsTrigger value="content" className="flex items-center gap-2">
+          <TabsTrigger value="content" className="flex-1 gap-2">
             <FileText className="w-4 h-4" />
-            Content Factory
+            <span className="hidden sm:inline">Content</span>
           </TabsTrigger>
-          <TabsTrigger value="generation" className="flex items-center gap-2">
+          <TabsTrigger value="generation" className="flex-1 gap-2">
             <Activity className="w-4 h-4" />
-            Generation Queue
+            <span className="hidden sm:inline">Queue</span>
           </TabsTrigger>
-          <TabsTrigger value="operator" className="flex items-center gap-2">
+          <TabsTrigger value="operator" className="flex-1 gap-2">
             <Bot className="w-4 h-4" />
-            AI Operator
+            <span className="hidden sm:inline">AI Operator</span>
           </TabsTrigger>
         </TabsList>
         
         <TabsContent value="overview">
-          {/* How It Works */}
-          <Card className="bg-gradient-card border-border shadow-card">
-            <CardHeader>
-              <CardTitle className="text-foreground">How It Works</CardTitle>
-              <CardDescription className="text-muted-foreground">Generate professional video ads in 4 simple steps</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                {[
-                  { step: 1, title: "Upload Content", desc: "Add your product images, scripts, and brand assets" },
-                  { step: 2, title: "Generate Scripts", desc: "AI creates multiple script variations with hooks" },
-                  { step: 3, title: "Build Scenes", desc: "Auto-route scenes to the best AI video engines" },
-                  { step: 4, title: "Export Videos", desc: "Download in multiple formats for all platforms" },
-                ].map((item) => (
-                  <div key={item.step} className="text-center">
-                    <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-3">
-                      <span className="text-xl font-bold text-primary">{item.step}</span>
-                    </div>
-                    <h4 className="font-semibold text-foreground mb-1">{item.title}</h4>
-                    <p className="text-sm text-muted-foreground">{item.desc}</p>
+          <SectionCard title="How It Works" description="Generate professional video ads in 4 simple steps">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { step: 1, title: "Upload Content", desc: "Add product images and brand assets" },
+                { step: 2, title: "Generate Scripts", desc: "AI creates script variations" },
+                { step: 3, title: "Build Scenes", desc: "Auto-route to best AI engines" },
+                { step: 4, title: "Export Videos", desc: "Download for all platforms" },
+              ].map((item) => (
+                <div key={item.step} className="text-center p-4 rounded-lg bg-muted/30">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-2">
+                    <span className="text-lg font-bold text-primary">{item.step}</span>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  <h4 className="font-medium text-sm text-foreground mb-1">{item.title}</h4>
+                  <p className="text-xs text-muted-foreground">{item.desc}</p>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
         </TabsContent>
 
         <TabsContent value="content">
