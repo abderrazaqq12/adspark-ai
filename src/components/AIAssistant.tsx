@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Bot, Send, Loader2, Sparkles, X, Lightbulb, Wand2, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAIAgent, AIAgentModel } from "@/hooks/useAIAgent";
 
 interface Message {
   role: "user" | "assistant";
@@ -25,11 +25,13 @@ interface AIAssistantProps {
   };
 }
 
-const AI_PROVIDERS = [
-  { id: "lovable", name: "Lovable AI (Free)", requiresKey: false },
-  { id: "openai", name: "ChatGPT", requiresKey: true, keyName: "OPENAI_API_KEY" },
-  { id: "gemini", name: "Google Gemini", requiresKey: true, keyName: "GEMINI_API_KEY" },
-];
+const AI_AGENT_LABELS: Record<AIAgentModel, string> = {
+  chatgpt: "ChatGPT",
+  gemini: "Gemini",
+  deepseek: "DeepSeek",
+  claude: "Claude",
+  llama: "Llama"
+};
 
 const QUICK_ACTIONS = [
   { id: "improve_script", label: "Improve my script", icon: Wand2 },
@@ -43,38 +45,16 @@ export default function AIAssistant({ context, onSuggestion, currentState }: AIA
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [provider, setProvider] = useState("lovable");
-  const [hasApiKey, setHasApiKey] = useState<Record<string, boolean>>({});
+  const [lastUsedProvider, setLastUsedProvider] = useState<AIAgentModel | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    checkApiKeys();
-  }, []);
+  
+  const { aiAgent, loading: agentLoading } = useAIAgent();
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
-
-  const checkApiKeys = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data: settings } = await supabase
-      .from("user_settings")
-      .select("api_keys")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (settings?.api_keys) {
-      const keys = settings.api_keys as Record<string, string>;
-      setHasApiKey({
-        openai: !!keys.OPENAI_API_KEY,
-        gemini: !!keys.GEMINI_API_KEY,
-      });
-    }
-  };
 
   const buildContextMessage = () => {
     let contextInfo = `Current context: ${context || "video ad creation"}`;
@@ -126,34 +106,42 @@ export default function AIAssistant({ context, onSuggestion, currentState }: AIA
     setIsLoading(true);
 
     try {
-      const selectedProvider = AI_PROVIDERS.find(p => p.id === provider);
-      
-      if (selectedProvider?.requiresKey && !hasApiKey[provider]) {
-        toast.error(`Please add your ${selectedProvider.name} API key in Settings`);
-        setIsLoading(false);
-        return;
-      }
-
       const contextMessage = buildContextMessage();
 
-      const { data, error } = await supabase.functions.invoke("ai-assistant", {
+      // Use the ai-fallback edge function with preferred agent from settings
+      const { data, error } = await supabase.functions.invoke("ai-fallback", {
         body: {
-          message: messageToSend,
-          provider,
-          context: contextMessage,
-          history: messages.slice(-10),
-          saasState: currentState,
+          prompt: `${contextMessage}\n\nUser question: ${messageToSend}`,
+          systemPrompt: `You are FlowScale AI Assistant, an expert in video ad creation, marketing, and AI-powered content generation. 
+You help users create compelling video ads by:
+- Writing and improving scripts
+- Suggesting marketing hooks and CTAs
+- Recommending AI video engines based on requirements
+- Reviewing scenes and providing feedback
+- Optimizing content for different platforms (TikTok, Instagram, YouTube)
+
+Be concise, actionable, and focus on practical advice. When suggesting improvements, be specific.`,
+          maxTokens: 1500,
+          preferredAgent: aiAgent
         },
       });
 
       if (error) {
-        const errorMessage = error.message || "Failed to get response from AI";
-        toast.error(`AI Assistant Error: ${errorMessage}`);
-        throw error;
+        throw new Error(error.message || "Failed to get response from AI");
+      }
+
+      if (data.error) {
+        throw new Error(data.error);
       }
 
       const assistantMessage = data.response || "I couldn't generate a response. Please try again.";
       setMessages(prev => [...prev, { role: "assistant", content: assistantMessage }]);
+      setLastUsedProvider(data.provider as AIAgentModel);
+
+      // Notify if fallback was used
+      if (data.fallbacksAttempted > 0) {
+        toast.info(`Used ${AI_AGENT_LABELS[data.provider as AIAgentModel] || data.provider} as fallback`);
+      }
 
       // Check if suggestion should be applied
       if (data.suggestion && onSuggestion) {
@@ -162,9 +150,10 @@ export default function AIAssistant({ context, onSuggestion, currentState }: AIA
       }
     } catch (error: any) {
       console.error("AI Assistant error:", error);
+      toast.error(`AI Assistant Error: ${error.message || "Unknown error"}`);
       setMessages(prev => [...prev, { 
         role: "assistant", 
-        content: "Sorry, I encountered an error. Please try again." 
+        content: "Sorry, I encountered an error. Please check your API keys in Settings → Preferences." 
       }]);
     } finally {
       setIsLoading(false);
@@ -191,23 +180,14 @@ export default function AIAssistant({ context, onSuggestion, currentState }: AIA
             AI Assistant
           </CardTitle>
           <div className="flex items-center gap-2">
-            <Select value={provider} onValueChange={setProvider}>
-              <SelectTrigger className="w-32 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {AI_PROVIDERS.map(p => (
-                  <SelectItem 
-                    key={p.id} 
-                    value={p.id}
-                    disabled={p.requiresKey && !hasApiKey[p.id]}
-                  >
-                    {p.name}
-                    {p.requiresKey && !hasApiKey[p.id] && " 🔒"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Badge variant="outline" className="text-xs">
+              {agentLoading ? "Loading..." : AI_AGENT_LABELS[aiAgent]}
+            </Badge>
+            {lastUsedProvider && lastUsedProvider !== aiAgent && (
+              <Badge variant="secondary" className="text-xs">
+                Used: {AI_AGENT_LABELS[lastUsedProvider]}
+              </Badge>
+            )}
             <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)}>
               <X className="w-4 h-4" />
             </Button>
@@ -246,6 +226,9 @@ export default function AIAssistant({ context, onSuggestion, currentState }: AIA
                   <li>• Reviewing your scenes</li>
                   <li>• Optimizing for platforms</li>
                 </ul>
+                <p className="text-xs mt-4 text-muted-foreground/70">
+                  Using: {AI_AGENT_LABELS[aiAgent]} (with auto-fallback)
+                </p>
               </div>
             )}
             {messages.map((msg, idx) => (
