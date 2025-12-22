@@ -22,7 +22,12 @@ import {
   Grid3X3,
   List,
   ArrowLeft,
-  Eye
+  Eye,
+  ExternalLink,
+  Cloud,
+  CloudOff,
+  Palette,
+  Wand2
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -54,6 +59,16 @@ interface Project {
   output_count: number;
   created_at: string;
   updated_at: string;
+  google_drive_folder_id: string | null;
+  google_drive_folder_link: string | null;
+}
+
+interface AssetCounts {
+  videos: number;
+  images: number;
+  scripts: number;
+  voiceovers: number;
+  landingPages: number;
 }
 
 interface Script {
@@ -106,6 +121,7 @@ export default function Projects() {
   const [videos, setVideos] = useState<VideoOutput[]>([]);
   const [landingPages, setLandingPages] = useState<LandingPage[]>([]);
   const [voiceovers, setVoiceovers] = useState<AudioTrack[]>([]);
+  const [projectAssetCounts, setProjectAssetCounts] = useState<Record<string, AssetCounts>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
@@ -138,6 +154,29 @@ export default function Projects() {
       if (error) throw error;
       setProjects(data || []);
       setSelectedProject(null);
+
+      // Fetch asset counts for each project
+      if (data && data.length > 0) {
+        const projectIds = data.map(p => p.id);
+        const [videoCounts, imageCounts, scriptCounts, landingPageCounts] = await Promise.all([
+          supabase.from("video_outputs").select("project_id").in("project_id", projectIds),
+          supabase.from("generated_images").select("project_id").in("project_id", projectIds),
+          supabase.from("scripts").select("project_id").in("project_id", projectIds),
+          supabase.from("landing_pages").select("project_id").in("project_id", projectIds),
+        ]);
+
+        const counts: Record<string, AssetCounts> = {};
+        projectIds.forEach(id => {
+          counts[id] = {
+            videos: videoCounts.data?.filter(v => v.project_id === id).length || 0,
+            images: imageCounts.data?.filter(i => i.project_id === id).length || 0,
+            scripts: scriptCounts.data?.filter(s => s.project_id === id).length || 0,
+            voiceovers: 0,
+            landingPages: landingPageCounts.data?.filter(l => l.project_id === id).length || 0,
+          };
+        });
+        setProjectAssetCounts(counts);
+      }
     } catch (error: any) {
       toast.error("Failed to load projects");
       console.error(error);
@@ -274,7 +313,61 @@ export default function Projects() {
             <h1 className="text-3xl font-bold text-foreground">{selectedProject.name}</h1>
             <p className="text-muted-foreground">{selectedProject.product_name || 'No product name'}</p>
           </div>
-          <Badge className={getStatusColor(selectedProject.status)}>{selectedProject.status}</Badge>
+          <div className="flex items-center gap-2">
+            <Badge className={getStatusColor(selectedProject.status)}>{selectedProject.status}</Badge>
+            {selectedProject.google_drive_folder_id ? (
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="border-primary/30 text-primary hover:bg-primary/10"
+                onClick={() => {
+                  if (selectedProject.google_drive_folder_link) {
+                    window.open(selectedProject.google_drive_folder_link, '_blank');
+                  }
+                }}
+              >
+                <Cloud className="w-4 h-4 mr-2" />
+                Open Drive Folder
+                <ExternalLink className="w-3 h-3 ml-2" />
+              </Button>
+            ) : (
+              <Badge variant="outline" className="border-muted text-muted-foreground">
+                <CloudOff className="w-3 h-3 mr-1" />
+                No Drive Folder
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {/* Quick Access Tools */}
+        <div className="flex flex-wrap gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => navigate(`/studio?project=${selectedProject.id}`)}
+            className="border-border hover:bg-primary/10 hover:text-primary"
+          >
+            <Wand2 className="w-4 h-4 mr-2" />
+            Open in Studio
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => navigate(`/creative-replicator?project=${selectedProject.id}`)}
+            className="border-border hover:bg-primary/10 hover:text-primary"
+          >
+            <Palette className="w-4 h-4 mr-2" />
+            Creative Replicator
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => navigate(`/scene-builder?project=${selectedProject.id}`)}
+            className="border-border hover:bg-primary/10 hover:text-primary"
+          >
+            <Edit className="w-4 h-4 mr-2" />
+            Scene Builder
+          </Button>
         </div>
 
         {/* Asset Stats */}
@@ -694,6 +787,7 @@ export default function Projects() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Status and Drive Link */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge className={getStatusColor(project.status)}>
                     {project.status}
@@ -701,27 +795,83 @@ export default function Projects() {
                   <Badge variant="outline" className="border-border">
                     {project.language.toUpperCase()}
                   </Badge>
+                  {project.google_drive_folder_id ? (
+                    <Badge 
+                      variant="outline" 
+                      className="border-primary/30 text-primary bg-primary/5 cursor-pointer hover:bg-primary/10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (project.google_drive_folder_link) {
+                          window.open(project.google_drive_folder_link, '_blank');
+                        }
+                      }}
+                    >
+                      <Cloud className="w-3 h-3 mr-1" />
+                      Drive Synced
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-muted text-muted-foreground">
+                      <CloudOff className="w-3 h-3 mr-1" />
+                      No Drive
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Asset Counts Grid */}
+                <div className="grid grid-cols-4 gap-2 text-xs">
+                  <div className="flex flex-col items-center p-2 bg-muted/30 rounded-lg">
+                    <Video className="w-3.5 h-3.5 text-blue-500 mb-1" />
+                    <span className="font-medium text-foreground">{projectAssetCounts[project.id]?.videos || 0}</span>
+                    <span className="text-muted-foreground">Videos</span>
+                  </div>
+                  <div className="flex flex-col items-center p-2 bg-muted/30 rounded-lg">
+                    <Image className="w-3.5 h-3.5 text-green-500 mb-1" />
+                    <span className="font-medium text-foreground">{projectAssetCounts[project.id]?.images || 0}</span>
+                    <span className="text-muted-foreground">Images</span>
+                  </div>
+                  <div className="flex flex-col items-center p-2 bg-muted/30 rounded-lg">
+                    <FileText className="w-3.5 h-3.5 text-amber-500 mb-1" />
+                    <span className="font-medium text-foreground">{projectAssetCounts[project.id]?.scripts || 0}</span>
+                    <span className="text-muted-foreground">Scripts</span>
+                  </div>
+                  <div className="flex flex-col items-center p-2 bg-muted/30 rounded-lg">
+                    <FileCode className="w-3.5 h-3.5 text-pink-500 mb-1" />
+                    <span className="font-medium text-foreground">{projectAssetCounts[project.id]?.landingPages || 0}</span>
+                    <span className="text-muted-foreground">Pages</span>
+                  </div>
                 </div>
                 
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <Video className="w-4 h-4" />
-                    <span>{project.output_count} videos</span>
-                  </div>
                   <div className="flex items-center gap-1">
                     <Clock className="w-4 h-4" />
                     <span>{new Date(project.created_at).toLocaleDateString()}</span>
                   </div>
                 </div>
 
-                <Button 
-                  variant="outline" 
-                  className="w-full border-border hover:bg-primary/10 hover:text-primary"
-                  onClick={(e) => { e.stopPropagation(); openProject(project); }}
-                >
-                  <Play className="w-4 h-4 mr-2" />
-                  View Assets
-                </Button>
+                {/* Quick Actions */}
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    className="flex-1 border-border hover:bg-primary/10 hover:text-primary"
+                    onClick={(e) => { e.stopPropagation(); openProject(project); }}
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Assets
+                  </Button>
+                  {project.google_drive_folder_link && (
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      className="border-border hover:bg-primary/10 hover:text-primary"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        window.open(project.google_drive_folder_link!, '_blank');
+                      }}
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}
