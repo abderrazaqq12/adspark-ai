@@ -1,9 +1,22 @@
 /**
- * Global AI Brain
+ * GLOBAL AI BRAIN - MASTER DECISION SYSTEM
  * 
- * Unified entry point for the centralized AI decision-making system.
- * Combines cost optimization and decision scoring into a single interface
- * that can be used by all tools across the platform.
+ * This is the centralized AI decision-making and cost optimization layer.
+ * ALL video generation, image generation, and creative tools MUST use this
+ * for provider selection and cost estimation.
+ * 
+ * DO NOT BYPASS THIS SYSTEM.
+ * DO NOT CREATE DUPLICATE ENGINE REGISTRIES.
+ * DO NOT HARDCODE PROVIDER SELECTIONS ELSEWHERE.
+ * 
+ * Architecture:
+ * - CostOptimizer: Minimizes costs while meeting quality thresholds
+ * - DecisionScorer: Scores options based on cost, quality, market, platform
+ * - ProviderRegistry: Single source of truth for all AI provider configs
+ * 
+ * Usage:
+ * - useGlobalAIBrain() hook for React components
+ * - getGlobalAIBrain() for non-React code
  */
 
 import {
