@@ -8,6 +8,10 @@
  * - Critical (red): VPS offline, FFmpeg unavailable, repeated failures
  * - Warning (yellow): Drive not linked, queue blocked, cost tracking inactive
  * - Healthy (green): All systems operational
+ * 
+ * NOTIFICATIONS:
+ * - Browser notifications for critical issues
+ * - Sound alerts for new critical signals
  */
 
 import { useEffect, useState } from 'react';
@@ -23,12 +27,16 @@ import {
   AlertTriangle,
   AlertCircle,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Bell,
+  BellOff
 } from 'lucide-react';
 import { useRenderBackendStatus } from '@/hooks/useRenderBackendStatus';
 import { useDashboardSeverity, SeverityLevel } from '@/hooks/useDashboardSeverity';
+import { useCriticalNotifications } from '@/hooks/useCriticalNotifications';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface QueueStats {
   active: number;
@@ -49,6 +57,13 @@ export function SystemStatusBar() {
   const [queueStats, setQueueStats] = useState<QueueStats>({ active: 0, waiting: 0, failed24h: 0 });
   const [storage, setStorage] = useState<StorageStats>({ used: '0 GB', remaining: '∞', percentage: 0, isFull: false });
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  
+  // Initialize critical notifications with sound and browser alerts
+  const { notificationPermission, requestPermission } = useCriticalNotifications({
+    soundEnabled: notificationsEnabled,
+    browserNotificationsEnabled: notificationsEnabled
+  });
 
   // Report severity signals
   useEffect(() => {
@@ -310,13 +325,58 @@ export function SystemStatusBar() {
             <SeverityIndicator severity={aggregatedSeverity} />
           </div>
 
+          {/* Notification toggle */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => {
+                    if (!notificationsEnabled && notificationPermission === 'default') {
+                      requestPermission();
+                    }
+                    setNotificationsEnabled(!notificationsEnabled);
+                  }}
+                  className={cn(
+                    "px-3 py-1.5 hover:bg-muted/50 transition-colors",
+                    notificationsEnabled ? "text-primary" : "text-muted-foreground"
+                  )}
+                >
+                  {notificationsEnabled ? (
+                    <Bell className="w-3.5 h-3.5" />
+                  ) : (
+                    <BellOff className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p className="text-xs">
+                  {notificationsEnabled 
+                    ? 'Critical alerts enabled (sound + browser)' 
+                    : 'Critical alerts disabled'}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
           {/* Realtime indicator */}
-          <div className="px-3 py-1.5" title={isRealtimeConnected ? 'Realtime connected' : 'Realtime disconnected'}>
-            {isRealtimeConnected ? (
-              <Wifi className="w-3.5 h-3.5 text-green-500" />
-            ) : (
-              <WifiOff className="w-3.5 h-3.5 text-muted-foreground" />
-            )}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="px-3 py-1.5">
+                  {isRealtimeConnected ? (
+                    <Wifi className="w-3.5 h-3.5 text-green-500" />
+                  ) : (
+                    <WifiOff className="w-3.5 h-3.5 text-muted-foreground" />
+                  )}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p className="text-xs">
+                  {isRealtimeConnected ? 'Realtime connected' : 'Realtime disconnected'}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           </div>
 
           {/* VPS Status */}
