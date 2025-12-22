@@ -33,6 +33,7 @@ import { AssetUploader } from './AssetUploader';
 import { SceneCard } from './SceneCard';
 import { DebugPanel } from './DebugPanel';
 import { RealTimeCostEstimator } from './RealTimeCostEstimator';
+import { VariationPreview } from './VariationPreview';
 import { SmartScenePlan, SceneDuration, SceneStructure } from '@/lib/smart-scene-builder/types';
 
 // Script interface for props
@@ -429,6 +430,17 @@ export function SmartSceneBuilderV2({ projectId, scripts = [], onProceedToAssemb
                   ))}
                 </div>
               </ScrollArea>
+              
+              {/* Variation Preview - Shows how scenes appear across videos */}
+              {scriptAnalysis && (
+                <div className="mt-4">
+                  <VariationPreview
+                    scenes={scenes}
+                    scriptAnalysis={scriptAnalysis}
+                    scriptsCount={videoScripts.length}
+                  />
+                </div>
+              )}
             </div>
           )}
           
