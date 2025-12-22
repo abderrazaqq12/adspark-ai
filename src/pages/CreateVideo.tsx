@@ -1056,48 +1056,11 @@ export default function CreateVideo() {
             />
           )}
 
-          {/* Stage 4: Unified Scene Builder & Video Generation */}
+          {/* Stage 4: Scene Builder */}
           {expandedStage === 4 && (
             <div className="space-y-6">
-              {/* Unified Video Creation - Intelligent Engine Selection */}
-              <UnifiedVideoCreation
-                script={scriptSlots.map(s => s.text).filter(t => t.trim()).join('\n\n')}
-                voiceoverUrl={scriptSlots.find(s => s.generatedAudioUrl || s.audioUrl)?.generatedAudioUrl || scriptSlots.find(s => s.audioUrl)?.audioUrl || undefined}
-                scenes={unifiedScenes.length > 0 ? unifiedScenes.map(s => ({
-                  id: s.id,
-                  index: s.index,
-                  text: s.text,
-                  visualPrompt: s.visualPrompt,
-                  duration: s.duration,
-                  imageUrl: s.thumbnailUrl, // Use thumbnailUrl as imageUrl fallback
-                  videoUrl: s.videoUrl,
-                })) : scenes.map((s, i) => ({
-                  id: s.id || `scene-${i}`,
-                  index: i,
-                  text: s.description || s.text || '',
-                  visualPrompt: s.visualPrompt || '',
-                  duration: s.duration || 5,
-                }))}
-                images={productInfo.imageUrl ? [productInfo.imageUrl] : []}
-                onComplete={(output) => {
-                  if (output.status === 'success') {
-                    toast.success('Video generated! Proceeding to assembly...');
-                    setExpandedStage(5);
-                    setCurrentStage(5);
-                  }
-                }}
-              />
-
-              {/* Cost Calculator */}
-              <CostCalculatorPreview
-                scenesCount={unifiedScenes.length || scenes.length || 5}
-                avgDuration={5}
-                videoCount={videosToGenerate}
-                onFreeOnlyChange={setFreeEnginesOnly}
-              />
-
-              {/* Smart Scene Builder V2 - AI-driven scene generation */}
-              {projectId && (
+              {/* Smart Scene Builder V2 - Primary UI for AI-driven scene generation */}
+              {projectId ? (
                 <SmartSceneBuilderV2
                   projectId={projectId}
                   onProceedToAssembly={(scenePlan) => {
@@ -1126,15 +1089,21 @@ export default function CreateVideo() {
                     setCurrentStage(5);
                   }}
                 />
-              )}
-
-              {!projectId && (
+              ) : (
                 <Card className="bg-gradient-card border-border shadow-card p-8 text-center">
                   <Wand2 className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
                   <p className="text-muted-foreground">Save your project first to use the Scene Builder</p>
                   <p className="text-xs text-muted-foreground mt-2">Complete earlier steps and save your project</p>
                 </Card>
               )}
+
+              {/* Cost Calculator */}
+              <CostCalculatorPreview
+                scenesCount={unifiedScenes.length || scenes.length || 5}
+                avgDuration={5}
+                videoCount={videosToGenerate}
+                onFreeOnlyChange={setFreeEnginesOnly}
+              />
             </div>
           )}
 
