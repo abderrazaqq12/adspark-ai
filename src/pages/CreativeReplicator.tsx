@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRenderBackendStatus } from "@/hooks/useRenderBackendStatus";
+import { useSecureApiKeys } from "@/hooks/useSecureApiKeys";
 
 export interface UploadedAd {
   id: string;
@@ -108,6 +109,16 @@ const ENGINE_BY_TIER: Record<string, string[]> = {
 const CreativeReplicator = () => {
   // Auto-detect available backends
   const backendStatus = useRenderBackendStatus();
+  
+  // Fetch user's configured API keys for AI Brain engine selection
+  const { providers: apiKeyProviders, loading: apiKeysLoading } = useSecureApiKeys();
+  
+  // Extract active provider names for AI Brain
+  const availableApiKeys = useMemo(() => {
+    return apiKeyProviders
+      .filter(p => p.is_active)
+      .map(p => p.provider);
+  }, [apiKeyProviders]);
   
   const [activeStep, setActiveStep] = useState<string>("upload");
   const [projectName, setProjectName] = useState<string>("");
@@ -677,6 +688,7 @@ const CreativeReplicator = () => {
                 config={variationConfig}
                 setConfig={setVariationConfig}
                 sourceVideoDuration={uploadedAds[0]?.duration || 30}
+                availableApiKeys={availableApiKeys}
                 onBack={() => setActiveStep("upload")}
                 onGenerate={(brainOutput: BrainOutput) => {
                   console.log("AI Brain decisions:", brainOutput);
