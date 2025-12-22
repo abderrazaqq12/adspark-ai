@@ -2,6 +2,12 @@
  * System Status Bar - Compact top status bar (SECTION 1)
  * Shows VPS, FFmpeg, GPU, Queue, and Storage status
  * READ-ONLY - No buttons, status only
+ * 
+ * SEVERITY AGGREGATION:
+ * - Shows aggregated system health (Critical > Warning > Healthy)
+ * - Critical (red): VPS offline, FFmpeg unavailable, repeated failures
+ * - Warning (yellow): Drive not linked, queue blocked, cost tracking inactive
+ * - Healthy (green): All systems operational
  */
 
 import { useEffect, useState } from 'react';
@@ -13,28 +19,105 @@ import {
   HardDrive,
   Wifi,
   WifiOff,
-  Loader2
+  Loader2,
+  AlertTriangle,
+  AlertCircle,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
 import { useRenderBackendStatus } from '@/hooks/useRenderBackendStatus';
+import { useDashboardSeverity, SeverityLevel } from '@/hooks/useDashboardSeverity';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
 interface QueueStats {
   active: number;
   waiting: number;
+  failed24h: number;
 }
 
 interface StorageStats {
   used: string;
   remaining: string;
   percentage: number;
+  isFull: boolean;
 }
 
 export function SystemStatusBar() {
   const backendStatus = useRenderBackendStatus();
-  const [queueStats, setQueueStats] = useState<QueueStats>({ active: 0, waiting: 0 });
-  const [storage, setStorage] = useState<StorageStats>({ used: '0 GB', remaining: '∞', percentage: 0 });
+  const { addSignal, removeSignal, getAggregatedSeverity, getCriticalSignals, getWarningSignals } = useDashboardSeverity();
+  const [queueStats, setQueueStats] = useState<QueueStats>({ active: 0, waiting: 0, failed24h: 0 });
+  const [storage, setStorage] = useState<StorageStats>({ used: '0 GB', remaining: '∞', percentage: 0, isFull: false });
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+
+  // Report severity signals
+  useEffect(() => {
+    // VPS Status
+    if (!backendStatus.loading) {
+      if (!backendStatus.vpsServer.available) {
+        addSignal({
+          id: 'vps-offline',
+          component: 'SystemStatusBar',
+          level: 'critical',
+          message: 'VPS server is offline',
+          blocksOutput: true
+        });
+      } else {
+        removeSignal('vps-offline');
+      }
+    }
+
+    // FFmpeg availability (derived from VPS)
+    if (!backendStatus.loading && !backendStatus.vpsServer.available) {
+      addSignal({
+        id: 'ffmpeg-unavailable',
+        component: 'SystemStatusBar',
+        level: 'critical',
+        message: 'FFmpeg is unavailable',
+        blocksOutput: true
+      });
+    } else {
+      removeSignal('ffmpeg-unavailable');
+    }
+  }, [backendStatus.loading, backendStatus.vpsServer.available, addSignal, removeSignal]);
+
+  // Report queue failures
+  useEffect(() => {
+    if (queueStats.failed24h > 2) {
+      addSignal({
+        id: 'repeated-failures',
+        component: 'SystemStatusBar',
+        level: 'critical',
+        message: `${queueStats.failed24h} jobs failed in last 24h`,
+        blocksOutput: false
+      });
+    } else if (queueStats.failed24h > 0) {
+      addSignal({
+        id: 'repeated-failures',
+        component: 'SystemStatusBar',
+        level: 'warning',
+        message: `${queueStats.failed24h} job(s) failed in last 24h`,
+        blocksOutput: false
+      });
+    } else {
+      removeSignal('repeated-failures');
+    }
+  }, [queueStats.failed24h, addSignal, removeSignal]);
+
+  // Report storage issues
+  useEffect(() => {
+    if (storage.isFull) {
+      addSignal({
+        id: 'storage-full',
+        component: 'SystemStatusBar',
+        level: 'critical',
+        message: 'Storage is full or unreachable',
+        blocksOutput: true
+      });
+    } else {
+      removeSignal('storage-full');
+    }
+  }, [storage.isFull, addSignal, removeSignal]);
 
   useEffect(() => {
     fetchQueueStats();
@@ -60,13 +143,13 @@ export function SystemStatusBar() {
       const { data: jobs } = await supabase
         .from('pipeline_jobs')
         .select('status')
-        .in('status', ['processing', 'running', 'pending', 'queued'])
         .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
 
       if (jobs) {
         setQueueStats({
           active: jobs.filter(j => j.status === 'processing' || j.status === 'running').length,
           waiting: jobs.filter(j => j.status === 'pending' || j.status === 'queued').length,
+          failed24h: jobs.filter(j => j.status === 'failed').length,
         });
       }
 
@@ -79,10 +162,12 @@ export function SystemStatusBar() {
       if (files) {
         const totalBytes = files.reduce((sum, f) => sum + (f.file_size || 0), 0);
         const usedGB = totalBytes / (1024 * 1024 * 1024);
+        const maxGB = 100; // Assume 100GB quota
         setStorage({
           used: usedGB < 1 ? `${(usedGB * 1024).toFixed(1)} MB` : `${usedGB.toFixed(2)} GB`,
-          remaining: 'Unlimited', // Cloud storage
-          percentage: Math.min(usedGB / 100 * 100, 100) // Assume 100GB quota for visualization
+          remaining: `${(maxGB - usedGB).toFixed(1)} GB`,
+          percentage: Math.min(usedGB / maxGB * 100, 100),
+          isFull: usedGB >= maxGB * 0.95
         });
       }
     } catch (error) {
@@ -90,18 +175,55 @@ export function SystemStatusBar() {
     }
   };
 
+  const aggregatedSeverity = getAggregatedSeverity();
+  const criticalSignals = getCriticalSignals();
+  const warningSignals = getWarningSignals();
+
+  const SeverityIndicator = ({ severity }: { severity: SeverityLevel }) => {
+    const config = {
+      healthy: { 
+        icon: CheckCircle2, 
+        color: 'text-green-500', 
+        bg: 'bg-green-500/10', 
+        border: 'border-green-500/30',
+        label: 'Healthy'
+      },
+      warning: { 
+        icon: AlertTriangle, 
+        color: 'text-amber-500', 
+        bg: 'bg-amber-500/10', 
+        border: 'border-amber-500/30',
+        label: 'Warning'
+      },
+      critical: { 
+        icon: XCircle, 
+        color: 'text-destructive', 
+        bg: 'bg-destructive/10', 
+        border: 'border-destructive/30',
+        label: 'Critical'
+      }
+    };
+    
+    const { icon: Icon, color, bg, border, label } = config[severity];
+    
+    return (
+      <div className={cn("flex items-center gap-2 px-3 py-1.5 rounded-md", bg, border, "border")}>
+        <Icon className={cn("w-4 h-4", color)} />
+        <span className={cn("text-xs font-medium", color)}>{label}</span>
+      </div>
+    );
+  };
+
   const StatusItem = ({ 
     icon: Icon, 
     label, 
     status, 
     value,
-    isOnline = true
   }: { 
     icon: any; 
     label: string; 
     status: 'online' | 'offline' | 'warning';
     value?: string;
-    isOnline?: boolean;
   }) => (
     <div className="flex items-center gap-2 px-3 py-1.5">
       <Icon className="w-3.5 h-3.5 text-muted-foreground" />
@@ -126,63 +248,147 @@ export function SystemStatusBar() {
   );
 
   return (
-    <div className="rounded-lg border border-border/50 bg-muted/30 backdrop-blur">
-      <div className="flex flex-wrap items-center divide-x divide-border/50">
-        {/* Realtime indicator */}
-        <div className="px-3 py-1.5">
-          {isRealtimeConnected ? (
-            <Wifi className="w-3.5 h-3.5 text-green-500" />
-          ) : (
-            <WifiOff className="w-3.5 h-3.5 text-muted-foreground" />
-          )}
-        </div>
-
-        {/* VPS Status */}
-        {backendStatus.loading ? (
-          <div className="px-3 py-1.5">
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+    <div className="space-y-2">
+      {/* Aggregated Severity Banner - Only shows if not healthy */}
+      {aggregatedSeverity !== 'healthy' && (
+        <div className={cn(
+          "rounded-lg border p-3",
+          aggregatedSeverity === 'critical' && "bg-destructive/5 border-destructive/30",
+          aggregatedSeverity === 'warning' && "bg-amber-500/5 border-amber-500/30"
+        )}>
+          <div className="flex items-start gap-3">
+            {aggregatedSeverity === 'critical' ? (
+              <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className={cn(
+                "text-sm font-medium",
+                aggregatedSeverity === 'critical' && "text-destructive",
+                aggregatedSeverity === 'warning' && "text-amber-600 dark:text-amber-400"
+              )}>
+                {aggregatedSeverity === 'critical' 
+                  ? `${criticalSignals.length} Critical Issue${criticalSignals.length > 1 ? 's' : ''}`
+                  : `${warningSignals.length} Warning${warningSignals.length > 1 ? 's' : ''}`
+                }
+              </p>
+              <div className="mt-1 space-y-1">
+                {criticalSignals.map(signal => (
+                  <p key={signal.id} className="text-xs text-destructive/80 flex items-center gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-destructive" />
+                    {signal.message}
+                    {signal.blocksOutput && (
+                      <Badge variant="outline" className="ml-1 text-[9px] h-4 border-destructive/30 text-destructive">
+                        BLOCKS OUTPUT
+                      </Badge>
+                    )}
+                  </p>
+                ))}
+                {aggregatedSeverity === 'warning' && warningSignals.map(signal => (
+                  <p key={signal.id} className="text-xs text-amber-600/80 dark:text-amber-400/80 flex items-center gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-amber-500" />
+                    {signal.message}
+                  </p>
+                ))}
+              </div>
+            </div>
           </div>
-        ) : (
-          <StatusItem 
-            icon={Server}
-            label="VPS"
-            status={backendStatus.vpsServer.available ? 'online' : 'offline'}
-            value={backendStatus.vpsServer.available ? 'Online' : 'Offline'}
-          />
-        )}
-
-        {/* FFmpeg */}
-        <StatusItem 
-          icon={Film}
-          label="FFmpeg"
-          status={backendStatus.vpsServer.available ? 'online' : 'offline'}
-        />
-
-        {/* GPU */}
-        <StatusItem 
-          icon={Cpu}
-          label="GPU"
-          status="warning"
-          value="N/A"
-        />
-
-        {/* Queue Status */}
-        <div className="flex items-center gap-3 px-3 py-1.5">
-          <span className="text-xs text-muted-foreground">Queue:</span>
-          <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-primary/30 bg-primary/5 text-primary">
-            {queueStats.active} Active
-          </Badge>
-          <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-amber-500/30 bg-amber-500/5 text-amber-600">
-            {queueStats.waiting} Waiting
-          </Badge>
         </div>
+      )}
 
-        {/* Storage */}
-        <div className="flex items-center gap-2 px-3 py-1.5">
-          <HardDrive className="w-3.5 h-3.5 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">Storage:</span>
-          <span className="text-xs font-medium text-foreground">{storage.used}</span>
-          <span className="text-xs text-muted-foreground">/ {storage.remaining}</span>
+      {/* Main Status Bar */}
+      <div className={cn(
+        "rounded-lg border backdrop-blur",
+        aggregatedSeverity === 'healthy' && "border-border/50 bg-muted/30",
+        aggregatedSeverity === 'warning' && "border-amber-500/30 bg-amber-500/5",
+        aggregatedSeverity === 'critical' && "border-destructive/30 bg-destructive/5"
+      )}>
+        <div className="flex flex-wrap items-center divide-x divide-border/50">
+          {/* Aggregated Status Indicator */}
+          <div className="px-3 py-1.5">
+            <SeverityIndicator severity={aggregatedSeverity} />
+          </div>
+
+          {/* Realtime indicator */}
+          <div className="px-3 py-1.5" title={isRealtimeConnected ? 'Realtime connected' : 'Realtime disconnected'}>
+            {isRealtimeConnected ? (
+              <Wifi className="w-3.5 h-3.5 text-green-500" />
+            ) : (
+              <WifiOff className="w-3.5 h-3.5 text-muted-foreground" />
+            )}
+          </div>
+
+          {/* VPS Status */}
+          {backendStatus.loading ? (
+            <div className="px-3 py-1.5">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <StatusItem 
+              icon={Server}
+              label="VPS"
+              status={backendStatus.vpsServer.available ? 'online' : 'offline'}
+              value={backendStatus.vpsServer.available ? 'Online' : 'Offline'}
+            />
+          )}
+
+          {/* FFmpeg */}
+          <StatusItem 
+            icon={Film}
+            label="FFmpeg"
+            status={backendStatus.vpsServer.available ? 'online' : 'offline'}
+          />
+
+          {/* GPU */}
+          <StatusItem 
+            icon={Cpu}
+            label="GPU"
+            status="warning"
+            value="N/A"
+          />
+
+          {/* Queue Status */}
+          <div className="flex items-center gap-3 px-3 py-1.5">
+            <span className="text-xs text-muted-foreground">Queue:</span>
+            <Badge variant="outline" className={cn(
+              "h-5 px-1.5 text-[10px]",
+              queueStats.active > 0 
+                ? "border-primary/30 bg-primary/5 text-primary" 
+                : "border-border bg-muted/30"
+            )}>
+              {queueStats.active} Active
+            </Badge>
+            <Badge variant="outline" className={cn(
+              "h-5 px-1.5 text-[10px]",
+              queueStats.waiting > 0 
+                ? "border-amber-500/30 bg-amber-500/5 text-amber-600"
+                : "border-border bg-muted/30"
+            )}>
+              {queueStats.waiting} Waiting
+            </Badge>
+            {queueStats.failed24h > 0 && (
+              <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-destructive/30 bg-destructive/5 text-destructive">
+                {queueStats.failed24h} Failed
+              </Badge>
+            )}
+          </div>
+
+          {/* Storage */}
+          <div className="flex items-center gap-2 px-3 py-1.5">
+            <HardDrive className={cn(
+              "w-3.5 h-3.5",
+              storage.isFull ? "text-destructive" : "text-muted-foreground"
+            )} />
+            <span className="text-xs text-muted-foreground">Storage:</span>
+            <span className={cn(
+              "text-xs font-medium",
+              storage.isFull ? "text-destructive" : "text-foreground"
+            )}>
+              {storage.used}
+            </span>
+            <span className="text-xs text-muted-foreground">/ {storage.remaining}</span>
+          </div>
         </div>
       </div>
     </div>
