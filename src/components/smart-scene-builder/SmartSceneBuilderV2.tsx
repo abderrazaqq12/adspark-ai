@@ -6,22 +6,24 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 import {
   Brain,
   Sparkles,
   Plus,
-  Play,
   Loader2,
   Film,
   Clock,
   DollarSign,
   CheckCircle2,
-  AlertCircle,
   ArrowRight,
   Wand2,
   LayoutTemplate,
+  Settings2,
+  Upload,
+  Zap,
+  ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -45,9 +47,34 @@ const TEMPLATES = [
   { id: 'comparison', label: 'Comparison', icon: '⚖️', description: 'vs competitors' },
 ];
 
+// Step indicator component
+function StepIndicator({ step, title, description, isActive, isComplete }: { 
+  step: number; 
+  title: string; 
+  description: string;
+  isActive: boolean;
+  isComplete: boolean;
+}) {
+  return (
+    <div className={`flex items-start gap-3 ${isActive ? 'opacity-100' : 'opacity-60'}`}>
+      <div className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold flex-shrink-0 ${
+        isComplete 
+          ? 'bg-green-500/20 text-green-500 border border-green-500/30' 
+          : isActive 
+            ? 'bg-primary/20 text-primary border border-primary/30' 
+            : 'bg-muted text-muted-foreground border border-border'
+      }`}>
+        {isComplete ? <CheckCircle2 className="w-4 h-4" /> : step}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-medium ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}>{title}</p>
+        <p className="text-xs text-muted-foreground truncate">{description}</p>
+      </div>
+    </div>
+  );
+}
+
 export function SmartSceneBuilderV2({ projectId, onProceedToAssembly }: SmartSceneBuilderV2Props) {
-  const [activeTab, setActiveTab] = useState('build');
-  
   const {
     config,
     updateConfig,
@@ -94,6 +121,11 @@ export function SmartSceneBuilderV2({ projectId, onProceedToAssembly }: SmartSce
 
   const progress = scenes.length > 0 ? (completedCount / scenes.length) * 100 : 0;
 
+  // Determine current step based on state
+  const hasAssets = assets.length > 0;
+  const hasScenes = scenes.length > 0;
+  const hasCompletedScenes = completedCount > 0;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -101,7 +133,7 @@ export function SmartSceneBuilderV2({ projectId, onProceedToAssembly }: SmartSce
         <div>
           <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
             <Brain className="w-5 h-5 text-primary" />
-            Smart Scene Builder
+            Scene Builder
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
             AI-driven video scenes with automatic engine selection
@@ -170,43 +202,85 @@ export function SmartSceneBuilderV2({ projectId, onProceedToAssembly }: SmartSce
         </div>
       )}
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="build">
-            <Wand2 className="w-4 h-4 mr-2" />
-            Build Scenes
-          </TabsTrigger>
-          <TabsTrigger value="advanced">
-            <LayoutTemplate className="w-4 h-4 mr-2" />
-            Advanced
-          </TabsTrigger>
-          <TabsTrigger value="debug">
-            <Brain className="w-4 h-4 mr-2" />
-            Debug
-          </TabsTrigger>
-        </TabsList>
+      {/* Step Progress Sidebar (Mobile: horizontal, Desktop: inline) */}
+      <Card className="p-4 bg-muted/30 border-border">
+        <div className="grid grid-cols-5 gap-4">
+          <StepIndicator 
+            step={1} 
+            title="Visual Context" 
+            description="Upload assets (optional)"
+            isActive={!hasScenes}
+            isComplete={hasAssets}
+          />
+          <div className="flex items-center justify-center">
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </div>
+          <StepIndicator 
+            step={2} 
+            title="Output Settings" 
+            description="Format, duration, budget"
+            isActive={!hasScenes}
+            isComplete={hasScenes}
+          />
+          <div className="flex items-center justify-center">
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </div>
+          <StepIndicator 
+            step={3} 
+            title="Scene Construction" 
+            description="Build & generate scenes"
+            isActive={hasScenes}
+            isComplete={hasCompletedScenes}
+          />
+        </div>
+      </Card>
 
-        {/* Build Tab */}
-        <TabsContent value="build" className="space-y-4">
-          {/* Config Panel */}
-          <ConfigPanel config={config} onConfigChange={updateConfig} />
-
-          {/* Asset Uploader */}
+      <div className="space-y-6">
+        {/* STEP 1: Visual Context (Asset Uploader) */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold">1</div>
+            <h3 className="text-sm font-semibold">Visual Context</h3>
+            <Badge variant="secondary" className="text-xs">Optional</Badge>
+          </div>
           <AssetUploader
             assets={assets}
             onAddAsset={addAsset}
             onRemoveAsset={removeAsset}
             onGenerateScenes={generateFromAssets}
           />
+        </section>
 
+        <Separator />
+
+        {/* STEP 2: Output Constraints */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold">2</div>
+            <h3 className="text-sm font-semibold">Output Settings & Engine Strategy</h3>
+          </div>
+          <ConfigPanel config={config} onConfigChange={updateConfig} />
+        </section>
+
+        <Separator />
+
+        {/* STEP 3: Scene Construction */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold">3</div>
+            <h3 className="text-sm font-semibold">Scene Construction</h3>
+          </div>
+          
           {/* Template Selector (when no scenes) */}
           {scenes.length === 0 && assets.length === 0 && (
             <Card className="p-4 bg-card border-border">
-              <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-2 mb-2">
                 <LayoutTemplate className="w-4 h-4 text-primary" />
-                <h3 className="font-semibold text-sm">Quick Start Templates</h3>
+                <h4 className="font-semibold text-sm">Quick Start Templates</h4>
               </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Select a template to generate scenes automatically, or add assets above first.
+              </p>
               
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 {TEMPLATES.map(template => (
@@ -228,7 +302,13 @@ export function SmartSceneBuilderV2({ projectId, onProceedToAssembly }: SmartSce
           {scenes.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-sm">Scenes</h3>
+                <div className="flex items-center gap-2">
+                  <Film className="w-4 h-4 text-muted-foreground" />
+                  <h4 className="font-semibold text-sm">Scenes</h4>
+                  <span className="text-xs text-muted-foreground">
+                    (Engine selection happens per-scene based on complexity and cost efficiency)
+                  </span>
+                </div>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={addScene}>
                     <Plus className="w-4 h-4 mr-1" />
@@ -268,48 +348,35 @@ export function SmartSceneBuilderV2({ projectId, onProceedToAssembly }: SmartSce
               </ScrollArea>
             </div>
           )}
-        </TabsContent>
-
-        {/* Advanced Tab */}
-        <TabsContent value="advanced" className="space-y-4">
-          <Card className="p-4 bg-card border-border">
-            <h3 className="font-semibold text-sm mb-4">Manual Scene Creation</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Create custom scenes with full control over structure, duration, and engine selection.
-            </p>
-            <Button onClick={addScene} variant="outline">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Custom Scene
-            </Button>
-          </Card>
-
-          {/* Full scene list with more controls */}
-          {scenes.length > 0 && (
-            <ScrollArea className="h-[400px]">
-              <div className="space-y-3 pr-4">
-                {scenes.map((scene) => (
-                  <SceneCard
-                    key={scene.id}
-                    scene={scene}
-                    isGenerating={generatingSceneId === scene.id}
-                    onUpdate={(updates) => updateScene(scene.id, updates)}
-                    onUpdateStructure={(structure) => updateSceneStructure(scene.id, structure)}
-                    onUpdateDuration={(duration) => updateDuration(scene.id, duration)}
-                    onRegenerate={() => regenerateEngine(scene.id)}
-                    onGenerateVideo={() => generateSceneVideo(scene.id)}
-                    onRemove={() => removeScene(scene.id)}
-                  />
-                ))}
+          
+          {/* Empty state with assets */}
+          {scenes.length === 0 && assets.length > 0 && (
+            <Card className="p-6 bg-card border-border text-center">
+              <Wand2 className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground mb-3">
+                You have {assets.length} asset{assets.length > 1 ? 's' : ''} uploaded. Generate scenes from them or choose a template.
+              </p>
+              <div className="flex items-center justify-center gap-2">
+                <Button onClick={generateFromAssets}>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Generate from Assets
+                </Button>
               </div>
-            </ScrollArea>
+            </Card>
           )}
-        </TabsContent>
+        </section>
 
-        {/* Debug Tab */}
-        <TabsContent value="debug" className="space-y-4">
+        <Separator />
+
+        {/* Debug Panel - Always visible, contextual */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <Brain className="w-4 h-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold text-muted-foreground">AI Decisions & Debug</h3>
+          </div>
           <DebugPanel scenePlan={getScenePlan()} />
-        </TabsContent>
-      </Tabs>
+        </section>
+      </div>
 
       {/* Proceed Button */}
       {scenes.length > 0 && (
