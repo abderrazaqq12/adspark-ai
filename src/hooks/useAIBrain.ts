@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAIAgent } from './useAIAgent';
 
 interface BrainContext {
   project_id?: string;
@@ -46,6 +47,8 @@ interface Recommendation {
 }
 
 export function useAIBrain() {
+  const { aiAgent } = useAIAgent();
+  
   const callBrain = useCallback(async (
     action: string,
     context: BrainContext,
@@ -53,7 +56,7 @@ export function useAIBrain() {
   ): Promise<any> => {
     try {
       const response = await supabase.functions.invoke('ai-brain', {
-        body: { action, context, input },
+        body: { action, context, input, preferredAgent: aiAgent },
       });
 
       if (response.error) throw response.error;
@@ -62,7 +65,7 @@ export function useAIBrain() {
       console.error('AI Brain error:', error);
       throw error;
     }
-  }, []);
+  }, [aiAgent]);
 
   const selectEngine = useCallback(async (
     context: BrainContext,

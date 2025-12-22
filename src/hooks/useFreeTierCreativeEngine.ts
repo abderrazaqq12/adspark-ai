@@ -4,6 +4,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAIAgent } from './useAIAgent';
 import {
   FFMPEG_TRANSFORMATIONS,
   SYNTHETIC_MOTION_EFFECTS,
@@ -86,6 +87,7 @@ export interface AIOperatorFreeTierRecommendation {
 }
 
 export const useFreeTierCreativeEngine = () => {
+  const { aiAgent } = useAIAgent();
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<FreeTierResult[]>([]);

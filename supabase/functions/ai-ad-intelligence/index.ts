@@ -129,36 +129,34 @@ serve(async (req) => {
   }
 
   try {
-    const { action, config, productContext, sourceAdAnalysis } = await req.json();
+    const { action, config, productContext, sourceAdAnalysis, preferredAgent } = await req.json();
 
-    console.log('AI Ad Intelligence - Action:', action);
-
-    console.log('AI Ad Intelligence - Action:', action);
+    console.log('AI Ad Intelligence - Action:', action, 'Preferred Agent:', preferredAgent);
 
     switch (action) {
       case 'generate_ad_structure': {
-        const structure = await generateAdStructure(config, productContext, sourceAdAnalysis);
+        const structure = await generateAdStructure(config, productContext, sourceAdAnalysis, preferredAgent);
         return new Response(JSON.stringify({ success: true, structure }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
 
       case 'generate_hooks': {
-        const hooks = await generateDynamicHooks(config, productContext);
+        const hooks = await generateDynamicHooks(config, productContext, preferredAgent);
         return new Response(JSON.stringify({ success: true, hooks }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
 
       case 'generate_scene_content': {
-        const sceneContent = await generateSceneContent(config, productContext, sourceAdAnalysis);
+        const sceneContent = await generateSceneContent(config, productContext, sourceAdAnalysis, preferredAgent);
         return new Response(JSON.stringify({ success: true, sceneContent }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
 
       case 'optimize_for_market': {
-        const optimized = await optimizeForMarket(config, productContext);
+        const optimized = await optimizeForMarket(config, productContext, preferredAgent);
         return new Response(JSON.stringify({ success: true, optimized }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
@@ -181,7 +179,7 @@ serve(async (req) => {
       }
 
       case 'generate_complete_variation': {
-        const variation = await generateCompleteVariation(config, productContext, sourceAdAnalysis);
+        const variation = await generateCompleteVariation(config, productContext, sourceAdAnalysis, preferredAgent);
         return new Response(JSON.stringify({ success: true, variation }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
@@ -203,7 +201,7 @@ serve(async (req) => {
   }
 });
 
-async function generateAdStructure(config: any, productContext: any, sourceAdAnalysis: any) {
+async function generateAdStructure(config: any, productContext: any, sourceAdAnalysis: any, preferredAgent?: string) {
   const { language, market, videoType, targetAudience, pacing, hookStyle } = config;
   
   const marketProfile = MARKET_PSYCHOLOGY[market as keyof typeof MARKET_PSYCHOLOGY] || MARKET_PSYCHOLOGY['global'];
@@ -244,6 +242,7 @@ Do not include any placeholder or example text - generate real, usable content.`
       { role: 'user', content: userPrompt }
     ],
     temperature: 0.8,
+    preferredAgent: preferredAgent as any,
   });
 
   const content = aiResponse.content || '';
@@ -260,7 +259,7 @@ Do not include any placeholder or example text - generate real, usable content.`
   return { raw: content, scenes: videoStructure.map((type, i) => ({ type, index: i })) };
 }
 
-async function generateDynamicHooks(config: any, productContext: any) {
+async function generateDynamicHooks(config: any, productContext: any, preferredAgent?: string) {
   const { language, market, targetAudience, hookStyles, productCategory } = config;
   
   const marketProfile = MARKET_PSYCHOLOGY[market as keyof typeof MARKET_PSYCHOLOGY] || MARKET_PSYCHOLOGY['global'];
@@ -300,6 +299,7 @@ Adapt to ${market} market's cultural preferences and buying behavior.`;
       { role: 'user', content: userPrompt }
     ],
     temperature: 0.9,
+    preferredAgent: preferredAgent as any,
   });
 
   const content = aiResponse.content || '';
@@ -316,7 +316,7 @@ Adapt to ${market} market's cultural preferences and buying behavior.`;
   return { hooks: [], raw: content };
 }
 
-async function generateSceneContent(config: any, productContext: any, sourceAdAnalysis: any) {
+async function generateSceneContent(config: any, productContext: any, sourceAdAnalysis: any, preferredAgent?: string) {
   const { language, market, videoType, pacing, transitions } = config;
   
   const marketProfile = MARKET_PSYCHOLOGY[market as keyof typeof MARKET_PSYCHOLOGY] || MARKET_PSYCHOLOGY['global'];
@@ -365,6 +365,7 @@ Match ${market} market cultural preferences.`;
       { role: 'user', content: userPrompt }
     ],
     temperature: 0.8,
+    preferredAgent: preferredAgent as any,
   });
 
   const content = aiResponse.content || '';
@@ -381,7 +382,7 @@ Match ${market} market cultural preferences.`;
   return { scenes: [], raw: content };
 }
 
-async function optimizeForMarket(config: any, productContext: any) {
+async function optimizeForMarket(config: any, productContext: any, preferredAgent?: string) {
   const { language, market, currentContent } = config;
   
   const marketProfile = MARKET_PSYCHOLOGY[market as keyof typeof MARKET_PSYCHOLOGY] || MARKET_PSYCHOLOGY['global'];
@@ -415,6 +416,7 @@ ALL CONTENT IN ${language.toUpperCase()}.`;
       { role: 'user', content: userPrompt }
     ],
     temperature: 0.7,
+    preferredAgent: preferredAgent as any,
   });
 
   const content = aiResponse.content || '';
@@ -431,11 +433,11 @@ ALL CONTENT IN ${language.toUpperCase()}.`;
   return { raw: content };
 }
 
-async function generateCompleteVariation(config: any, productContext: any, sourceAdAnalysis: any) {
+async function generateCompleteVariation(config: any, productContext: any, sourceAdAnalysis: any, preferredAgent?: string) {
   // Generate all components for a complete ad variation
-  const structure = await generateAdStructure(config, productContext, sourceAdAnalysis);
-  const hooks = await generateDynamicHooks(config, productContext);
-  const sceneContent = await generateSceneContent(config, productContext, sourceAdAnalysis);
+  const structure = await generateAdStructure(config, productContext, sourceAdAnalysis, preferredAgent);
+  const hooks = await generateDynamicHooks(config, productContext, preferredAgent);
+  const sceneContent = await generateSceneContent(config, productContext, sourceAdAnalysis, preferredAgent);
 
   return {
     structure,

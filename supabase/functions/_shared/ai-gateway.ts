@@ -20,12 +20,13 @@ export interface AIRequestOptions {
   maxTokens?: number;
   stream?: boolean;
   apiKeys?: Record<string, string>;
+  preferredAgent?: 'gemini' | 'chatgpt' | 'deepseek' | 'claude' | 'llama'; // User's preferred AI agent
 }
 
 export interface AIResponse {
   content: string;
   model: string;
-  provider: 'gemini' | 'openai' | 'openrouter' | 'lovable';
+  provider: 'gemini' | 'openai' | 'openrouter' | 'lovable' | 'deepseek' | 'claude';
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -38,10 +39,10 @@ export type AIErrorType = 'RATE_LIMIT' | 'QUOTA_EXCEEDED' | 'AUTH_ERROR' | 'API_
 
 export class AIError extends Error {
   type: AIErrorType;
-  provider: 'gemini' | 'openai' | 'openrouter' | 'lovable';
+  provider: 'gemini' | 'openai' | 'openrouter' | 'lovable' | 'deepseek' | 'claude';
   retryAfterSeconds?: number;
   
-  constructor(message: string, type: AIErrorType, provider: 'gemini' | 'openai' | 'openrouter' | 'lovable', retryAfterSeconds?: number) {
+  constructor(message: string, type: AIErrorType, provider: 'gemini' | 'openai' | 'openrouter' | 'lovable' | 'deepseek' | 'claude', retryAfterSeconds?: number) {
     super(message);
     this.name = 'AIError';
     this.type = type;
@@ -310,6 +311,124 @@ async function callOpenRouter(options: AIRequestOptions): Promise<AIResponse> {
 }
 
 /**
+ * Call DeepSeek API
+ */
+async function callDeepSeek(options: AIRequestOptions): Promise<AIResponse> {
+  const apiKey = options.apiKeys?.['DEEPSEEK_API_KEY'] || Deno.env.get('DEEPSEEK_API_KEY');
+  if (!apiKey) {
+    throw new AIError('DeepSeek API key not configured', 'AUTH_ERROR', 'deepseek');
+  }
+
+  const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      messages: options.messages,
+      temperature: options.temperature ?? 0.7,
+      max_tokens: options.maxTokens ?? 4096,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('[DeepSeek] Error:', response.status, errorText);
+    
+    if (response.status === 429) {
+      throw new AIError('DeepSeek API rate limited. Trying fallback provider...', 'RATE_LIMIT', 'deepseek');
+    }
+    
+    if (response.status === 401 || response.status === 403) {
+      throw new AIError('DeepSeek API key is invalid or expired', 'AUTH_ERROR', 'deepseek');
+    }
+    
+    throw new AIError(`DeepSeek API error: ${response.status}`, 'API_ERROR', 'deepseek');
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content || '';
+
+  return {
+    content,
+    model: 'deepseek-chat',
+    provider: 'deepseek',
+    usage: data.usage ? {
+      promptTokens: data.usage.prompt_tokens || 0,
+      completionTokens: data.usage.completion_tokens || 0,
+      totalTokens: data.usage.total_tokens || 0,
+    } : undefined,
+  };
+}
+
+/**
+ * Call Anthropic Claude API
+ */
+async function callClaude(options: AIRequestOptions): Promise<AIResponse> {
+  const apiKey = options.apiKeys?.['ANTHROPIC_API_KEY'] || Deno.env.get('ANTHROPIC_API_KEY');
+  if (!apiKey) {
+    throw new AIError('Anthropic API key not configured', 'AUTH_ERROR', 'claude');
+  }
+
+  // Extract system message
+  const systemMessage = options.messages.find(m => m.role === 'system');
+  const systemContent = systemMessage && typeof systemMessage.content === 'string' ? systemMessage.content : undefined;
+  
+  const messages = options.messages
+    .filter(m => m.role !== 'system')
+    .map(m => ({
+      role: m.role,
+      content: typeof m.content === 'string' ? m.content : m.content.map(c => c.type === 'text' ? { type: 'text', text: c.text } : c).filter(Boolean)
+    }));
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-5-20250514',
+      max_tokens: options.maxTokens ?? 4096,
+      system: systemContent,
+      messages,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('[Claude] Error:', response.status, errorText);
+    
+    if (response.status === 429) {
+      throw new AIError('Claude API rate limited. Trying fallback provider...', 'RATE_LIMIT', 'claude');
+    }
+    
+    if (response.status === 401 || response.status === 403) {
+      throw new AIError('Anthropic API key is invalid or expired', 'AUTH_ERROR', 'claude');
+    }
+    
+    throw new AIError(`Claude API error: ${response.status}`, 'API_ERROR', 'claude');
+  }
+
+  const data = await response.json();
+  const content = data.content?.[0]?.text || '';
+
+  return {
+    content,
+    model: 'claude-sonnet-4-5-20250514',
+    provider: 'claude',
+    usage: data.usage ? {
+      promptTokens: data.usage.input_tokens || 0,
+      completionTokens: data.usage.output_tokens || 0,
+      totalTokens: (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0),
+    } : undefined,
+  };
+}
+
+/**
  * Call Lovable AI Gateway (final fallback - always available)
  * Uses LOVABLE_API_KEY which is auto-provisioned by Lovable Cloud
  */
@@ -377,42 +496,82 @@ async function callLovable(options: AIRequestOptions): Promise<AIResponse> {
 }
 
 // Provider info for logging
-type ProviderName = 'gemini' | 'openai' | 'openrouter' | 'lovable';
+type ProviderName = 'gemini' | 'openai' | 'openrouter' | 'lovable' | 'deepseek' | 'claude';
 type ProviderFunction = (options: AIRequestOptions) => Promise<AIResponse>;
 
 interface ProviderConfig {
   name: ProviderName;
+  agentAlias?: string; // Maps to user-facing agent name
   call: ProviderFunction;
   isConfigured: (keys?: Record<string, string>) => boolean;
 }
 
+// Map user agent preferences to provider names
+const AGENT_TO_PROVIDER: Record<string, ProviderName> = {
+  'gemini': 'gemini',
+  'chatgpt': 'openai',
+  'deepseek': 'deepseek',
+  'claude': 'claude',
+  'llama': 'openrouter', // llama uses OpenRouter
+};
+
 /**
  * Main AI Gateway function - tries providers in order with automatic fallback
- * Order: Gemini → OpenAI → OpenRouter → Lovable AI (final fallback)
+ * Respects user's preferred agent from settings, then falls back to others
+ * Default order: User's preference → Gemini → OpenAI → DeepSeek → Claude → OpenRouter → Lovable AI
  */
 export async function callAI(options: AIRequestOptions): Promise<AIResponse> {
-  const providers: ProviderConfig[] = [
+  const allProviders: ProviderConfig[] = [
     { 
-      name: 'gemini', 
+      name: 'gemini',
+      agentAlias: 'gemini',
       call: callGemini, 
       isConfigured: (keys) => !!(keys?.['GEMINI_API_KEY'] || Deno.env.get('Gemini'))
     },
     { 
-      name: 'openai', 
+      name: 'openai',
+      agentAlias: 'chatgpt',
       call: callOpenAI, 
       isConfigured: (keys) => !!(keys?.['OPENAI_API_KEY'] || Deno.env.get('OpenAI'))
     },
     { 
-      name: 'openrouter', 
+      name: 'deepseek',
+      agentAlias: 'deepseek',
+      call: callDeepSeek, 
+      isConfigured: (keys) => !!(keys?.['DEEPSEEK_API_KEY'] || Deno.env.get('DEEPSEEK_API_KEY'))
+    },
+    { 
+      name: 'claude',
+      agentAlias: 'claude',
+      call: callClaude, 
+      isConfigured: (keys) => !!(keys?.['ANTHROPIC_API_KEY'] || Deno.env.get('ANTHROPIC_API_KEY'))
+    },
+    { 
+      name: 'openrouter',
+      agentAlias: 'llama',
       call: callOpenRouter, 
       isConfigured: (keys) => !!(keys?.['OPENROUTER_API_KEY'] || Deno.env.get('OPENROUTER_API_KEY'))
     },
     { 
-      name: 'lovable', 
+      name: 'lovable',
       call: callLovable, 
       isConfigured: () => !!Deno.env.get('LOVABLE_API_KEY')
     },
   ];
+
+  // Reorder providers based on user's preference
+  let providers = [...allProviders];
+  if (options.preferredAgent) {
+    const preferredProviderName = AGENT_TO_PROVIDER[options.preferredAgent];
+    if (preferredProviderName) {
+      const preferredIndex = providers.findIndex(p => p.name === preferredProviderName);
+      if (preferredIndex > 0) {
+        const [preferred] = providers.splice(preferredIndex, 1);
+        providers.unshift(preferred);
+        console.log(`[AI-Gateway] User prefers ${options.preferredAgent}, prioritizing ${preferredProviderName}`);
+      }
+    }
+  }
 
   const errors: { provider: ProviderName; error: AIError | Error }[] = [];
   
@@ -509,6 +668,8 @@ export function isAIAvailable(apiKeys?: Record<string, string>): boolean {
   return !!(
     (apiKeys?.['GEMINI_API_KEY'] || Deno.env.get('Gemini')) || 
     (apiKeys?.['OPENAI_API_KEY'] || Deno.env.get('OpenAI')) || 
+    (apiKeys?.['DEEPSEEK_API_KEY'] || Deno.env.get('DEEPSEEK_API_KEY')) ||
+    (apiKeys?.['ANTHROPIC_API_KEY'] || Deno.env.get('ANTHROPIC_API_KEY')) ||
     (apiKeys?.['OPENROUTER_API_KEY'] || Deno.env.get('OPENROUTER_API_KEY')) ||
     Deno.env.get('LOVABLE_API_KEY')
   );
@@ -521,6 +682,8 @@ export function getAvailableProviders(apiKeys?: Record<string, string>): string[
   const providers: string[] = [];
   if (apiKeys?.['GEMINI_API_KEY'] || Deno.env.get('Gemini')) providers.push('gemini');
   if (apiKeys?.['OPENAI_API_KEY'] || Deno.env.get('OpenAI')) providers.push('openai');
+  if (apiKeys?.['DEEPSEEK_API_KEY'] || Deno.env.get('DEEPSEEK_API_KEY')) providers.push('deepseek');
+  if (apiKeys?.['ANTHROPIC_API_KEY'] || Deno.env.get('ANTHROPIC_API_KEY')) providers.push('claude');
   if (apiKeys?.['OPENROUTER_API_KEY'] || Deno.env.get('OPENROUTER_API_KEY')) providers.push('openrouter');
   if (Deno.env.get('LOVABLE_API_KEY')) providers.push('lovable');
   return providers;
