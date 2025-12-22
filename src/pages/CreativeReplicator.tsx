@@ -21,6 +21,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useRenderBackendStatus } from "@/hooks/useRenderBackendStatus";
 import { useSecureApiKeys } from "@/hooks/useSecureApiKeys";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { useAudience } from "@/contexts/AudienceContext";
 
 export interface UploadedAd {
   id: string;
@@ -106,6 +107,9 @@ const ENGINE_BY_TIER: Record<string, string[]> = {
 };
 
 const CreativeReplicator = () => {
+  // Global audience context
+  const { resolved: audience } = useAudience();
+  
   // Auto-detect available backends
   const backendStatus = useRenderBackendStatus();
   
@@ -122,22 +126,23 @@ const CreativeReplicator = () => {
   const [activeStep, setActiveStep] = useState<string>("upload");
   const [projectName, setProjectName] = useState<string>("");
   const [uploadedAds, setUploadedAds] = useState<UploadedAd[]>([]);
-  // Default: Arabic (Saudi), Saudi Arabia market
+  
+  // Initialize variation config with global audience defaults
   const [variationConfig, setVariationConfig] = useState<VariationConfig>({
     count: 10,
     hookStyles: ["ai-auto"],
     pacing: "dynamic",
     transitions: ["ai-auto"],
     actors: [],
-    voiceSettings: { language: "ar", tone: "ai-auto" },
+    voiceSettings: { language: audience.language, tone: "ai-auto" },
     ratios: ["9:16"],
     engineTier: "free",
     randomizeEngines: true,
     useAIOperator: true,
     adIntelligence: {
       enabled: true,
-      language: "ar",
-      market: "saudi",
+      language: audience.language,
+      market: audience.country,
       videoType: "ai-auto",
       platform: "tiktok",
       productCategory: "general",
@@ -146,6 +151,19 @@ const CreativeReplicator = () => {
       productContext: {}
     }
   });
+  
+  // Sync variation config when audience changes
+  useEffect(() => {
+    setVariationConfig(prev => ({
+      ...prev,
+      voiceSettings: { ...prev.voiceSettings, language: audience.language },
+      adIntelligence: {
+        ...prev.adIntelligence,
+        language: audience.language,
+        market: audience.country
+      }
+    }));
+  }, [audience.language, audience.country]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { 
-  Wand2, Video, Image, Upload, Loader2, Users, Zap, Settings2, X, FileVideo, FileImage, Layers
+  Wand2, Video, Image, Upload, Loader2, Users, Zap, Settings2, X, FileVideo, FileImage, Layers, Globe
 } from "lucide-react";
 import { toast } from "sonner";
 import { useExtendedAITools } from "@/hooks/useExtendedAITools";
@@ -22,8 +22,14 @@ import { OutputResultPanel } from "@/components/ai-tools/OutputResultPanel";
 import { OutputControlsPanel, ImageOutputSettings, VideoOutputSettings } from "@/components/ai-tools/OutputControlsPanel";
 import { ExecutionHistoryPanel } from "@/components/ai-tools/ExecutionHistoryPanel";
 import { BatchQueuePanel } from "@/components/ai-tools/BatchQueuePanel";
+import { useAudience } from "@/contexts/AudienceContext";
+import { CountrySelector } from "@/components/audience/CountrySelector";
+import { LANGUAGES } from "@/lib/audience/countries";
 
 export default function AITools() {
+  // Global audience context
+  const { resolved: audience } = useAudience();
+  
   const { 
     isExecuting, executionProgress, executeTool, getTools, getImageModels, getVideoModels,
     getTalkingActorModels, getPresets, currentDebug, executionTiming, executionHistory,
@@ -38,9 +44,16 @@ export default function AITools() {
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [inputUrl, setInputUrl] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [targetMarket, setTargetMarket] = useState("GCC");
-  const [language, setLanguage] = useState("ar");
+  // Initialize from global audience defaults
+  const [targetCountry, setTargetCountry] = useState("");
+  const [language, setLanguage] = useState("");
   const [activeCategory, setActiveCategory] = useState("tools");
+  
+  // Sync with global audience when loaded
+  useEffect(() => {
+    if (!targetCountry) setTargetCountry(audience.country);
+    if (!language) setLanguage(audience.language);
+  }, [audience]);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -127,8 +140,8 @@ export default function AITools() {
     startBatch({
       toolId: selectedTool,
       prompt,
-      language,
-      targetMarket,
+      language: language || audience.language,
+      targetMarket: targetCountry || audience.country,
       imageSettings: activeCategory === 'image' ? imageSettings : undefined,
       videoSettings: activeCategory === 'video' ? videoSettings : undefined,
     });
@@ -137,7 +150,7 @@ export default function AITools() {
   const handleExecuteTool = async (toolId: string) => {
     if (!inputUrl && !prompt) { toast.error("Please provide input or prompt"); return; }
     await executeTool({
-      toolId, prompt, language, targetMarket,
+      toolId, prompt, language: language || audience.language, targetMarket: targetCountry || audience.country,
       inputData: inputUrl ? { imageUrl: inputUrl, videoUrl: inputUrl } : undefined,
       imageSettings: activeCategory === 'image' ? imageSettings : undefined,
       videoSettings: activeCategory === 'video' ? videoSettings : undefined,
@@ -172,29 +185,34 @@ export default function AITools() {
 
       <Card className="bg-gradient-card border-border">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2"><Users className="w-4 h-4 text-primary" />Audience Targeting</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Globe className="w-4 h-4 text-primary" />
+              Audience Targeting
+            </CardTitle>
+            <Badge variant="outline" className="text-xs">From Default Settings</Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Using your default audience. Override below if needed.
+          </p>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="space-y-2">
-              <Label className="text-foreground text-sm">Target Market</Label>
-              <Select value={targetMarket} onValueChange={setTargetMarket}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="GCC">GCC</SelectItem>
-                  <SelectItem value="EUROPE">Europe</SelectItem>
-                  <SelectItem value="LATAM">LATAM</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label className="text-foreground text-sm">Target Country</Label>
+              <CountrySelector
+                value={targetCountry || audience.country}
+                onChange={setTargetCountry}
+              />
             </div>
             <div className="space-y-2">
               <Label className="text-foreground text-sm">Language</Label>
-              <Select value={language} onValueChange={setLanguage}>
+              <Select value={language || audience.language} onValueChange={setLanguage}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ar">Arabic</SelectItem>
-                  <SelectItem value="en">English</SelectItem>
-                  <SelectItem value="es">Spanish</SelectItem>
+                  {LANGUAGES.map(lang => (
+                    <SelectItem key={lang.code} value={lang.code}>{lang.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
