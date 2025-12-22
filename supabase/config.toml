@@ -134,3 +134,6 @@ verify_jwt = false
 
 [functions.test-ai-providers]
 verify_jwt = true
+
+[functions.ai-fallback]
+verify_jwt = false
