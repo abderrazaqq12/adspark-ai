@@ -70,6 +70,16 @@ export function useBatchProcessing() {
     setQueue(prev => prev.filter(item => item.id !== id));
   }, []);
 
+  // Reorder queue items (drag and drop)
+  const reorderQueue = useCallback((fromIndex: number, toIndex: number) => {
+    setQueue(prev => {
+      const items = [...prev];
+      const [movedItem] = items.splice(fromIndex, 1);
+      items.splice(toIndex, 0, movedItem);
+      return items;
+    });
+  }, []);
+
   // Clear entire queue
   const clearQueue = useCallback(() => {
     setQueue([]);
@@ -223,6 +233,7 @@ export function useBatchProcessing() {
     completedOutputs,
     addToQueue,
     removeFromQueue,
+    reorderQueue,
     clearQueue,
     startBatch,
     pauseBatch,
