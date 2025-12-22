@@ -72,11 +72,11 @@ function ClearHistoryDialog({ onConfirm }: { onConfirm: () => void }) {
       <AlertDialogHeader>
         <AlertDialogTitle className="flex items-center gap-2">
           <RotateCcw className="w-5 h-5 text-destructive" />
-          Clear Creative Scale Session?
+          Clear Creative AI Editor Session?
         </AlertDialogTitle>
         <AlertDialogDescription className="space-y-3">
           <p>
-            This will reset the entire Creative Scale pipeline and clear:
+            This will reset the entire Creative AI Editor pipeline and clear:
           </p>
           <ul className="list-disc list-inside space-y-1 text-sm">
             <li>Uploaded videos</li>
