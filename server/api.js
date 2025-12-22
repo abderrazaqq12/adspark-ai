@@ -1204,6 +1204,366 @@ app.get('/api/oauth/google/callback', async (req, res) => {
 });
 
 // ============================================
+// HISTORY & CLEANUP API
+// Unified history control and file cleanup endpoints
+// ============================================
+
+/**
+ * GET /api/history
+ * Returns execution history for a project or tool
+ */
+app.get('/api/history', (req, res) => {
+  const { projectId, tool } = req.query;
+  console.log(`[History] Fetching history for project: ${projectId}, tool: ${tool}`);
+  
+  // Get relevant jobs from in-memory store
+  const allJobs = Array.from(jobs.values());
+  const filteredJobs = allJobs.filter(job => {
+    if (projectId && job.input?.projectId !== projectId) return false;
+    if (tool && job.type !== tool) return false;
+    return true;
+  }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  
+  res.json({
+    ok: true,
+    history: filteredJobs.map(job => ({
+      id: job.id,
+      type: job.type,
+      status: job.status,
+      createdAt: job.createdAt,
+      completedAt: job.completedAt,
+      output: job.output,
+      error: job.error
+    })),
+    count: filteredJobs.length
+  });
+});
+
+/**
+ * DELETE /api/history
+ * Clears execution history and associated data
+ * REAL backend action - deletes logs, pipeline state, job records
+ */
+app.delete('/api/history', async (req, res) => {
+  const { projectId, tool, scope } = req.body;
+  console.log(`[History] Clear request - projectId: ${projectId}, tool: ${tool}, scope: ${scope}`);
+  
+  const deletedItems = {
+    jobs: 0,
+    logs: 0,
+    pipelines: 0,
+    tempFiles: 0
+  };
+  
+  try {
+    // 1. Delete jobs from in-memory queue
+    const jobsToDelete = [];
+    for (const [jobId, job] of jobs.entries()) {
+      const shouldDelete = 
+        (scope === 'all') ||
+        (projectId && job.input?.projectId === projectId) ||
+        (tool && job.type === tool);
+      
+      if (shouldDelete && job.status !== 'running') {
+        jobsToDelete.push(jobId);
+      }
+    }
+    
+    for (const jobId of jobsToDelete) {
+      const job = jobs.get(jobId);
+      
+      // Clean up temp files associated with this job
+      if (job?.tempFiles && Array.isArray(job.tempFiles)) {
+        for (const tempFile of job.tempFiles) {
+          try {
+            if (fs.existsSync(tempFile)) {
+              fs.unlinkSync(tempFile);
+              deletedItems.tempFiles++;
+              console.log(`[History] Deleted temp file: ${tempFile}`);
+            }
+          } catch (e) {
+            console.warn(`[History] Failed to delete temp file: ${tempFile}`);
+          }
+        }
+      }
+      
+      jobs.delete(jobId);
+      deletedItems.jobs++;
+    }
+    
+    // 2. Remove from pending queue
+    const pendingBefore = pendingQueue.length;
+    pendingQueue.length = 0;
+    pendingQueue.push(...pendingQueue.filter(id => !jobsToDelete.includes(id)));
+    deletedItems.pipelines = pendingBefore - pendingQueue.length;
+    
+    // 3. Clean up project-specific temp directory
+    if (projectId) {
+      const projectTempDir = path.join(TEMP_DIR, projectId);
+      if (fs.existsSync(projectTempDir)) {
+        const files = fs.readdirSync(projectTempDir);
+        for (const file of files) {
+          try {
+            fs.unlinkSync(path.join(projectTempDir, file));
+            deletedItems.tempFiles++;
+          } catch (e) { /* ignore */ }
+        }
+        try {
+          fs.rmdirSync(projectTempDir);
+        } catch (e) { /* ignore if not empty */ }
+      }
+    }
+    
+    console.log(`[History] Cleared: ${deletedItems.jobs} jobs, ${deletedItems.tempFiles} temp files`);
+    
+    res.json({
+      ok: true,
+      message: 'History cleared successfully',
+      deleted: deletedItems
+    });
+    
+  } catch (err) {
+    console.error('[History] Clear failed:', err);
+    jsonError(res, 500, 'CLEAR_FAILED', err.message);
+  }
+});
+
+/**
+ * GET /api/files
+ * Lists files for a project or tool
+ */
+app.get('/api/files', (req, res) => {
+  const { projectId, type } = req.query;
+  console.log(`[Files] Listing files for project: ${projectId}, type: ${type}`);
+  
+  const files = [];
+  
+  // Scan uploads directory
+  const scanDir = projectId 
+    ? path.join(UPLOAD_DIR, projectId)
+    : UPLOAD_DIR;
+  
+  if (fs.existsSync(scanDir)) {
+    const dirFiles = fs.readdirSync(scanDir, { withFileTypes: true });
+    for (const dirent of dirFiles) {
+      if (dirent.isFile()) {
+        const filePath = path.join(scanDir, dirent.name);
+        const stats = fs.statSync(filePath);
+        const ext = path.extname(dirent.name).toLowerCase();
+        const fileType = 
+          ['.mp4', '.webm', '.mov', '.avi'].includes(ext) ? 'video' :
+          ['.jpg', '.jpeg', '.png', '.webp'].includes(ext) ? 'image' :
+          'other';
+        
+        if (!type || type === fileType) {
+          files.push({
+            name: dirent.name,
+            path: filePath,
+            type: fileType,
+            size: stats.size,
+            createdAt: stats.birthtime,
+            modifiedAt: stats.mtime
+          });
+        }
+      }
+    }
+  }
+  
+  // Scan outputs directory
+  const outputDir = projectId 
+    ? path.join(OUTPUT_DIR, projectId)
+    : OUTPUT_DIR;
+  
+  if (fs.existsSync(outputDir)) {
+    const dirFiles = fs.readdirSync(outputDir, { withFileTypes: true });
+    for (const dirent of dirFiles) {
+      if (dirent.isFile()) {
+        const filePath = path.join(outputDir, dirent.name);
+        const stats = fs.statSync(filePath);
+        files.push({
+          name: dirent.name,
+          path: filePath,
+          type: 'output',
+          size: stats.size,
+          createdAt: stats.birthtime,
+          modifiedAt: stats.mtime
+        });
+      }
+    }
+  }
+  
+  res.json({
+    ok: true,
+    files,
+    count: files.length,
+    totalSize: files.reduce((sum, f) => sum + f.size, 0)
+  });
+});
+
+/**
+ * DELETE /api/files
+ * Deletes files for a project
+ */
+app.delete('/api/files', async (req, res) => {
+  const { projectId, fileTypes, scope } = req.body;
+  console.log(`[Files] Delete request - projectId: ${projectId}, types: ${fileTypes}, scope: ${scope}`);
+  
+  if (!projectId && scope !== 'orphaned') {
+    return jsonError(res, 400, 'PROJECT_REQUIRED', 'projectId is required unless scope is "orphaned"');
+  }
+  
+  const deleted = {
+    videos: 0,
+    images: 0,
+    outputs: 0,
+    orphaned: 0,
+    totalBytes: 0
+  };
+  
+  try {
+    const typesToDelete = fileTypes || ['video', 'image', 'output'];
+    
+    // Delete from uploads
+    if (typesToDelete.includes('video') || typesToDelete.includes('image')) {
+      const uploadDir = projectId 
+        ? path.join(UPLOAD_DIR, projectId)
+        : UPLOAD_DIR;
+      
+      if (fs.existsSync(uploadDir)) {
+        const files = fs.readdirSync(uploadDir);
+        for (const file of files) {
+          const filePath = path.join(uploadDir, file);
+          const stats = fs.statSync(filePath);
+          if (stats.isFile()) {
+            const ext = path.extname(file).toLowerCase();
+            const isVideo = ['.mp4', '.webm', '.mov', '.avi'].includes(ext);
+            const isImage = ['.jpg', '.jpeg', '.png', '.webp'].includes(ext);
+            
+            if ((isVideo && typesToDelete.includes('video')) || 
+                (isImage && typesToDelete.includes('image'))) {
+              fs.unlinkSync(filePath);
+              deleted.totalBytes += stats.size;
+              if (isVideo) deleted.videos++;
+              else deleted.images++;
+              console.log(`[Files] Deleted: ${filePath}`);
+            }
+          }
+        }
+      }
+    }
+    
+    // Delete outputs
+    if (typesToDelete.includes('output')) {
+      const outputDir = projectId 
+        ? path.join(OUTPUT_DIR, projectId)
+        : OUTPUT_DIR;
+      
+      if (fs.existsSync(outputDir)) {
+        const files = fs.readdirSync(outputDir);
+        for (const file of files) {
+          const filePath = path.join(outputDir, file);
+          const stats = fs.statSync(filePath);
+          if (stats.isFile()) {
+            fs.unlinkSync(filePath);
+            deleted.totalBytes += stats.size;
+            deleted.outputs++;
+            console.log(`[Files] Deleted output: ${filePath}`);
+          }
+        }
+      }
+    }
+    
+    // Handle orphaned files (no active job reference)
+    if (scope === 'orphaned') {
+      const activeJobIds = new Set(Array.from(jobs.values()).map(j => j.id));
+      
+      // Scan temp directory for orphans
+      if (fs.existsSync(TEMP_DIR)) {
+        const tempFiles = fs.readdirSync(TEMP_DIR, { withFileTypes: true });
+        for (const dirent of tempFiles) {
+          if (dirent.isFile()) {
+            // Check if file is referenced by any job
+            const isOrphan = !Array.from(jobs.values()).some(job => 
+              job.tempFiles?.includes(path.join(TEMP_DIR, dirent.name))
+            );
+            
+            if (isOrphan) {
+              const filePath = path.join(TEMP_DIR, dirent.name);
+              const stats = fs.statSync(filePath);
+              fs.unlinkSync(filePath);
+              deleted.orphaned++;
+              deleted.totalBytes += stats.size;
+              console.log(`[Files] Deleted orphaned: ${filePath}`);
+            }
+          }
+        }
+      }
+    }
+    
+    console.log(`[Files] Cleanup complete: ${JSON.stringify(deleted)}`);
+    
+    res.json({
+      ok: true,
+      message: 'Files deleted successfully',
+      deleted
+    });
+    
+  } catch (err) {
+    console.error('[Files] Delete failed:', err);
+    jsonError(res, 500, 'DELETE_FAILED', err.message);
+  }
+});
+
+/**
+ * GET /api/pipeline/status
+ * Returns current pipeline status
+ */
+app.get('/api/pipeline/status', (req, res) => {
+  const { projectId } = req.query;
+  
+  const queuedJobs = pendingQueue.length;
+  const currentJobInfo = currentJob ? jobs.get(currentJob) : null;
+  
+  res.json({
+    ok: true,
+    pipeline: {
+      queuedJobs,
+      currentJob: currentJobInfo ? {
+        id: currentJobInfo.id,
+        type: currentJobInfo.type,
+        status: currentJobInfo.status,
+        progressPct: currentJobInfo.progressPct,
+        startedAt: currentJobInfo.startedAt
+      } : null,
+      isProcessing: currentJob !== null
+    }
+  });
+});
+
+/**
+ * DELETE /api/pipeline
+ * Resets pipeline state (clears queue)
+ */
+app.delete('/api/pipeline', (req, res) => {
+  const { force } = req.body;
+  
+  if (currentJob && !force) {
+    return jsonError(res, 400, 'JOB_RUNNING', 'A job is currently running. Use force=true to clear anyway.');
+  }
+  
+  const clearedCount = pendingQueue.length;
+  pendingQueue.length = 0;
+  
+  console.log(`[Pipeline] Cleared ${clearedCount} pending jobs`);
+  
+  res.json({
+    ok: true,
+    message: `Cleared ${clearedCount} pending jobs`,
+    clearedCount
+  });
+});
+
+// ============================================
 // RENDERFLOW PROXY ADAPTER (Phase 2)
 // Direct proxy to deterministic engine on port 3001
 // ============================================
