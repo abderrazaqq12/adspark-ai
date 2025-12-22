@@ -403,11 +403,52 @@ export function SmartSceneBuilderV2({ projectId, scripts = [], productData, onPr
                 and duration constraints ({config.minVideoDuration || 20}-{config.maxVideoDuration || 35}s per video).
               </p>
               
+              {/* Scene Optimization Breakdown */}
+              <Card className="p-3 bg-muted/30 border-border mb-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-medium">Scene Optimization Preview</span>
+                </div>
+                
+                {/* Visual breakdown */}
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-2 h-2 rounded-full bg-primary" />
+                      <span className="text-xs font-medium text-primary">Reusable Scenes</span>
+                    </div>
+                    <p className="text-lg font-bold">{Math.ceil(aiRecommendation.sceneCount * 0.4)}</p>
+                    <p className="text-xs text-muted-foreground">Generated once, used in all {config.videoCount} videos</p>
+                  </div>
+                  <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                      <span className="text-xs font-medium text-blue-400">Unique Scenes</span>
+                    </div>
+                    <p className="text-lg font-bold">{Math.ceil(aiRecommendation.sceneCount * 0.6)}</p>
+                    <p className="text-xs text-muted-foreground">Specific to each video variation</p>
+                  </div>
+                </div>
+                
+                {/* Efficiency indicator */}
+                <div className="flex items-center justify-between p-2 rounded-lg bg-green-500/10 border border-green-500/20">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <span className="text-xs text-green-400">
+                      ~{Math.round((1 - (aiRecommendation.sceneCount / (aiRecommendation.sceneCount * config.videoCount))) * 100)}% cost savings through scene reuse
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="text-xs border-green-500/30 text-green-400">
+                    {aiRecommendation.sceneCount} total vs {aiRecommendation.sceneCount * config.videoCount} without optimization
+                  </Badge>
+                </div>
+              </Card>
+              
               {/* AI Recommendation Card */}
-              <Card className="p-3 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 mb-4">
+              <Card className="p-3 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-primary" />
+                    <Brain className="w-4 h-4 text-primary" />
                     <span className="text-sm font-medium">Recommended: {aiRecommendation.templateName}</span>
                   </div>
                   <Badge variant="outline" className="text-xs">
