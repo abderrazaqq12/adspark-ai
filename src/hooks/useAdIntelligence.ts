@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAIAgent } from './useAIAgent';
 
 export interface AdIntelligenceConfig {
   language: string;
@@ -132,6 +133,7 @@ export const PLATFORM_IDENTITIES: Record<string, any> = {
 };
 
 export const useAdIntelligence = () => {
+  const { aiAgent } = useAIAgent();
   const [isLoading, setIsLoading] = useState(false);
   const [generatedStructure, setGeneratedStructure] = useState<AdStructure | null>(null);
   const [generatedHooks, setGeneratedHooks] = useState<any[]>([]);
@@ -161,7 +163,8 @@ export const useAdIntelligence = () => {
           action: 'generate_ad_structure',
           config,
           productContext,
-          sourceAdAnalysis
+          sourceAdAnalysis,
+          preferredAgent: aiAgent
         }
       });
 
@@ -192,7 +195,8 @@ export const useAdIntelligence = () => {
         body: {
           action: 'generate_hooks',
           config,
-          productContext
+          productContext,
+          preferredAgent: aiAgent
         }
       });
 
@@ -225,7 +229,8 @@ export const useAdIntelligence = () => {
           action: 'generate_scene_content',
           config,
           productContext,
-          sourceAdAnalysis
+          sourceAdAnalysis,
+          preferredAgent: aiAgent
         }
       });
 
@@ -257,7 +262,8 @@ export const useAdIntelligence = () => {
         body: {
           action: 'optimize_for_market',
           config: { ...config, currentContent },
-          productContext
+          productContext,
+          preferredAgent: aiAgent
         }
       });
 
@@ -284,7 +290,8 @@ export const useAdIntelligence = () => {
           action: 'generate_complete_variation',
           config,
           productContext,
-          sourceAdAnalysis
+          sourceAdAnalysis,
+          preferredAgent: aiAgent
         }
       });
 
