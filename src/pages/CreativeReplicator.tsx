@@ -27,7 +27,7 @@ import { EnhancedResultsGallery } from "@/components/replicator/EnhancedResultsG
 import { ProcessingTimeline } from "@/components/replicator/ProcessingTimeline";
 import { PipelineProgressPanel } from "@/components/replicator/PipelineProgressPanel";
 import { RenderDebugPanel } from "@/components/replicator/RenderDebugPanel";
-import { ProjectContextBanner } from "@/components/project";
+import { ProjectContextBanner, DriveSyncIndicator } from "@/components/project";
 import { useGlobalProject } from "@/contexts/GlobalProjectContext";
 import { useAssetUpload } from "@/hooks/useAssetUpload";
 import { toast } from "sonner";
@@ -655,6 +655,8 @@ const CreativeReplicator = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Drive Sync Status */}
+          <DriveSyncIndicator />
           {/* Audience Badge */}
           <TooltipProvider>
             <Tooltip>
