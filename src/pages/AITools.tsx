@@ -29,6 +29,7 @@ import {
 import { toast } from "sonner";
 import { useExtendedAITools } from "@/hooks/useExtendedAITools";
 import { supabase } from "@/integrations/supabase/client";
+import { AIToolsDebugPanel } from "@/components/ai-tools/AIToolsDebugPanel";
 
 export default function AITools() {
   const { 
@@ -39,7 +40,8 @@ export default function AITools() {
     getImageModels,
     getVideoModels,
     getTalkingActorModels,
-    getPresets
+    getPresets,
+    currentDebug
   } = useExtendedAITools();
 
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
@@ -511,6 +513,9 @@ export default function AITools() {
               )}
             </CardContent>
           </Card>
+
+          {/* Debug Panel */}
+          <AIToolsDebugPanel debug={currentDebug} selectedTool={selectedTool} />
         </div>
       </div>
     </div>
