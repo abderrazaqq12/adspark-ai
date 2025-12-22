@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Zap, Upload, Settings2, Play, FolderOpen, Brain, Server, Cloud, CheckCircle2, Loader2 } from "lucide-react";
 import { AdUploader } from "@/components/replicator/AdUploader";
-import { SimplifiedVariationSettings } from "@/components/replicator/SimplifiedVariationSettings";
+import { AICreativeConfigPanel } from "@/components/replicator/AICreativeConfigPanel";
+import type { BrainOutput } from "@/lib/replicator/ai-creative-brain";
 import { GenerationProgress } from "@/components/replicator/GenerationProgress";
 import { EnhancedResultsGallery } from "@/components/replicator/EnhancedResultsGallery";
 import { ProcessingTimeline } from "@/components/replicator/ProcessingTimeline";
@@ -612,11 +613,15 @@ const CreativeReplicator = () => {
             )}
 
             {activeStep === "settings" && (
-              <SimplifiedVariationSettings
+              <AICreativeConfigPanel
                 config={variationConfig}
                 setConfig={setVariationConfig}
+                sourceVideoDuration={uploadedAds[0]?.duration || 30}
                 onBack={() => setActiveStep("upload")}
-                onGenerate={handleStartGeneration}
+                onGenerate={(brainOutput: BrainOutput) => {
+                  console.log("AI Brain decisions:", brainOutput);
+                  handleStartGeneration();
+                }}
               />
             )}
 
