@@ -17,13 +17,9 @@ import {
   Clock,
   DollarSign,
   CheckCircle2,
-  ArrowRight,
   Wand2,
-  LayoutTemplate,
-  Settings2,
-  Upload,
-  Zap,
   ChevronRight,
+  ArrowRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -60,13 +56,7 @@ interface SmartSceneBuilderV2Props {
   onProceedToAssembly?: (scenePlan: any) => void;
 }
 
-const TEMPLATES = [
-  { id: 'product_focused', label: 'Product Focus', icon: '📦', description: 'Highlight product features' },
-  { id: 'problem_solution', label: 'Problem/Solution', icon: '💡', description: 'PAS framework' },
-  { id: 'testimonial', label: 'Testimonial', icon: '💬', description: 'Customer stories' },
-  { id: 'unboxing', label: 'Unboxing', icon: '🎁', description: 'First impressions' },
-  { id: 'comparison', label: 'Comparison', icon: '⚖️', description: 'vs competitors' },
-];
+// Templates removed - AI-only scene generation
 
 // Step indicator component
 function StepIndicator({ step, title, description, isActive, isComplete }: { 
@@ -430,28 +420,6 @@ export function SmartSceneBuilderV2({ projectId, scripts = [], productData, onPr
                   Generate {aiRecommendation.sceneCount} Scenes for {config.videoCount} Videos
                 </Button>
               </Card>
-              
-              {/* Manual Template Options */}
-              <div className="flex items-center gap-2 mb-2">
-                <LayoutTemplate className="w-4 h-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Or choose manually:</span>
-              </div>
-              <div className="grid grid-cols-5 gap-2">
-                {TEMPLATES.map(template => (
-                  <button
-                    key={template.id}
-                    onClick={() => generateFromTemplate(template.id)}
-                    className={`p-2 rounded-lg border transition-all text-center ${
-                      aiRecommendation.templateId === template.id 
-                        ? 'border-primary/50 bg-primary/5' 
-                        : 'border-border hover:border-primary/30'
-                    }`}
-                  >
-                    <span className="text-lg block">{template.icon}</span>
-                    <span className="text-xs font-medium block">{template.label}</span>
-                  </button>
-                ))}
-              </div>
             </Card>
           )}
 
