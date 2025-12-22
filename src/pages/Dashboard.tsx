@@ -18,7 +18,8 @@ import {
   LiveOperationsPanel,
   OperationalMetricsPanel,
   AttentionQueuePanel,
-  PrimaryActionsPanel
+  PrimaryActionsPanel,
+  TodayStatsPanel
 } from '@/components/dashboard';
 
 export default function Dashboard() {
@@ -36,6 +37,9 @@ export default function Dashboard() {
 
       {/* 1. SYSTEM STATUS - Always visible at top */}
       <SystemStatusPanel />
+
+      {/* TODAY'S STATS - Costs, Creations, Achievements */}
+      <TodayStatsPanel />
 
       {/* 2. PRIMARY ACTIONS - Task-oriented entry */}
       <PrimaryActionsPanel />
