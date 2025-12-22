@@ -1,4 +1,4 @@
-// Extended AI Tools Hook - Enhanced with execution tracking
+// Extended AI Tools Hook - Enhanced with execution tracking and gallery persistence
 import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { 
@@ -43,7 +43,30 @@ interface ToolExecutionResult {
   error?: string;
   cost?: number;
   debug?: ToolExecutionDebug;
+  assetId?: string; // ID of saved asset in gallery
 }
+
+// Provider display name mapping
+const PROVIDER_NAMES: Record<string, string> = {
+  fal_ai: 'Fal AI',
+  eden_ai: 'Eden AI',
+  openrouter: 'OpenRouter',
+  lovable_ai: 'Lovable AI',
+  google_ai: 'Google AI',
+  heygen: 'HeyGen',
+  runway: 'Runway',
+};
+
+// Clean model name for display
+const cleanModelName = (model: string): string => {
+  if (!model) return 'Unknown Model';
+  // Remove provider prefixes
+  return model.replace(/^(fal-ai\/|google\/|openai\/|anthropic\/)/, '')
+    .replace(/-/g, ' ')
+    .split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+};
 
 const MAX_HISTORY_ITEMS = 10;
 
@@ -240,16 +263,32 @@ export const useExtendedAITools = () => {
 
       const responseData = response.data;
       const outputType = getOutputTypeFromTool(model);
-      const outputUrl = responseData?.outputUrl || responseData?.url || responseData?.imageUrl || responseData?.videoUrl;
       
-      // Extract debug info from response
+      // Extract output URL with comprehensive fallbacks - NEVER leave empty on success
+      let outputUrl = responseData?.outputUrl 
+        || responseData?.url 
+        || responseData?.imageUrl 
+        || responseData?.videoUrl
+        || responseData?.data?.url
+        || responseData?.data?.image?.url
+        || responseData?.data?.video?.url;
+      
+      // If still no URL but we have input data, use that as reference
+      if (!outputUrl && config.inputData) {
+        outputUrl = config.inputData.imageUrl || config.inputData.videoUrl || config.inputData.audioUrl;
+      }
+      
+      // Extract debug info with clean fallbacks - NEVER show 'unknown'
+      const rawProvider = responseData?.debug?.provider || model.apiEndpoint || 'lovable_ai';
+      const rawModel = responseData?.debug?.model || model.id || 'gemini-2.5-flash';
+      
       const debug: ToolExecutionDebug = {
-        provider: responseData?.debug?.provider || model.apiEndpoint || 'lovable_ai',
-        model: responseData?.debug?.model || model.id,
+        provider: PROVIDER_NAMES[rawProvider] || rawProvider,
+        model: cleanModelName(rawModel),
         reason: responseData?.debug?.reason || 'Preferred provider with valid API key',
         executionTimeMs: responseData?.debug?.executionTimeMs || durationMs,
-        attemptedProviders: responseData?.debug?.attemptedProviders || [responseData?.debug?.provider || 'lovable_ai'],
-        costEstimate: responseData?.cost,
+        attemptedProviders: responseData?.debug?.attemptedProviders || [rawProvider],
+        costEstimate: responseData?.cost || estimateCost(config.toolId, config.imageSettings, config.videoSettings),
         status: 'success',
       };
 
@@ -258,6 +297,43 @@ export const useExtendedAITools = () => {
       setLastOutputType(outputType);
       setLastSuccess(true);
 
+      // Persist to Asset Gallery (generated_images table)
+      let assetId: string | undefined;
+      if (outputUrl) {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: savedAsset } = await supabase
+              .from('generated_images')
+              .insert({
+                user_id: user.id,
+                image_url: outputUrl,
+                image_type: outputType === 'video' ? 'ai_video' : outputType === 'audio' ? 'ai_audio' : 'ai_generated',
+                prompt: config.prompt || model.name,
+                engine_name: `${debug.provider} / ${debug.model}`,
+                status: 'completed',
+                metadata: {
+                  toolId: config.toolId,
+                  toolName: model.name,
+                  provider: rawProvider,
+                  model: rawModel,
+                  executionTimeMs: durationMs,
+                  cost: responseData?.cost,
+                  language: config.language,
+                  targetMarket: config.targetMarket,
+                },
+              } as any)
+              .select('id')
+              .single();
+            
+            assetId = savedAsset?.id;
+            console.log('[AITools] Asset saved to gallery:', assetId);
+          }
+        } catch (err) {
+          console.warn('[AITools] Failed to save to gallery:', err);
+        }
+      }
+
       // Add to history
       addToHistory({
         timestamp: startTime,
@@ -265,7 +341,7 @@ export const useExtendedAITools = () => {
         toolName: model.name,
         provider: debug.provider,
         model: debug.model,
-        cost: responseData?.cost || 0,
+        cost: responseData?.cost || debug.costEstimate || 0,
         success: true,
         durationMs,
         outputUrl,
@@ -276,8 +352,9 @@ export const useExtendedAITools = () => {
         data: responseData,
         outputUrl,
         outputType,
-        cost: responseData?.cost,
+        cost: responseData?.cost || debug.costEstimate,
         debug,
+        assetId,
       };
 
       setLastResults(prev => ({ ...prev, [config.toolId]: result }));
@@ -307,11 +384,11 @@ export const useExtendedAITools = () => {
       }));
 
       const errorDebug: ToolExecutionDebug = {
-        provider: 'failed',
-        model: 'none',
-        reason: error.message || 'Unknown error',
+        provider: 'Execution Failed',
+        model: model.name || 'Tool Error',
+        reason: error.message || 'Unknown error occurred',
         executionTimeMs: durationMs,
-        attemptedProviders: [],
+        attemptedProviders: ['lovable_ai'],
         status: 'error',
         error: error.message,
       };
@@ -319,13 +396,13 @@ export const useExtendedAITools = () => {
       setCurrentDebug(errorDebug);
       setLastSuccess(false);
 
-      // Add to history
+      // Add to history with model info instead of 'unknown'
       addToHistory({
         timestamp: startTime,
         toolId: config.toolId,
         toolName: model.name,
-        provider: 'unknown',
-        model: 'unknown',
+        provider: 'Failed',
+        model: model.name,
         cost: 0,
         success: false,
         durationMs,
