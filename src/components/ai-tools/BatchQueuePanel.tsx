@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,8 @@ import {
   Loader2,
   FileImage,
   FileVideo,
-  Clock
+  Clock,
+  GripVertical
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -36,6 +37,7 @@ interface BatchQueuePanelProps {
   isProcessing: boolean;
   currentIndex: number;
   onRemoveItem: (id: string) => void;
+  onReorderQueue: (fromIndex: number, toIndex: number) => void;
   onClearQueue: () => void;
   onStartBatch: () => void;
   onPauseBatch: () => void;
@@ -47,16 +49,68 @@ export function BatchQueuePanel({
   isProcessing,
   currentIndex,
   onRemoveItem,
+  onReorderQueue,
   onClearQueue,
   onStartBatch,
   onPauseBatch,
   toolName
 }: BatchQueuePanelProps) {
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const dragNodeRef = useRef<HTMLDivElement | null>(null);
+
   const completedCount = queue.filter(i => i.status === 'completed').length;
   const failedCount = queue.filter(i => i.status === 'failed').length;
   const totalProgress = queue.length > 0 
     ? Math.round((completedCount / queue.length) * 100) 
     : 0;
+
+  // Drag handlers
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    if (queue[index].status !== 'queued') return; // Only allow dragging queued items
+    setDraggedIndex(index);
+    dragNodeRef.current = e.currentTarget;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
+    // Add dragging class after a small delay
+    setTimeout(() => {
+      if (dragNodeRef.current) {
+        dragNodeRef.current.classList.add('opacity-50');
+      }
+    }, 0);
+  };
+
+  const handleDragEnd = () => {
+    if (dragNodeRef.current) {
+      dragNodeRef.current.classList.remove('opacity-50');
+    }
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+    dragNodeRef.current = null;
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+    if (queue[index].status !== 'queued') return; // Only allow dropping on queued items
+    setDragOverIndex(index);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, toIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === toIndex) return;
+    if (queue[toIndex].status !== 'queued') return;
+    
+    onReorderQueue(draggedIndex, toIndex);
+    toast.success('Queue reordered');
+    
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
 
   const getStatusIcon = (status: BatchQueueItem['status']) => {
     switch (status) {
@@ -146,7 +200,13 @@ export function BatchQueuePanel({
             {queue.map((item, index) => (
               <div 
                 key={item.id}
-                className={`flex items-center gap-3 p-2 rounded-lg border transition-colors ${
+                draggable={item.status === 'queued'}
+                onDragStart={(e) => handleDragStart(e, index)}
+                onDragEnd={handleDragEnd}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, index)}
+                className={`flex items-center gap-2 p-2 rounded-lg border transition-all ${
                   item.status === 'processing' 
                     ? 'bg-primary/5 border-primary/30' 
                     : item.status === 'completed'
@@ -154,8 +214,21 @@ export function BatchQueuePanel({
                     : item.status === 'failed'
                     ? 'bg-destructive/5 border-destructive/20'
                     : 'bg-muted/30 border-border'
+                } ${
+                  dragOverIndex === index && draggedIndex !== index
+                    ? 'border-primary border-dashed scale-[1.02]' 
+                    : ''
+                } ${
+                  item.status === 'queued' ? 'cursor-grab active:cursor-grabbing' : ''
                 }`}
               >
+                {/* Drag Handle */}
+                {item.status === 'queued' && (
+                  <div className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors">
+                    <GripVertical className="w-4 h-4" />
+                  </div>
+                )}
+
                 {/* File Icon & Index */}
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xs text-muted-foreground w-4">{index + 1}</span>

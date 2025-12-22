@@ -32,7 +32,7 @@ export default function AITools() {
 
   const {
     queue, isProcessing: isBatchProcessing, currentIndex, 
-    addToQueue, removeFromQueue, clearQueue, startBatch, pauseBatch
+    addToQueue, removeFromQueue, reorderQueue, clearQueue, startBatch, pauseBatch
   } = useBatchProcessing();
 
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
@@ -353,6 +353,7 @@ export default function AITools() {
               isProcessing={isBatchProcessing}
               currentIndex={currentIndex}
               onRemoveItem={removeFromQueue}
+              onReorderQueue={reorderQueue}
               onClearQueue={clearQueue}
               onStartBatch={handleStartBatch}
               onPauseBatch={pauseBatch}
