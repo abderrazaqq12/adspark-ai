@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Brain,
   Sparkles,
@@ -403,64 +404,124 @@ export function SmartSceneBuilderV2({ projectId, scripts = [], productData, onPr
                 and duration constraints ({config.minVideoDuration || 20}-{config.maxVideoDuration || 35}s per video).
               </p>
               
-              {/* Scene Optimization Breakdown */}
-              <Card className="p-3 bg-muted/30 border-border mb-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Sparkles className="w-4 h-4 text-primary" />
-                  <span className="text-xs font-medium">Scene Optimization Preview</span>
-                </div>
-                
-                {/* Visual breakdown */}
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="w-2 h-2 rounded-full bg-primary" />
-                      <span className="text-xs font-medium text-primary">Reusable Scenes</span>
+              {isGenerating ? (
+                /* Loading Skeleton State */
+                <div className="space-y-4">
+                  {/* Skeleton for optimization breakdown */}
+                  <Card className="p-3 bg-muted/30 border-border">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                      <span className="text-xs font-medium">Analyzing optimal scene structure...</span>
                     </div>
-                    <p className="text-lg font-bold">{Math.ceil(aiRecommendation.sceneCount * 0.4)}</p>
-                    <p className="text-xs text-muted-foreground">Generated once, used in all {config.videoCount} videos</p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="w-2 h-2 rounded-full bg-blue-500" />
-                      <span className="text-xs font-medium text-blue-400">Unique Scenes</span>
+                    
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div className="p-2 rounded-lg bg-primary/5 border border-primary/10">
+                        <Skeleton className="h-3 w-24 mb-2" />
+                        <Skeleton className="h-6 w-8 mb-1" />
+                        <Skeleton className="h-3 w-32" />
+                      </div>
+                      <div className="p-2 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                        <Skeleton className="h-3 w-20 mb-2" />
+                        <Skeleton className="h-6 w-8 mb-1" />
+                        <Skeleton className="h-3 w-28" />
+                      </div>
                     </div>
-                    <p className="text-lg font-bold">{Math.ceil(aiRecommendation.sceneCount * 0.6)}</p>
-                    <p className="text-xs text-muted-foreground">Specific to each video variation</p>
+                    
+                    <div className="p-2 rounded-lg bg-muted/50">
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-4 w-4 rounded-full" />
+                        <Skeleton className="h-3 w-48" />
+                      </div>
+                    </div>
+                  </Card>
+                  
+                  {/* Skeleton for recommendation card */}
+                  <Card className="p-3 bg-muted/20 border-border animate-pulse">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-4 w-4 rounded" />
+                        <Skeleton className="h-4 w-32" />
+                      </div>
+                      <Skeleton className="h-5 w-16 rounded-full" />
+                    </div>
+                    <Skeleton className="h-3 w-full mb-2" />
+                    <Skeleton className="h-3 w-3/4 mb-4" />
+                    <Skeleton className="h-10 w-full rounded-md" />
+                  </Card>
+                  
+                  {/* Progress indicator */}
+                  <div className="flex items-center justify-center gap-2 py-2">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                    <span className="text-xs text-muted-foreground">Generating scenes with AI...</span>
                   </div>
                 </div>
-                
-                {/* Efficiency indicator */}
-                <div className="flex items-center justify-between p-2 rounded-lg bg-green-500/10 border border-green-500/20">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
-                    <span className="text-xs text-green-400">
-                      ~{Math.round((1 - (aiRecommendation.sceneCount / (aiRecommendation.sceneCount * config.videoCount))) * 100)}% cost savings through scene reuse
-                    </span>
-                  </div>
-                  <Badge variant="outline" className="text-xs border-green-500/30 text-green-400">
-                    {aiRecommendation.sceneCount} total vs {aiRecommendation.sceneCount * config.videoCount} without optimization
-                  </Badge>
-                </div>
-              </Card>
-              
-              {/* AI Recommendation Card */}
-              <Card className="p-3 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <Brain className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-medium">Recommended: {aiRecommendation.templateName}</span>
-                  </div>
-                  <Badge variant="outline" className="text-xs">
-                    {aiRecommendation.confidence}% match
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground mb-3">{aiRecommendation.reason}</p>
-                <Button onClick={generateFromAITemplate} className="w-full">
-                  <Wand2 className="w-4 h-4 mr-2" />
-                  Generate {aiRecommendation.sceneCount} Scenes for {config.videoCount} Videos
-                </Button>
-              </Card>
+              ) : (
+                /* Ready State */
+                <>
+                  {/* Scene Optimization Breakdown */}
+                  <Card className="p-3 bg-muted/30 border-border mb-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                      <span className="text-xs font-medium">Scene Optimization Preview</span>
+                    </div>
+                    
+                    {/* Visual breakdown */}
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="w-2 h-2 rounded-full bg-primary" />
+                          <span className="text-xs font-medium text-primary">Reusable Scenes</span>
+                        </div>
+                        <p className="text-lg font-bold">{Math.ceil(aiRecommendation.sceneCount * 0.4)}</p>
+                        <p className="text-xs text-muted-foreground">Generated once, used in all {config.videoCount} videos</p>
+                      </div>
+                      <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="w-2 h-2 rounded-full bg-blue-500" />
+                          <span className="text-xs font-medium text-blue-400">Unique Scenes</span>
+                        </div>
+                        <p className="text-lg font-bold">{Math.ceil(aiRecommendation.sceneCount * 0.6)}</p>
+                        <p className="text-xs text-muted-foreground">Specific to each video variation</p>
+                      </div>
+                    </div>
+                    
+                    {/* Efficiency indicator */}
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-green-500/10 border border-green-500/20">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        <span className="text-xs text-green-400">
+                          ~{Math.round((1 - (aiRecommendation.sceneCount / (aiRecommendation.sceneCount * config.videoCount))) * 100)}% cost savings through scene reuse
+                        </span>
+                      </div>
+                      <Badge variant="outline" className="text-xs border-green-500/30 text-green-400">
+                        {aiRecommendation.sceneCount} total vs {aiRecommendation.sceneCount * config.videoCount} without optimization
+                      </Badge>
+                    </div>
+                  </Card>
+                  
+                  {/* AI Recommendation Card */}
+                  <Card className="p-3 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Brain className="w-4 h-4 text-primary" />
+                        <span className="text-sm font-medium">Recommended: {aiRecommendation.templateName}</span>
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        {aiRecommendation.confidence}% match
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-3">{aiRecommendation.reason}</p>
+                    <Button onClick={generateFromAITemplate} className="w-full" disabled={isGenerating}>
+                      <Wand2 className="w-4 h-4 mr-2" />
+                      Generate {aiRecommendation.sceneCount} Scenes for {config.videoCount} Videos
+                    </Button>
+                  </Card>
+                </>
+              )}
             </Card>
           )}
 
