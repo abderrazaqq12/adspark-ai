@@ -35,8 +35,18 @@ import { DebugPanel } from './DebugPanel';
 import { RealTimeCostEstimator } from './RealTimeCostEstimator';
 import { SmartScenePlan, SceneDuration, SceneStructure } from '@/lib/smart-scene-builder/types';
 
+// Script interface for props
+interface VideoScriptInput {
+  id: string;
+  text: string;
+  hooks?: string[];
+  style?: string;
+  language?: string;
+}
+
 interface SmartSceneBuilderV2Props {
   projectId: string;
+  scripts?: VideoScriptInput[];
   onProceedToAssembly?: (scenePlan: any) => void;
 }
 
@@ -75,13 +85,16 @@ function StepIndicator({ step, title, description, isActive, isComplete }: {
   );
 }
 
-export function SmartSceneBuilderV2({ projectId, onProceedToAssembly }: SmartSceneBuilderV2Props) {
+export function SmartSceneBuilderV2({ projectId, scripts = [], onProceedToAssembly }: SmartSceneBuilderV2Props) {
   const {
     config,
     updateConfig,
     assets,
     addAsset,
     removeAsset,
+    videoScripts,
+    updateScripts,
+    scriptAnalysis,
     scenes,
     addScene,
     removeScene,
@@ -94,6 +107,7 @@ export function SmartSceneBuilderV2({ projectId, onProceedToAssembly }: SmartSce
     generatingSceneId,
     generateFromAssets,
     generateFromTemplate,
+    generateFromScripts,
     generateSceneVideo,
     generateAllScenes,
     getScenePlan,
@@ -102,7 +116,12 @@ export function SmartSceneBuilderV2({ projectId, onProceedToAssembly }: SmartSce
     totalCost,
     enginesUsed,
     completedCount,
-  } = useSmartSceneBuilder({ projectId });
+    reusableSceneCount,
+    scriptSpecificSceneCount,
+  } = useSmartSceneBuilder({ projectId, scripts });
+  
+  // Has scripts from voiceover stage
+  const hasScripts = scripts.length > 0 || videoScripts.length > 0;
   
   const handleProceed = () => {
     const validation = validate();
@@ -281,15 +300,69 @@ export function SmartSceneBuilderV2({ projectId, onProceedToAssembly }: SmartSce
             <h3 className="text-sm font-semibold">Scene Construction</h3>
           </div>
           
-          {/* Template Selector (when no scenes) */}
-          {scenes.length === 0 && assets.length === 0 && (
+          {/* Script-based generation (when scripts are available but no scenes) */}
+          {scenes.length === 0 && hasScripts && (
+            <Card className="p-4 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Brain className="w-4 h-4 text-primary" />
+                <h4 className="font-semibold text-sm">Generate from Video Scripts</h4>
+                <Badge variant="secondary" className="text-xs">Recommended</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">
+                AI will analyze your {scripts.length || videoScripts.length} video script{(scripts.length || videoScripts.length) > 1 ? 's' : ''} to identify:
+              </p>
+              <ul className="text-xs text-muted-foreground mb-4 space-y-1 ml-4">
+                <li>• <span className="text-primary font-medium">Reusable scenes</span> that work across all video variations</li>
+                <li>• <span className="text-blue-500 font-medium">Script-specific scenes</span> unique to each video</li>
+                <li>• <span className="text-green-500 font-medium">Scaled scenes</span> using your uploaded assets</li>
+              </ul>
+              <Button onClick={generateFromScripts} className="w-full">
+                <Sparkles className="w-4 h-4 mr-2" />
+                Generate Scenes from Scripts
+              </Button>
+            </Card>
+          )}
+          
+          {/* Script analysis summary (when scenes generated from scripts) */}
+          {scriptAnalysis && scenes.length > 0 && (
+            <Card className="p-3 bg-muted/30 border-border mb-4">
+              <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-primary" />
+                    <span className="text-xs text-muted-foreground">
+                      {reusableSceneCount} reusable
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-blue-500" />
+                    <span className="text-xs text-muted-foreground">
+                      {scriptSpecificSceneCount} script-specific
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-green-500" />
+                    <span className="text-xs text-muted-foreground">
+                      ×{scriptAnalysis.scalingFactor} scaling factor
+                    </span>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-xs">
+                  AI Analyzed
+                </Badge>
+              </div>
+            </Card>
+          )}
+          
+          {/* Template Selector (when no scenes and no scripts) */}
+          {scenes.length === 0 && !hasScripts && assets.length === 0 && (
             <Card className="p-4 bg-card border-border">
               <div className="flex items-center gap-2 mb-2">
                 <LayoutTemplate className="w-4 h-4 text-primary" />
                 <h4 className="font-semibold text-sm">Quick Start Templates</h4>
               </div>
               <p className="text-xs text-muted-foreground mb-4">
-                Select a template to generate scenes automatically, or add assets above first.
+                Select a template to generate scenes automatically, or add assets/scripts first.
               </p>
               
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

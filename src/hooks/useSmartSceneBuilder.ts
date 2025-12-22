@@ -29,12 +29,19 @@ import {
   generateScenePlanOutput,
   validateScenePlan,
 } from '@/lib/smart-scene-builder/output-schema';
+import {
+  VideoScript,
+  ScriptAnalysisResult,
+  generateScenesFromScripts,
+  analyzeScriptsForScenes,
+} from '@/lib/smart-scene-builder/script-analyzer';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-interface UseSmartSceneBuilderProps {
+export interface UseSmartSceneBuilderProps {
   projectId: string;
   initialConfig?: Partial<VideoConfig>;
+  scripts?: VideoScript[];
 }
 
 const DEFAULT_CONFIG: VideoConfig = {
@@ -45,7 +52,7 @@ const DEFAULT_CONFIG: VideoConfig = {
   enableTextOverlays: true,
 };
 
-export function useSmartSceneBuilder({ projectId, initialConfig }: UseSmartSceneBuilderProps) {
+export function useSmartSceneBuilder({ projectId, initialConfig, scripts = [] }: UseSmartSceneBuilderProps) {
   const [config, setConfig] = useState<VideoConfig>({
     ...DEFAULT_CONFIG,
     ...initialConfig,
@@ -53,6 +60,8 @@ export function useSmartSceneBuilder({ projectId, initialConfig }: UseSmartScene
   
   const [scenes, setScenes] = useState<SmartScenePlan[]>([]);
   const [assets, setAssets] = useState<VisualAsset[]>([]);
+  const [videoScripts, setVideoScripts] = useState<VideoScript[]>(scripts);
+  const [scriptAnalysis, setScriptAnalysis] = useState<ScriptAnalysisResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingSceneId, setGeneratingSceneId] = useState<string | null>(null);
   
@@ -63,6 +72,16 @@ export function useSmartSceneBuilder({ projectId, initialConfig }: UseSmartScene
   const completedCount = useMemo(() => 
     scenes.filter(s => s.status === 'completed').length, 
     [scenes]
+  );
+  
+  // Derived: reusable vs script-specific scenes
+  const reusableSceneCount = useMemo(() => 
+    scriptAnalysis?.reusableScenes.length || 0, 
+    [scriptAnalysis]
+  );
+  const scriptSpecificSceneCount = useMemo(() => 
+    scriptAnalysis?.scriptSpecificScenes.length || 0, 
+    [scriptAnalysis]
   );
   
   // Update config
@@ -106,6 +125,31 @@ export function useSmartSceneBuilder({ projectId, initialConfig }: UseSmartScene
     setScenes(newScenes);
     toast.success(`Generated ${newScenes.length} scenes from ${templateName} template`);
   }, [config, assets]);
+  
+  // Update scripts
+  const updateScripts = useCallback((newScripts: VideoScript[]) => {
+    setVideoScripts(newScripts);
+  }, []);
+  
+  // Generate scenes from video scripts (AI-powered)
+  const generateFromScripts = useCallback(() => {
+    if (videoScripts.length === 0) {
+      toast.error('No video scripts available. Add scripts first.');
+      return;
+    }
+    
+    const { scenes: newScenes, analysis } = generateScenesFromScripts(videoScripts, assets, config);
+    setScenes(newScenes);
+    setScriptAnalysis(analysis);
+    
+    const reusableCount = analysis.reusableScenes.length;
+    const specificCount = analysis.scriptSpecificScenes.length;
+    
+    toast.success(
+      `Generated ${newScenes.length} scenes from scripts. ` +
+      `${reusableCount} reusable across all videos, ${specificCount} script-specific.`
+    );
+  }, [videoScripts, assets, config]);
   
   // Add empty scene
   const addScene = useCallback(() => {
@@ -278,6 +322,11 @@ export function useSmartSceneBuilder({ projectId, initialConfig }: UseSmartScene
     addAsset,
     removeAsset,
     
+    // Scripts
+    videoScripts,
+    updateScripts,
+    scriptAnalysis,
+    
     // Scenes
     scenes,
     addScene,
@@ -293,6 +342,7 @@ export function useSmartSceneBuilder({ projectId, initialConfig }: UseSmartScene
     generatingSceneId,
     generateFromAssets,
     generateFromTemplate,
+    generateFromScripts,
     generateSceneVideo,
     generateAllScenes,
     
@@ -305,5 +355,7 @@ export function useSmartSceneBuilder({ projectId, initialConfig }: UseSmartScene
     totalCost,
     enginesUsed,
     completedCount,
+    reusableSceneCount,
+    scriptSpecificSceneCount,
   };
 }
