@@ -1,4 +1,4 @@
-// Asset Uploader - Upload product images, videos, B-roll
+// Asset Uploader - Upload product images, videos, B-roll (Step 1: Visual Context)
 
 import { useState, useCallback } from 'react';
 import { Card } from '@/components/ui/card';
@@ -16,6 +16,7 @@ import {
   Loader2,
   Link,
   Sparkles,
+  Info,
 } from 'lucide-react';
 import { VisualAsset } from '@/lib/smart-scene-builder/types';
 import { supabase } from '@/integrations/supabase/client';
@@ -114,10 +115,10 @@ export function AssetUploader({
 
   return (
     <Card className="p-4 bg-card border-border">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <Upload className="w-4 h-4 text-primary" />
-          <h3 className="font-semibold text-sm">Visual Assets</h3>
+          <h4 className="font-semibold text-sm">Visual Assets</h4>
           <Badge variant="secondary" className="text-xs">
             {assets.length} {assets.length === 1 ? 'asset' : 'assets'}
           </Badge>
@@ -133,6 +134,15 @@ export function AssetUploader({
             Generate Scenes from Assets
           </Button>
         )}
+      </div>
+      
+      {/* Helper text */}
+      <div className="flex items-start gap-2 mb-3 p-2 rounded-lg bg-muted/50">
+        <Info className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-muted-foreground">
+          <strong>Optional, but improves scene quality and relevance.</strong> Upload product images, 
+          existing videos, or B-roll footage. AI will analyze visuals and use them as anchors for scene construction.
+        </p>
       </div>
       
       {/* Upload Area */}
