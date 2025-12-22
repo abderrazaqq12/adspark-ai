@@ -34,6 +34,7 @@ import { SceneCard } from './SceneCard';
 import { DebugPanel } from './DebugPanel';
 import { RealTimeCostEstimator } from './RealTimeCostEstimator';
 import { VariationPreview } from './VariationPreview';
+import { DistributionPreview } from './DistributionPreview';
 import { ProductDataInput } from './ProductDataInput';
 import { SmartScenePlan, SceneDuration, SceneStructure, ProductData } from '@/lib/smart-scene-builder/types';
 
@@ -323,6 +324,17 @@ export function SmartSceneBuilderV2({ projectId, scripts = [], productData, onPr
               assets={assets} 
             />
           </div>
+          
+          {/* Distribution Preview - Show before generation */}
+          {scenes.length === 0 && (
+            <div className="mt-4">
+              <DistributionPreview 
+                config={config}
+                productName={product?.name || productData?.name}
+                scriptsCount={scripts.length || videoScripts.length}
+              />
+            </div>
+          )}
         </section>
 
         <Separator />
