@@ -30,6 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent } from "@/components/ui/card";
 import { ProjectContextBanner } from "@/components/project";
 import { useGlobalProject } from "@/contexts/GlobalProjectContext";
+import { useAssetUpload } from "@/hooks/useAssetUpload";
 
 // ============================================
 // SESSION PERSISTENCE
@@ -78,7 +79,10 @@ interface UploadedVideo {
 
 export default function CreativeScale() {
   // Global project context
-  const { hasActiveProject } = useGlobalProject();
+  const { hasActiveProject, activeProject } = useGlobalProject();
+  
+  // Asset upload hook for auto-uploading generated videos to Google Drive
+  const { uploadVideo, isUploadAvailable } = useAssetUpload();
 
   // Navigation state
   const [currentStep, setCurrentStep] = useState<StepId>(1);
@@ -551,6 +555,18 @@ export default function CreativeScale() {
       }));
 
       results.set(plan.plan_id, result);
+
+      // Auto-upload successful videos to Google Drive
+      if (result.status === 'success' && result.output_video_url && isUploadAvailable) {
+        const variationName = `variation_${i + 1}`;
+        uploadVideo(result.output_video_url, variationName, {
+          planId: plan.plan_id,
+          variationIndex: i,
+          framework: currentBlueprint?.framework,
+          engine: result.engine_used,
+        });
+        console.log(`[CreativeScale] Auto-uploading video ${i + 1} to Google Drive`);
+      }
     }
 
     setExecutionResults(results);
