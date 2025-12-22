@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +10,6 @@ import {
   TrendingUp, 
   DollarSign, 
   Video, 
-  Loader2,
   Zap,
   Activity,
   Brain,
@@ -48,6 +46,8 @@ import {
 } from "recharts";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { DateRange } from "react-day-picker";
+import { SectionCard, StatCard } from "@/components/ui/section-card";
+import { LoadingState, EmptyState } from "@/components/ui/page-components";
 
 // Content type categories mapped to pipeline stages
 const CONTENT_TYPES = {
@@ -290,7 +290,7 @@ export default function Analytics() {
         if (contentType) {
           contentStats[contentType].count++;
           contentStats[contentType].cost += tx.cost_usd || 0;
-          contentStats[contentType].success++; // Assume success if in cost_transactions
+          contentStats[contentType].success++;
         }
       });
 
@@ -453,42 +453,34 @@ export default function Analytics() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-8 flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="p-6">
+        <LoadingState message="Loading analytics..." />
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-8 space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-4xl font-bold text-foreground mb-2">Analytics & Insights</h1>
-          <p className="text-muted-foreground">
-            Track all generations, costs, and performance across text, audio, images, and videos
-          </p>
+    <div className="p-6 space-y-6 animate-fade-in">
+      {/* Date Range Controls */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex gap-1.5 flex-wrap">
+          {DATE_PRESETS.slice(0, 4).map(preset => (
+            <Button
+              key={preset.days}
+              variant="outline"
+              size="sm"
+              onClick={() => handleDatePreset(preset.days)}
+              className="text-xs"
+            >
+              {preset.label}
+            </Button>
+          ))}
         </div>
-        
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Date Presets */}
-          <div className="flex gap-1 flex-wrap">
-            {DATE_PRESETS.slice(0, 4).map(preset => (
-              <Button
-                key={preset.days}
-                variant="outline"
-                size="sm"
-                onClick={() => handleDatePreset(preset.days)}
-                className="text-xs"
-              >
-                {preset.label}
-              </Button>
-            ))}
-          </div>
 
-          {/* Custom Date Range Picker */}
+        <div className="flex items-center gap-2">
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="gap-2">
+              <Button variant="outline" size="sm" className="gap-2">
                 <CalendarIcon className="w-4 h-4" />
                 <span className="hidden sm:inline">{dateRangeLabel}</span>
               </Button>
@@ -530,128 +522,70 @@ export default function Analytics() {
         {analytics.contentTypeStats.map(stat => {
           const Icon = CONTENT_TYPE_ICONS[stat.type];
           return (
-            <Card key={stat.type} className="bg-gradient-card border-border shadow-card">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Icon className="w-4 h-4" style={{ color: CONTENT_TYPE_COLORS[stat.type] }} />
-                  {stat.type.charAt(0).toUpperCase() + stat.type.slice(1)} Content
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-foreground">{stat.count}</div>
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-xs text-muted-foreground">
-                    ${stat.cost.toFixed(2)} total
-                  </span>
-                  {stat.avgCost > 0 && (
-                    <span className="text-xs text-primary">
-                      ${stat.avgCost.toFixed(3)}/each
-                    </span>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            <StatCard
+              key={stat.type}
+              label={`${stat.type.charAt(0).toUpperCase() + stat.type.slice(1)} Content`}
+              value={stat.count}
+              icon={Icon}
+              trend={stat.cost > 0 ? { value: `$${stat.cost.toFixed(2)}`, positive: true } : undefined}
+            />
           );
         })}
       </div>
 
       {/* Main Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Zap className="w-4 h-4" />
-              Total Generations
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-foreground">{analytics.totalGenerations}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {analytics.totalProjects} projects
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Video className="w-4 h-4" />
-              Videos Created
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-foreground">{analytics.totalVideos}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {analytics.totalScenes} scenes
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <DollarSign className="w-4 h-4" />
-              Total Cost
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-foreground">${analytics.totalCost.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              ${(analytics.totalCost / Math.max(analytics.totalGenerations, 1)).toFixed(3)} avg
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Target className="w-4 h-4" />
-              Success Rate
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-primary">{avgSuccessRate}%</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Across all engines
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Brain className="w-4 h-4" />
-              AI Learnings
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-primary">{analytics.aiLearnings.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Insights captured
-            </p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <StatCard
+          label="Total Generations"
+          value={analytics.totalGenerations}
+          icon={Zap}
+          trend={{ value: `${analytics.totalProjects} projects`, positive: true }}
+        />
+        <StatCard
+          label="Videos Created"
+          value={analytics.totalVideos}
+          icon={Video}
+          trend={{ value: `${analytics.totalScenes} scenes`, positive: true }}
+        />
+        <StatCard
+          label="Total Cost"
+          value={`$${analytics.totalCost.toFixed(2)}`}
+          icon={DollarSign}
+          trend={{ value: `$${(analytics.totalCost / Math.max(analytics.totalGenerations, 1)).toFixed(3)} avg`, positive: true }}
+        />
+        <StatCard
+          label="Success Rate"
+          value={`${avgSuccessRate}%`}
+          icon={Target}
+          trend={{ value: "Across engines", positive: avgSuccessRate >= 80 }}
+        />
+        <StatCard
+          label="AI Learnings"
+          value={analytics.aiLearnings.length}
+          icon={Brain}
+          trend={{ value: "Insights captured", positive: true }}
+        />
       </div>
 
       <Tabs defaultValue="content-types" className="space-y-6">
-        <TabsList className="bg-muted/50 flex-wrap h-auto">
-          <TabsTrigger value="content-types" className="flex items-center gap-2">
+        <TabsList className="bg-muted/50 flex-wrap h-auto p-1">
+          <TabsTrigger value="content-types" className="gap-2">
             <BarChart3 className="w-4 h-4" />
             Content Types
           </TabsTrigger>
-          <TabsTrigger value="costs" className="flex items-center gap-2">
+          <TabsTrigger value="costs" className="gap-2">
             <DollarSign className="w-4 h-4" />
             Cost Trends
           </TabsTrigger>
-          <TabsTrigger value="engines" className="flex items-center gap-2">
+          <TabsTrigger value="engines" className="gap-2">
             <Zap className="w-4 h-4" />
             Engine Performance
           </TabsTrigger>
-          <TabsTrigger value="ai-learning" className="flex items-center gap-2">
+          <TabsTrigger value="ai-learning" className="gap-2">
             <Brain className="w-4 h-4" />
             AI Learning
           </TabsTrigger>
-          <TabsTrigger value="trends" className="flex items-center gap-2">
+          <TabsTrigger value="trends" className="gap-2">
             <TrendingUp className="w-4 h-4" />
             Usage Trends
           </TabsTrigger>
@@ -660,195 +594,50 @@ export default function Analytics() {
         {/* Content Types Tab */}
         <TabsContent value="content-types" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="bg-gradient-card border-border shadow-card">
-              <CardHeader>
-                <CardTitle className="text-foreground">Generation by Content Type</CardTitle>
-                <CardDescription>Breakdown of all content generated</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RechartsPie>
-                      <Pie
-                        data={analytics.contentTypeStats.filter(s => s.count > 0)}
-                        dataKey="count"
-                        nameKey="type"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={100}
-                        label={({ type, percent }) => `${type} (${(percent * 100).toFixed(0)}%)`}
-                        labelLine={{ stroke: 'hsl(var(--muted-foreground))' }}
-                      >
-                        {analytics.contentTypeStats.map((stat) => (
-                          <Cell key={stat.type} fill={CONTENT_TYPE_COLORS[stat.type]} />
-                        ))}
-                      </Pie>
-                      <Tooltip 
-                        formatter={(value: number, name: string) => [value, name.charAt(0).toUpperCase() + name.slice(1)]}
-                        contentStyle={{ 
-                          backgroundColor: 'hsl(var(--card))', 
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px'
-                        }}
-                      />
-                    </RechartsPie>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-gradient-card border-border shadow-card">
-              <CardHeader>
-                <CardTitle className="text-foreground">Cost by Content Type</CardTitle>
-                <CardDescription>How much each content type costs</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={analytics.contentTypeStats} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis type="number" stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `$${v.toFixed(2)}`} />
-                      <YAxis 
-                        dataKey="type" 
-                        type="category" 
-                        width={60}
-                        stroke="hsl(var(--muted-foreground))"
-                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                        tickFormatter={(v) => v.charAt(0).toUpperCase() + v.slice(1)}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'hsl(var(--card))', 
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px'
-                        }}
-                        formatter={(value: number) => [`$${value.toFixed(2)}`, 'Cost']}
-                      />
-                      <Bar dataKey="cost" radius={[0, 4, 4, 0]}>
-                        {analytics.contentTypeStats.map((stat) => (
-                          <Cell key={stat.type} fill={CONTENT_TYPE_COLORS[stat.type]} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Daily Content Type Breakdown */}
-          <Card className="bg-gradient-card border-border shadow-card">
-            <CardHeader>
-              <CardTitle className="text-foreground">Daily Content Generation</CardTitle>
-              <CardDescription>Content types generated over time</CardDescription>
-            </CardHeader>
-            <CardContent>
+            <SectionCard title="Generation by Content Type" description="Breakdown of all content generated">
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={analytics.dailyCosts}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis 
-                      dataKey="date" 
-                      stroke="hsl(var(--muted-foreground))"
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
-                      tickFormatter={(v) => format(new Date(v), 'MMM d')}
-                    />
-                    <YAxis stroke="hsl(var(--muted-foreground))" />
+                  <RechartsPie>
+                    <Pie
+                      data={analytics.contentTypeStats.filter(s => s.count > 0)}
+                      dataKey="count"
+                      nameKey="type"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={100}
+                      label={({ type, percent }) => `${type} (${(percent * 100).toFixed(0)}%)`}
+                      labelLine={{ stroke: 'hsl(var(--muted-foreground))' }}
+                    >
+                      {analytics.contentTypeStats.map((stat) => (
+                        <Cell key={stat.type} fill={CONTENT_TYPE_COLORS[stat.type]} />
+                      ))}
+                    </Pie>
                     <Tooltip 
+                      formatter={(value: number, name: string) => [value, name.charAt(0).toUpperCase() + name.slice(1)]}
                       contentStyle={{ 
                         backgroundColor: 'hsl(var(--card))', 
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px'
                       }}
-                      labelFormatter={(v) => format(new Date(v), 'MMM d, yyyy')}
                     />
-                    <Legend />
-                    <Area type="monotone" dataKey="text" name="Text" stackId="1" stroke={CONTENT_TYPE_COLORS.text} fill={CONTENT_TYPE_COLORS.text} fillOpacity={0.6} />
-                    <Area type="monotone" dataKey="audio" name="Audio" stackId="1" stroke={CONTENT_TYPE_COLORS.audio} fill={CONTENT_TYPE_COLORS.audio} fillOpacity={0.6} />
-                    <Area type="monotone" dataKey="image" name="Image" stackId="1" stroke={CONTENT_TYPE_COLORS.image} fill={CONTENT_TYPE_COLORS.image} fillOpacity={0.6} />
-                    <Area type="monotone" dataKey="video" name="Video" stackId="1" stroke={CONTENT_TYPE_COLORS.video} fill={CONTENT_TYPE_COLORS.video} fillOpacity={0.6} />
-                  </AreaChart>
+                  </RechartsPie>
                 </ResponsiveContainer>
               </div>
-            </CardContent>
-          </Card>
+            </SectionCard>
 
-          {/* Detailed Content Type Table */}
-          <Card className="bg-gradient-card border-border shadow-card">
-            <CardHeader>
-              <CardTitle className="text-foreground">Content Type Details</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-left py-3 px-4 text-muted-foreground font-medium">Type</th>
-                      <th className="text-right py-3 px-4 text-muted-foreground font-medium">Count</th>
-                      <th className="text-right py-3 px-4 text-muted-foreground font-medium">Total Cost</th>
-                      <th className="text-right py-3 px-4 text-muted-foreground font-medium">Avg Cost</th>
-                      <th className="text-right py-3 px-4 text-muted-foreground font-medium">% of Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {analytics.contentTypeStats.map(stat => {
-                      const Icon = CONTENT_TYPE_ICONS[stat.type];
-                      const percentage = analytics.totalGenerations > 0 
-                        ? Math.round((stat.count / analytics.totalGenerations) * 100) 
-                        : 0;
-                      return (
-                        <tr key={stat.type} className="border-b border-border/50 hover:bg-muted/30">
-                          <td className="py-3 px-4">
-                            <div className="flex items-center gap-2">
-                              <div 
-                                className="w-3 h-3 rounded-full"
-                                style={{ backgroundColor: CONTENT_TYPE_COLORS[stat.type] }}
-                              />
-                              <Icon className="w-4 h-4" style={{ color: CONTENT_TYPE_COLORS[stat.type] }} />
-                              <span className="font-medium text-foreground capitalize">{stat.type}</span>
-                            </div>
-                          </td>
-                          <td className="text-right py-3 px-4 text-foreground">{stat.count}</td>
-                          <td className="text-right py-3 px-4 text-foreground">${stat.cost.toFixed(2)}</td>
-                          <td className="text-right py-3 px-4 text-muted-foreground">${stat.avgCost.toFixed(4)}</td>
-                          <td className="text-right py-3 px-4">
-                            <div className="flex items-center justify-end gap-2">
-                              <Progress value={percentage} className="w-16 h-2" />
-                              <span className="text-xs text-muted-foreground w-10 text-right">{percentage}%</span>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Cost Trends Tab */}
-        <TabsContent value="costs" className="space-y-6">
-          <Card className="bg-gradient-card border-border shadow-card">
-            <CardHeader>
-              <CardTitle className="text-foreground">Daily Cost Breakdown</CardTitle>
-              <CardDescription>Track your spending over time</CardDescription>
-            </CardHeader>
-            <CardContent>
+            <SectionCard title="Cost by Content Type" description="How much each content type costs">
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={analytics.dailyCosts}>
+                  <BarChart data={analytics.contentTypeStats} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis 
-                      dataKey="date" 
-                      stroke="hsl(var(--muted-foreground))"
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                      tickFormatter={(v) => format(new Date(v), 'MMM d')}
-                    />
+                    <XAxis type="number" stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `$${v.toFixed(2)}`} />
                     <YAxis 
+                      dataKey="type" 
+                      type="category" 
+                      width={60}
                       stroke="hsl(var(--muted-foreground))"
                       tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                      tickFormatter={(value) => `$${value.toFixed(2)}`}
+                      tickFormatter={(v) => v.charAt(0).toUpperCase() + v.slice(1)}
                     />
                     <Tooltip 
                       contentStyle={{ 
@@ -857,216 +646,332 @@ export default function Analytics() {
                         borderRadius: '8px'
                       }}
                       formatter={(value: number) => [`$${value.toFixed(2)}`, 'Cost']}
-                      labelFormatter={(v) => format(new Date(v), 'MMM d, yyyy')}
                     />
-                    <Area 
-                      type="monotone" 
-                      dataKey="cost" 
-                      stroke="hsl(var(--primary))" 
-                      fill="hsl(var(--primary) / 0.3)"
-                      strokeWidth={2}
-                    />
-                  </AreaChart>
+                    <Bar dataKey="cost" radius={[0, 4, 4, 0]}>
+                      {analytics.contentTypeStats.map((stat) => (
+                        <Cell key={stat.type} fill={CONTENT_TYPE_COLORS[stat.type]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
-            </CardContent>
-          </Card>
+            </SectionCard>
+          </div>
+
+          {/* Daily Content Type Breakdown */}
+          <SectionCard title="Daily Content Generation" description="Content types generated over time">
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={analytics.dailyCosts}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis 
+                    dataKey="date" 
+                    stroke="hsl(var(--muted-foreground))"
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                    tickFormatter={(v) => format(new Date(v), 'MMM d')}
+                  />
+                  <YAxis stroke="hsl(var(--muted-foreground))" />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                    labelFormatter={(v) => format(new Date(v), 'MMM d, yyyy')}
+                  />
+                  <Legend />
+                  <Area type="monotone" dataKey="text" name="Text" stackId="1" stroke={CONTENT_TYPE_COLORS.text} fill={CONTENT_TYPE_COLORS.text} fillOpacity={0.6} />
+                  <Area type="monotone" dataKey="audio" name="Audio" stackId="1" stroke={CONTENT_TYPE_COLORS.audio} fill={CONTENT_TYPE_COLORS.audio} fillOpacity={0.6} />
+                  <Area type="monotone" dataKey="image" name="Image" stackId="1" stroke={CONTENT_TYPE_COLORS.image} fill={CONTENT_TYPE_COLORS.image} fillOpacity={0.6} />
+                  <Area type="monotone" dataKey="video" name="Video" stackId="1" stroke={CONTENT_TYPE_COLORS.video} fill={CONTENT_TYPE_COLORS.video} fillOpacity={0.6} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </SectionCard>
+
+          {/* Detailed Content Type Table */}
+          <SectionCard title="Content Type Details">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-3 px-4 text-muted-foreground font-medium text-sm">Type</th>
+                    <th className="text-right py-3 px-4 text-muted-foreground font-medium text-sm">Count</th>
+                    <th className="text-right py-3 px-4 text-muted-foreground font-medium text-sm">Total Cost</th>
+                    <th className="text-right py-3 px-4 text-muted-foreground font-medium text-sm">Avg Cost</th>
+                    <th className="text-right py-3 px-4 text-muted-foreground font-medium text-sm">% of Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analytics.contentTypeStats.map(stat => {
+                    const Icon = CONTENT_TYPE_ICONS[stat.type];
+                    const percentage = analytics.totalGenerations > 0 
+                      ? Math.round((stat.count / analytics.totalGenerations) * 100) 
+                      : 0;
+                    return (
+                      <tr key={stat.type} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-3 h-3 rounded-full"
+                              style={{ backgroundColor: CONTENT_TYPE_COLORS[stat.type] }}
+                            />
+                            <Icon className="w-4 h-4" style={{ color: CONTENT_TYPE_COLORS[stat.type] }} />
+                            <span className="font-medium text-foreground capitalize">{stat.type}</span>
+                          </div>
+                        </td>
+                        <td className="text-right py-3 px-4 text-foreground">{stat.count}</td>
+                        <td className="text-right py-3 px-4 text-foreground">${stat.cost.toFixed(2)}</td>
+                        <td className="text-right py-3 px-4 text-muted-foreground">${stat.avgCost.toFixed(4)}</td>
+                        <td className="text-right py-3 px-4">
+                          <div className="flex items-center justify-end gap-2">
+                            <Progress value={percentage} className="w-16 h-2" />
+                            <span className="text-xs text-muted-foreground w-10 text-right">{percentage}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </SectionCard>
+        </TabsContent>
+
+        {/* Cost Trends Tab */}
+        <TabsContent value="costs" className="space-y-6">
+          <SectionCard title="Daily Cost Breakdown" description="Track your spending over time">
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={analytics.dailyCosts}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis 
+                    dataKey="date" 
+                    stroke="hsl(var(--muted-foreground))"
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                    tickFormatter={(v) => format(new Date(v), 'MMM d')}
+                  />
+                  <YAxis 
+                    stroke="hsl(var(--muted-foreground))"
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                    tickFormatter={(value) => `$${value.toFixed(2)}`}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                    formatter={(value: number) => [`$${value.toFixed(2)}`, 'Cost']}
+                    labelFormatter={(v) => format(new Date(v), 'MMM d, yyyy')}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="cost" 
+                    stroke="hsl(var(--primary))" 
+                    fill="hsl(var(--primary) / 0.3)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </SectionCard>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="bg-gradient-card border-border shadow-card">
-              <CardHeader>
-                <CardTitle className="text-foreground">Cost by Engine</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                  {analytics.engineUsage.map((engine, idx) => (
-                    <div key={engine.name} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div 
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: COLORS[idx % COLORS.length] }}
-                        />
-                        <span className="text-foreground">{engine.name}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Badge variant="secondary">{engine.count} uses</Badge>
-                        <span className="text-primary font-medium">${engine.cost.toFixed(2)}</span>
-                      </div>
+            <SectionCard title="Cost by Engine" description="Which engines cost the most">
+              <div className="space-y-3">
+                {analytics.engineUsage.slice(0, 8).map((engine, idx) => (
+                  <div key={engine.name} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: COLORS[idx % COLORS.length] }}
+                      />
+                      <span className="text-sm text-foreground">{engine.name}</span>
                     </div>
-                  ))}
-                  {analytics.engineUsage.length === 0 && (
-                    <p className="text-center text-muted-foreground py-8">No engine usage data yet</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground">{engine.count} uses</span>
+                      <span className="text-sm font-medium text-foreground">${engine.cost.toFixed(2)}</span>
+                    </div>
+                  </div>
+                ))}
+                {analytics.engineUsage.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">No engine usage data</p>
+                )}
+              </div>
+            </SectionCard>
 
-            <Card className="bg-gradient-card border-border shadow-card">
-              <CardHeader>
-                <CardTitle className="text-foreground">Engine Pricing Reference</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                  {Object.entries(ENGINE_COSTS).map(([engine, cost]) => (
-                    <div key={engine} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                      <span className="text-muted-foreground">{engine}</span>
-                      <span className="text-foreground font-mono">${cost.toFixed(3)}/use</span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <SectionCard title="Cost Efficiency" description="Cost per generation over time">
+              <div className="h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={analytics.costTrends.filter(t => t.avgPerVideo > 0)}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis 
+                      dataKey="date" 
+                      stroke="hsl(var(--muted-foreground))"
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                      tickFormatter={(v) => format(new Date(v), 'MMM d')}
+                    />
+                    <YAxis 
+                      stroke="hsl(var(--muted-foreground))"
+                      tickFormatter={(v) => `$${v.toFixed(2)}`}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                      formatter={(value: number) => [`$${value.toFixed(2)}`, 'Avg per video']}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="avgPerVideo" 
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </SectionCard>
           </div>
         </TabsContent>
 
         {/* Engine Performance Tab */}
         <TabsContent value="engines" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="bg-gradient-card border-border shadow-card">
-              <CardHeader>
-                <CardTitle className="text-foreground">Engine Distribution</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RechartsPie>
-                      <Pie
-                        data={analytics.engineUsage}
-                        dataKey="count"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={100}
-                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                        labelLine={{ stroke: 'hsl(var(--muted-foreground))' }}
-                      >
-                        {analytics.engineUsage.map((_, idx) => (
-                          <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </RechartsPie>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
+            <SectionCard title="Engine Distribution" description="Usage share by engine">
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsPie>
+                    <Pie
+                      data={analytics.engineUsage.slice(0, 7)}
+                      dataKey="count"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={100}
+                      label={({ name, percent }) => `${name.split(' ')[0]} (${(percent * 100).toFixed(0)}%)`}
+                      labelLine={{ stroke: 'hsl(var(--muted-foreground))' }}
+                    >
+                      {analytics.engineUsage.slice(0, 7).map((_, idx) => (
+                        <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                    />
+                  </RechartsPie>
+                </ResponsiveContainer>
+              </div>
+            </SectionCard>
 
-            <Card className="bg-gradient-card border-border shadow-card">
-              <CardHeader>
-                <CardTitle className="text-foreground">Success Rate by Engine</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={analytics.engineUsage} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis type="number" domain={[0, 100]} stroke="hsl(var(--muted-foreground))" />
-                      <YAxis 
-                        dataKey="name" 
-                        type="category" 
-                        width={100}
-                        stroke="hsl(var(--muted-foreground))"
-                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'hsl(var(--card))', 
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px'
-                        }}
-                        formatter={(value) => [`${value}%`, 'Success Rate']}
-                      />
-                      <Bar dataKey="successRate" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
+            <SectionCard title="Success Rate by Engine" description="How reliable each engine is">
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={analytics.enginePerformance.slice(0, 8)} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis type="number" domain={[0, 100]} stroke="hsl(var(--muted-foreground))" />
+                    <YAxis 
+                      dataKey="engine" 
+                      type="category" 
+                      width={100}
+                      stroke="hsl(var(--muted-foreground))"
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                      formatter={(value: number) => [`${value}%`, 'Success Rate']}
+                    />
+                    <Bar dataKey="successRate" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </SectionCard>
           </div>
 
-          {/* Engine Performance Table */}
-          <Card className="bg-gradient-card border-border shadow-card">
-            <CardHeader>
-              <CardTitle className="text-foreground">Detailed Engine Performance</CardTitle>
-              <CardDescription>Compare engines across multiple metrics</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-left py-3 px-4 text-muted-foreground font-medium">Engine</th>
-                      <th className="text-right py-3 px-4 text-muted-foreground font-medium">Jobs</th>
-                      <th className="text-right py-3 px-4 text-muted-foreground font-medium">Success</th>
-                      <th className="text-right py-3 px-4 text-muted-foreground font-medium">Avg Cost</th>
-                      <th className="text-right py-3 px-4 text-muted-foreground font-medium">Quality</th>
-                      <th className="text-right py-3 px-4 text-muted-foreground font-medium">Trend</th>
+          <SectionCard title="Engine Performance Details">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-3 px-4 text-muted-foreground font-medium text-sm">Engine</th>
+                    <th className="text-right py-3 px-4 text-muted-foreground font-medium text-sm">Jobs</th>
+                    <th className="text-right py-3 px-4 text-muted-foreground font-medium text-sm">Success</th>
+                    <th className="text-right py-3 px-4 text-muted-foreground font-medium text-sm">Avg Cost</th>
+                    <th className="text-right py-3 px-4 text-muted-foreground font-medium text-sm">Quality</th>
+                    <th className="text-right py-3 px-4 text-muted-foreground font-medium text-sm">Trend</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analytics.enginePerformance.map((engine, idx) => (
+                    <tr key={engine.engine} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: COLORS[idx % COLORS.length] }}
+                          />
+                          <span className="font-medium text-foreground">{engine.engine}</span>
+                        </div>
+                      </td>
+                      <td className="text-right py-3 px-4 text-foreground">{engine.totalJobs}</td>
+                      <td className="text-right py-3 px-4">
+                        <Badge variant={engine.successRate >= 90 ? 'default' : engine.successRate >= 70 ? 'secondary' : 'destructive'}>
+                          {engine.successRate}%
+                        </Badge>
+                      </td>
+                      <td className="text-right py-3 px-4 text-foreground">${engine.avgCost.toFixed(3)}</td>
+                      <td className="text-right py-3 px-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <Progress value={engine.qualityScore} className="w-16 h-2" />
+                          <span className="text-xs text-muted-foreground">{engine.qualityScore}</span>
+                        </div>
+                      </td>
+                      <td className="text-right py-3 px-4">
+                        {engine.trend === 'up' ? (
+                          <ArrowUpRight className="w-4 h-4 text-success inline" />
+                        ) : engine.trend === 'down' ? (
+                          <ArrowDownRight className="w-4 h-4 text-destructive inline" />
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {analytics.enginePerformance.map((engine, idx) => (
-                      <tr key={engine.engine} className="border-b border-border/50 hover:bg-muted/30">
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            <div 
-                              className="w-2 h-2 rounded-full"
-                              style={{ backgroundColor: COLORS[idx % COLORS.length] }}
-                            />
-                            <span className="font-medium text-foreground">{engine.engine}</span>
-                          </div>
-                        </td>
-                        <td className="text-right py-3 px-4 text-foreground">{engine.totalJobs}</td>
-                        <td className="text-right py-3 px-4">
-                          <Badge variant={engine.successRate >= 90 ? 'default' : engine.successRate >= 70 ? 'secondary' : 'destructive'}>
-                            {engine.successRate}%
-                          </Badge>
-                        </td>
-                        <td className="text-right py-3 px-4 text-foreground">${engine.avgCost.toFixed(3)}</td>
-                        <td className="text-right py-3 px-4">
-                          <div className="flex items-center justify-end gap-2">
-                            <Progress value={engine.qualityScore} className="w-16 h-2" />
-                            <span className="text-xs text-muted-foreground">{engine.qualityScore}</span>
-                          </div>
-                        </td>
-                        <td className="text-right py-3 px-4">
-                          {engine.trend === 'up' ? (
-                            <ArrowUpRight className="w-4 h-4 text-emerald-500 inline" />
-                          ) : engine.trend === 'down' ? (
-                            <ArrowDownRight className="w-4 h-4 text-destructive inline" />
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                    {analytics.enginePerformance.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="py-8 text-center text-muted-foreground">
-                          No engine performance data yet
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+                  ))}
+                  {analytics.enginePerformance.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                        No engine performance data yet
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </SectionCard>
         </TabsContent>
 
         {/* AI Learning Tab */}
         <TabsContent value="ai-learning" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="bg-gradient-card border-border shadow-card">
-              <CardHeader>
-                <CardTitle className="text-foreground flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-primary" />
-                  Learning Patterns
-                </CardTitle>
-                <CardDescription>How the AI is improving based on your usage</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {analytics.aiLearnings.length > 0 ? (
-                  analytics.aiLearnings.slice(0, 6).map((learning, idx) => (
+            <SectionCard 
+              title="Learning Patterns" 
+              description="How the AI is improving based on your usage"
+              icon={Sparkles}
+            >
+              {analytics.aiLearnings.length > 0 ? (
+                <div className="space-y-3">
+                  {analytics.aiLearnings.slice(0, 6).map((learning, idx) => (
                     <div key={learning.id || idx} className="p-3 rounded-lg bg-muted/30 border border-border">
                       <div className="flex items-center justify-between mb-2">
                         <Badge variant="secondary" className="capitalize">
@@ -1088,26 +993,23 @@ export default function Analytics() {
                         </p>
                       )}
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Brain className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>AI is still learning from your usage</p>
-                    <p className="text-xs mt-2">Generate more content to see patterns</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  icon={Brain}
+                  title="AI is still learning"
+                  description="Generate more content to see patterns"
+                />
+              )}
+            </SectionCard>
 
-            <Card className="bg-gradient-card border-border shadow-card">
-              <CardHeader>
-                <CardTitle className="text-foreground flex items-center gap-2">
-                  <Lightbulb className="w-5 h-5 text-primary" />
-                  Smart Insights
-                </CardTitle>
-                <CardDescription>AI-generated recommendations</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <SectionCard 
+              title="Smart Insights" 
+              description="AI-generated recommendations"
+              icon={Lightbulb}
+            >
+              <div className="space-y-3">
                 {analytics.engineUsage.length > 0 && (
                   <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
                     <div className="flex items-start gap-3">
@@ -1125,11 +1027,11 @@ export default function Analytics() {
 
                 <div className="p-4 rounded-lg bg-muted/30 border border-border">
                   <div className="flex items-start gap-3">
-                    <DollarSign className="w-5 h-5 text-emerald-500 mt-0.5" />
+                    <DollarSign className="w-5 h-5 text-success mt-0.5" />
                     <div>
                       <p className="font-medium text-foreground">Cost Efficiency</p>
                       <p className="text-sm text-muted-foreground">
-                        Average cost per generation: <span className="text-emerald-400 font-medium">
+                        Average cost per generation: <span className="text-success font-medium">
                           ${(analytics.totalCost / Math.max(analytics.totalGenerations, 1)).toFixed(4)}
                         </span>
                       </p>
@@ -1165,93 +1067,81 @@ export default function Analytics() {
                     </div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </SectionCard>
           </div>
 
-          <Card className="bg-gradient-card border-border shadow-card">
-            <CardHeader>
-              <CardTitle className="text-foreground">AI Confidence Over Time</CardTitle>
-              <CardDescription>How confident the AI is in its recommendations</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[250px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={analytics.aiLearnings.slice(0, 20).reverse().map((l, idx) => ({
-                    index: idx + 1,
-                    confidence: Math.round(l.confidence_score * 100),
-                    usageCount: l.usage_count,
-                  }))}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="index" stroke="hsl(var(--muted-foreground))" />
-                    <YAxis stroke="hsl(var(--muted-foreground))" domain={[0, 100]} />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px'
-                      }}
-                    />
-                    <Area 
-                      type="monotone" 
-                      dataKey="confidence" 
-                      stroke="hsl(var(--primary))" 
-                      fill="hsl(var(--primary) / 0.2)"
-                      strokeWidth={2}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
+          <SectionCard title="AI Confidence Over Time" description="How confident the AI is in its recommendations">
+            <div className="h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={analytics.aiLearnings.slice(0, 20).reverse().map((l, idx) => ({
+                  index: idx + 1,
+                  confidence: Math.round(l.confidence_score * 100),
+                  usageCount: l.usage_count,
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="index" stroke="hsl(var(--muted-foreground))" />
+                  <YAxis stroke="hsl(var(--muted-foreground))" domain={[0, 100]} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="confidence" 
+                    stroke="hsl(var(--primary))" 
+                    fill="hsl(var(--primary) / 0.2)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </SectionCard>
         </TabsContent>
 
         {/* Trends Tab */}
         <TabsContent value="trends">
-          <Card className="bg-gradient-card border-border shadow-card">
-            <CardHeader>
-              <CardTitle className="text-foreground">Generation Trends</CardTitle>
-              <CardDescription>Content created and costs over time</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[350px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={analytics.dailyCosts}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis 
-                      dataKey="date" 
-                      stroke="hsl(var(--muted-foreground))"
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                      tickFormatter={(v) => format(new Date(v), 'MMM d')}
-                    />
-                    <YAxis 
-                      yAxisId="left"
-                      stroke="hsl(var(--muted-foreground))"
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                    />
-                    <YAxis 
-                      yAxisId="right"
-                      orientation="right"
-                      stroke="hsl(var(--muted-foreground))"
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                      tickFormatter={(value) => `$${value}`}
-                    />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px'
-                      }}
-                      labelFormatter={(v) => format(new Date(v), 'MMM d, yyyy')}
-                    />
-                    <Legend />
-                    <Bar yAxisId="left" dataKey="videos" name="Videos" fill="hsl(280, 70%, 60%)" radius={[4, 4, 0, 0]} />
-                    <Line yAxisId="right" type="monotone" dataKey="cost" name="Cost ($)" stroke="hsl(var(--primary))" strokeWidth={2} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
+          <SectionCard title="Generation Trends" description="Content created and costs over time">
+            <div className="h-[350px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={analytics.dailyCosts}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis 
+                    dataKey="date" 
+                    stroke="hsl(var(--muted-foreground))"
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                    tickFormatter={(v) => format(new Date(v), 'MMM d')}
+                  />
+                  <YAxis 
+                    yAxisId="left"
+                    stroke="hsl(var(--muted-foreground))"
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                  />
+                  <YAxis 
+                    yAxisId="right"
+                    orientation="right"
+                    stroke="hsl(var(--muted-foreground))"
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                    tickFormatter={(value) => `$${value}`}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                    labelFormatter={(v) => format(new Date(v), 'MMM d, yyyy')}
+                  />
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="videos" name="Videos" fill="hsl(280, 70%, 60%)" radius={[4, 4, 0, 0]} />
+                  <Line yAxisId="right" type="monotone" dataKey="cost" name="Cost ($)" stroke="hsl(var(--primary))" strokeWidth={2} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </SectionCard>
         </TabsContent>
       </Tabs>
     </div>
