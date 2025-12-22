@@ -43,7 +43,7 @@ export function StepSidebar({ currentStep, completedSteps, onStepClick, onClearH
       {/* Header */}
       <div className="p-4 border-b border-border">
         <h2 className="font-semibold text-lg">Creative AI Editor</h2>
-        <p className="text-xs text-muted-foreground mt-0.5">Video optimization pipeline</p>
+        <p className="text-xs text-muted-foreground mt-0.5">AI-powered video editing</p>
       </div>
 
       {/* Steps */}
