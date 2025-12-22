@@ -34,7 +34,8 @@ import { SceneCard } from './SceneCard';
 import { DebugPanel } from './DebugPanel';
 import { RealTimeCostEstimator } from './RealTimeCostEstimator';
 import { VariationPreview } from './VariationPreview';
-import { SmartScenePlan, SceneDuration, SceneStructure } from '@/lib/smart-scene-builder/types';
+import { ProductDataInput } from './ProductDataInput';
+import { SmartScenePlan, SceneDuration, SceneStructure, ProductData } from '@/lib/smart-scene-builder/types';
 
 // Script interface for props
 interface VideoScriptInput {
@@ -274,19 +275,34 @@ export function SmartSceneBuilderV2({ projectId, scripts = [], productData, onPr
       </Card>
 
       <div className="space-y-6">
-        {/* STEP 1: Visual Context (Asset Uploader) */}
+        {/* STEP 1: Visual Context & Product Data */}
         <section>
           <div className="flex items-center gap-2 mb-3">
             <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold">1</div>
-            <h3 className="text-sm font-semibold">Visual Context</h3>
+            <h3 className="text-sm font-semibold">Visual Context & Product Data</h3>
             <Badge variant="secondary" className="text-xs">Optional</Badge>
           </div>
-          <AssetUploader
-            assets={assets}
-            onAddAsset={addAsset}
-            onRemoveAsset={removeAsset}
-            onGenerateScenes={generateFromAssets}
+          
+          {/* Product Data Input */}
+          <ProductDataInput
+            productData={productData ? {
+              name: productData.name,
+              description: productData.description,
+              imageUrl: productData.imageUrl,
+            } : product}
+            onProductDataChange={setProduct}
+            isFromProductInput={!!productData?.name}
           />
+          
+          {/* Asset Uploader */}
+          <div className="mt-4">
+            <AssetUploader
+              assets={assets}
+              onAddAsset={addAsset}
+              onRemoveAsset={removeAsset}
+              onGenerateScenes={generateFromAssets}
+            />
+          </div>
         </section>
 
         <Separator />
