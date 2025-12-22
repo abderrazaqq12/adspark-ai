@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
@@ -11,7 +11,7 @@ import {
   Info
 } from 'lucide-react';
 import { config, isCloud } from '@/config';
-import { VPSServerStatus } from './VPSServerStatus';
+import { RenderEnvironmentStatus } from './RenderEnvironmentStatus';
 
 interface DeploymentSettingsProps {
   onSave?: () => void;
@@ -132,8 +132,8 @@ export default function DeploymentSettings({ onSave }: DeploymentSettingsProps) 
         </Card>
       )}
 
-      {/* VPS Server Status */}
-      <VPSServerStatus />
+      {/* Auto-Detected Render Environment */}
+      <RenderEnvironmentStatus />
     </div>
   );
 }
