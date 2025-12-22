@@ -1,210 +1,115 @@
 /**
- * Advanced Engine Router - Server-only rendering (with Cloudinary Planning)
- * All video processing routed to VPS server
+ * ADVANCED ENGINE ROUTER
+ * 
+ * ARCHITECTURAL LAW: VPS-First, FFmpeg-First
+ * 
+ * 1. VPS is the ONLY execution environment for rendering
+ * 2. FFmpeg handles ALL operations it's capable of
+ * 3. Paid AI ONLY when FFmpeg is technically incapable
+ * 4. Cloudinary is a PLANNER only, NOT a renderer
  */
 
 import { ENGINE_REGISTRY, EngineSpecs, ScenePlan } from "./registry-types";
 import { IVideoEngine, EngineTask, EngineResult } from "./types";
+import { getDecisionScorer } from "@/lib/render";
 
-export type RenderingMode = 'auto' | 'server_only' | 'cloudinary_only';
+export type RenderingMode = 'server_only' | 'auto';
 
 export interface RoutingRequest {
   plan: ScenePlan;
   userTier: "free" | "low" | "medium" | "premium";
   preferLocal?: boolean;
-  renderingMode?: RenderingMode; // New override
+  renderingMode?: RenderingMode;
 }
 
 /**
- * Cloudinary Planner & Validator
- * - Checks if the plan is "simple" enough for basic cloud transcoding
- * - Identifies "uncompilable" complex edits that require FFmpeg
+ * VPS FFmpeg Engine - THE Primary Renderer
+ * All video processing happens here.
  */
-class CloudinaryPlanner {
-  static validatePlan(plan: ScenePlan): { feasible: boolean; reason?: string } {
-    // 1. Check for complex audio ops (not supported by basic Cloudinary URL gen)
-    const hasAudioMix = plan.requiredCapabilities?.includes('audio_mix');
-    if (hasAudioMix) return { feasible: false, reason: "Complex audio mixing requires FFmpeg" };
-
-    // 2. Check for precise trimming (often frame-inaccurate on Cloudinary free tier)
-    // For now, we allow it, but flag it if needed.
-
-    // 3. Check for external assets that might be private/local
-    // Cloudinary needs public URLs. If source is local, must use Server.
-    // We assume plan.scenes checks are done elsewhere, but here we enforce policy.
-
-    return { feasible: true, reason: "Plan is compatible with Cloudinary transformations" };
-  }
-}
-
-/**
- * Cloudinary Engine (Planner/Optimizer)
- * - Returns a Plan if complex
- * - Returns a Video URL if simple
- * - Falls back to Server FFmpeg if configured
- */
-class CloudinaryEngine implements IVideoEngine {
-  name = "Cloudinary (Gen-AI)";
-  tier = "free" as const;
-
-  async initialize(): Promise<void> { console.log("Cloudinary Engine Ready"); }
-
-  async process(task: EngineTask): Promise<EngineResult> {
-    console.log(`[Cloudinary] Analzying plan...`);
-
-    // 1. Check Feasibility
-    const feasibility = CloudinaryPlanner.validatePlan({
-      scenes: task.config.scenes as any,
-      requiredCapabilities: ['trim'],
-      totalDuration: 0, // Placeholder
-      resolution: '1080p'
-    });
-
-    // 2. If Not Feasible -> Fallback to Server (Handover)
-    if (!feasibility.feasible) {
-      console.warn(`[Cloudinary] Cannot render final output: ${feasibility.reason}. Handoff to Server FFmpeg...`);
-
-      // AUTOMATIC HANDOFF
-      return AdvancedEngineRouter.getEngineInstance('server-ffmpeg').process({
-        ...task,
-        config: {
-          ...task.config,
-          // strategies: "cloudinary_failed_fallback"
-        }
-      });
-    }
-
-    // 3. If Feasible -> Return Compilation Plan (Not final video)
-    // The user requirement says: "Cloudinary must be treated as Plan compiler... NOT a final renderer unless explicitly configured"
-    // But if we are in "Cloudinary Only" mode, we might try.
-    // For "Auto" mode, if we selected Cloudinary, we likely want a fast preview or Plan.
-
-    return {
-      success: true,
-      status: 'success',
-      outputType: 'plan', // Important: It's a PLAN, not a VIDEO
-      videoUrl: "", // No video yet
-      executionPlan: {
-        provider: "cloudinary",
-        transformations: ["c_fill", "w_1080", "h_1920"],
-        segments: task.config.scenes.length
-      },
-      logs: ["Cloudinary compilation successful", "Ready for final execution"]
-    };
-  }
-}
-
-/**
- * Server-Only FFmpegEngine
- * All processing happens on VPS
- */
-class ServerFFmpegEngine implements IVideoEngine {
-  name = "Server FFmpeg (VPS)";
+class VPSFFmpegEngine implements IVideoEngine {
+  name = "VPS FFmpeg (Native)";
   tier = "server" as const;
 
   async initialize(): Promise<void> {
-    console.log('[ServerFFmpeg] Ready - all processing on VPS');
+    console.log('[VPSFFmpeg] Ready - all processing on VPS');
   }
 
   async process(task: EngineTask): Promise<EngineResult> {
-    console.log('[ServerFFmpeg] Processing via VPS API...');
+    console.log('[VPSFFmpeg] Processing via VPS /render/jobs...');
     let currentJobId: string | null = null;
 
     try {
-      const response = await fetch('/api/execute', {
+      // Use the SINGLE RENDER CONTRACT
+      const response = await fetch('/render/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sourcePath: task.videoUrl, // Can be local path or remote URL
-          inputFileUrl: task.videoUrl.startsWith('http') ? task.videoUrl : undefined,
-          outputName: task.id,
-          config: task.config,
-          scenes: task.config?.scenes || [],
-          // Pass the execution plan for server-side logging/debugging
-          executionPlan: {
-            engine: "server_ffmpeg",
-            routedBy: "AdvancedEngineRouter",
-            timestamp: new Date().toISOString()
+          source_url: task.videoUrl,
+          output_format: 'mp4',
+          resolution: task.outputRatio === '9:16' ? '1080x1920' : '1920x1080',
+          metadata: {
+            taskId: task.id,
+            engine: 'vps-ffmpeg',
+            scenes: task.config?.scenes?.length || 0,
           },
-          outputFormat: {
-            width: task.outputRatio === '9:16' ? 1080 : 1920,
-            height: task.outputRatio === '9:16' ? 1920 : 1080,
-          }
-        })
+        }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || `Server error: ${response.status}`);
+        throw new Error(errorData.error || `Server error: ${response.status}`);
       }
 
       const data = await response.json();
+      currentJobId = data.id;
 
-      // 1. Check for Immediate Success (Sync)
-      if ((data.header?.ok || data.ok) && (data.outputUrl || data.outputPath)) {
-        return {
-          success: true,
-          status: 'success',
-          outputType: 'video',
-          videoUrl: data.outputUrl || data.outputPath,
-          logs: data.logs || ['Server FFmpeg processing complete (Sync)']
-        };
-      }
+      console.log(`[VPSFFmpeg] Job submitted: ${currentJobId}`);
 
-      // 2. Handle Async Job (202 Accepted)
-      if (response.status === 202 && data.jobId) {
-        currentJobId = data.jobId;
-        console.log(`[ServerFFmpeg] Job Queued: ${currentJobId}. Starting Poll Loop...`);
+      // Poll for completion using SINGLE CONTRACT
+      const maxAttempts = 180; // 6 minutes (2s interval)
+      let attempts = 0;
 
-        // POLL LOOP
-        const maxAttempts = 120; // 4 minutes (2s interval)
-        let attempts = 0;
+      while (attempts < maxAttempts) {
+        attempts++;
+        await new Promise(r => setTimeout(r, 2000));
 
-        while (attempts < maxAttempts) {
-          attempts++;
-          await new Promise(r => setTimeout(r, 2000)); // Wait 2s
+        try {
+          const pollRes = await fetch(`/render/jobs/${currentJobId}`);
+          if (!pollRes.ok) continue;
 
-          try {
-            const pollRes = await fetch(`/api/jobs/${currentJobId}`);
-            if (!pollRes.ok) continue;
+          const jobData = await pollRes.json();
+          console.log(`[VPSFFmpeg] Poll ${currentJobId}: ${jobData.status}`);
 
-            const jobData = await pollRes.json();
-            console.log(`[ServerFFmpeg] Poll ${currentJobId}: ${jobData.status}`);
-
-            if (jobData.status === 'done' && jobData.output) {
-              return {
-                success: true,
-                status: 'success',
-                outputType: 'video',
-                videoUrl: jobData.output.outputUrl || jobData.output.outputPath,
-                jobId: currentJobId,
-                logs: ['Job completed successfully', ...(jobData.logs || [])]
-              };
-            }
-
-            if (jobData.status === 'error') {
-              throw new Error(jobData.error?.message || 'Job failed on server');
-            }
-          } catch (pollErr) {
-            console.warn(`[ServerFFmpeg] Poll error:`, pollErr);
-            // Don't throw immediately, allow retries for network glitches
+          if (jobData.status === 'completed' && (jobData.output_url || jobData.output_path)) {
+            return {
+              success: true,
+              status: 'success',
+              outputType: 'video',
+              videoUrl: jobData.output_url || jobData.output_path,
+              jobId: currentJobId,
+              logs: ['VPS FFmpeg render complete'],
+            };
           }
-        }
 
-        throw new Error('Server rendering timed out (polling limit reached)');
+          if (jobData.status === 'failed') {
+            throw new Error(jobData.error || 'Job failed on VPS');
+          }
+        } catch (pollErr) {
+          console.warn(`[VPSFFmpeg] Poll error:`, pollErr);
+        }
       }
 
-      throw new Error('Server returned unexpected response type');
+      throw new Error('VPS rendering timed out');
 
     } catch (err: any) {
-      console.error('[ServerFFmpeg] Error:', err);
+      console.error('[VPSFFmpeg] Error:', err);
       return {
         success: false,
         status: 'failed',
-        outputType: 'job', // Failed job
-        error: err.message || 'Server connection failed',
+        outputType: 'job',
+        error: err.message || 'VPS connection failed',
         jobId: currentJobId || undefined,
-        logs: [`Error: ${err.message}`]
+        logs: [`Error: ${err.message}`],
       };
     }
   }
@@ -214,88 +119,82 @@ class ServerFFmpegEngine implements IVideoEngine {
   }
 }
 
+/**
+ * ADVANCED ENGINE ROUTER
+ * 
+ * Routes ALL rendering to VPS FFmpeg.
+ * Uses Decision Scorer for operation analysis.
+ */
 export class AdvancedEngineRouter {
-  private static serverEngine: IVideoEngine | null = null;
+  private static vpsEngine: IVideoEngine | null = null;
 
   /**
-   * Selects the engine based on Capability, Tier, and Mode overrides.
+   * Select engine - ALWAYS returns VPS FFmpeg
+   * The Decision Scorer validates if FFmpeg can handle it.
    */
   static selectEngine(req: RoutingRequest): EngineSpecs {
-    const mode = req.renderingMode || 'auto';
-    const plan = req.plan;
-
-    console.log(`[Router] Mode: ${mode}, Tier: ${req.userTier}, Capabilities: ${plan.requiredCapabilities}`);
-
-    // FORCE MODES
-    if (mode === 'server_only') {
-      return this.getServerSpec("Forced by User Mode");
+    const scorer = getDecisionScorer();
+    const capabilities = req.plan.requiredCapabilities || [];
+    
+    // Log routing decision
+    console.log(`[Router] Analyzing capabilities: ${capabilities.join(', ')}`);
+    
+    // Check FFmpeg capability using decision scorer
+    const ffmpegOps = scorer.getFFmpegOperations(capabilities);
+    const aiOps = scorer.getAIOperations(capabilities);
+    
+    if (aiOps.length > 0) {
+      console.warn(`[Router] AI required for: ${aiOps.join(', ')} - these will be handled separately`);
     }
-
-    // NOTE: In this architecture, we treat Cloudinary as a PLANNER.
-    // Even if 'cloudinary_only' is selected, we might just be explicitly avoiding the VPS for *rendering*,
-    // but the task requirements say Cloudinary shouldn't be the final renderer for advanced stuff.
-    // For now, if "Cloudinary Only" is requested, we stick to it (legacy behavior), 
-    // unless it's impossible, then we might fail or warn.
-    // However, the Task Description says "Cloudinary MUST NOT be treated as a final renderer for advanced operations".
-
-    // AUTO MODE LOGIC
-    if (mode === 'auto') {
-      const planningResult = CloudinaryPlanner.validatePlan(plan);
-
-      if (!planningResult.feasible) {
-        console.log(`[Router] Cloudinary skipped: ${planningResult.reason}. Routing to Server.`);
-        return this.getServerSpec(`Cloudinary Incompatible: ${planningResult.reason}`);
-      }
-
-      // If Cloudinary IS feasible, we check preferences.
-      // Generally we prefer Server for quality, but we can return Cloudinary if the user wanted a "Light" render
-      // For now, based on "Server is Final Authority", we still default to Server.
-      return this.getServerSpec("Auto-Default to Server Authority");
-    }
-
-    if (mode === 'cloudinary_only') {
-      return {
-        id: 'cloudinary', // Matches getEngineInstance check
-        name: 'Cloudinary (Plan/Preview)',
-        tier: 'free',
-        location: 'server',
-        maxResolution: '1080p',
-        maxDurationSec: 60,
-        costPerMinute: 0,
-        capabilities: ['trim', 'resize']
-      };
-    }
-
-    return this.getServerSpec("Default Fallback");
+    
+    // ALWAYS route to VPS FFmpeg for video rendering
+    return this.getVPSSpec(`FFmpeg handles: ${ffmpegOps.join(', ') || 'all operations'}`);
   }
 
-  static getServerSpec(reason: string): EngineSpecs {
+  private static getVPSSpec(reason: string): EngineSpecs {
     return {
-      id: "server-ffmpeg",
-      name: `Server FFmpeg (${reason})`,
+      id: "vps-ffmpeg",
+      name: `VPS FFmpeg (${reason})`,
       tier: "free",
       location: "server",
       maxResolution: "4k",
-      maxDurationSec: 600, // 10 mins
+      maxDurationSec: 600,
       costPerMinute: 0,
-      capabilities: ["trim", "merge", "text_overlay", "transitions", "audio_mix", "resize", "speed_change"],
+      capabilities: [
+        "trim", "merge", "concat", "text_overlay", 
+        "transitions", "audio_mix", "resize", "speed_change",
+        "zoom_pan", "subtitle_burn", "transcode"
+      ],
     };
   }
 
   /**
-   * Always returns server engine instance
+   * Get VPS engine instance
    */
-  static getEngineInstance(specId: string): IVideoEngine {
-    if (specId === 'cloudinary') {
-      return new CloudinaryEngine();
+  static getEngineInstance(_specId?: string): IVideoEngine {
+    // ALWAYS return VPS engine - no alternatives
+    if (!this.vpsEngine) {
+      this.vpsEngine = new VPSFFmpegEngine();
     }
-    // Default to Server
-    if (!this.serverEngine) {
-      this.serverEngine = new ServerFFmpegEngine();
-    }
-    return this.serverEngine;
+    return this.vpsEngine;
   }
 
-  // Tier levels (for compatibility)
-  private static tierLevels = { free: 0, low: 1, medium: 2, premium: 3 };
+  /**
+   * Check if VPS is available
+   */
+  static async checkVPSHealth(): Promise<boolean> {
+    try {
+      const response = await fetch('/api/health', {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!response.ok) return false;
+      const data = await response.json();
+      return data.ok === true;
+    } catch {
+      return false;
+    }
+  }
 }
+
+// Legacy export for backward compatibility
+export { AdvancedEngineRouter as EngineRouterV2 };
