@@ -43,6 +43,8 @@ export function LivePipelineActivity() {
   const [runningJobs, setRunningJobs] = useState<RunningJob[]>([]);
   const [failedJobs, setFailedJobs] = useState<FailedJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempts, setLoadAttempts] = useState(0);
 
   useEffect(() => {
     fetchJobs();
@@ -63,13 +65,25 @@ export function LivePipelineActivity() {
       }
     }, 10000);
 
+    // Timeout to prevent perpetual loading - max 8 seconds
+    const timeout = setTimeout(() => {
+      if (isLoading && loadAttempts >= 1) {
+        setIsLoading(false);
+        setLoadError('Backend not responding');
+      }
+    }, 8000);
+
     return () => {
       supabase.removeChannel(channel);
       clearInterval(interval);
+      clearTimeout(timeout);
     };
-  }, [activeProject?.id]);
+  }, [activeProject?.id, loadAttempts]);
 
   const fetchJobs = async () => {
+    setLoadAttempts(prev => prev + 1);
+    setLoadError(null);
+    
     try {
       // Fetch running jobs
       let runningQuery = supabase
@@ -90,7 +104,14 @@ export function LivePipelineActivity() {
         runningQuery = runningQuery.eq('project_id', activeProject.id);
       }
 
-      const { data: running } = await runningQuery;
+      const { data: running, error: runningError } = await runningQuery;
+
+      if (runningError) {
+        console.error('Error fetching running jobs:', runningError);
+        setLoadError('Failed to fetch running jobs');
+        setIsLoading(false);
+        return;
+      }
 
       if (running) {
         setRunningJobs(running.map(job => ({
@@ -103,6 +124,8 @@ export function LivePipelineActivity() {
             : '0s',
           projectName: (job.projects as any)?.name || 'Unknown'
         })));
+      } else {
+        setRunningJobs([]);
       }
 
       // Fetch failed jobs (last 24h)
@@ -124,7 +147,12 @@ export function LivePipelineActivity() {
         failedQuery = failedQuery.eq('project_id', activeProject.id);
       }
 
-      const { data: failed } = await failedQuery;
+      const { data: failed, error: failedError } = await failedQuery;
+
+      if (failedError) {
+        console.error('Error fetching failed jobs:', failedError);
+        // Don't block - we still got running jobs
+      }
 
       if (failed) {
         setFailedJobs(failed.map(job => ({
@@ -137,9 +165,14 @@ export function LivePipelineActivity() {
             : 'Unknown',
           projectName: (job.projects as any)?.name || 'Unknown'
         })));
+      } else {
+        setFailedJobs([]);
       }
+      
+      setLoadError(null);
     } catch (error) {
       console.error('Error fetching pipeline jobs:', error);
+      setLoadError('Backend connection failed');
     } finally {
       setIsLoading(false);
     }
@@ -212,7 +245,31 @@ export function LivePipelineActivity() {
 
   const isEmpty = runningJobs.length === 0 && failedJobs.length === 0;
 
-  if (isLoading) {
+  // Error state - backend not responding
+  if (loadError) {
+    return (
+      <Card className="border-amber-500/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-500" />
+            Live Pipeline Activity
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3 text-amber-600 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <Server className="w-5 h-5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium">Status unavailable</p>
+              <p className="text-xs text-amber-600/80">{loadError}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Short loading state (max 3 seconds visible)
+  if (isLoading && loadAttempts < 2) {
     return (
       <Card>
         <CardContent className="py-8">
@@ -242,12 +299,15 @@ export function LivePipelineActivity() {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Idle State */}
+        {/* Idle State - Truthful empty state */}
         {isEmpty && (
           <div className="text-center py-6 text-muted-foreground">
             <Inbox className="w-10 h-10 mx-auto mb-2 opacity-50" />
-            <p className="text-sm font-medium">System Idle</p>
-            <p className="text-xs">No active or recently failed jobs</p>
+            <p className="text-sm font-medium">No active jobs</p>
+            <p className="text-xs mt-1">Pipeline is idle. No jobs running or failed in the last 24 hours.</p>
+            <p className="text-[10px] mt-2 text-muted-foreground/60">
+              Jobs will appear here when you start a generation in Studio, Replicator, or AI Tools.
+            </p>
           </div>
         )}
 

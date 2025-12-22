@@ -196,12 +196,20 @@ export function CostUsageSnapshot() {
   if (!costData.isAvailable && !isLoading) {
     return (
       <Card className="border-amber-500/30">
-        <CardContent className="py-6">
-          <div className="flex items-center gap-3 text-amber-600">
-            <AlertCircle className="w-5 h-5" />
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+            <DollarSign className="w-5 h-5 text-muted-foreground" />
+            Cost & Usage (Today)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3 text-amber-600 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
             <div>
-              <p className="text-sm font-medium">Cost data temporarily unavailable</p>
-              <p className="text-xs text-muted-foreground">Unable to load cost tracking data</p>
+              <p className="text-sm font-medium">Cost tracking unavailable</p>
+              <p className="text-xs text-amber-600/80">
+                Backend cost service is not responding. Data will sync when connection is restored.
+              </p>
             </div>
           </div>
         </CardContent>
@@ -296,10 +304,18 @@ export function CostUsageSnapshot() {
           </div>
         )}
 
-        {/* Empty state */}
-        {nonZeroBreakdown.length === 0 && !isLoading && (
-          <div className="text-center py-4 text-muted-foreground">
-            <p className="text-sm">No costs recorded today</p>
+        {/* Empty state - with explanation */}
+        {nonZeroBreakdown.length === 0 && !isLoading && costData.isAvailable && (
+          <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
+            <div className="text-center">
+              <p className="text-sm font-medium text-muted-foreground">$0.00 today</p>
+              <p className="text-xs text-muted-foreground/80 mt-1">
+                No AI jobs have been executed today.
+              </p>
+              <p className="text-[10px] text-muted-foreground/60 mt-2">
+                Costs are tracked when you run AI generation, video rendering, or voice synthesis.
+              </p>
+            </div>
           </div>
         )}
       </CardContent>
