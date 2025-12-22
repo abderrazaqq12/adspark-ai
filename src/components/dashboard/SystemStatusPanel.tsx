@@ -48,12 +48,26 @@ export function SystemStatusPanel() {
     fetchQueueStats();
     fetchAIBrainStatus();
     
-    // Poll every 30 seconds
-    const interval = setInterval(() => {
-      fetchQueueStats();
-    }, 30000);
+    // Subscribe to realtime updates on pipeline_jobs
+    const channel = supabase
+      .channel('system-status-pipeline-jobs')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'pipeline_jobs'
+        },
+        () => {
+          // Refetch queue stats on any pipeline_jobs change
+          fetchQueueStats();
+        }
+      )
+      .subscribe();
     
-    return () => clearInterval(interval);
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchQueueStats = async () => {
