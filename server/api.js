@@ -44,6 +44,7 @@ import { createWriteStream } from 'fs';
 import { trackCost, supabase } from './supabase.js';
 import { trackResource } from './project-manager.js';
 import { enforceProject } from './middleware/project-enforcer.js';
+import { errorHandler } from './error-handler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2156,6 +2157,108 @@ app.get('/api/jobs/:jobId/state', (req, res) => {
     logsCount: job.fullLogs?.length || 0,
     isComplete: job.status === 'done' || job.status === 'error',
   });
+});
+
+// ============================================
+// ERROR OBSERVABILITY APIs
+// ============================================
+
+/**
+ * GET /api/projects/:id/errors
+ * Get error log for a project
+ */
+app.get('/api/projects/:id/errors', async (req, res) => {
+  const { id } = req.params;
+  const { resolved, category, limit = 50, offset = 0 } = req.query;
+
+  try {
+    let query = supabase
+      .from('execution_errors')
+      .select('*')
+      .eq('project_id', id)
+      .order('created_at', { ascending: false })
+      .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+
+    if (resolved !== undefined) {
+      query = query.eq('resolved', resolved === 'true');
+    }
+
+    if (category) {
+      query = query.eq('category', category);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      return jsonError(res, 500, 'QUERY_FAILED', error.message);
+    }
+
+    res.json({
+      ok: true,
+      errors: data,
+      count: data.length
+    });
+  } catch (err) {
+    return jsonError(res, 500, 'ERROR_QUERY_FAILED', err.message);
+  }
+});
+
+/**
+ * GET /api/projects/:id/error-stats
+ * Get error statistics for a project
+ */
+app.get('/api/projects/:id/error-stats', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const { data, error } = await supabase.rpc('get_error_stats', {
+      p_project_id: id
+    });
+
+    if (error) {
+      return jsonError(res, 500, 'STATS_QUERY_FAILED', error.message);
+    }
+
+    res.json({
+      ok: true,
+      stats: data || {
+        total_errors: 0,
+        unresolved: 0,
+        by_category: {},
+        retry_rate: 0
+      }
+    });
+  } catch (err) {
+    return jsonError(res, 500, 'STATS_FAILED', err.message);
+  }
+});
+
+/**
+ * GET /api/jobs/:id/errors
+ * Get errors for a specific job
+ */
+app.get('/api/jobs/:id/errors', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const { data, error } = await supabase
+      .from('execution_errors')
+      .select('*')
+      .eq('job_id', id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return jsonError(res, 500, 'JOB_ERRORS_FAILED', error.message);
+    }
+
+    res.json({
+      ok: true,
+      errors: data,
+      count: data.length
+    });
+  } catch (err) {
+    return jsonError(res, 500, 'JOB_ERRORS_FAILED', err.message);
+  }
 });
 
 // ============================================
