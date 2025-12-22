@@ -1408,6 +1408,7 @@ export type Database = {
           ai_operator_enabled: boolean | null
           api_keys: Json | null
           created_at: string | null
+          default_country: string | null
           default_language: string | null
           default_voice: string | null
           id: string
@@ -1422,6 +1423,7 @@ export type Database = {
           ai_operator_enabled?: boolean | null
           api_keys?: Json | null
           created_at?: string | null
+          default_country?: string | null
           default_language?: string | null
           default_voice?: string | null
           id?: string
@@ -1436,6 +1438,7 @@ export type Database = {
           ai_operator_enabled?: boolean | null
           api_keys?: Json | null
           created_at?: string | null
+          default_country?: string | null
           default_language?: string | null
           default_voice?: string | null
           id?: string

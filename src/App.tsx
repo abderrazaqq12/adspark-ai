@@ -7,6 +7,7 @@ import { ThemeProvider } from "./components/ThemeProvider";
 import { Layout } from "./components/Layout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ProjectProvider } from "./contexts/ProjectContext";
+import { AudienceProvider } from "./contexts/AudienceContext";
 import Dashboard from "./pages/Dashboard";
 import CreateVideo from "./pages/CreateVideo";
 import Projects from "./pages/Projects";
@@ -36,8 +37,9 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/*" element={
               <ProtectedRoute>
-                <ProjectProvider>
-                  <Layout>
+                <AudienceProvider>
+                  <ProjectProvider>
+                    <Layout>
                     <Routes>
                       <Route path="/" element={<Dashboard />} />
                       <Route path="/create" element={<CreateVideo />} />
@@ -54,9 +56,10 @@ const App = () => (
                       <Route path="/templates" element={<Templates />} />
                       <Route path="/ai-tools" element={<AITools />} />
                       <Route path="*" element={<NotFound />} />
-                    </Routes>
-                  </Layout>
-                </ProjectProvider>
+                      </Routes>
+                    </Layout>
+                  </ProjectProvider>
+                </AudienceProvider>
               </ProtectedRoute>
             } />
           </Routes>
