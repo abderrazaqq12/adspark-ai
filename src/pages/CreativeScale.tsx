@@ -28,6 +28,8 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from "@/components/ui/card";
+import { ProjectContextBanner } from "@/components/project";
+import { useGlobalProject } from "@/contexts/GlobalProjectContext";
 
 // ============================================
 // SESSION PERSISTENCE
@@ -75,6 +77,9 @@ interface UploadedVideo {
 // ============================================
 
 export default function CreativeScale() {
+  // Global project context
+  const { hasActiveProject } = useGlobalProject();
+
   // Navigation state
   const [currentStep, setCurrentStep] = useState<StepId>(1);
   const [completedSteps, setCompletedSteps] = useState<StepId[]>([]);
@@ -637,6 +642,8 @@ export default function CreativeScale() {
       {/* Main Content Area */}
       <main className="flex-1 p-8">
         <div className="max-w-4xl mx-auto">
+          {/* Project Context Banner */}
+          <ProjectContextBanner toolName="Creative Scale" className="mb-6" />
           {/* Step 1: Upload */}
           {currentStep === 1 && (
             <UploadStep

@@ -66,6 +66,8 @@ import { UnifiedSceneBuilder, UnifiedScene } from "@/components/video/UnifiedSce
 import { AutoAdFactory } from "@/components/video/AutoAdFactory";
 import { SmartSceneBuilderV2 } from "@/components/smart-scene-builder";
 import { UnifiedVideoCreation } from "@/components/video/UnifiedVideoCreation";
+import { ProjectContextBanner } from "@/components/project";
+import { useGlobalProject } from "@/contexts/GlobalProjectContext";
 
 // ElevenLabs voices - expanded list with categories
 const ELEVENLABS_VOICES = [
@@ -204,6 +206,9 @@ interface PromptTemplate {
 }
 
 export default function CreateVideo() {
+  // Global project context
+  const { hasActiveProject } = useGlobalProject();
+
   // Product Info state
   const [productInfo, setProductInfo] = useState<ProductInfo>({
     name: "",
@@ -977,6 +982,9 @@ export default function CreateVideo() {
             compact={true}
           />
         </div>
+
+        {/* Project Context Banner */}
+        <ProjectContextBanner toolName="Studio" className="mb-4" />
 
         {/* Smart Defaults Banner - only show when not on Product Input stage */}
         {expandedStage !== 0 && (
