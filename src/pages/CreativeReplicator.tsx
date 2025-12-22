@@ -17,11 +17,10 @@ import { EngineTask } from "@/lib/video-engines/types";
 import { AdvancedEngineRouter, RoutingRequest, RenderingMode } from "@/lib/video-engines/AdvancedRouter";
 import { ScenePlan } from "@/lib/video-engines/registry-types";
 import { RenderDebugPanel } from "@/components/replicator/RenderDebugPanel";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRenderBackendStatus } from "@/hooks/useRenderBackendStatus";
 import { useSecureApiKeys } from "@/hooks/useSecureApiKeys";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 export interface UploadedAd {
   id: string;
@@ -244,10 +243,6 @@ const CreativeReplicator = () => {
     return preferredHooks[index % preferredHooks.length];
   };
 
-
-
-
-
   /**
    * AI Brain-driven generation handler
    * Uses BrainOutput decisions for each variation
@@ -338,7 +333,7 @@ const CreativeReplicator = () => {
             end: s.endTime,
             description: s.description
           })) || [],
-          totalDuration: decision.targetDuration, // AI Brain enforced duration (20-35s)
+          totalDuration: decision.targetDuration,
           resolution: "1080p",
           requiredCapabilities: ["trim", "merge", "text_overlay", "resize"] as any
         };
@@ -354,7 +349,7 @@ const CreativeReplicator = () => {
 
         const routingReq: RoutingRequest = {
           plan,
-          userTier: decision.engineTier as any, // AI Brain selected tier
+          userTier: decision.engineTier as any,
           preferLocal: backendStatus.vpsServer.available,
           renderingMode: autoRenderingMode
         };
@@ -443,7 +438,6 @@ const CreativeReplicator = () => {
             variants: 1,
             market: variationConfig.adIntelligence.market,
             language: variationConfig.adIntelligence.language,
-            // AI Brain parameters stored in strategy
             strategy: {
               framework: decision.framework,
               hookType: decision.hookType,
@@ -542,19 +536,17 @@ const CreativeReplicator = () => {
 
   // Legacy handler (fallback)
   const handleStartGeneration = async () => {
-    // Generate brain output on-the-fly if not using new flow
     const brain = new AICreativeBrain({
       numberOfVideos: variationConfig.count,
       language: variationConfig.adIntelligence?.language || 'ar',
       market: variationConfig.adIntelligence?.market || 'saudi',
       platform: variationConfig.adIntelligence?.platform || 'tiktok',
       sourceVideoDuration: uploadedAds[0]?.duration || 30,
-      availableApiKeys: ['fal_ai', 'runway'], // Default fallback
+      availableApiKeys: ['fal_ai', 'runway'],
     });
     const output = brain.generateDecisions();
     await handleStartGenerationWithBrain(output);
   };
-
 
   const steps = [
     { id: "upload", label: "Upload Ads", icon: Upload, count: uploadedAds.length },
@@ -563,192 +555,204 @@ const CreativeReplicator = () => {
     { id: "results", label: "Results", icon: FolderOpen, count: generatedVideos.length },
   ];
 
+  // Get backend status display
+  const getBackendStatus = () => {
+    if (backendStatus.loading) {
+      return { label: "Detecting...", status: "default" as const, icon: Loader2 };
+    }
+    if (backendStatus.vpsServer.available) {
+      return { label: "VPS Active", status: "success" as const, icon: Server };
+    }
+    if (backendStatus.edgeFunctions.available) {
+      return { label: "Edge Functions", status: "info" as const, icon: Cloud };
+    }
+    return { label: "Cloud Only", status: "warning" as const, icon: Cloud };
+  };
+
+  const backend = getBackendStatus();
+
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-              <Brain className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">AI Creative Replicator</h1>
-              <p className="text-muted-foreground text-sm">
-                Upload ads, AI generates 1-100 optimized variations automatically
-              </p>
-            </div>
+    <div className="p-6 space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+            <Brain className="w-5 h-5 text-primary" />
           </div>
-          <div className="flex items-center gap-3">
-            {/* Auto-detected Backend Status */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 border border-border/50">
-                    {backendStatus.loading ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                    ) : backendStatus.vpsServer.available ? (
-                      <>
-                        <Server className="w-4 h-4 text-green-500" />
-                        <span className="text-xs text-green-500 font-medium">VPS Active</span>
-                        {backendStatus.vpsServer.latency && (
-                          <Badge variant="outline" className="text-[10px] h-5 text-muted-foreground">
-                            {backendStatus.vpsServer.latency}ms
-                          </Badge>
-                        )}
-                      </>
-                    ) : backendStatus.edgeFunctions.available ? (
-                      <>
-                        <Cloud className="w-4 h-4 text-blue-500" />
-                        <span className="text-xs text-blue-500 font-medium">Edge Functions</span>
-                      </>
-                    ) : (
-                      <>
-                        <Cloud className="w-4 h-4 text-amber-500" />
-                        <span className="text-xs text-amber-500 font-medium">Cloud Only</span>
-                      </>
-                    )}
-                    <CheckCircle2 className="w-3 h-3 text-green-500" />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-xs">
-                  <div className="space-y-1 text-xs">
-                    <p className="font-medium">Auto-detected Render Backends</p>
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">AI Creative Replicator</h1>
+            <p className="text-sm text-muted-foreground">
+              Upload ads, AI generates 1-100 optimized variations
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Backend Status Badge */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 border border-border">
+                  {backendStatus.loading ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <backend.icon className={`w-4 h-4 ${
+                      backend.status === 'success' ? 'text-success' : 
+                      backend.status === 'info' ? 'text-primary' : 'text-warning'
+                    }`} />
+                  )}
+                  <span className={`text-xs font-medium ${
+                    backend.status === 'success' ? 'text-success' : 
+                    backend.status === 'info' ? 'text-primary' : 'text-warning'
+                  }`}>
+                    {backend.label}
+                  </span>
+                  {backendStatus.vpsServer.latency && (
+                    <Badge variant="outline" className="text-[10px] h-5">
+                      {backendStatus.vpsServer.latency}ms
+                    </Badge>
+                  )}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs bg-popover border-border">
+                <div className="space-y-1.5 text-xs">
+                  <p className="font-medium">Auto-detected Render Backends</p>
+                  <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className={backendStatus.vpsServer.available ? 'text-green-500' : 'text-muted-foreground'}>
+                      <span className={backendStatus.vpsServer.available ? 'text-success' : 'text-muted-foreground'}>
                         VPS Server: {backendStatus.vpsServer.available ? '✓ Online' : '✗ Offline'}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={backendStatus.edgeFunctions.available ? 'text-green-500' : 'text-muted-foreground'}>
+                      <span className={backendStatus.edgeFunctions.available ? 'text-success' : 'text-muted-foreground'}>
                         Edge Functions: {backendStatus.edgeFunctions.available ? '✓ Ready' : '✗ Unavailable'}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={backendStatus.cloudinaryApi.available ? 'text-green-500' : 'text-muted-foreground'}>
+                      <span className={backendStatus.cloudinaryApi.available ? 'text-success' : 'text-muted-foreground'}>
                         Cloudinary: {backendStatus.cloudinaryApi.configured ? '✓ Configured' : '✗ Not configured'}
                       </span>
                     </div>
-                    <p className="text-muted-foreground pt-1">
-                      Using: <span className="font-medium capitalize">{backendStatus.recommended}</span> (auto-selected)
-                    </p>
                   </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+                  <p className="text-muted-foreground pt-1">
+                    Using: <span className="font-medium capitalize">{backendStatus.recommended}</span>
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
 
-            <Button
-              onClick={handleStartGeneration}
-              disabled={isGenerating || uploadedAds.length === 0}
-              className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
-            >
-              <Zap className="w-4 h-4 mr-2" />
-              Generate AI Variations
-            </Button>
-          </div>
+          <Button
+            onClick={handleStartGeneration}
+            disabled={isGenerating || uploadedAds.length === 0}
+            className="gap-2"
+          >
+            <Zap className="w-4 h-4" />
+            Generate Variations
+          </Button>
         </div>
+      </div>
 
-        {/* Step Indicators */}
-        <div className="flex items-center gap-2">
-          {steps.map((step) => (
-            <button
-              key={step.id}
-              onClick={() => setActiveStep(step.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${activeStep === step.id
+      {/* Step Indicators */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {steps.map((step) => (
+          <button
+            key={step.id}
+            onClick={() => setActiveStep(step.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-medium ${
+              activeStep === step.id
                 ? "bg-primary text-primary-foreground"
-                : "bg-card hover:bg-accent text-muted-foreground"
-                }`}
-            >
-              <step.icon className="w-4 h-4" />
-              <span className="text-sm font-medium">{step.label}</span>
-              {step.count !== undefined && step.count > 0 && (
-                <Badge variant="secondary" className="ml-1">
-                  {step.count}
-                </Badge>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* Content */}
-        <Card className="border-border/50">
-          <CardContent className="p-6">
-            {activeStep === "upload" && (
-              <AdUploader
-                uploadedAds={uploadedAds}
-                setUploadedAds={setUploadedAds}
-                projectName={projectName}
-                setProjectName={setProjectName}
-                onContinue={() => setActiveStep("settings")}
-              />
+                : "bg-muted hover:bg-accent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <step.icon className="w-4 h-4" />
+            <span>{step.label}</span>
+            {step.count !== undefined && step.count > 0 && (
+              <Badge variant={activeStep === step.id ? "secondary" : "outline"} className="ml-1 h-5 text-xs">
+                {step.count}
+              </Badge>
             )}
+          </button>
+        ))}
+      </div>
 
-            {activeStep === "settings" && (
-              <AICreativeConfigPanel
-                config={variationConfig}
-                setConfig={setVariationConfig}
-                sourceVideoDuration={uploadedAds[0]?.duration || 30}
-                availableApiKeys={availableApiKeys}
-                onBack={() => setActiveStep("upload")}
-                onGenerate={(brainOutput: BrainOutput) => {
-                  console.log("AI Brain decisions:", brainOutput);
-                  handleStartGenerationWithBrain(brainOutput);
+      {/* Content */}
+      <Card className="border-border bg-card">
+        <CardContent className="p-6">
+          {activeStep === "upload" && (
+            <AdUploader
+              uploadedAds={uploadedAds}
+              setUploadedAds={setUploadedAds}
+              projectName={projectName}
+              setProjectName={setProjectName}
+              onContinue={() => setActiveStep("settings")}
+            />
+          )}
+
+          {activeStep === "settings" && (
+            <AICreativeConfigPanel
+              config={variationConfig}
+              setConfig={setVariationConfig}
+              sourceVideoDuration={uploadedAds[0]?.duration || 30}
+              availableApiKeys={availableApiKeys}
+              onBack={() => setActiveStep("upload")}
+              onGenerate={(brainOutput: BrainOutput) => {
+                console.log("AI Brain decisions:", brainOutput);
+                handleStartGenerationWithBrain(brainOutput);
+              }}
+            />
+          )}
+
+          {activeStep === "generate" && (
+            <div className="space-y-6">
+              {/* Real-time pipeline progress */}
+              <PipelineProgressPanel
+                jobId={currentJobId}
+                onComplete={() => {
+                  setIsGenerating(false);
+                  setActiveStep("results");
+                  toast.success("Generation complete!");
+                }}
+                onVideoReady={(videoId, url) => {
+                  setGeneratedVideos(prev => prev.map(v =>
+                    v.id === videoId ? { ...v, url, status: 'completed' as const } : v
+                  ));
                 }}
               />
-            )}
-
-            {activeStep === "generate" && (
-              <div className="space-y-6">
-                {/* Real-time pipeline progress - backend-driven, not timer-based */}
-                <PipelineProgressPanel
+              {/* Legacy processing timeline for compatibility */}
+              {currentJobId && (
+                <ProcessingTimeline
                   jobId={currentJobId}
-                  onComplete={() => {
+                  totalVideos={variationConfig.count * variationConfig.ratios.length}
+                  onComplete={(urls) => {
                     setIsGenerating(false);
                     setActiveStep("results");
-                    toast.success("Generation complete!");
+                    toast.success(`Generated ${urls.length} videos!`);
                   }}
-                  onVideoReady={(videoId, url) => {
-                    setGeneratedVideos(prev => prev.map(v =>
-                      v.id === videoId ? { ...v, url, status: 'completed' as const } : v
-                    ));
+                  onError={(errors) => {
+                    toast.error(errors[0] || "Generation failed");
                   }}
                 />
-                {/* Legacy processing timeline for compatibility */}
-                {currentJobId && (
-                  <ProcessingTimeline
-                    jobId={currentJobId}
-                    totalVideos={variationConfig.count * variationConfig.ratios.length}
-                    onComplete={(urls) => {
-                      setIsGenerating(false);
-                      setActiveStep("results");
-                      toast.success(`Generated ${urls.length} videos!`);
-                    }}
-                    onError={(errors) => {
-                      toast.error(errors[0] || "Generation failed");
-                    }}
-                  />
-                )}
-              </div>
-            )}
+              )}
+            </div>
+          )}
 
-            {activeStep === "results" && (
-              <EnhancedResultsGallery
-                videos={generatedVideos}
-                setVideos={setGeneratedVideos}
-                jobId={currentJobId || undefined}
-                onRegenerate={() => {
-                  setActiveStep("settings");
-                }}
-              />
-            )}
-          </CardContent>
-        </Card>
+          {activeStep === "results" && (
+            <EnhancedResultsGallery
+              videos={generatedVideos}
+              setVideos={setGeneratedVideos}
+              jobId={currentJobId || undefined}
+              onRegenerate={() => {
+                setActiveStep("settings");
+              }}
+            />
+          )}
+        </CardContent>
+      </Card>
 
-        {debugInfo && (
-          <RenderDebugPanel debugInfo={debugInfo} isOpen={true} />
-        )}
-
-      </div>
+      {debugInfo && (
+        <RenderDebugPanel debugInfo={debugInfo} isOpen={true} />
+      )}
     </div>
   );
 };
