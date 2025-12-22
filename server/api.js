@@ -1733,12 +1733,14 @@ app.get('/api/health', (req, res) => {
   res.json(health);
 });
 
-// ============================================
-// POST /api/upload
-// ============================================
-
-app.post('/api/upload', (req, res) => {
-  upload.single('file')(req, res, (err) => {
+/**
+ * POST /api/upload
+ * Upload a video/image file
+ * REQUIRES: projectId (enforced by middleware)
+ */
+app.post('/api/upload', async (req, res) => {
+  // First, handle the file upload
+  upload.single('file')(req, res, async (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
         return jsonError(res, 413, 'FILE_TOO_LARGE',
@@ -1755,20 +1757,69 @@ app.post('/api/upload', (req, res) => {
       return jsonError(res, 400, 'NO_FILE', 'No file provided. Use field name "file"');
     }
 
-    const filePath = path.join(req.file.destination, req.file.filename);
-    const publicUrl = `/uploads/${req.body.projectId ? req.body.projectId + '/' : ''}${req.file.filename}`;
+    // Then enforce project context
+    const projectId = req.body.projectId;
+    if (!projectId) {
+      // Clean up uploaded file if no project
+      try { fs.unlinkSync(req.file.path); } catch (e) { }
+      return jsonError(res, 400, 'PROJECT_REQUIRED', 'projectId is required for all uploads');
+    }
 
-    console.log(`[Upload] Saved: ${req.file.filename} (${req.file.size} bytes)`);
+    // Validate project (manual validation since we can't use middleware after multer)
+    try {
+      const { data: project, error } = await supabase
+        .from('projects')
+        .select('id, name, status, google_drive_folder_id')
+        .eq('id', projectId)
+        .single();
 
-    res.json({
-      ok: true,
-      fileId: req.file.filename.split('.')[0],
-      filePath: filePath,
-      publicUrl: publicUrl,
-      filename: req.file.filename,
-      size: req.file.size,
-      mimetype: req.file.mimetype,
-    });
+      if (error || !project) {
+        try { fs.unlinkSync(req.file.path); } catch (e) { }
+        return jsonError(res, 404, 'PROJECT_NOT_FOUND', 'Project not found or access denied');
+      }
+
+      if (project.status !== 'active') {
+        try { fs.unlinkSync(req.file.path); } catch (e) { }
+        return jsonError(res, 403, 'PROJECT_INACTIVE', `Project is ${project.status}`);
+      }
+
+      const filePath = path.join(req.file.destination, req.file.filename);
+      const publicUrl = `/uploads/${req.body.projectId ? req.body.projectId + '/' : ''}${req.file.filename}`;
+      const fileId = req.file.filename.split('.')[0];
+
+      console.log(`[Upload] Saved: ${req.file.filename} (${req.file.size} bytes) to project ${projectId}`);
+
+      // Track uploaded file as project resource
+      try {
+        await trackResource(projectId, {
+          type: 'file',
+          id: fileId,
+          path: filePath,
+          size: req.file.size,
+          metadata: {
+            original_name: req.file.originalname,
+            mime_type: req.file.mimetype,
+            upload_timestamp: new Date().toISOString()
+          }
+        });
+      } catch (trackError) {
+        console.warn(`[Upload] Resource tracking failed: ${trackError.message}`);
+      }
+
+      res.json({
+        ok: true,
+        fileId,
+        projectId,
+        filePath: filePath,
+        publicUrl: publicUrl,
+        filename: req.file.filename,
+        size: req.file.size,
+        mimetype: req.file.mimetype,
+      });
+    } catch (validationError) {
+      try { fs.unlinkSync(req.file.path); } catch (e) { }
+      return jsonError(res, 500, 'VALIDATION_ERROR', validationError.message);
+    }
   });
 });
 
