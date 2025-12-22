@@ -11,10 +11,11 @@ interface LayoutProps {
 }
 
 export function Layout({ children, title, actions }: LayoutProps) {
-  // Enable system-wide pipeline job notifications
+  // Enable system-wide pipeline job notifications with progress updates
   usePipelineNotifications({
     enabled: true,
-    notifyOn: ['completed', 'failed'],
+    notifyOn: ['completed', 'failed', 'progress'],
+    progressInterval: 25, // Notify at 25%, 50%, 75%
   });
 
   return (
