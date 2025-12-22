@@ -74,6 +74,7 @@ export interface EngineDecision {
   tier: 'free' | 'budget' | 'premium';
   costPerSecond: number;
   estimatedCost: number;
+  qualityScore: number; // 0-100 quality rating for this scene
   reason: string;
   alternatives: AlternativeEngine[];
 }

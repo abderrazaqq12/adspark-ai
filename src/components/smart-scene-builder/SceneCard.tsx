@@ -23,6 +23,8 @@ import {
   Upload,
   Image as ImageIcon,
   Info,
+  Star,
+  Brain,
 } from 'lucide-react';
 import { 
   SmartScenePlan, 
@@ -63,6 +65,18 @@ const MOTION_LABELS: Record<MotionIntensity, { label: string; color: string }> =
   low: { label: 'Static', color: 'bg-blue-500/20 text-blue-400' },
   medium: { label: 'Subtle', color: 'bg-amber-500/20 text-amber-400' },
   high: { label: 'Dynamic', color: 'bg-red-500/20 text-red-400' },
+};
+
+const TIER_COLORS: Record<string, string> = {
+  free: 'bg-green-500/20 text-green-400 border-green-500/30',
+  budget: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  premium: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+};
+
+const getQualityColor = (score: number): string => {
+  if (score >= 80) return 'text-green-400';
+  if (score >= 60) return 'text-amber-400';
+  return 'text-red-400';
 };
 
 const STATUS_STYLES = {
@@ -144,17 +158,27 @@ export function SceneCard({
           </SelectContent>
         </Select>
         
-        {/* Engine badge */}
-        <Badge variant="secondary" className="text-xs">
-          <Zap className="w-3 h-3 mr-1" />
-          {scene.selectedEngine.engineName}
-        </Badge>
+        {/* AI Engine Selection Indicator */}
+        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md border ${TIER_COLORS[scene.selectedEngine.tier]}`}>
+          <Brain className="w-3 h-3" />
+          <span className="text-xs font-medium">{scene.selectedEngine.engineName}</span>
+        </div>
+        
+        {/* Quality Score */}
+        <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50">
+          <Star className={`w-3 h-3 ${getQualityColor(scene.selectedEngine.qualityScore || 75)}`} />
+          <span className={`text-xs font-medium ${getQualityColor(scene.selectedEngine.qualityScore || 75)}`}>
+            {scene.selectedEngine.qualityScore || 75}
+          </span>
+        </div>
         
         {/* Cost */}
-        <Badge variant="outline" className="text-xs text-muted-foreground">
-          <DollarSign className="w-3 h-3" />
-          {scene.selectedEngine.estimatedCost.toFixed(3)}
-        </Badge>
+        <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50">
+          <DollarSign className="w-3 h-3 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">
+            ${scene.selectedEngine.estimatedCost.toFixed(3)}
+          </span>
+        </div>
         
         {/* Expand toggle */}
         <Button
@@ -284,18 +308,36 @@ export function SceneCard({
                 <span className="text-xs font-medium">AI Decision Details</span>
               </div>
               
-              <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="grid grid-cols-3 gap-2 text-xs">
                 <div>
                   <span className="text-muted-foreground">Engine:</span>{' '}
                   <span className="font-medium">{scene.selectedEngine.engineName}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Tier:</span>{' '}
-                  <Badge variant="outline" className="text-xs">
+                  <Badge className={`text-xs ${TIER_COLORS[scene.selectedEngine.tier]}`}>
                     {scene.selectedEngine.tier}
                   </Badge>
                 </div>
-                <div className="col-span-2">
+                <div>
+                  <span className="text-muted-foreground">Quality:</span>{' '}
+                  <span className={`font-medium ${getQualityColor(scene.selectedEngine.qualityScore || 75)}`}>
+                    {scene.selectedEngine.qualityScore || 75}/100
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Cost/sec:</span>{' '}
+                  <span className="font-medium">${scene.selectedEngine.costPerSecond.toFixed(4)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Est. Total:</span>{' '}
+                  <span className="font-medium text-primary">${scene.selectedEngine.estimatedCost.toFixed(3)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Duration:</span>{' '}
+                  <span className="font-medium">{scene.duration}s</span>
+                </div>
+                <div className="col-span-3 mt-1">
                   <span className="text-muted-foreground">Reason:</span>{' '}
                   <span>{scene.selectedEngine.reason}</span>
                 </div>
