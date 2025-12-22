@@ -1434,7 +1434,7 @@ export default function Settings() {
                       </div>
                       <span className="font-semibold text-foreground">ChatGPT</span>
                     </div>
-                    <p className="text-sm text-muted-foreground">OpenAI GPT-4 for high-quality content</p>
+                    <p className="text-sm text-muted-foreground">OpenAI GPT-5 for high-quality content</p>
                   </Label>
                   {(settings as any)?.ai_agent === "chatgpt" && (
                     <CheckCircle className="absolute top-3 right-3 w-5 h-5 text-green-500" />
@@ -1458,6 +1458,46 @@ export default function Settings() {
                   </Label>
                   {((settings as any)?.ai_agent === "gemini" || !(settings as any)?.ai_agent) && (
                     <CheckCircle className="absolute top-3 right-3 w-5 h-5 text-blue-500" />
+                  )}
+                </div>
+                <div
+                  className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${(settings as any)?.ai_agent === "claude"
+                    ? "bg-orange-500/10 border-orange-500/30"
+                    : "bg-muted/20 border-border hover:border-primary/50"
+                    }`}
+                >
+                  <RadioGroupItem value="claude" id="ai-claude" className="sr-only" />
+                  <Label htmlFor="ai-claude" className="cursor-pointer">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white font-bold text-sm">
+                        C
+                      </div>
+                      <span className="font-semibold text-foreground">Claude</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Anthropic Claude for nuanced reasoning</p>
+                  </Label>
+                  {(settings as any)?.ai_agent === "claude" && (
+                    <CheckCircle className="absolute top-3 right-3 w-5 h-5 text-orange-500" />
+                  )}
+                </div>
+                <div
+                  className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${(settings as any)?.ai_agent === "llama"
+                    ? "bg-violet-500/10 border-violet-500/30"
+                    : "bg-muted/20 border-border hover:border-primary/50"
+                    }`}
+                >
+                  <RadioGroupItem value="llama" id="ai-llama" className="sr-only" />
+                  <Label htmlFor="ai-llama" className="cursor-pointer">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-white font-bold text-sm">
+                        L
+                      </div>
+                      <span className="font-semibold text-foreground">Llama</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Meta Llama 3.3 open-source model</p>
+                  </Label>
+                  {(settings as any)?.ai_agent === "llama" && (
+                    <CheckCircle className="absolute top-3 right-3 w-5 h-5 text-violet-500" />
                   )}
                 </div>
               </RadioGroup>
