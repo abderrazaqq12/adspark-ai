@@ -24,3 +24,8 @@ export {
 export { 
   UnifiedPipelineStatus 
 } from './UnifiedPipelineStatus';
+
+export { 
+  UnifiedDebugPanel,
+  type ToolType as DebugToolType
+} from './UnifiedDebugPanel';
