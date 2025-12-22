@@ -16,13 +16,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import BatchApiKeyTester from "@/components/BatchApiKeyTester";
 
-
 import { StudioDataSettings } from "@/components/studio/StudioDataSettings";
 import StudioPrompts from "@/components/StudioPrompts";
 import DeploymentSettings from "@/components/DeploymentSettings";
 import { useSecureApiKeys } from "@/hooks/useSecureApiKeys";
-import { BackendHealthDashboard } from "@/components/BackendHealthDashboard";
-import { AIProviderStatus } from "@/components/AIProviderStatus";
+import { SystemIntelligencePanel } from "@/components/SystemIntelligencePanel";
 
 
 interface PromptTemplate {
@@ -782,7 +780,7 @@ export default function Settings() {
 
         {/* Deployment Tab */}
         <TabsContent value="deployment" className="space-y-6">
-          <BackendHealthDashboard />
+          <SystemIntelligencePanel />
           <DeploymentSettings />
         </TabsContent>
 
@@ -816,8 +814,7 @@ export default function Settings() {
                 </div>
               </div>
 
-              {/* AI Provider Status - Test All Providers */}
-              <AIProviderStatus />
+              {/* Global API Keys Section */}
 
               {/* Global API Keys Section */}
               <div className="space-y-4">

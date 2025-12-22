@@ -1,4 +1,10 @@
-import { useState } from 'react';
+/**
+ * DEPLOYMENT SETTINGS
+ * 
+ * Read-only display of detected deployment mode.
+ * No user configuration - purely informational.
+ */
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
@@ -22,7 +28,7 @@ const DEPLOYMENT_MODES = [
     id: 'cloud', 
     label: 'Cloud', 
     icon: Cloud, 
-    description: 'Managed infrastructure with Supabase',
+    description: 'Managed infrastructure',
     color: 'text-primary'
   },
   { 
@@ -41,7 +47,7 @@ const DEPLOYMENT_MODES = [
   },
   { 
     id: 'local', 
-    label: 'Local Development', 
+    label: 'Local', 
     icon: Laptop, 
     description: 'Development mode',
     color: 'text-amber-500'
@@ -49,7 +55,7 @@ const DEPLOYMENT_MODES = [
 ];
 
 export default function DeploymentSettings({ onSave }: DeploymentSettingsProps) {
-  const [currentMode] = useState(config.deploymentTarget);
+  const currentMode = config.deploymentTarget;
 
   return (
     <div className="space-y-6">
@@ -62,7 +68,7 @@ export default function DeploymentSettings({ onSave }: DeploymentSettingsProps) 
             </div>
             <div>
               <CardTitle className="text-lg">Deployment Mode</CardTitle>
-              <CardDescription>Current deployment environment detected</CardDescription>
+              <CardDescription>Automatically detected from environment</CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -99,7 +105,7 @@ export default function DeploymentSettings({ onSave }: DeploymentSettingsProps) 
               <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
               <div className="text-sm">
                 <p className="font-medium text-foreground">Running on Cloud</p>
-                <p className="text-muted-foreground">Backend services are managed via Supabase. Configure your AI provider in the Preferences tab.</p>
+                <p className="text-muted-foreground">Backend services are fully managed. No configuration required.</p>
               </div>
             </div>
           )}
