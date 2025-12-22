@@ -12,10 +12,6 @@ import {
   Smartphone, 
   Square, 
   Clock, 
-  DollarSign,
-  Sparkles,
-  Zap,
-  Crown,
   Brain,
   Settings2,
   Info,
@@ -26,8 +22,7 @@ import {
   VideoConfig, 
   AspectRatio, 
   Resolution, 
-  SceneDuration, 
-  BudgetPreference 
+  SceneDuration,
 } from '@/lib/smart-scene-builder/types';
 
 interface ConfigPanelProps {
@@ -51,13 +46,7 @@ const DURATIONS: SceneDuration[] = [3, 5, 7, 10];
 
 const VIDEO_COUNTS = [1, 2, 3, 5, 10];
 
-const BUDGETS: { value: BudgetPreference; label: string; icon: React.ElementType; description: string }[] = [
-  { value: 'auto', label: 'AI Chooses', icon: Brain, description: 'Optimal per scene' },
-  { value: 'free', label: 'Free', icon: Sparkles, description: 'Use only free engines' },
-  { value: 'low', label: 'Low Cost', icon: DollarSign, description: 'Budget-friendly options' },
-  { value: 'balanced', label: 'Balanced', icon: Zap, description: 'Quality vs cost balance' },
-  { value: 'premium', label: 'Premium', icon: Crown, description: 'Best quality available' },
-];
+// AI automatically decides the best engine based on scene complexity, cost efficiency, and quality
 
 export function ConfigPanel({ config, onConfigChange }: ConfigPanelProps) {
   return (
@@ -206,46 +195,43 @@ export function ConfigPanel({ config, onConfigChange }: ConfigPanelProps) {
       
       <Separator className="my-4" />
       
-      {/* Budget & Engine Strategy Section */}
+      {/* AI Engine Strategy Section */}
       <div className="flex items-center gap-2 mb-2">
         <Brain className="w-4 h-4 text-primary" />
         <h4 className="font-semibold text-sm">Engine Strategy</h4>
+        <Badge variant="secondary" className="text-xs">AI Powered</Badge>
       </div>
       
-      <div className="flex items-start gap-2 mb-3 p-2 rounded-lg bg-muted/50">
-        <Info className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-        <p className="text-xs text-muted-foreground">
-          AI selects the best engine per scene based on complexity and cost efficiency. 
-          The engine choice happens after scenes are defined, optimizing for your budget preference.
-        </p>
-      </div>
-      
-      <div className="flex flex-wrap gap-2">
-        {BUDGETS.map(b => {
-          const Icon = b.icon;
-          const isActive = config.budgetPreference === b.value;
-          const isDefault = b.value === 'auto';
-          return (
-            <button
-              key={b.value}
-              onClick={() => onConfigChange({ budgetPreference: b.value })}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
-                isActive
-                  ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-border hover:border-primary/50 text-muted-foreground'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              <div className="text-left">
-                <span className="text-sm font-medium block">
-                  {b.label}
-                  {isDefault && <Badge variant="secondary" className="ml-2 text-xs py-0">Default</Badge>}
-                </span>
-                <span className="text-xs opacity-70">{b.description}</span>
-              </div>
-            </button>
-          );
-        })}
+      <div className="p-3 rounded-lg border border-primary/30 bg-primary/5">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-primary/10">
+            <Brain className="w-5 h-5 text-primary" />
+          </div>
+          <div className="flex-1">
+            <h5 className="text-sm font-medium">AI Automatically Selects Best Engine</h5>
+            <p className="text-xs text-muted-foreground mt-1">
+              For each scene, AI analyzes complexity and selects the optimal engine balancing 
+              <span className="text-primary font-medium"> low cost</span>, 
+              <span className="text-primary font-medium"> high quality</span>, and 
+              <span className="text-primary font-medium"> best model fit</span>.
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex gap-4 mt-3 pt-3 border-t border-primary/20">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <div className="w-2 h-2 rounded-full bg-green-500"></div>
+            <span>Cost Optimized</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+            <span>Quality Focused</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+            <span>Scene-Aware</span>
+          </div>
+        </div>
       </div>
     </Card>
   );
