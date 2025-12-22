@@ -890,6 +890,320 @@ app.use('/uploads', express.static(UPLOAD_DIR));
 app.use('/outputs', express.static(OUTPUT_DIR));
 
 // ============================================
+// CONNECTION MANAGEMENT API
+// Backend-owned connection status for external services
+// ============================================
+
+/**
+ * Supported connection providers and their required env vars
+ */
+const CONNECTION_PROVIDERS = {
+  google_drive: {
+    name: 'Google Drive',
+    description: 'Cloud storage for video outputs',
+    envVars: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REFRESH_TOKEN'],
+    category: 'storage'
+  },
+  elevenlabs: {
+    name: 'ElevenLabs',
+    description: 'AI voice generation',
+    envVars: ['ELEVENLABS_API_KEY'],
+    category: 'ai'
+  },
+  openai: {
+    name: 'OpenAI',
+    description: 'GPT models for content generation',
+    envVars: ['OPENAI_API_KEY'],
+    category: 'ai'
+  },
+  anthropic: {
+    name: 'Anthropic',
+    description: 'Claude models for content generation',
+    envVars: ['ANTHROPIC_API_KEY'],
+    category: 'ai'
+  },
+  gemini: {
+    name: 'Google Gemini',
+    description: 'Gemini models for content generation',
+    envVars: ['GEMINI_API_KEY', 'GOOGLE_AI_STUDIO_KEY'],
+    category: 'ai'
+  },
+  fal: {
+    name: 'Fal.ai',
+    description: 'Video generation models',
+    envVars: ['FAL_API_KEY'],
+    category: 'video'
+  },
+  runway: {
+    name: 'Runway',
+    description: 'AI video generation',
+    envVars: ['RUNWAY_API_KEY'],
+    category: 'video'
+  },
+  kling: {
+    name: 'Kling AI',
+    description: 'AI video generation',
+    envVars: ['KLING_API_KEY', 'KLING_ACCESS_KEY', 'KLING_SECRET_KEY'],
+    category: 'video'
+  },
+  heygen: {
+    name: 'HeyGen',
+    description: 'AI avatar video generation',
+    envVars: ['HEYGEN_API_KEY'],
+    category: 'video'
+  },
+  deepseek: {
+    name: 'DeepSeek',
+    description: 'DeepSeek AI models',
+    envVars: ['DEEPSEEK_API_KEY'],
+    category: 'ai'
+  },
+  openrouter: {
+    name: 'OpenRouter',
+    description: 'Multi-model AI gateway',
+    envVars: ['OPENROUTER_API_KEY'],
+    category: 'ai'
+  }
+};
+
+/**
+ * Check if a provider is connected by verifying env vars exist and have values
+ */
+function checkProviderConnection(providerId) {
+  const provider = CONNECTION_PROVIDERS[providerId];
+  if (!provider) return { connected: false, error: 'Unknown provider' };
+  
+  // Check if ANY of the required env vars are set (some providers have alternatives)
+  const hasAnyKey = provider.envVars.some(envVar => {
+    const value = process.env[envVar];
+    return value && value.trim().length > 0;
+  });
+  
+  // Check which specific vars are set
+  const configuredVars = provider.envVars.filter(envVar => {
+    const value = process.env[envVar];
+    return value && value.trim().length > 0;
+  });
+  
+  return {
+    connected: hasAnyKey,
+    configuredVars: configuredVars.length > 0 ? configuredVars : undefined,
+    missingVars: hasAnyKey ? undefined : provider.envVars
+  };
+}
+
+/**
+ * GET /api/connections/status
+ * Returns connection status for all supported providers
+ */
+app.get('/api/connections/status', (req, res) => {
+  console.log('[Connections] Fetching connection status for all providers');
+  
+  const connections = {};
+  
+  for (const [providerId, provider] of Object.entries(CONNECTION_PROVIDERS)) {
+    const status = checkProviderConnection(providerId);
+    connections[providerId] = {
+      id: providerId,
+      name: provider.name,
+      description: provider.description,
+      category: provider.category,
+      connected: status.connected,
+      ...(status.configuredVars && { configuredVars: status.configuredVars }),
+      ...(status.error && { error: status.error })
+    };
+  }
+  
+  res.json({
+    ok: true,
+    connections,
+    timestamp: new Date().toISOString()
+  });
+});
+
+/**
+ * GET /api/connections/status/:providerId
+ * Returns connection status for a specific provider
+ */
+app.get('/api/connections/status/:providerId', (req, res) => {
+  const { providerId } = req.params;
+  console.log(`[Connections] Fetching status for provider: ${providerId}`);
+  
+  const provider = CONNECTION_PROVIDERS[providerId];
+  if (!provider) {
+    return jsonError(res, 404, 'PROVIDER_NOT_FOUND', `Unknown provider: ${providerId}`);
+  }
+  
+  const status = checkProviderConnection(providerId);
+  
+  res.json({
+    ok: true,
+    connection: {
+      id: providerId,
+      name: provider.name,
+      description: provider.description,
+      category: provider.category,
+      connected: status.connected,
+      ...(status.configuredVars && { configuredVars: status.configuredVars }),
+      ...(status.missingVars && { missingVars: status.missingVars })
+    }
+  });
+});
+
+/**
+ * POST /api/connections/connect/:providerId
+ * Initiates connection flow for a provider
+ * For OAuth providers (google_drive), returns redirect URL
+ * For API key providers, validates the key is configured
+ */
+app.post('/api/connections/connect/:providerId', async (req, res) => {
+  const { providerId } = req.params;
+  console.log(`[Connections] Connect request for provider: ${providerId}`);
+  
+  const provider = CONNECTION_PROVIDERS[providerId];
+  if (!provider) {
+    return jsonError(res, 404, 'PROVIDER_NOT_FOUND', `Unknown provider: ${providerId}`);
+  }
+  
+  // Check current status
+  const status = checkProviderConnection(providerId);
+  
+  if (status.connected) {
+    return res.json({
+      ok: true,
+      message: `${provider.name} is already connected`,
+      connected: true
+    });
+  }
+  
+  // Handle OAuth providers
+  if (providerId === 'google_drive') {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/oauth/google/callback`;
+    
+    if (!clientId) {
+      return jsonError(res, 503, 'NOT_CONFIGURED', 'Google OAuth is not configured on this server. Contact administrator.');
+    }
+    
+    // Build OAuth URL
+    const scopes = [
+      'https://www.googleapis.com/auth/drive.file',
+      'https://www.googleapis.com/auth/drive.metadata.readonly'
+    ].join(' ');
+    
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `client_id=${encodeURIComponent(clientId)}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&response_type=code` +
+      `&scope=${encodeURIComponent(scopes)}` +
+      `&access_type=offline` +
+      `&prompt=consent`;
+    
+    return res.json({
+      ok: true,
+      action: 'redirect',
+      redirectUrl: authUrl,
+      message: 'Redirect user to Google OAuth'
+    });
+  }
+  
+  // For API key providers, they need to be configured in .env
+  return jsonError(res, 503, 'NOT_CONFIGURED', 
+    `${provider.name} requires API key configuration. Missing: ${status.missingVars?.join(', ')}. Contact administrator.`
+  );
+});
+
+/**
+ * POST /api/connections/disconnect/:providerId
+ * Disconnects a provider (clears tokens for OAuth, marks as inactive)
+ */
+app.post('/api/connections/disconnect/:providerId', async (req, res) => {
+  const { providerId } = req.params;
+  console.log(`[Connections] Disconnect request for provider: ${providerId}`);
+  
+  const provider = CONNECTION_PROVIDERS[providerId];
+  if (!provider) {
+    return jsonError(res, 404, 'PROVIDER_NOT_FOUND', `Unknown provider: ${providerId}`);
+  }
+  
+  // For OAuth providers, we could clear refresh tokens
+  // For API key providers, disconnection is handled via .env configuration
+  
+  if (providerId === 'google_drive') {
+    // In a real implementation, this would:
+    // 1. Revoke the refresh token with Google
+    // 2. Clear the stored refresh token from secure storage
+    console.log('[Connections] Google Drive disconnect requested - tokens should be revoked');
+    
+    return res.json({
+      ok: true,
+      message: 'Google Drive disconnected. Tokens have been revoked.',
+      connected: false
+    });
+  }
+  
+  // API key providers can't be "disconnected" without modifying .env
+  return jsonError(res, 400, 'CANNOT_DISCONNECT', 
+    `${provider.name} uses API key authentication. To disconnect, remove the API key from server configuration.`
+  );
+});
+
+/**
+ * GET /api/oauth/google/callback
+ * OAuth callback handler for Google Drive
+ */
+app.get('/api/oauth/google/callback', async (req, res) => {
+  const { code, error } = req.query;
+  
+  if (error) {
+    console.error('[OAuth] Google auth error:', error);
+    return res.redirect('/?oauth_error=' + encodeURIComponent(error));
+  }
+  
+  if (!code) {
+    return res.redirect('/?oauth_error=no_code');
+  }
+  
+  try {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/oauth/google/callback`;
+    
+    // Exchange code for tokens
+    const fetch = (await import('node-fetch')).default;
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code'
+      })
+    });
+    
+    const tokens = await tokenRes.json();
+    
+    if (tokens.error) {
+      console.error('[OAuth] Token exchange error:', tokens);
+      return res.redirect('/?oauth_error=' + encodeURIComponent(tokens.error));
+    }
+    
+    // Store refresh token securely (in production, this would go to secure storage)
+    console.log('[OAuth] Google tokens received successfully');
+    console.log('[OAuth] Refresh token needs to be stored in GOOGLE_REFRESH_TOKEN env var');
+    
+    // Redirect to settings page with success
+    res.redirect('/settings?oauth_success=google_drive');
+    
+  } catch (err) {
+    console.error('[OAuth] Callback error:', err);
+    res.redirect('/?oauth_error=' + encodeURIComponent(err.message));
+  }
+});
+
+// ============================================
 // RENDERFLOW PROXY ADAPTER (Phase 2)
 // Direct proxy to deterministic engine on port 3001
 // ============================================

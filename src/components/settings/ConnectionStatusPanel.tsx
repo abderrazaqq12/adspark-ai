@@ -63,11 +63,37 @@ const CONNECTIONS: ConnectionConfig[] = [
     docsUrl: 'https://app.heygen.com/settings/api'
   },
   { 
-    service: 'fal_ai', 
+    service: 'fal', 
     label: 'Fal AI', 
     description: 'Fast generation',
     category: 'api_key',
     docsUrl: 'https://fal.ai/dashboard/keys'
+  },
+  { 
+    service: 'kling', 
+    label: 'Kling AI', 
+    description: 'AI video generation',
+    category: 'api_key',
+  },
+  { 
+    service: 'anthropic', 
+    label: 'Anthropic', 
+    description: 'Claude models',
+    category: 'api_key',
+    docsUrl: 'https://console.anthropic.com/settings/keys'
+  },
+  { 
+    service: 'deepseek', 
+    label: 'DeepSeek', 
+    description: 'DeepSeek AI',
+    category: 'api_key',
+  },
+  { 
+    service: 'openrouter', 
+    label: 'OpenRouter', 
+    description: 'Multi-model gateway',
+    category: 'api_key',
+    docsUrl: 'https://openrouter.ai/keys'
   },
 ];
 

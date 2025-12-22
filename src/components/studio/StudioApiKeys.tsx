@@ -50,7 +50,7 @@ const apiKeyFields: ApiKeyField[] = [
     docsUrl: 'https://app.heygen.com/settings/api'
   },
   { 
-    id: 'fal_ai', 
+    id: 'fal', 
     label: 'Fal AI', 
     description: 'Fast video & image generation',
     docsUrl: 'https://fal.ai/dashboard/keys'
