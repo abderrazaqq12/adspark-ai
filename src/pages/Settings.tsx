@@ -372,6 +372,7 @@ export default function Settings() {
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [expandedProviders, setExpandedProviders] = useState<Record<string, boolean>>({});
   const [savingKeys, setSavingKeys] = useState(false);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
   const [testingKey, setTestingKey] = useState<string | null>(null);
   const [keyTestResults, setKeyTestResults] = useState<Record<string, { success: boolean; message: string }>>({});
   const [activeApiKeys, setActiveApiKeys] = useState<Record<string, boolean>>({});
@@ -1420,6 +1421,7 @@ export default function Settings() {
                 onValueChange={(v) => setSettings(s => s ? { ...s, ai_agent: v } as any : null)}
                 className="grid grid-cols-2 gap-4"
               >
+                {/* ChatGPT */}
                 <div
                   className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${(settings as any)?.ai_agent === "chatgpt"
                     ? "bg-green-500/10 border-green-500/30"
@@ -1433,13 +1435,56 @@ export default function Settings() {
                         G
                       </div>
                       <span className="font-semibold text-foreground">ChatGPT</span>
+                      {hasApiKey('OPENAI_API_KEY') && (
+                        <Badge className="bg-green-500/20 text-green-500 text-xs ml-auto">
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Active
+                        </Badge>
+                      )}
                     </div>
-                    <p className="text-sm text-muted-foreground">OpenAI GPT-5 for high-quality content</p>
+                    <p className="text-sm text-muted-foreground mb-3">OpenAI GPT-5 for high-quality content</p>
                   </Label>
+                  <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex gap-2">
+                      <Input
+                        type={showKeys['OPENAI_API_KEY'] ? 'text' : 'password'}
+                        placeholder="sk-proj-..."
+                        value={apiKeys['OPENAI_API_KEY'] || ''}
+                        onChange={(e) => setApiKeys(prev => ({ ...prev, OPENAI_API_KEY: e.target.value }))}
+                        className="text-xs h-8"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => toggleKeyVisibility('OPENAI_API_KEY')}
+                      >
+                        {showKeys['OPENAI_API_KEY'] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs"
+                        disabled={!apiKeys['OPENAI_API_KEY'] || savingKey === 'OPENAI_API_KEY'}
+                        onClick={async () => {
+                          setSavingKey('OPENAI_API_KEY');
+                          const success = await saveSecureApiKey('OPENAI_API_KEY', apiKeys['OPENAI_API_KEY']);
+                          if (success) {
+                            toast.success('OpenAI API key saved');
+                            setApiKeys(prev => ({ ...prev, OPENAI_API_KEY: '' }));
+                          }
+                          setSavingKey(null);
+                        }}
+                      >
+                        {savingKey === 'OPENAI_API_KEY' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                      </Button>
+                    </div>
+                  </div>
                   {(settings as any)?.ai_agent === "chatgpt" && (
                     <CheckCircle className="absolute top-3 right-3 w-5 h-5 text-green-500" />
                   )}
                 </div>
+
+                {/* Gemini */}
                 <div
                   className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${(settings as any)?.ai_agent === "gemini" || !(settings as any)?.ai_agent
                     ? "bg-blue-500/10 border-blue-500/30"
@@ -1453,13 +1498,56 @@ export default function Settings() {
                         G
                       </div>
                       <span className="font-semibold text-foreground">Gemini</span>
+                      {hasApiKey('GEMINI_API_KEY') && (
+                        <Badge className="bg-blue-500/20 text-blue-500 text-xs ml-auto">
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Active
+                        </Badge>
+                      )}
                     </div>
-                    <p className="text-sm text-muted-foreground">Google Gemini for fast & efficient content</p>
+                    <p className="text-sm text-muted-foreground mb-3">Google Gemini for fast & efficient content</p>
                   </Label>
+                  <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex gap-2">
+                      <Input
+                        type={showKeys['GEMINI_API_KEY'] ? 'text' : 'password'}
+                        placeholder="AIzaSy..."
+                        value={apiKeys['GEMINI_API_KEY'] || ''}
+                        onChange={(e) => setApiKeys(prev => ({ ...prev, GEMINI_API_KEY: e.target.value }))}
+                        className="text-xs h-8"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => toggleKeyVisibility('GEMINI_API_KEY')}
+                      >
+                        {showKeys['GEMINI_API_KEY'] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs"
+                        disabled={!apiKeys['GEMINI_API_KEY'] || savingKey === 'GEMINI_API_KEY'}
+                        onClick={async () => {
+                          setSavingKey('GEMINI_API_KEY');
+                          const success = await saveSecureApiKey('GEMINI_API_KEY', apiKeys['GEMINI_API_KEY']);
+                          if (success) {
+                            toast.success('Gemini API key saved');
+                            setApiKeys(prev => ({ ...prev, GEMINI_API_KEY: '' }));
+                          }
+                          setSavingKey(null);
+                        }}
+                      >
+                        {savingKey === 'GEMINI_API_KEY' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                      </Button>
+                    </div>
+                  </div>
                   {((settings as any)?.ai_agent === "gemini" || !(settings as any)?.ai_agent) && (
                     <CheckCircle className="absolute top-3 right-3 w-5 h-5 text-blue-500" />
                   )}
                 </div>
+
+                {/* Claude */}
                 <div
                   className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${(settings as any)?.ai_agent === "claude"
                     ? "bg-orange-500/10 border-orange-500/30"
@@ -1473,13 +1561,56 @@ export default function Settings() {
                         C
                       </div>
                       <span className="font-semibold text-foreground">Claude</span>
+                      {hasApiKey('ANTHROPIC_API_KEY') && (
+                        <Badge className="bg-orange-500/20 text-orange-500 text-xs ml-auto">
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Active
+                        </Badge>
+                      )}
                     </div>
-                    <p className="text-sm text-muted-foreground">Anthropic Claude for nuanced reasoning</p>
+                    <p className="text-sm text-muted-foreground mb-3">Anthropic Claude for nuanced reasoning</p>
                   </Label>
+                  <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex gap-2">
+                      <Input
+                        type={showKeys['ANTHROPIC_API_KEY'] ? 'text' : 'password'}
+                        placeholder="sk-ant-..."
+                        value={apiKeys['ANTHROPIC_API_KEY'] || ''}
+                        onChange={(e) => setApiKeys(prev => ({ ...prev, ANTHROPIC_API_KEY: e.target.value }))}
+                        className="text-xs h-8"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => toggleKeyVisibility('ANTHROPIC_API_KEY')}
+                      >
+                        {showKeys['ANTHROPIC_API_KEY'] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs"
+                        disabled={!apiKeys['ANTHROPIC_API_KEY'] || savingKey === 'ANTHROPIC_API_KEY'}
+                        onClick={async () => {
+                          setSavingKey('ANTHROPIC_API_KEY');
+                          const success = await saveSecureApiKey('ANTHROPIC_API_KEY', apiKeys['ANTHROPIC_API_KEY']);
+                          if (success) {
+                            toast.success('Anthropic API key saved');
+                            setApiKeys(prev => ({ ...prev, ANTHROPIC_API_KEY: '' }));
+                          }
+                          setSavingKey(null);
+                        }}
+                      >
+                        {savingKey === 'ANTHROPIC_API_KEY' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                      </Button>
+                    </div>
+                  </div>
                   {(settings as any)?.ai_agent === "claude" && (
                     <CheckCircle className="absolute top-3 right-3 w-5 h-5 text-orange-500" />
                   )}
                 </div>
+
+                {/* Llama */}
                 <div
                   className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${(settings as any)?.ai_agent === "llama"
                     ? "bg-violet-500/10 border-violet-500/30"
@@ -1493,9 +1624,50 @@ export default function Settings() {
                         L
                       </div>
                       <span className="font-semibold text-foreground">Llama</span>
+                      {hasApiKey('OPENROUTER_API_KEY') && (
+                        <Badge className="bg-violet-500/20 text-violet-500 text-xs ml-auto">
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Active
+                        </Badge>
+                      )}
                     </div>
-                    <p className="text-sm text-muted-foreground">Meta Llama 3.3 open-source model</p>
+                    <p className="text-sm text-muted-foreground mb-3">Meta Llama 3.3 via OpenRouter</p>
                   </Label>
+                  <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex gap-2">
+                      <Input
+                        type={showKeys['OPENROUTER_API_KEY'] ? 'text' : 'password'}
+                        placeholder="sk-or-v1-..."
+                        value={apiKeys['OPENROUTER_API_KEY'] || ''}
+                        onChange={(e) => setApiKeys(prev => ({ ...prev, OPENROUTER_API_KEY: e.target.value }))}
+                        className="text-xs h-8"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => toggleKeyVisibility('OPENROUTER_API_KEY')}
+                      >
+                        {showKeys['OPENROUTER_API_KEY'] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs"
+                        disabled={!apiKeys['OPENROUTER_API_KEY'] || savingKey === 'OPENROUTER_API_KEY'}
+                        onClick={async () => {
+                          setSavingKey('OPENROUTER_API_KEY');
+                          const success = await saveSecureApiKey('OPENROUTER_API_KEY', apiKeys['OPENROUTER_API_KEY']);
+                          if (success) {
+                            toast.success('OpenRouter API key saved');
+                            setApiKeys(prev => ({ ...prev, OPENROUTER_API_KEY: '' }));
+                          }
+                          setSavingKey(null);
+                        }}
+                      >
+                        {savingKey === 'OPENROUTER_API_KEY' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                      </Button>
+                    </div>
+                  </div>
                   {(settings as any)?.ai_agent === "llama" && (
                     <CheckCircle className="absolute top-3 right-3 w-5 h-5 text-violet-500" />
                   )}
