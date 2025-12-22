@@ -1,11 +1,10 @@
 /**
- * AI Creative Config Panel - Simplified Configuration
+ * AI Creative Config Panel - Configuration with Local Overrides
  * 
  * ARCHITECTURAL CONTRACT:
- * - Audience (language/country) is INHERITED from Settings → Preferences
- * - NO manual language/market selection allowed in this panel
- * - User only controls: number of videos, export platform
- * - Everything else is handled by AI Brain
+ * - Audience (language/country) DEFAULTS from Settings → Preferences
+ * - User CAN override language/country per-generation
+ * - Overrides are session-only; global defaults remain unchanged
  */
 
 import { useState, useEffect, useMemo } from "react";
@@ -18,14 +17,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   ArrowLeft, Zap, Sparkles, Brain, DollarSign,
-  Clock, Cpu, ChevronDown, ChevronUp, Info, AlertTriangle
+  Clock, Cpu, ChevronDown, ChevronUp, Info, AlertTriangle, Globe, Languages
 } from "lucide-react";
 import { AICreativeBrain, estimateCostRange, BrainOutput } from "@/lib/replicator/ai-creative-brain";
 import { AIDecisionDebugPanel } from "./AIDecisionDebugPanel";
-import { AudienceInheritedDisplay } from "./AudienceInheritedDisplay";
 import type { VariationConfig } from "@/pages/CreativeReplicator";
 import { useAudience } from "@/contexts/AudienceContext";
 import { isAudienceConfigured } from "@/lib/replicator/creative-plan-types";
+import { COUNTRIES, LANGUAGES, getCountryByCode, getLanguageByCode } from "@/lib/audience/countries";
 
 interface AICreativeConfigPanelProps {
   config: VariationConfig;
@@ -58,25 +57,36 @@ export const AICreativeConfigPanel = ({
   // Get audience from global context (inherited from Settings)
   const { resolved: audience, isLoading: audienceLoading } = useAudience();
   
+  // Local overrides - default to global settings
+  const [localLanguage, setLocalLanguage] = useState<string | null>(null);
+  const [localCountry, setLocalCountry] = useState<string | null>(null);
+  
+  // Effective values (local override or global default)
+  const effectiveLanguage = localLanguage ?? audience.language;
+  const effectiveCountry = localCountry ?? audience.country;
+  
   // Check if audience is configured
   const audienceConfigured = useMemo(() => 
-    isAudienceConfigured(audience.language, audience.country),
-    [audience.language, audience.country]
+    isAudienceConfigured(effectiveLanguage, effectiveCountry),
+    [effectiveLanguage, effectiveCountry]
   );
+  
+  // Track if user has made local changes
+  const hasLocalOverride = localLanguage !== null || localCountry !== null;
 
   // Quick cost estimation for display
   const costEstimate = useMemo(() => {
     return estimateCostRange(config.count, availableApiKeys);
   }, [config.count, availableApiKeys]);
 
-  // Run brain analysis when config changes - using inherited audience
+  // Run brain analysis when config changes - using effective audience
   useEffect(() => {
     if (audienceLoading) return;
     
     const brain = new AICreativeBrain({
       numberOfVideos: config.count,
-      language: audience.language, // Inherited from Settings
-      market: audience.country, // Inherited from Settings
+      language: effectiveLanguage,
+      market: effectiveCountry,
       platform: config.adIntelligence?.platform || 'tiktok',
       sourceVideoDuration: sourceVideoDuration || 30,
       availableApiKeys,
@@ -84,7 +94,7 @@ export const AICreativeConfigPanel = ({
     
     const output = brain.generateDecisions();
     setBrainOutput(output);
-  }, [config.count, config.adIntelligence?.platform, sourceVideoDuration, availableApiKeys, audience.language, audience.country, audienceLoading]);
+  }, [config.count, config.adIntelligence?.platform, sourceVideoDuration, availableApiKeys, effectiveLanguage, effectiveCountry, audienceLoading]);
 
   const handleGenerate = () => {
     if (!audienceConfigured) {
@@ -94,6 +104,10 @@ export const AICreativeConfigPanel = ({
       onGenerate(brainOutput);
     }
   };
+  
+  // Get display info
+  const countryInfo = getCountryByCode(effectiveCountry);
+  const languageInfo = getLanguageByCode(effectiveLanguage);
 
   return (
     <div className="space-y-6">
@@ -111,15 +125,101 @@ export const AICreativeConfigPanel = ({
         </Button>
       </div>
 
-      {/* Audience Contract Display - READ ONLY */}
-      <AudienceInheritedDisplay />
+      {/* Audience Settings - Defaults from Settings with Override Option */}
+      <Card className="border-primary/30">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Globe className="w-4 h-4 text-primary" />
+              Target Audience
+            </CardTitle>
+            {hasLocalOverride ? (
+              <Badge variant="outline" className="text-orange-500 border-orange-500/50">
+                Local Override
+              </Badge>
+            ) : (
+              <Badge className="bg-green-500/20 text-green-400">
+                From Settings
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            {/* Language Selector */}
+            <div className="space-y-2">
+              <Label className="text-sm flex items-center gap-2">
+                <Languages className="w-3 h-3" />
+                Language
+              </Label>
+              <Select
+                value={effectiveLanguage}
+                onValueChange={(value) => setLocalLanguage(value)}
+              >
+                <SelectTrigger>
+                  <SelectValue>
+                    {languageInfo ? `${languageInfo.name} (${languageInfo.nativeName})` : effectiveLanguage}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50 max-h-60">
+                  {LANGUAGES.map((lang) => (
+                    <SelectItem key={lang.code} value={lang.code}>
+                      {lang.name} ({lang.nativeName})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Country Selector */}
+            <div className="space-y-2">
+              <Label className="text-sm flex items-center gap-2">
+                <Globe className="w-3 h-3" />
+                Country
+              </Label>
+              <Select
+                value={effectiveCountry}
+                onValueChange={(value) => setLocalCountry(value)}
+              >
+                <SelectTrigger>
+                  <SelectValue>
+                    {countryInfo ? `${countryInfo.flag} ${countryInfo.name}` : effectiveCountry}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50 max-h-60">
+                  {COUNTRIES.map((country) => (
+                    <SelectItem key={country.code} value={country.code}>
+                      {country.flag} {country.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          {/* Reset to defaults button */}
+          {hasLocalOverride && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-xs text-muted-foreground"
+              onClick={() => {
+                setLocalLanguage(null);
+                setLocalCountry(null);
+              }}
+            >
+              Reset to Settings defaults
+            </Button>
+          )}
+        </CardContent>
+      </Card>
       
       {/* Warning if audience not configured */}
       {!audienceLoading && !audienceConfigured && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            <strong>Generation Blocked:</strong> Go to Settings → Preferences to configure your default audience.
+            <strong>Generation Blocked:</strong> Please select a language and country above, or configure defaults in Settings → Preferences.
           </AlertDescription>
         </Alert>
       )}
@@ -193,7 +293,7 @@ export const AICreativeConfigPanel = ({
           </CardContent>
         </Card>
 
-        {/* Right Column - Export Platform ONLY */}
+        {/* Right Column - Export Platform */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -226,14 +326,6 @@ export const AICreativeConfigPanel = ({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            
-            {/* Info about inherited audience */}
-            <div className="p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground">
-              <p className="flex items-center gap-2">
-                <Info className="w-3 h-3" />
-                Language & Country are set globally in Settings → Preferences
-              </p>
             </div>
           </CardContent>
         </Card>
