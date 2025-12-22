@@ -6,3 +6,4 @@ export { ConfigPanel } from './ConfigPanel';
 export { AssetUploader } from './AssetUploader';
 export { DebugPanel } from './DebugPanel';
 export { RealTimeCostEstimator } from './RealTimeCostEstimator';
+export { VariationPreview } from './VariationPreview';
