@@ -24,6 +24,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { ImageGenerationProgress } from '@/components/ImageGenerationProgress';
 import { useProject } from '@/contexts/ProjectContext';
 import { parseEdgeFunctionError, formatErrorForToast, createDetailedErrorLog } from '@/lib/edgeFunctionErrors';
+import { useAssetUpload } from '@/hooks/useAssetUpload';
 
 interface StudioImageGenerationProps {
   onNext: () => void;
@@ -74,6 +75,7 @@ const ageOptions = [
 export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: StudioImageGenerationProps) => {
   const { toast } = useToast();
   const { settings, setSettings, saveProject } = useProject();
+  const { uploadImage, isUploadAvailable } = useAssetUpload();
   const [isGenerating, setIsGenerating] = useState(false);
   const [imageEngine, setImageEngine] = useState('nano-banana');
   const [imageCount, setImageCount] = useState('3');
@@ -338,6 +340,18 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
                 ? { ...p, url: imageUrl, status: 'completed' as const }
                 : p
             ));
+            
+            // Auto-upload to Google Drive if available
+            if (isUploadAvailable && imageUrl) {
+              const typeInfo = imageTypes.find(t => t.id === img.type);
+              uploadImage(imageUrl, `${productInfo.name}_${img.type}`, {
+                imageType: img.type,
+                typeName: typeInfo?.name,
+                prompt: img.prompt,
+                resolution,
+                engine: imageEngine,
+              });
+            }
           }
         } catch (genError: any) {
           console.error(`Error generating image ${idx}:`, genError);
@@ -421,6 +435,19 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
 
       if (imageUrl) {
         toast({ title: "Image regenerated successfully" });
+        
+        // Auto-upload regenerated image to Google Drive
+        if (isUploadAvailable) {
+          const typeInfo = imageTypes.find(t => t.id === image.type);
+          uploadImage(imageUrl, `${productInfo.name}_${image.type}_regen`, {
+            imageType: image.type,
+            typeName: typeInfo?.name,
+            prompt: image.prompt,
+            resolution,
+            engine: imageEngine,
+            regenerated: true,
+          });
+        }
       }
     } catch (error: any) {
       setImages(prev => prev.map(img => 
