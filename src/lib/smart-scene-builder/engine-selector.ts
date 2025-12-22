@@ -183,6 +183,7 @@ export function selectEngineForScene(
       tier: fallback.tier,
       costPerSecond: fallback.costPerSecond,
       estimatedCost: fallback.costPerSecond * (scene.duration || 5),
+      qualityScore: 50, // Fallback quality score
       reason: 'Fallback to free tier - no engines matched requirements',
       alternatives: [],
     };
@@ -205,15 +206,44 @@ export function selectEngineForScene(
   // Build selection reason
   const reason = buildSelectionReason(selected, complexity, budgetPreference);
   
+  // Calculate quality score based on engine tier and complexity match
+  const qualityScore = calculateQualityScore(selected, complexity, scoredEngines[0].score);
+  
   return {
     engineId: selected.engineId,
     engineName: selected.name,
     tier: selected.tier,
     costPerSecond: selected.costPerSecond,
     estimatedCost: selected.costPerSecond * sceneDuration,
+    qualityScore,
     reason,
     alternatives,
   };
+}
+
+// Calculate quality score based on engine capabilities and scene match
+function calculateQualityScore(
+  engine: VideoEngineSpec, 
+  complexity: SceneComplexity, 
+  engineScore: number
+): number {
+  let quality = 50; // Base score
+  
+  // Tier bonus
+  if (engine.tier === 'premium') quality += 30;
+  else if (engine.tier === 'budget') quality += 15;
+  else quality += 5;
+  
+  // Quality setting bonus
+  if (engine.quality === 'cinematic') quality += 15;
+  else if (engine.quality === 'balanced') quality += 10;
+  else quality += 5;
+  
+  // Complexity match bonus (how well engine score matched)
+  quality += Math.min(10, engineScore / 10);
+  
+  // Cap at 100
+  return Math.min(100, Math.max(0, Math.round(quality)));
 }
 
 // Build selection reason string
