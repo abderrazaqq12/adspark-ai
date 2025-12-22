@@ -22,7 +22,7 @@ import {
 const workflowItems = [
   { title: "Studio", url: "/create", icon: Clapperboard, description: "Video creation studio" },
   { title: "Creative Replicator", url: "/creative-replicator", icon: SlidersHorizontal, description: "Replicate winning ads" },
-  { title: "Creative Scale", url: "/creative-scale", icon: Scale, description: "AI-powered optimization" },
+  { title: "Creative AI Editor", url: "/creative-scale", icon: Scale, description: "AI-powered optimization" },
   { title: "AI Tools", url: "/ai-tools", icon: Wand2, description: "AI-powered tools" },
 ];
 
