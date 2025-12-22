@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Zap, Upload, Settings2, Play, FolderOpen, Brain, Server, Cloud, CheckCircle2, Loader2 } from "lucide-react";
 import { AdUploader } from "@/components/replicator/AdUploader";
 import { AICreativeConfigPanel } from "@/components/replicator/AICreativeConfigPanel";
-import type { BrainOutput } from "@/lib/replicator/ai-creative-brain";
+import { AICreativeBrain, type BrainOutput, type AIVariationDecision, ENGINE_TIERS } from "@/lib/replicator/ai-creative-brain";
 import { GenerationProgress } from "@/components/replicator/GenerationProgress";
 import { EnhancedResultsGallery } from "@/components/replicator/EnhancedResultsGallery";
 import { ProcessingTimeline } from "@/components/replicator/ProcessingTimeline";
@@ -143,6 +143,9 @@ const CreativeReplicator = () => {
 
   // Debug state
   const [debugInfo, setDebugInfo] = useState<any>(null);
+  
+  // AI Brain output - stores all decisions for the generation run
+  const [currentBrainOutput, setCurrentBrainOutput] = useState<BrainOutput | null>(null);
 
   // Real-time subscription for video status updates
   useEffect(() => {
@@ -234,23 +237,30 @@ const CreativeReplicator = () => {
 
 
 
-  const handleStartGeneration = async () => {
+  /**
+   * AI Brain-driven generation handler
+   * Uses BrainOutput decisions for each variation
+   */
+  const handleStartGenerationWithBrain = async (brainOutput: BrainOutput) => {
     if (uploadedAds.length === 0) {
       toast.error("Please upload at least one ad to replicate");
       return;
     }
 
+    // Store brain output for reference
+    setCurrentBrainOutput(brainOutput);
     setIsGenerating(true);
     setActiveStep("generate");
     setGenerationProgress(0);
 
     try {
       const currentAd = uploadedAds[0];
+      const { decisions, costEstimate, optimizationStrategy } = brainOutput;
 
-      // 1. ANALYZE (AI BRAIN)
-      if (!currentAd.analysis) {
-        toast.info("Analyzing ad structure first...");
-      }
+      // Log AI Brain strategy
+      console.log("🧠 AI Brain Strategy:", optimizationStrategy);
+      console.log("💰 Estimated Cost:", costEstimate);
+      toast.info(`AI Brain: ${optimizationStrategy}`);
 
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData?.user?.id;
@@ -258,19 +268,27 @@ const CreativeReplicator = () => {
 
       const jobId = crypto.randomUUID();
 
-      // CREATE PIPELINE JOB RECORD (Critical for Realtime Progress)
+      // CREATE PIPELINE JOB RECORD with AI Brain metadata
       const { error: jobError } = await supabase
         .from('pipeline_jobs')
         .insert({
           user_id: userId,
-          stage_name: 'creative_replicator',
+          stage_name: 'creative_replicator_v2',
           stage_number: 1,
           status: 'pending',
           progress: 0,
+          estimated_cost: costEstimate.optimized,
           input_data: {
-            totalVideos: variationConfig.count,
+            totalVideos: decisions.length,
             completedVideos: 0,
-            currentStage: 'queued'
+            currentStage: 'queued',
+            aiStrategy: optimizationStrategy,
+            brainDecisions: decisions.map(d => ({
+              framework: d.framework,
+              engineTier: d.engineTier,
+              duration: d.targetDuration,
+              cost: d.estimatedCost
+            }))
           }
         });
 
@@ -284,13 +302,24 @@ const CreativeReplicator = () => {
       setCurrentJobId(jobId);
       const newGeneratedVideos: GeneratedVideo[] = [];
 
-      // 2. EXECUTE (LOOP)
-      for (let i = 0; i < variationConfig.count; i++) {
+      // EXECUTE LOOP - Using AI Brain decisions
+      for (let i = 0; i < decisions.length; i++) {
+        const decision = decisions[i];
         const variationId = i + 1;
-        const hookStyle = selectHook(i);
-        const ratio = variationConfig.ratios[i % variationConfig.ratios.length];
 
-        // 2a. CONSTRUCT SCENE PLAN (From AI Brain Analysis)
+        // Log decision for this variation
+        console.log(`📹 Variation ${variationId}:`, {
+          framework: decision.framework,
+          hook: decision.hookType,
+          engine: decision.selectedProvider,
+          duration: decision.targetDuration,
+          cost: decision.estimatedCost
+        });
+
+        // Get ratio from config (platform-based)
+        const ratio = variationConfig.ratios[0] || "9:16";
+
+        // CONSTRUCT SCENE PLAN with AI Brain duration
         const plan: ScenePlan = {
           scenes: currentAd.analysis?.scenes?.map((s: any) => ({
             type: s.type.toUpperCase() as any,
@@ -298,21 +327,23 @@ const CreativeReplicator = () => {
             end: s.endTime,
             description: s.description
           })) || [],
-          totalDuration: currentAd.duration,
-          resolution: "1080p", // Default assumption
-          requiredCapabilities: ["trim", "merge", "text_overlay"]
+          totalDuration: decision.targetDuration, // AI Brain enforced duration (20-35s)
+          resolution: "1080p",
+          requiredCapabilities: ["trim", "merge", "text_overlay", "resize"] as any
         };
 
-        // 2b. ROUTE TO ENGINE (Auto-detect based on available backends)
-        const autoRenderingMode: RenderingMode = backendStatus.vpsServer.available 
-          ? 'server_only' 
-          : backendStatus.edgeFunctions.available 
-            ? 'auto' 
-            : 'cloudinary_only';
+        // ROUTE TO ENGINE based on AI Brain decision
+        const autoRenderingMode: RenderingMode = decision.useFFMPEGOnly
+          ? 'server_only'
+          : backendStatus.vpsServer.available 
+            ? 'server_only' 
+            : backendStatus.edgeFunctions.available 
+              ? 'auto' 
+              : 'cloudinary_only';
 
         const routingReq: RoutingRequest = {
           plan,
-          userTier: variationConfig.engineTier as any,
+          userTier: decision.engineTier as any, // AI Brain selected tier
           preferLocal: backendStatus.vpsServer.available,
           renderingMode: autoRenderingMode
         };
@@ -320,163 +351,176 @@ const CreativeReplicator = () => {
         const engineSpec = AdvancedEngineRouter.selectEngine(routingReq);
         const engine = AdvancedEngineRouter.getEngineInstance(engineSpec.id);
 
-        // Update Debug Info
+        // Update Debug Info with AI Brain reasoning
         setDebugInfo({
-          engine: engineSpec.name,
-          executionPath: `Auto(${backendStatus.recommended}) -> ${engineSpec.id}`,
+          engine: decision.selectedProvider,
+          engineTier: decision.engineTier,
+          framework: decision.framework,
+          hookType: decision.hookType,
+          targetDuration: decision.targetDuration,
+          estimatedCost: decision.estimatedCost,
+          useFFMPEG: decision.useFFMPEGOnly,
+          executionPath: `AIBrain -> ${decision.engineTier} -> ${decision.selectedProvider}`,
           status: 'pending',
           logs: [
-            `Backend detection: VPS=${backendStatus.vpsServer.available}, Edge=${backendStatus.edgeFunctions.available}`,
-            `Auto-selected: ${autoRenderingMode}`,
-            `Engine: ${engineSpec.name}`
+            `🧠 AI Brain Decision for Variation ${variationId}:`,
+            `  Framework: ${decision.framework} - ${decision.reasoning.frameworkReason}`,
+            `  Engine: ${decision.selectedProvider} - ${decision.reasoning.engineReason}`,
+            `  Duration: ${decision.targetDuration}s - ${decision.reasoning.durationReason}`,
+            `  Pacing: ${decision.pacing}`,
+            `  Transitions: ${decision.transitions.join(', ')}`,
+            `  Cost: $${decision.estimatedCost.toFixed(3)}`
           ],
           payload: routingReq
         });
 
-        // Initialize if first time for this engine type
+        // Initialize engine
         await engine.initialize();
 
-        const { data: userData } = await supabase.auth.getUser();
-        const userId = userData?.user?.id;
-        if (!userId) throw new Error("User not authenticated");
-
-        const jobId = crypto.randomUUID();
-        setCurrentJobId(jobId);
-        const newGeneratedVideos: GeneratedVideo[] = [];
-
-        // 3. EXECUTE (LOOP)
-        for (let i = 0; i < variationConfig.count; i++) {
-          const variationId = i + 1;
-          const hookStyle = selectHook(i);
-          const ratio = variationConfig.ratios[i % variationConfig.ratios.length];
-
-          // Create DB Record (Processing)
-          const { data: insertedVideo, error: insertError } = await supabase
-            .from('video_variations')
-            .insert({
-              user_id: userId,
-              variation_number: variationId,
-              variation_config: {
-                hookStyle,
-                ratio,
-                engine: engine.name,
-                engineTier: variationConfig.engineTier
-              },
-              status: "processing",
-              metadata: { job_id: jobId }
-            })
-            .select()
-            .single();
-
-          if (insertError) {
-            console.error("DB Insert Error", insertError);
-            continue;
-          }
-
-          // Build Task
-          const task: EngineTask = {
-            id: insertedVideo.id,
-            videoUrl: currentAd.url, // Video URL for server-side processing
-            outputRatio: ratio,
-            config: {
-              scenes: currentAd.analysis?.scenes?.map(s => ({
-                type: s.type,
-                start: s.startTime,
-                end: s.endTime,
-                description: s.description
-              })) || [
-                  // Fallback scenes if analysis missing
-                  { type: "hook", start: 0, end: 3 },
-                  { type: "body", start: 3, end: currentAd.duration }
-                ],
-              variants: 1,
-              market: variationConfig.adIntelligence.market,
-              language: variationConfig.adIntelligence.language
-            }
-          };
-
-          // Process Client-Side
-          toast.message(`Generating variation ${variationId}...`);
-          const result = await engine.process(task);
-
-          setDebugInfo((prev: any) => ({
-            ...prev,
-            status: result.success ? 'success' : 'failed',
-            logs: [...(prev?.logs || []), ...(result.logs || [])],
-            serverJobId: result.jobId,
-            outputType: result.outputType
-          }));
-
-          // NORMALIZE: Only treat 'video' output as completion
-          if (result.success && result.outputType === 'video' && result.videoUrl) {
-            // UPLOAD RESULT TO STORAGE (Persist)
-            const blob = await fetch(result.videoUrl).then(r => r.blob());
-            const fileName = `${userId}/${jobId}_${variationId}.mp4`;
-
-            const { error: uploadError } = await supabase.storage
-              .from('videos')
-              .upload(fileName, blob, { upsert: true });
-
-            let publicUrl = result.videoUrl; // Default to local blob if upload fails
-
-            if (!uploadError) {
-              const { data: urlData } = supabase.storage.from('videos').getPublicUrl(fileName);
-              publicUrl = urlData.publicUrl;
-            }
-
-            // Update DB Record (Completed)
-            await supabase
-              .from('video_variations')
-              .update({
-                status: 'completed',
-                video_url: publicUrl,
-                thumbnail_url: publicUrl, // Use video as thumb for now
-                duration_sec: currentAd.duration // Approximate
-              })
-              .eq('id', insertedVideo.id);
-
-            newGeneratedVideos.push({
-              id: insertedVideo.id,
-              url: publicUrl,
-              thumbnail: publicUrl,
-              hookStyle,
-              pacing: "medium",
-              engine: engine.name, // "Server FFmpeg (VPS)" or "Cloudinary..."
+        // Create DB Record with AI Brain metadata
+        const { data: insertedVideo, error: insertError } = await supabase
+          .from('video_variations')
+          .insert({
+            user_id: userId,
+            variation_number: variationId,
+            variation_config: {
+              hookStyle: decision.hookType,
+              framework: decision.framework,
+              pacing: decision.pacing,
+              transitions: decision.transitions,
               ratio,
-              duration: currentAd.duration,
-              status: "completed"
-            });
+              engine: decision.selectedProvider,
+              engineTier: decision.engineTier,
+              targetDuration: decision.targetDuration,
+              useFFMPEG: decision.useFFMPEGOnly,
+              aiReasoning: decision.reasoning
+            },
+            status: "processing",
+            cost_usd: decision.estimatedCost,
+            metadata: { 
+              job_id: jobId,
+              ai_brain_decision: {
+                framework: decision.framework,
+                videoType: decision.videoType,
+                engineTier: decision.engineTier
+              }
+            }
+          })
+          .select()
+          .single();
 
-            setGeneratedVideos(prev => [...prev, ...newGeneratedVideos]);
-            setGenerationProgress(((i + 1) / variationConfig.count) * 100);
-
-          } else if (result.success && result.outputType === 'plan') {
-            // HANDLE PLAN ONLY
-            toast.info(`Variation ${variationId}: Plan compiled (No Video)`);
-            await supabase
-              .from('video_variations')
-              .update({
-                status: 'failed', // Technically not a video, so 'failed' for gallery purposes or maybe we need a new status?
-                // For now, let's just log error_message so user knows why
-                error_message: "Plan compiled but video rendering skipped (Cloudinary Mode)"
-              })
-              .eq('id', insertedVideo.id);
-
-          } else {
-            // Handle Failure
-            await supabase
-              .from('video_variations')
-              .update({ status: 'failed', error_message: result.error })
-              .eq('id', insertedVideo.id);
-
-            toast.error(`Variation ${variationId} failed: ${result.error}`);
-          }
+        if (insertError) {
+          console.error("DB Insert Error", insertError);
+          continue;
         }
 
+        // Build Task with AI Brain parameters
+        const task: EngineTask = {
+          id: insertedVideo.id,
+          videoUrl: currentAd.url,
+          outputRatio: ratio,
+          config: {
+            scenes: currentAd.analysis?.scenes?.map(s => ({
+              type: s.type,
+              start: s.startTime,
+              end: s.endTime,
+              description: s.description
+            })) || [
+              { type: "hook", start: 0, end: 3 },
+              { type: "body", start: 3, end: decision.targetDuration }
+            ],
+            variants: 1,
+            market: variationConfig.adIntelligence.market,
+            language: variationConfig.adIntelligence.language,
+            // AI Brain parameters stored in strategy
+            strategy: {
+              framework: decision.framework,
+              hookType: decision.hookType,
+              pacing: decision.pacing,
+              transitions: decision.transitions,
+              targetDuration: decision.targetDuration
+            }
+          }
+        };
+
+        // Process with selected engine
+        toast.message(`Generating variation ${variationId} (${decision.framework}, ${decision.hookType})...`);
+        const result = await engine.process(task);
+
+        setDebugInfo((prev: any) => ({
+          ...prev,
+          status: result.success ? 'success' : 'failed',
+          logs: [...(prev?.logs || []), ...(result.logs || [])],
+          serverJobId: result.jobId,
+          outputType: result.outputType
+        }));
+
+        // Handle success
+        if (result.success && result.outputType === 'video' && result.videoUrl) {
+          const blob = await fetch(result.videoUrl).then(r => r.blob());
+          const fileName = `${userId}/${jobId}_${variationId}.mp4`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('videos')
+            .upload(fileName, blob, { upsert: true });
+
+          let publicUrl = result.videoUrl;
+
+          if (!uploadError) {
+            const { data: urlData } = supabase.storage.from('videos').getPublicUrl(fileName);
+            publicUrl = urlData.publicUrl;
+          }
+
+          // Update DB Record with actual cost
+          await supabase
+            .from('video_variations')
+            .update({
+              status: 'completed',
+              video_url: publicUrl,
+              thumbnail_url: publicUrl,
+              duration_sec: decision.targetDuration,
+              cost_usd: decision.estimatedCost
+            })
+            .eq('id', insertedVideo.id);
+
+          newGeneratedVideos.push({
+            id: insertedVideo.id,
+            url: publicUrl,
+            thumbnail: publicUrl,
+            hookStyle: decision.hookType,
+            pacing: decision.pacing,
+            engine: decision.selectedProvider,
+            ratio,
+            duration: decision.targetDuration,
+            status: "completed"
+          });
+
+          setGeneratedVideos(prev => [...prev, ...newGeneratedVideos]);
+          setGenerationProgress(((i + 1) / decisions.length) * 100);
+
+        } else if (result.success && result.outputType === 'plan') {
+          toast.info(`Variation ${variationId}: Plan compiled (${decision.framework})`);
+          await supabase
+            .from('video_variations')
+            .update({
+              status: 'pending_render',
+              error_message: "Plan compiled, awaiting render"
+            })
+            .eq('id', insertedVideo.id);
+
+        } else {
+          await supabase
+            .from('video_variations')
+            .update({ status: 'failed', error_message: result.error })
+            .eq('id', insertedVideo.id);
+
+          toast.error(`Variation ${variationId} failed: ${result.error}`);
+        }
       }
+
       setIsGenerating(false);
       setActiveStep("results");
-      toast.success("Generation Complete!");
+      toast.success(`Generation Complete! Total cost: $${costEstimate.optimized.toFixed(2)}`);
 
     } catch (err: any) {
       console.error('Generation error:', err);
@@ -484,6 +528,22 @@ const CreativeReplicator = () => {
       setIsGenerating(false);
     }
   };
+
+  // Legacy handler (fallback)
+  const handleStartGeneration = async () => {
+    // Generate brain output on-the-fly if not using new flow
+    const brain = new AICreativeBrain({
+      numberOfVideos: variationConfig.count,
+      language: variationConfig.adIntelligence?.language || 'ar',
+      market: variationConfig.adIntelligence?.market || 'saudi',
+      platform: variationConfig.adIntelligence?.platform || 'tiktok',
+      sourceVideoDuration: uploadedAds[0]?.duration || 30,
+      availableApiKeys: ['fal_ai', 'runway'], // Default fallback
+    });
+    const output = brain.generateDecisions();
+    await handleStartGenerationWithBrain(output);
+  };
+
 
   const steps = [
     { id: "upload", label: "Upload Ads", icon: Upload, count: uploadedAds.length },
@@ -620,7 +680,7 @@ const CreativeReplicator = () => {
                 onBack={() => setActiveStep("upload")}
                 onGenerate={(brainOutput: BrainOutput) => {
                   console.log("AI Brain decisions:", brainOutput);
-                  handleStartGeneration();
+                  handleStartGenerationWithBrain(brainOutput);
                 }}
               />
             )}
