@@ -433,32 +433,38 @@ const CreativeReplicator = () => {
         await engine.initialize();
 
         // Create DB Record with plan metadata
+        const variationRecord = {
+          user_id: userId,
+          variation_number: variationId,
+          variation_config: {
+            planId: lockedPlan.id,
+            hookStyle: variation.hookType,
+            framework: variation.framework,
+            pacing: variation.pacing,
+            transitions: variation.transitions,
+            ratio,
+            engine: variation.engineProvider,
+            engineId: variation.engineId,
+            targetDuration: variation.targetDuration,
+            useVPS: variation.useVPS,
+            reasoning: variation.reasoning,
+          },
+          status: "processing",
+          cost_usd: variation.estimatedCost,
+          metadata: { 
+            job_id: jobId,
+            plan_id: lockedPlan.id,
+            audience: {
+              language: lockedPlan.audience.language,
+              country: lockedPlan.audience.country,
+              market: lockedPlan.audience.market,
+            },
+          }
+        };
+        
         const { data: insertedVideo, error: insertError } = await supabase
           .from('video_variations')
-          .insert({
-            variation_number: variationId,
-            variation_config: {
-              planId: lockedPlan.id,
-              hookStyle: variation.hookType,
-              framework: variation.framework,
-              pacing: variation.pacing,
-              transitions: variation.transitions,
-              ratio,
-              engine: variation.engineProvider,
-              engineId: variation.engineId,
-              targetDuration: variation.targetDuration,
-              useVPS: variation.useVPS,
-              reasoning: variation.reasoning,
-            },
-            status: "processing",
-            cost_usd: variation.estimatedCost,
-            metadata: { 
-              job_id: jobId,
-              plan_id: lockedPlan.id,
-              user_id: userId,
-              audience: lockedPlan.audience,
-            }
-          })
+          .insert(variationRecord)
           .select()
           .single();
 
