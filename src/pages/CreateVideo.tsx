@@ -1063,6 +1063,11 @@ export default function CreateVideo() {
               {projectId ? (
                 <SmartSceneBuilderV2
                   projectId={projectId}
+                  scripts={scriptSlots.filter(s => s.text.trim()).map((slot, idx) => ({
+                    id: `script-${slot.id}`,
+                    text: slot.text,
+                    language: voiceLanguage,
+                  }))}
                   onProceedToAssembly={(scenePlan) => {
                     // Convert scene plan to unified scenes format
                     if (scenePlan?.scenes) {
