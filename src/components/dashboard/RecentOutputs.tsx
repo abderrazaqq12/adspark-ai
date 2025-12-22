@@ -14,7 +14,8 @@ import {
   Mic,
   ExternalLink,
   Clock,
-  Inbox
+  Inbox,
+  AlertCircle
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useGlobalProject } from '@/contexts/GlobalProjectContext';
@@ -40,12 +41,15 @@ export function RecentOutputs() {
   const { activeProject } = useGlobalProject();
   const [outputs, setOutputs] = useState<RecentOutput[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRecentOutputs();
   }, [activeProject?.id]);
 
   const fetchRecentOutputs = async () => {
+    setLoadError(null);
+    
     try {
       const results: RecentOutput[] = [];
 
@@ -67,7 +71,14 @@ export function RecentOutputs() {
         videoQuery = videoQuery.eq('project_id', activeProject.id);
       }
 
-      const { data: videos } = await videoQuery;
+      const { data: videos, error: videoError } = await videoQuery;
+
+      if (videoError) {
+        console.error('Error fetching videos:', videoError);
+        setLoadError('Failed to load outputs');
+        setIsLoading(false);
+        return;
+      }
 
       videos?.forEach(v => {
         results.push({
@@ -98,7 +109,12 @@ export function RecentOutputs() {
         imageQuery = imageQuery.eq('project_id', activeProject.id);
       }
 
-      const { data: images } = await imageQuery;
+      const { data: images, error: imageError } = await imageQuery;
+
+      if (imageError) {
+        console.error('Error fetching images:', imageError);
+        // Don't block - we still have videos
+      }
 
       images?.forEach(i => {
         results.push({
@@ -117,6 +133,7 @@ export function RecentOutputs() {
       setOutputs(results.slice(0, 5));
     } catch (error) {
       console.error('Error fetching recent outputs:', error);
+      setLoadError('Backend connection failed');
     } finally {
       setIsLoading(false);
     }
@@ -136,6 +153,29 @@ export function RecentOutputs() {
     );
   }
 
+  // Error state
+  if (loadError) {
+    return (
+      <Card className="border-amber-500/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+            <FileOutput className="w-5 h-5 text-muted-foreground" />
+            Recent Outputs
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3 text-amber-600 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium">Status unavailable</p>
+              <p className="text-xs text-amber-600/80">{loadError}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -148,8 +188,11 @@ export function RecentOutputs() {
         {outputs.length === 0 ? (
           <div className="text-center py-6 text-muted-foreground">
             <Inbox className="w-10 h-10 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">No outputs yet</p>
-            <p className="text-xs">Generated files will appear here</p>
+            <p className="text-sm font-medium">No outputs generated</p>
+            <p className="text-xs mt-1">No completed videos, images, or audio files found.</p>
+            <p className="text-[10px] text-muted-foreground/60 mt-2">
+              Outputs will appear here when generation jobs complete successfully.
+            </p>
           </div>
         ) : (
           <div className="space-y-2">

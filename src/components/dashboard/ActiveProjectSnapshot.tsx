@@ -10,7 +10,8 @@ import {
   FolderOpen, 
   ExternalLink,
   Clock,
-  Hash
+  Hash,
+  AlertTriangle
 } from 'lucide-react';
 import { useGlobalProject } from '@/contexts/GlobalProjectContext';
 import { formatDistanceToNow } from 'date-fns';
@@ -117,14 +118,17 @@ export function ActiveProjectSnapshot() {
             </div>
           </div>
         ) : (
-          <div className="p-2.5 rounded-lg bg-muted/20 border border-border/30">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <img 
-                src="https://www.gstatic.com/images/branding/product/1x/drive_2020q4_48dp.png" 
-                alt="Google Drive" 
-                className="w-4 h-4 opacity-50"
-              />
-              <span className="text-xs">No Google Drive folder linked</span>
+          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                  Outputs will NOT be saved
+                </p>
+                <p className="text-[10px] text-amber-600/80 dark:text-amber-400/80 mt-0.5">
+                  Google Drive is not linked. Generated files cannot be stored permanently.
+                </p>
+              </div>
             </div>
           </div>
         )}
