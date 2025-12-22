@@ -42,6 +42,8 @@ import { fileURLToPath } from 'url';
 import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
 import { trackCost, supabase } from './supabase.js';
+import { trackResource } from './project-manager.js';
+import { enforceProject } from './middleware/project-enforcer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
