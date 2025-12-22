@@ -1,27 +1,51 @@
+/**
+ * CREATIVE REPLICATOR - Production AI Video Replication System
+ * 
+ * ARCHITECTURAL CONTRACTS:
+ * 1. Audience inherited from Settings → Preferences (no manual selection)
+ * 2. Duration hard-locked: 20-35 seconds
+ * 3. VPS-First execution: FFmpeg only when VPS available
+ * 4. AI Planning Layer: Plan must be generated/validated before Generate
+ * 5. Generate blocked until plan is validated and locked
+ */
+
 import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Zap, Upload, Settings2, Play, FolderOpen, Brain, Server, Cloud, CheckCircle2, Loader2 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { 
+  Zap, Upload, Settings2, Play, FolderOpen, Brain, Server, 
+  Cloud, CheckCircle2, Loader2, Lock, AlertTriangle, FileText 
+} from "lucide-react";
 import { AdUploader } from "@/components/replicator/AdUploader";
 import { AICreativeConfigPanel } from "@/components/replicator/AICreativeConfigPanel";
-import { AICreativeBrain, type BrainOutput, type AIVariationDecision, ENGINE_TIERS } from "@/lib/replicator/ai-creative-brain";
+import { PlanPreviewPanel } from "@/components/replicator/PlanPreviewPanel";
+import { type BrainOutput } from "@/lib/replicator/ai-creative-brain";
 import { GenerationProgress } from "@/components/replicator/GenerationProgress";
 import { EnhancedResultsGallery } from "@/components/replicator/EnhancedResultsGallery";
 import { ProcessingTimeline } from "@/components/replicator/ProcessingTimeline";
 import { PipelineProgressPanel } from "@/components/replicator/PipelineProgressPanel";
+import { RenderDebugPanel } from "@/components/replicator/RenderDebugPanel";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { EngineRouter } from "@/lib/video-engines/EngineRouter";
-import { EngineTask } from "@/lib/video-engines/types";
 import { AdvancedEngineRouter, RoutingRequest, RenderingMode } from "@/lib/video-engines/AdvancedRouter";
 import { ScenePlan } from "@/lib/video-engines/registry-types";
-import { RenderDebugPanel } from "@/components/replicator/RenderDebugPanel";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRenderBackendStatus } from "@/hooks/useRenderBackendStatus";
 import { useSecureApiKeys } from "@/hooks/useSecureApiKeys";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { useAudience } from "@/contexts/AudienceContext";
+import { 
+  CreativePlan, 
+  isAudienceConfigured,
+  DURATION_MIN,
+  DURATION_MAX 
+} from "@/lib/replicator/creative-plan-types";
+import { 
+  generateCreativePlan, 
+  lockPlan,
+  PlanGeneratorInput 
+} from "@/lib/replicator/plan-generator";
 
 export interface UploadedAd {
   id: string;
@@ -98,17 +122,18 @@ export interface GeneratedVideo {
   status: "processing" | "completed" | "failed";
 }
 
-// Engine selection based on tier - VIDEO MODELS ONLY
-const ENGINE_BY_TIER: Record<string, string[]> = {
-  free: ["FFMPEG-Motion", "Ken-Burns", "Parallax", "AI-Shake"],
-  low: ["Kling-2.5", "MiniMax", "Wan-2.5", "Kie-Luma"],
-  medium: ["Runway-Gen3", "Veo-3.1", "Luma-Dream", "Kie-Runway"],
-  premium: ["Sora-2", "Sora-2-Pro", "Kie-Veo-3.1"],
-};
+// Steps with Plan Preview added
+type StepId = "upload" | "settings" | "plan" | "generate" | "results";
 
 const CreativeReplicator = () => {
-  // Global audience context
-  const { resolved: audience } = useAudience();
+  // Global audience context (inherited from Settings)
+  const { resolved: audience, isLoading: audienceLoading } = useAudience();
+  
+  // Check if audience is configured
+  const audienceConfigured = useMemo(() => 
+    isAudienceConfigured(audience.language, audience.country),
+    [audience.language, audience.country]
+  );
   
   // Auto-detect available backends
   const backendStatus = useRenderBackendStatus();
@@ -123,7 +148,7 @@ const CreativeReplicator = () => {
       .map(p => p.provider);
   }, [apiKeyProviders]);
   
-  const [activeStep, setActiveStep] = useState<string>("upload");
+  const [activeStep, setActiveStep] = useState<StepId>("upload");
   const [projectName, setProjectName] = useState<string>("");
   const [uploadedAds, setUploadedAds] = useState<UploadedAd[]>([]);
   
@@ -152,28 +177,35 @@ const CreativeReplicator = () => {
     }
   });
   
+  // Creative Plan state (AI Planning Layer)
+  const [creativePlan, setCreativePlan] = useState<CreativePlan | null>(null);
+  const [planGenerating, setPlanGenerating] = useState(false);
+  const [planValidationErrors, setPlanValidationErrors] = useState<string[]>([]);
+  const [planValidationWarnings, setPlanValidationWarnings] = useState<string[]>([]);
+  
+  // Brain output for legacy compatibility
+  const [currentBrainOutput, setCurrentBrainOutput] = useState<BrainOutput | null>(null);
+  
   // Sync variation config when audience changes
   useEffect(() => {
-    setVariationConfig(prev => ({
-      ...prev,
-      voiceSettings: { ...prev.voiceSettings, language: audience.language },
-      adIntelligence: {
-        ...prev.adIntelligence,
-        language: audience.language,
-        market: audience.country
-      }
-    }));
-  }, [audience.language, audience.country]);
+    if (!audienceLoading) {
+      setVariationConfig(prev => ({
+        ...prev,
+        voiceSettings: { ...prev.voiceSettings, language: audience.language },
+        adIntelligence: {
+          ...prev.adIntelligence,
+          language: audience.language,
+          market: audience.country
+        }
+      }));
+    }
+  }, [audience.language, audience.country, audienceLoading]);
+
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
-
-  // Debug state
   const [debugInfo, setDebugInfo] = useState<any>(null);
-  
-  // AI Brain output - stores all decisions for the generation run
-  const [currentBrainOutput, setCurrentBrainOutput] = useState<BrainOutput | null>(null);
 
   // Real-time subscription for video status updates
   useEffect(() => {
@@ -218,73 +250,83 @@ const CreativeReplicator = () => {
     };
   }, [generatedVideos.length]);
 
-  // AI-driven engine selection within tier
-  const selectEngineForVariation = (tier: string, index: number): string => {
-    const engines = ENGINE_BY_TIER[tier] || ENGINE_BY_TIER.free;
-    if (variationConfig.randomizeEngines) {
-      return engines[Math.floor(Math.random() * engines.length)];
-    }
-    return engines[index % engines.length];
-  };
-
-  // AI-driven pacing selection based on hook strength and language
-  const selectPacing = (hookStyle: string, language: string): string => {
-    if (variationConfig.pacing !== "dynamic") return variationConfig.pacing;
-
-    // Arabic markets prefer medium pacing
-    if (language.startsWith("ar")) {
-      return hookStyle === "emotional" ? "slow" : "medium";
-    }
-    // Western markets prefer fast pacing
-    return hookStyle === "story" ? "medium" : "fast";
-  };
-
-  // AI-driven hook selection
-  const selectHook = (index: number): string => {
-    if (!variationConfig.hookStyles.includes("ai-auto")) {
-      return variationConfig.hookStyles[index % variationConfig.hookStyles.length];
+  /**
+   * Generate Creative Plan (Step 2 -> Step 3)
+   */
+  const handleGeneratePlan = async () => {
+    // Block if audience not configured
+    if (!audienceConfigured) {
+      toast.error("Default Audience not configured. Go to Settings → Preferences.");
+      return;
     }
 
-    const aiHooks = ["question", "shock", "emotional", "story", "problem-solution", "statistic"];
-    const market = variationConfig.adIntelligence?.market || "saudi";
+    setPlanGenerating(true);
+    setPlanValidationErrors([]);
+    setPlanValidationWarnings([]);
 
-    // Market-specific hook preferences
-    const marketHooks: Record<string, string[]> = {
-      saudi: ["emotional", "story", "problem-solution"],
-      uae: ["emotional", "story", "shock"],
-      usa: ["question", "shock", "statistic"],
-      europe: ["statistic", "question", "story"],
-      latam: ["shock", "emotional", "question"],
-    };
+    try {
+      const input: PlanGeneratorInput = {
+        language: audience.language,
+        country: audience.country,
+        variationCount: variationConfig.count,
+        platform: variationConfig.adIntelligence?.platform || 'tiktok',
+        aspectRatio: variationConfig.ratios[0] || '9:16',
+        sourceVideoDuration: uploadedAds[0]?.duration || 30,
+        vpsAvailable: backendStatus.vpsServer.available,
+        availableApiKeys,
+      };
 
-    const preferredHooks = marketHooks[market] || aiHooks;
-    return preferredHooks[index % preferredHooks.length];
+      const result = generateCreativePlan(input);
+      
+      setCreativePlan(result.plan);
+      setCurrentBrainOutput(result.brainOutput);
+      setPlanValidationErrors(result.validation.errors);
+      setPlanValidationWarnings(result.validation.warnings);
+
+      if (result.plan) {
+        toast.success("Creative Plan generated successfully");
+        setActiveStep("plan");
+      } else {
+        toast.error("Plan validation failed");
+      }
+    } catch (err: any) {
+      console.error('Plan generation error:', err);
+      toast.error(err.message || "Failed to generate plan");
+      setPlanValidationErrors([err.message || "Unknown error"]);
+    } finally {
+      setPlanGenerating(false);
+    }
   };
 
   /**
-   * AI Brain-driven generation handler
-   * Uses BrainOutput decisions for each variation
+   * Lock plan and start generation
    */
-  const handleStartGenerationWithBrain = async (brainOutput: BrainOutput) => {
+  const handleLockAndGenerate = async () => {
+    if (!creativePlan || creativePlan.status !== 'validated') {
+      toast.error("Plan must be validated before generation");
+      return;
+    }
+
     if (uploadedAds.length === 0) {
       toast.error("Please upload at least one ad to replicate");
       return;
     }
 
-    // Store brain output for reference
-    setCurrentBrainOutput(brainOutput);
-    setIsGenerating(true);
-    setActiveStep("generate");
-    setGenerationProgress(0);
-
     try {
-      const currentAd = uploadedAds[0];
-      const { decisions, costEstimate, optimizationStrategy } = brainOutput;
+      // Lock the plan
+      const lockedPlan = lockPlan(creativePlan);
+      setCreativePlan(lockedPlan);
+      
+      setIsGenerating(true);
+      setActiveStep("generate");
+      setGenerationProgress(0);
 
-      // Log AI Brain strategy
-      console.log("🧠 AI Brain Strategy:", optimizationStrategy);
-      console.log("💰 Estimated Cost:", costEstimate);
-      toast.info(`AI Brain: ${optimizationStrategy}`);
+      const currentAd = uploadedAds[0];
+      
+      // Log execution strategy
+      console.log("🔒 Locked Plan:", lockedPlan.id);
+      console.log("📊 Strategy:", lockedPlan.executionStrategy.description);
+      toast.info(`Executing: ${lockedPlan.executionStrategy.description}`);
 
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData?.user?.id;
@@ -292,27 +334,23 @@ const CreativeReplicator = () => {
 
       const jobId = crypto.randomUUID();
 
-      // CREATE PIPELINE JOB RECORD with AI Brain metadata
+      // CREATE PIPELINE JOB RECORD with plan metadata
       const { error: jobError } = await supabase
         .from('pipeline_jobs')
         .insert({
           user_id: userId,
-          stage_name: 'creative_replicator_v2',
+          stage_name: 'creative_replicator_v3',
           stage_number: 1,
           status: 'pending',
           progress: 0,
-          estimated_cost: costEstimate.optimized,
+          estimated_cost: lockedPlan.costEstimate.optimized,
           input_data: {
-            totalVideos: decisions.length,
+            planId: lockedPlan.id,
+            totalVideos: lockedPlan.variations.length,
             completedVideos: 0,
             currentStage: 'queued',
-            aiStrategy: optimizationStrategy,
-            brainDecisions: decisions.map(d => ({
-              framework: d.framework,
-              engineTier: d.engineTier,
-              duration: d.targetDuration,
-              cost: d.estimatedCost
-            }))
+            vpsFirst: lockedPlan.executionStrategy.vpsFirst,
+            strategy: lockedPlan.executionStrategy.description,
           }
         });
 
@@ -326,24 +364,24 @@ const CreativeReplicator = () => {
       setCurrentJobId(jobId);
       const newGeneratedVideos: GeneratedVideo[] = [];
 
-      // EXECUTE LOOP - Using AI Brain decisions
-      for (let i = 0; i < decisions.length; i++) {
-        const decision = decisions[i];
+      // EXECUTE LOOP - Using locked plan variations
+      for (let i = 0; i < lockedPlan.variations.length; i++) {
+        const variation = lockedPlan.variations[i];
         const variationId = i + 1;
 
-        // Log decision for this variation
+        // Log variation execution
         console.log(`📹 Variation ${variationId}:`, {
-          framework: decision.framework,
-          hook: decision.hookType,
-          engine: decision.selectedProvider,
-          duration: decision.targetDuration,
-          cost: decision.estimatedCost
+          framework: variation.framework,
+          hook: variation.hookType,
+          engine: variation.engineProvider,
+          duration: variation.targetDuration,
+          vps: variation.useVPS,
         });
 
-        // Get ratio from config (platform-based)
-        const ratio = variationConfig.ratios[0] || "9:16";
+        // Get ratio from plan
+        const ratio = lockedPlan.globalSettings.aspectRatio;
 
-        // CONSTRUCT SCENE PLAN with AI Brain duration
+        // CONSTRUCT SCENE PLAN with locked duration
         const plan: ScenePlan = {
           scenes: currentAd.analysis?.scenes?.map((s: any) => ({
             type: s.type.toUpperCase() as any,
@@ -351,43 +389,42 @@ const CreativeReplicator = () => {
             end: s.endTime,
             description: s.description
           })) || [],
-          totalDuration: decision.targetDuration,
+          totalDuration: variation.targetDuration,
           resolution: "1080p",
           requiredCapabilities: ["trim", "merge", "text_overlay", "resize"] as any
         };
 
-        // ROUTE TO ENGINE - VPS-First (Cloudinary removed per architectural contract)
-        const autoRenderingMode: RenderingMode = 'server_only';
+        // VPS-First routing (Architectural Contract #3)
+        const renderingMode: RenderingMode = 'server_only';
 
         const routingReq: RoutingRequest = {
           plan,
-          userTier: decision.engineTier as any,
-          preferLocal: backendStatus.vpsServer.available,
-          renderingMode: autoRenderingMode
+          userTier: 'free', // Always try free tier first with VPS
+          preferLocal: variation.useVPS,
+          renderingMode,
         };
 
         const engineSpec = AdvancedEngineRouter.selectEngine(routingReq);
         const engine = AdvancedEngineRouter.getEngineInstance(engineSpec.id);
 
-        // Update Debug Info with AI Brain reasoning
+        // Update Debug Info
         setDebugInfo({
-          engine: decision.selectedProvider,
-          engineTier: decision.engineTier,
-          framework: decision.framework,
-          hookType: decision.hookType,
-          targetDuration: decision.targetDuration,
-          estimatedCost: decision.estimatedCost,
-          useFFMPEG: decision.useFFMPEGOnly,
-          executionPath: `AIBrain -> ${decision.engineTier} -> ${decision.selectedProvider}`,
+          engine: variation.engineProvider,
+          engineId: variation.engineId,
+          framework: variation.framework,
+          hookType: variation.hookType,
+          targetDuration: variation.targetDuration,
+          estimatedCost: variation.estimatedCost,
+          useVPS: variation.useVPS,
+          executionPath: `Plan[${lockedPlan.id}] -> ${variation.engineId} -> ${variation.engineProvider}`,
           status: 'pending',
           logs: [
-            `🧠 AI Brain Decision for Variation ${variationId}:`,
-            `  Framework: ${decision.framework} - ${decision.reasoning.frameworkReason}`,
-            `  Engine: ${decision.selectedProvider} - ${decision.reasoning.engineReason}`,
-            `  Duration: ${decision.targetDuration}s - ${decision.reasoning.durationReason}`,
-            `  Pacing: ${decision.pacing}`,
-            `  Transitions: ${decision.transitions.join(', ')}`,
-            `  Cost: $${decision.estimatedCost.toFixed(3)}`
+            `🔒 Locked Plan Execution for Variation ${variationId}:`,
+            `  Framework: ${variation.framework} - ${variation.reasoning.framework}`,
+            `  Engine: ${variation.engineProvider} - ${variation.reasoning.engine}`,
+            `  Duration: ${variation.targetDuration}s (${DURATION_MIN}-${DURATION_MAX}s enforced)`,
+            `  VPS: ${variation.useVPS ? 'Yes' : 'No'}`,
+            `  Cost: $${variation.estimatedCost.toFixed(3)}`,
           ],
           payload: routingReq
         });
@@ -395,33 +432,31 @@ const CreativeReplicator = () => {
         // Initialize engine
         await engine.initialize();
 
-        // Create DB Record with AI Brain metadata
+        // Create DB Record with plan metadata
         const { data: insertedVideo, error: insertError } = await supabase
           .from('video_variations')
           .insert({
-            user_id: userId,
             variation_number: variationId,
             variation_config: {
-              hookStyle: decision.hookType,
-              framework: decision.framework,
-              pacing: decision.pacing,
-              transitions: decision.transitions,
+              planId: lockedPlan.id,
+              hookStyle: variation.hookType,
+              framework: variation.framework,
+              pacing: variation.pacing,
+              transitions: variation.transitions,
               ratio,
-              engine: decision.selectedProvider,
-              engineTier: decision.engineTier,
-              targetDuration: decision.targetDuration,
-              useFFMPEG: decision.useFFMPEGOnly,
-              aiReasoning: decision.reasoning
+              engine: variation.engineProvider,
+              engineId: variation.engineId,
+              targetDuration: variation.targetDuration,
+              useVPS: variation.useVPS,
+              reasoning: variation.reasoning,
             },
             status: "processing",
-            cost_usd: decision.estimatedCost,
+            cost_usd: variation.estimatedCost,
             metadata: { 
               job_id: jobId,
-              ai_brain_decision: {
-                framework: decision.framework,
-                videoType: decision.videoType,
-                engineTier: decision.engineTier
-              }
+              plan_id: lockedPlan.id,
+              user_id: userId,
+              audience: lockedPlan.audience,
             }
           })
           .select()
@@ -432,8 +467,8 @@ const CreativeReplicator = () => {
           continue;
         }
 
-        // Build Task with AI Brain parameters
-        const task: EngineTask = {
+        // Build Task
+        const task = {
           id: insertedVideo.id,
           videoUrl: currentAd.url,
           outputRatio: ratio,
@@ -445,23 +480,23 @@ const CreativeReplicator = () => {
               description: s.description
             })) || [
               { type: "hook", start: 0, end: 3 },
-              { type: "body", start: 3, end: decision.targetDuration }
+              { type: "body", start: 3, end: variation.targetDuration }
             ],
             variants: 1,
-            market: variationConfig.adIntelligence.market,
-            language: variationConfig.adIntelligence.language,
+            market: lockedPlan.audience.market,
+            language: lockedPlan.audience.language,
             strategy: {
-              framework: decision.framework,
-              hookType: decision.hookType,
-              pacing: decision.pacing,
-              transitions: decision.transitions,
-              targetDuration: decision.targetDuration
+              framework: variation.framework,
+              hookType: variation.hookType,
+              pacing: variation.pacing,
+              transitions: variation.transitions,
+              targetDuration: variation.targetDuration
             }
           }
         };
 
         // Process with selected engine
-        toast.message(`Generating variation ${variationId} (${decision.framework}, ${decision.hookType})...`);
+        toast.message(`Generating variation ${variationId} (${variation.framework}, ${variation.hookType})...`);
         const result = await engine.process(task);
 
         setDebugInfo((prev: any) => ({
@@ -488,15 +523,15 @@ const CreativeReplicator = () => {
             publicUrl = urlData.publicUrl;
           }
 
-          // Update DB Record with actual cost
+          // Update DB Record
           await supabase
             .from('video_variations')
             .update({
               status: 'completed',
               video_url: publicUrl,
               thumbnail_url: publicUrl,
-              duration_sec: decision.targetDuration,
-              cost_usd: decision.estimatedCost
+              duration_sec: variation.targetDuration,
+              cost_usd: variation.estimatedCost
             })
             .eq('id', insertedVideo.id);
 
@@ -504,19 +539,19 @@ const CreativeReplicator = () => {
             id: insertedVideo.id,
             url: publicUrl,
             thumbnail: publicUrl,
-            hookStyle: decision.hookType,
-            pacing: decision.pacing,
-            engine: decision.selectedProvider,
+            hookStyle: variation.hookType,
+            pacing: variation.pacing,
+            engine: variation.engineProvider,
             ratio,
-            duration: decision.targetDuration,
+            duration: variation.targetDuration,
             status: "completed"
           });
 
           setGeneratedVideos(prev => [...prev, ...newGeneratedVideos]);
-          setGenerationProgress(((i + 1) / decisions.length) * 100);
+          setGenerationProgress(((i + 1) / lockedPlan.variations.length) * 100);
 
         } else if (result.success && result.outputType === 'plan') {
-          toast.info(`Variation ${variationId}: Plan compiled (${decision.framework})`);
+          toast.info(`Variation ${variationId}: Plan compiled (${variation.framework})`);
           await supabase
             .from('video_variations')
             .update({
@@ -537,7 +572,7 @@ const CreativeReplicator = () => {
 
       setIsGenerating(false);
       setActiveStep("results");
-      toast.success(`Generation Complete! Total cost: $${costEstimate.optimized.toFixed(2)}`);
+      toast.success(`Generation Complete! Total cost: $${lockedPlan.costEstimate.optimized.toFixed(2)}`);
 
     } catch (err: any) {
       console.error('Generation error:', err);
@@ -546,25 +581,12 @@ const CreativeReplicator = () => {
     }
   };
 
-  // Legacy handler (fallback)
-  const handleStartGeneration = async () => {
-    const brain = new AICreativeBrain({
-      numberOfVideos: variationConfig.count,
-      language: variationConfig.adIntelligence?.language || 'ar',
-      market: variationConfig.adIntelligence?.market || 'saudi',
-      platform: variationConfig.adIntelligence?.platform || 'tiktok',
-      sourceVideoDuration: uploadedAds[0]?.duration || 30,
-      availableApiKeys: ['fal_ai', 'runway'],
-    });
-    const output = brain.generateDecisions();
-    await handleStartGenerationWithBrain(output);
-  };
-
   const steps = [
-    { id: "upload", label: "Upload Ads", icon: Upload, count: uploadedAds.length },
-    { id: "settings", label: "Configure", icon: Settings2 },
-    { id: "generate", label: "Generate", icon: Play },
-    { id: "results", label: "Results", icon: FolderOpen, count: generatedVideos.length },
+    { id: "upload" as const, label: "Upload Ads", icon: Upload, count: uploadedAds.length },
+    { id: "settings" as const, label: "Configure", icon: Settings2 },
+    { id: "plan" as const, label: "Plan", icon: FileText, locked: !creativePlan },
+    { id: "generate" as const, label: "Generate", icon: Play, locked: !creativePlan?.status || creativePlan.status !== 'locked' },
+    { id: "results" as const, label: "Results", icon: FolderOpen, count: generatedVideos.length },
   ];
 
   // Get backend status display
@@ -583,8 +605,23 @@ const CreativeReplicator = () => {
 
   const backend = getBackendStatus();
 
+  // Generate button disabled conditions
+  const generateDisabled = !creativePlan || creativePlan.status !== 'validated' || isGenerating;
+
   return (
     <div className="p-6 space-y-6 animate-fade-in">
+      {/* Audience Warning Banner */}
+      {!audienceLoading && !audienceConfigured && (
+        <Alert variant="destructive" className="border-destructive/50">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Default Audience Not Configured</AlertTitle>
+          <AlertDescription>
+            Go to <strong>Settings → Preferences</strong> to set your default language and country.
+            Generation is blocked until audience is configured.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
@@ -600,6 +637,26 @@ const CreativeReplicator = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Audience Badge */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${
+                  audienceConfigured 
+                    ? 'bg-muted/50 border-border' 
+                    : 'bg-destructive/10 border-destructive/50'
+                }`}>
+                  <span className="text-xs font-medium">
+                    {audience.language.toUpperCase()} / {audience.country}
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>Audience from Settings → Preferences</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
           {/* Backend Status Badge */}
           <TooltipProvider>
             <Tooltip>
@@ -609,13 +666,13 @@ const CreativeReplicator = () => {
                     <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                   ) : (
                     <backend.icon className={`w-4 h-4 ${
-                      backend.status === 'success' ? 'text-success' : 
-                      backend.status === 'info' ? 'text-primary' : 'text-warning'
+                      backend.status === 'success' ? 'text-green-500' : 
+                      backend.status === 'info' ? 'text-primary' : 'text-yellow-500'
                     }`} />
                   )}
                   <span className={`text-xs font-medium ${
-                    backend.status === 'success' ? 'text-success' : 
-                    backend.status === 'info' ? 'text-primary' : 'text-warning'
+                    backend.status === 'success' ? 'text-green-500' : 
+                    backend.status === 'info' ? 'text-primary' : 'text-yellow-500'
                   }`}>
                     {backend.label}
                   </span>
@@ -626,28 +683,18 @@ const CreativeReplicator = () => {
                   )}
                 </div>
               </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-xs bg-popover border-border">
+              <TooltipContent side="bottom" className="max-w-xs">
                 <div className="space-y-1.5 text-xs">
-                  <p className="font-medium">Auto-detected Render Backends</p>
+                  <p className="font-medium">VPS-First Execution Policy</p>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className={backendStatus.vpsServer.available ? 'text-success' : 'text-muted-foreground'}>
-                        VPS Server: {backendStatus.vpsServer.available ? '✓ Online' : '✗ Offline'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={backendStatus.edgeFunctions.available ? 'text-success' : 'text-muted-foreground'}>
-                        Edge Functions: {backendStatus.edgeFunctions.available ? '✓ Ready' : '✗ Unavailable'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={backendStatus.cloudinaryApi.available ? 'text-success' : 'text-muted-foreground'}>
-                        Cloudinary: {backendStatus.cloudinaryApi.configured ? '✓ Configured' : '✗ Not configured'}
+                      <span className={backendStatus.vpsServer.available ? 'text-green-500' : 'text-muted-foreground'}>
+                        VPS Server: {backendStatus.vpsServer.available ? '✓ Online (FFmpeg Active)' : '✗ Offline'}
                       </span>
                     </div>
                   </div>
                   <p className="text-muted-foreground pt-1">
-                    Using: <span className="font-medium capitalize">{backendStatus.recommended}</span>
+                    Mode: <span className="font-medium">{backendStatus.vpsServer.available ? 'VPS-First' : 'Cloud Fallback'}</span>
                   </p>
                 </div>
               </TooltipContent>
@@ -655,12 +702,15 @@ const CreativeReplicator = () => {
           </TooltipProvider>
 
           <Button
-            onClick={handleStartGeneration}
-            disabled={isGenerating || uploadedAds.length === 0}
+            onClick={handleLockAndGenerate}
+            disabled={generateDisabled || !audienceConfigured}
             className="gap-2"
           >
-            <Zap className="w-4 h-4" />
-            Generate Variations
+            {creativePlan?.status === 'locked' ? (
+              <><Lock className="w-4 h-4" /> Locked</>
+            ) : (
+              <><Zap className="w-4 h-4" /> Generate Variations</>
+            )}
           </Button>
         </div>
       </div>
@@ -670,11 +720,18 @@ const CreativeReplicator = () => {
         {steps.map((step) => (
           <button
             key={step.id}
-            onClick={() => setActiveStep(step.id)}
+            onClick={() => {
+              if (step.id === 'plan' && !creativePlan) return;
+              if (step.id === 'generate' && (!creativePlan || creativePlan.status !== 'locked')) return;
+              setActiveStep(step.id);
+            }}
+            disabled={step.locked}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-medium ${
               activeStep === step.id
                 ? "bg-primary text-primary-foreground"
-                : "bg-muted hover:bg-accent text-muted-foreground hover:text-foreground"
+                : step.locked
+                  ? "bg-muted/50 text-muted-foreground cursor-not-allowed"
+                  : "bg-muted hover:bg-accent text-muted-foreground hover:text-foreground"
             }`}
           >
             <step.icon className="w-4 h-4" />
@@ -684,6 +741,7 @@ const CreativeReplicator = () => {
                 {step.count}
               </Badge>
             )}
+            {step.locked && <Lock className="w-3 h-3 ml-1" />}
           </button>
         ))}
       </div>
@@ -708,15 +766,34 @@ const CreativeReplicator = () => {
               sourceVideoDuration={uploadedAds[0]?.duration || 30}
               availableApiKeys={availableApiKeys}
               onBack={() => setActiveStep("upload")}
-              onGenerate={(brainOutput: BrainOutput) => {
-                console.log("AI Brain decisions:", brainOutput);
-                handleStartGenerationWithBrain(brainOutput);
-              }}
+              onGenerate={() => handleGeneratePlan()}
+            />
+          )}
+
+          {activeStep === "plan" && (
+            <PlanPreviewPanel
+              plan={creativePlan}
+              isGenerating={isGenerating}
+              validationErrors={planValidationErrors}
+              validationWarnings={planValidationWarnings}
+              onBack={() => setActiveStep("settings")}
+              onLockAndGenerate={handleLockAndGenerate}
             />
           )}
 
           {activeStep === "generate" && (
             <div className="space-y-6">
+              {/* Plan Lock Status */}
+              {creativePlan && (
+                <Alert className="border-green-500/50 bg-green-500/10">
+                  <Lock className="h-4 w-4 text-green-500" />
+                  <AlertTitle className="text-green-500">Plan Locked</AlertTitle>
+                  <AlertDescription className="text-green-500/80">
+                    Executing {creativePlan.variations.length} variations using {creativePlan.executionStrategy.description}
+                  </AlertDescription>
+                </Alert>
+              )}
+              
               {/* Real-time pipeline progress */}
               <PipelineProgressPanel
                 jobId={currentJobId}
@@ -755,6 +832,7 @@ const CreativeReplicator = () => {
               setVideos={setGeneratedVideos}
               jobId={currentJobId || undefined}
               onRegenerate={() => {
+                setCreativePlan(null);
                 setActiveStep("settings");
               }}
             />
