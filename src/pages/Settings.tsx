@@ -24,6 +24,7 @@ import { SystemIntelligencePanel } from "@/components/SystemIntelligencePanel";
 import { SectionCard } from "@/components/ui/section-card";
 import { LoadingState, EmptyState } from "@/components/ui/page-components";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { CountrySelector } from "@/components/audience/CountrySelector";
 
 
 interface PromptTemplate {
@@ -1744,49 +1745,63 @@ export default function Settings() {
               <Separator className="bg-border" />
 
               {/* Default Audience Settings */}
-              <div className="space-y-3">
-                <Label className="text-foreground text-lg font-semibold">Default Audience</Label>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Globe className="w-5 h-5 text-primary" />
+                  <Label className="text-foreground text-lg font-semibold">Default Audience</Label>
+                </div>
                 <p className="text-sm text-muted-foreground">
-                  Set default language and market for content generation
+                  These settings apply automatically to all tools unless overridden.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-foreground">Default Language</Label>
-                  <Select
-                    value={settings?.default_language || "ar"}
-                    onValueChange={(v) => setSettings(s => s ? { ...s, default_language: v } : null)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ar">Arabic</SelectItem>
-                      <SelectItem value="en">English</SelectItem>
-                      <SelectItem value="es">Spanish</SelectItem>
-                      <SelectItem value="fr">French</SelectItem>
-                      <SelectItem value="de">German</SelectItem>
-                      <SelectItem value="pt">Portuguese</SelectItem>
-                    </SelectContent>
-                  </Select>
+              <div className="p-4 bg-muted/30 rounded-lg border border-border space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-foreground flex items-center gap-2">
+                      <span>Default Language</span>
+                    </Label>
+                    <Select
+                      value={settings?.default_language || "en"}
+                      onValueChange={(v) => setSettings(s => s ? { ...s, default_language: v } : null)}
+                    >
+                      <SelectTrigger className="w-full bg-background">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background border-border z-50 max-h-[300px]">
+                        <SelectItem value="ar">🇸🇦 Arabic (العربية)</SelectItem>
+                        <SelectItem value="en">🇺🇸 English</SelectItem>
+                        <SelectItem value="es">🇪🇸 Spanish (Español)</SelectItem>
+                        <SelectItem value="fr">🇫🇷 French (Français)</SelectItem>
+                        <SelectItem value="de">🇩🇪 German (Deutsch)</SelectItem>
+                        <SelectItem value="pt">🇧🇷 Portuguese (Português)</SelectItem>
+                        <SelectItem value="zh">🇨🇳 Chinese (中文)</SelectItem>
+                        <SelectItem value="ja">🇯🇵 Japanese (日本語)</SelectItem>
+                        <SelectItem value="ko">🇰🇷 Korean (한국어)</SelectItem>
+                        <SelectItem value="hi">🇮🇳 Hindi (हिन्दी)</SelectItem>
+                        <SelectItem value="ru">🇷🇺 Russian (Русский)</SelectItem>
+                        <SelectItem value="it">🇮🇹 Italian (Italiano)</SelectItem>
+                        <SelectItem value="nl">🇳🇱 Dutch (Nederlands)</SelectItem>
+                        <SelectItem value="tr">🇹🇷 Turkish (Türkçe)</SelectItem>
+                        <SelectItem value="id">🇮🇩 Indonesian</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-foreground flex items-center gap-2">
+                      <span>Default Country</span>
+                    </Label>
+                    <CountrySelector
+                      value={(settings as any)?.default_country || "US"}
+                      onChange={(v) => setSettings(s => s ? { ...s, default_country: v } as any : null)}
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="text-foreground">Default Market</Label>
-                  <Select
-                    value={(settings as any)?.default_market || "GCC"}
-                    onValueChange={(v) => setSettings(s => s ? { ...s, default_market: v } as any : null)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="GCC">GCC</SelectItem>
-                      <SelectItem value="EUROPE">Europe</SelectItem>
-                      <SelectItem value="LATAM">LATAM</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="text-xs text-muted-foreground flex items-center gap-2 pt-2 border-t border-border/50">
+                  <Globe className="w-3 h-3" />
+                  <span>Your default audience settings will be used across Studio, Creative Replicator, AI Tools, Scene Builder, and all future features.</span>
                 </div>
               </div>
 
