@@ -29,6 +29,7 @@ interface AICreativeConfigPanelProps {
   config: VariationConfig;
   setConfig: React.Dispatch<React.SetStateAction<VariationConfig>>;
   sourceVideoDuration: number;
+  availableApiKeys: string[]; // Fetched from secure_api_keys
   onBack: () => void;
   onGenerate: (brainOutput: BrainOutput) => void;
 }
@@ -64,17 +65,12 @@ export const AICreativeConfigPanel = ({
   config,
   setConfig,
   sourceVideoDuration,
+  availableApiKeys,
   onBack,
   onGenerate,
 }: AICreativeConfigPanelProps) => {
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [brainOutput, setBrainOutput] = useState<BrainOutput | null>(null);
-
-  // Get available API keys (in production, this would come from settings)
-  const availableApiKeys = useMemo(() => {
-    // Simulate checking configured keys - in production, fetch from user settings
-    return ['fal_ai', 'runway', 'openai']; // Example
-  }, []);
 
   // Quick cost estimation for display
   const costEstimate = useMemo(() => {
