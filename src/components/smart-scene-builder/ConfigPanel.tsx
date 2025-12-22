@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { 
@@ -18,6 +19,8 @@ import {
   Brain,
   Settings2,
   Info,
+  Film,
+  Timer,
 } from 'lucide-react';
 import { 
   VideoConfig, 
@@ -46,6 +49,8 @@ const RESOLUTIONS: { value: Resolution; label: string }[] = [
 
 const DURATIONS: SceneDuration[] = [3, 5, 7, 10];
 
+const VIDEO_COUNTS = [1, 2, 3, 5, 10];
+
 const BUDGETS: { value: BudgetPreference; label: string; icon: React.ElementType; description: string }[] = [
   { value: 'auto', label: 'AI Chooses', icon: Brain, description: 'Optimal per scene' },
   { value: 'free', label: 'Free', icon: Sparkles, description: 'Use only free engines' },
@@ -63,7 +68,60 @@ export function ConfigPanel({ config, onConfigChange }: ConfigPanelProps) {
         <h4 className="font-semibold text-sm">Output Constraints</h4>
       </div>
       
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+        {/* Video Count */}
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">
+            Number of Videos
+          </Label>
+          <Select
+            value={(config.videoCount || 3).toString()}
+            onValueChange={(v) => onConfigChange({ videoCount: parseInt(v) })}
+          >
+            <SelectTrigger>
+              <Film className="w-4 h-4 mr-2" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {VIDEO_COUNTS.map(c => (
+                <SelectItem key={c} value={c.toString()}>
+                  {c} video{c > 1 ? 's' : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        
+        {/* Video Duration Range */}
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">
+            Video Length
+            <span className="text-muted-foreground/60 ml-1">(seconds)</span>
+          </Label>
+          <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-1">
+              <Input 
+                type="number" 
+                min={15} 
+                max={60}
+                value={config.minVideoDuration || 20}
+                onChange={(e) => onConfigChange({ minVideoDuration: parseInt(e.target.value) || 20 })}
+                className="h-9 w-14 text-xs text-center"
+              />
+              <span className="text-xs text-muted-foreground">-</span>
+              <Input 
+                type="number" 
+                min={15} 
+                max={60}
+                value={config.maxVideoDuration || 35}
+                onChange={(e) => onConfigChange({ maxVideoDuration: parseInt(e.target.value) || 35 })}
+                className="h-9 w-14 text-xs text-center"
+              />
+              <Timer className="w-4 h-4 text-muted-foreground" />
+            </div>
+          </div>
+        </div>
+        
         {/* Aspect Ratio */}
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground">Aspect Ratio</Label>
@@ -108,11 +166,10 @@ export function ConfigPanel({ config, onConfigChange }: ConfigPanelProps) {
           </Select>
         </div>
         
-        {/* Default Duration */}
+        {/* Default Scene Duration */}
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground">
             Scene Duration
-            <span className="text-muted-foreground/60 ml-1">(recommended: 5s)</span>
           </Label>
           <Select
             value={config.defaultSceneDuration.toString()}
@@ -125,7 +182,7 @@ export function ConfigPanel({ config, onConfigChange }: ConfigPanelProps) {
             <SelectContent>
               {DURATIONS.map(d => (
                 <SelectItem key={d} value={d.toString()}>
-                  {d} seconds {d === 5 && '(recommended)'}
+                  {d}s {d === 5 && '(rec.)'}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -141,7 +198,7 @@ export function ConfigPanel({ config, onConfigChange }: ConfigPanelProps) {
               onCheckedChange={(v) => onConfigChange({ enableTextOverlays: v })}
             />
             <span className="text-sm">
-              {config.enableTextOverlays ? 'Enabled' : 'Disabled'}
+              {config.enableTextOverlays ? 'On' : 'Off'}
             </span>
           </div>
         </div>
