@@ -418,6 +418,51 @@ export type Database = {
         }
         Relationships: []
       }
+      cleanup_history: {
+        Row: {
+          bytes_freed: number | null
+          cleanup_type: string
+          completed_at: string | null
+          error_message: string | null
+          files_deleted: number | null
+          id: string
+          jobs_updated: number | null
+          logs_deleted: number | null
+          started_at: string
+          status: string
+          target_id: string | null
+          user_id: string
+        }
+        Insert: {
+          bytes_freed?: number | null
+          cleanup_type: string
+          completed_at?: string | null
+          error_message?: string | null
+          files_deleted?: number | null
+          id?: string
+          jobs_updated?: number | null
+          logs_deleted?: number | null
+          started_at?: string
+          status?: string
+          target_id?: string | null
+          user_id: string
+        }
+        Update: {
+          bytes_freed?: number | null
+          cleanup_type?: string
+          completed_at?: string | null
+          error_message?: string | null
+          files_deleted?: number | null
+          id?: string
+          jobs_updated?: number | null
+          logs_deleted?: number | null
+          started_at?: string
+          status?: string
+          target_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       cost_transactions: {
         Row: {
           cost_usd: number
@@ -508,6 +553,81 @@ export type Database = {
             columns: ["engine_id"]
             isOneToOne: false
             referencedRelation: "ai_engines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      file_assets: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          expires_at: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: string
+          file_url: string | null
+          id: string
+          job_id: string | null
+          last_accessed_at: string
+          mime_type: string | null
+          project_id: string | null
+          retention_hours: number | null
+          status: string
+          tool: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          expires_at?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type: string
+          file_url?: string | null
+          id?: string
+          job_id?: string | null
+          last_accessed_at?: string
+          mime_type?: string | null
+          project_id?: string | null
+          retention_hours?: number | null
+          status?: string
+          tool: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          expires_at?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string
+          file_url?: string | null
+          id?: string
+          job_id?: string | null
+          last_accessed_at?: string
+          mime_type?: string | null
+          project_id?: string | null
+          retention_hours?: number | null
+          status?: string
+          tool?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "file_assets_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "pipeline_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "file_assets_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -621,6 +741,44 @@ export type Database = {
             columns: ["scene_id"]
             isOneToOne: false
             referencedRelation: "scenes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_state_history: {
+        Row: {
+          created_at: string
+          from_status: string | null
+          id: string
+          job_id: string
+          reason: string | null
+          to_status: string
+          triggered_by: string
+        }
+        Insert: {
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          job_id: string
+          reason?: string | null
+          to_status: string
+          triggered_by: string
+        }
+        Update: {
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          job_id?: string
+          reason?: string | null
+          to_status?: string
+          triggered_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_state_history_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "pipeline_jobs"
             referencedColumns: ["id"]
           },
         ]
@@ -1361,6 +1519,66 @@ export type Database = {
             columns: ["scene_id"]
             isOneToOne: false
             referencedRelation: "scenes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      system_logs: {
+        Row: {
+          created_at: string
+          details: Json | null
+          expires_at: string | null
+          id: string
+          job_id: string | null
+          message: string
+          project_id: string | null
+          retention_days: number
+          severity: string
+          stage: string | null
+          tool: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          details?: Json | null
+          expires_at?: string | null
+          id?: string
+          job_id?: string | null
+          message: string
+          project_id?: string | null
+          retention_days?: number
+          severity: string
+          stage?: string | null
+          tool: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          details?: Json | null
+          expires_at?: string | null
+          id?: string
+          job_id?: string | null
+          message?: string
+          project_id?: string | null
+          retention_days?: number
+          severity?: string
+          stage?: string | null
+          tool?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_logs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "pipeline_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_logs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
