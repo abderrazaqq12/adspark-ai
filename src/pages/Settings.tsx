@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
-import { Save, Plus, Trash2, FileText, Loader2, Pencil, CheckCircle, XCircle, ExternalLink, Key, Eye, EyeOff, Bot, RefreshCw, ChevronDown, Power, Database, ShieldCheck, Settings as SettingsIcon, Globe, Sliders } from "lucide-react";
+import { Save, Plus, Trash2, FileText, Loader2, Pencil, CheckCircle, XCircle, ExternalLink, Key, Eye, EyeOff, Bot, RefreshCw, ChevronDown, Power, Database, ShieldCheck, Settings as SettingsIcon, Globe, Sliders, Server } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -25,6 +25,7 @@ import { SectionCard } from "@/components/ui/section-card";
 import { LoadingState, EmptyState } from "@/components/ui/page-components";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CountrySelector } from "@/components/audience/CountrySelector";
+import { ConnectionStatusPanel } from "@/components/settings/ConnectionStatusPanel";
 
 
 interface PromptTemplate {
@@ -765,6 +766,10 @@ export default function Settings() {
             <Sliders className="w-4 h-4" />
             <span className="hidden sm:inline">System</span>
           </TabsTrigger>
+          <TabsTrigger value="connections" className="gap-2">
+            <Server className="w-4 h-4" />
+            <span className="hidden sm:inline">Connections</span>
+          </TabsTrigger>
           <TabsTrigger value="api-keys" className="gap-2">
             <Key className="w-4 h-4" />
             <span className="hidden sm:inline">API Keys</span>
@@ -787,6 +792,17 @@ export default function Settings() {
         <TabsContent value="deployment" className="space-y-6">
           <SystemIntelligencePanel />
           <DeploymentSettings />
+        </TabsContent>
+
+        {/* Connections Tab - Backend Status */}
+        <TabsContent value="connections" className="space-y-6">
+          <SectionCard
+            title="Backend Connections"
+            description="Connection status from VPS backend. OAuth and API keys are managed server-side."
+            icon={Server}
+          >
+            <ConnectionStatusPanel />
+          </SectionCard>
         </TabsContent>
 
         {/* API Keys Tab */}
