@@ -48,7 +48,7 @@ import BatchGeneration from "@/components/BatchGeneration";
 import VoicePreview from "@/components/VoicePreview";
 import { VideoUploadPreview, generateVideoId } from "@/components/VideoUploadPreview";
 import BatchAssembly from "@/components/BatchAssembly";
-import CostCalculatorPreview from "@/components/CostCalculatorPreview";
+
 import { VideoVarietyEngine } from "@/components/VideoVarietyEngine";
 import VideoTimelineEditor from "@/components/VideoTimelineEditor";
 import { PipelineStatusIndicator } from "@/components/PipelineStatusIndicator";
@@ -1097,13 +1097,6 @@ export default function CreateVideo() {
                 </Card>
               )}
 
-              {/* Cost Calculator */}
-              <CostCalculatorPreview
-                scenesCount={unifiedScenes.length || scenes.length || 5}
-                avgDuration={5}
-                videoCount={videosToGenerate}
-                onFreeOnlyChange={setFreeEnginesOnly}
-              />
             </div>
           )}
 
