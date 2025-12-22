@@ -33,6 +33,7 @@ import {
   Layout,
   Trash2
 } from "lucide-react";
+import { UnifiedStepSidebar, STUDIO_STEPS } from "@/components/unified";
 import { StudioProductInput } from "@/components/studio/StudioProductInput";
 import { StudioMarketingEngine } from "@/components/studio/StudioMarketingEngine";
 import { StudioImageGeneration } from "@/components/studio/StudioImageGeneration";
@@ -54,7 +55,6 @@ import VideoTimelineEditor from "@/components/VideoTimelineEditor";
 import { PipelineStatusIndicator } from "@/components/PipelineStatusIndicator";
 import VideoGenerationStage from "@/components/VideoGenerationStage";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { RealTimeCostTracker } from "@/components/RealTimeCostTracker";
 import { AIBrainRecommendations } from "@/components/AIBrainRecommendations";
 import { PipelineJobsTracker } from "@/components/PipelineJobsTracker";
@@ -270,8 +270,6 @@ export default function CreateVideo() {
   // Timeline editor state
   const [showTimelineEditor, setShowTimelineEditor] = useState(false);
 
-  // Confirmation dialog state
-  const [showClearPipelineDialog, setShowClearPipelineDialog] = useState(false);
 
   // Backend mode state for webhook indicators
   const [webhookConfig, setWebhookConfig] = useState<Record<string, { enabled: boolean; webhook_url: string }>>({});
@@ -382,7 +380,7 @@ export default function CreateVideo() {
       }
     }
 
-    setShowClearPipelineDialog(false);
+    
     toast.success("Pipeline reset - all data cleared");
   };
 
@@ -857,113 +855,26 @@ export default function CreateVideo() {
 
   return (
     <div className="flex min-h-screen animate-in fade-in duration-500">
-      {/* Vertical Pipeline Sidebar */}
-      <div className="w-64 shrink-0 border-r border-border bg-gradient-card p-4">
-        <div className="mb-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">Pipeline</h2>
-              <p className="text-xs text-muted-foreground">Production stages</p>
-            </div>
-            <AlertDialog open={showClearPipelineDialog} onOpenChange={setShowClearPipelineDialog}>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                  title="Clear all pipeline data"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Clear All Pipeline Data?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will reset all stages including product info, scripts, scenes, and videos.
-                    This action only affects the dashboard view, not your database or Google Sheets.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={clearAllPipelineData} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                    Clear All
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
-
-          {/* Progress Indicator */}
-          <div className="mt-3 space-y-1">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Progress</span>
-              <span className="font-medium text-primary">{Math.round((currentStage / (pipelineStages.length - 1)) * 100)}%</span>
-            </div>
-            <div className="h-2 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-primary transition-all duration-500 ease-out"
-                style={{ width: `${(currentStage / (pipelineStages.length - 1)) * 100}%` }}
-              />
-            </div>
-            <p className="text-[10px] text-muted-foreground">
-              {currentStage} of {pipelineStages.length - 1} steps completed
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-col gap-1">
-          {pipelineStages.map((stage, index) => (
-            <div key={stage.id} className="flex flex-col">
-              <div className="flex items-center group">
-                <button
-                  onClick={() => {
-                    setExpandedStage(stage.id);
-                    setCurrentStage(stage.id);
-                  }}
-                  className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left flex-1 cursor-pointer ${expandedStage === stage.id
-                    ? 'bg-primary/20 text-primary'
-                    : currentStage > stage.id || currentStage === stage.id
-                      ? 'bg-primary/10 text-primary hover:bg-primary/20'
-                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-                    }`}
-                >
-                  {currentStage > stage.id ? (
-                    <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
-                  ) : expandedStage === stage.id ? (
-                    <stage.icon className="w-5 h-5 shrink-0" />
-                  ) : (
-                    <Circle className="w-5 h-5 opacity-50 shrink-0" />
-                  )}
-                  <div className="flex flex-col flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-medium">{stage.name}</span>
-                      <div className="w-2 h-2 rounded-full bg-primary" title="AI Operator active" />
-                    </div>
-                    <span className={`text-[10px] ${stage.required ? 'text-destructive/80' : 'text-muted-foreground'}`}>
-                      {stage.required ? '● Required' : '○ Optional'}
-                    </span>
-                  </div>
-                </button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    clearStageData(stage.id);
-                  }}
-                  title={`Clear ${stage.name}`}
-                >
-                  <X className="w-3 h-3" />
-                </Button>
-              </div>
-              {index < pipelineStages.length - 1 && (
-                <div className="ml-6 h-4 border-l-2 border-muted-foreground/20" />
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Unified Step Sidebar - LEFT side, matching Creative AI Editor */}
+      <UnifiedStepSidebar
+        tool="studio"
+        toolName="Studio"
+        toolDescription="Video production pipeline"
+        steps={STUDIO_STEPS}
+        currentStep={expandedStage}
+        completedSteps={Array.from({ length: currentStage }, (_, i) => i)}
+        onStepClick={(step) => {
+          setExpandedStage(step);
+          if (step <= currentStage) {
+            // Allow going back to completed steps
+          } else if (step === currentStage + 1) {
+            // Allow going to next step only if current is complete
+            setCurrentStage(step);
+          }
+        }}
+        onClearHistory={clearAllPipelineData}
+        projectId={projectId || undefined}
+      />
 
       {/* Main Content */}
       <div className="flex-1 p-8 space-y-8 overflow-auto">
