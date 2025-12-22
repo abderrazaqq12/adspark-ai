@@ -7,6 +7,7 @@
  * 3. VPS-First execution: FFmpeg only when VPS available
  * 4. AI Planning Layer: Plan must be generated/validated before Generate
  * 5. Generate blocked until plan is validated and locked
+ * 6. Unified left-side pipeline layout (matches Creative AI Editor)
  */
 
 import { useState, useEffect, useMemo } from "react";
@@ -16,13 +17,13 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { 
   Zap, Upload, Settings2, Play, FolderOpen, Brain, Server, 
-  Cloud, CheckCircle2, Loader2, Lock, AlertTriangle, FileText 
+  Cloud, Loader2, Lock, AlertTriangle, FileText
 } from "lucide-react";
+import { UnifiedStepSidebar, CREATIVE_REPLICATOR_STEPS } from "@/components/unified/UnifiedStepSidebar";
 import { AdUploader } from "@/components/replicator/AdUploader";
 import { AICreativeConfigPanel } from "@/components/replicator/AICreativeConfigPanel";
 import { PlanPreviewPanel } from "@/components/replicator/PlanPreviewPanel";
 import { type BrainOutput } from "@/lib/replicator/ai-creative-brain";
-import { GenerationProgress } from "@/components/replicator/GenerationProgress";
 import { EnhancedResultsGallery } from "@/components/replicator/EnhancedResultsGallery";
 import { ProcessingTimeline } from "@/components/replicator/ProcessingTimeline";
 import { PipelineProgressPanel } from "@/components/replicator/PipelineProgressPanel";
@@ -125,9 +126,6 @@ export interface GeneratedVideo {
   status: "processing" | "completed" | "failed";
 }
 
-// Steps with Plan Preview added
-type StepId = "upload" | "settings" | "plan" | "generate" | "results";
-
 const CreativeReplicator = () => {
   // Global project context
   const { activeProject, hasActiveProject } = useGlobalProject();
@@ -157,7 +155,10 @@ const CreativeReplicator = () => {
       .map(p => p.provider);
   }, [apiKeyProviders]);
   
-  const [activeStep, setActiveStep] = useState<StepId>("upload");
+  // Step state - using numeric IDs for UnifiedStepSidebar
+  const [currentStep, setCurrentStep] = useState<number>(1);
+  const [completedSteps, setCompletedSteps] = useState<number[]>([]);
+  
   const [projectName, setProjectName] = useState<string>("");
   const [uploadedAds, setUploadedAds] = useState<UploadedAd[]>([]);
   
@@ -259,6 +260,20 @@ const CreativeReplicator = () => {
     };
   }, [generatedVideos.length]);
 
+  // Step navigation helpers
+  const goToStep = (step: number) => {
+    // Validate step transitions
+    if (step === 3 && !creativePlan) return;
+    if (step === 4 && (!creativePlan || creativePlan.status !== 'locked')) return;
+    setCurrentStep(step);
+  };
+
+  const completeStep = (step: number) => {
+    if (!completedSteps.includes(step)) {
+      setCompletedSteps(prev => [...prev, step]);
+    }
+  };
+
   /**
    * Generate Creative Plan (Step 2 -> Step 3)
    */
@@ -294,7 +309,8 @@ const CreativeReplicator = () => {
 
       if (result.plan) {
         toast.success("Creative Plan generated successfully");
-        setActiveStep("plan");
+        completeStep(2);
+        setCurrentStep(3);
       } else {
         toast.error("Plan validation failed");
       }
@@ -327,7 +343,8 @@ const CreativeReplicator = () => {
       setCreativePlan(lockedPlan);
       
       setIsGenerating(true);
-      setActiveStep("generate");
+      completeStep(3);
+      setCurrentStep(4);
       setGenerationProgress(0);
 
       const currentAd = uploadedAds[0];
@@ -586,7 +603,8 @@ const CreativeReplicator = () => {
       }
 
       setIsGenerating(false);
-      setActiveStep("results");
+      completeStep(4);
+      setCurrentStep(5);
       toast.success(`Generation Complete! Total cost: $${lockedPlan.costEstimate.optimized.toFixed(2)}`);
 
     } catch (err: any) {
@@ -596,13 +614,16 @@ const CreativeReplicator = () => {
     }
   };
 
-  const steps = [
-    { id: "upload" as const, label: "Upload Ads", icon: Upload, count: uploadedAds.length },
-    { id: "settings" as const, label: "Configure", icon: Settings2 },
-    { id: "plan" as const, label: "Plan", icon: FileText, locked: !creativePlan },
-    { id: "generate" as const, label: "Generate", icon: Play, locked: !creativePlan?.status || creativePlan.status !== 'locked' },
-    { id: "results" as const, label: "Results", icon: FolderOpen, count: generatedVideos.length },
-  ];
+  // Handle history cleared
+  const handleHistoryCleared = () => {
+    setCreativePlan(null);
+    setCompletedSteps([]);
+    setCurrentStep(1);
+    setGeneratedVideos([]);
+    setCurrentJobId(null);
+    setDebugInfo(null);
+    toast.success("History cleared");
+  };
 
   // Get backend status display
   const getBackendStatus = () => {
@@ -624,255 +645,215 @@ const CreativeReplicator = () => {
   const generateDisabled = !creativePlan || creativePlan.status !== 'validated' || isGenerating || !hasActiveProject;
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
-      {/* Project Context Banner - REQUIRED */}
-      <ProjectContextBanner toolName="Creative Replicator" />
-
-      {/* Audience Warning Banner */}
-      {!audienceLoading && !audienceConfigured && (
-        <Alert variant="destructive" className="border-destructive/50">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Default Audience Not Configured</AlertTitle>
-          <AlertDescription>
-            Go to <strong>Settings → Preferences</strong> to set your default language and country.
-            Generation is blocked until audience is configured.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Brain className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">AI Creative Replicator</h1>
-            <p className="text-sm text-muted-foreground">
-              Upload ads, AI generates 1-100 optimized variations
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* Drive Sync Status */}
-          <DriveSyncIndicator />
-          {/* Audience Badge */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${
-                  audienceConfigured 
-                    ? 'bg-muted/50 border-border' 
-                    : 'bg-destructive/10 border-destructive/50'
-                }`}>
-                  <span className="text-xs font-medium">
-                    {audience.language.toUpperCase()} / {audience.country}
-                  </span>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <p>Audience from Settings → Preferences</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          {/* Backend Status Badge */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 border border-border">
-                  {backendStatus.loading ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                  ) : (
-                    <backend.icon className={`w-4 h-4 ${
-                      backend.status === 'success' ? 'text-green-500' : 
-                      backend.status === 'info' ? 'text-primary' : 'text-yellow-500'
-                    }`} />
-                  )}
-                  <span className={`text-xs font-medium ${
-                    backend.status === 'success' ? 'text-green-500' : 
-                    backend.status === 'info' ? 'text-primary' : 'text-yellow-500'
-                  }`}>
-                    {backend.label}
-                  </span>
-                  {backendStatus.vpsServer.latency && (
-                    <Badge variant="outline" className="text-[10px] h-5">
-                      {backendStatus.vpsServer.latency}ms
-                    </Badge>
-                  )}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-xs">
-                <div className="space-y-1.5 text-xs">
-                  <p className="font-medium">VPS-First Execution Policy</p>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className={backendStatus.vpsServer.available ? 'text-green-500' : 'text-muted-foreground'}>
-                        VPS Server: {backendStatus.vpsServer.available ? '✓ Online (FFmpeg Active)' : '✗ Offline'}
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-muted-foreground pt-1">
-                    Mode: <span className="font-medium">{backendStatus.vpsServer.available ? 'VPS-First' : 'Cloud Fallback'}</span>
-                  </p>
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <Button
-            onClick={handleLockAndGenerate}
-            disabled={generateDisabled || !audienceConfigured}
-            className="gap-2"
-          >
-            {creativePlan?.status === 'locked' ? (
-              <><Lock className="w-4 h-4" /> Locked</>
+    <div className="flex min-h-screen bg-background">
+      {/* Left Sidebar - Unified Step Sidebar */}
+      <UnifiedStepSidebar
+        tool="creative-replicator"
+        toolName="AI Creative Replicator"
+        toolDescription="Generate 1-100 ad variations"
+        steps={CREATIVE_REPLICATOR_STEPS}
+        currentStep={currentStep}
+        completedSteps={completedSteps}
+        onStepClick={goToStep}
+        onClearHistory={handleHistoryCleared}
+        projectId={activeProject?.id}
+      >
+        {/* Backend Status in sidebar */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/50 border border-border text-xs">
+            {backendStatus.loading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
             ) : (
-              <><Zap className="w-4 h-4" /> Generate Variations</>
+              <backend.icon className={`w-3.5 h-3.5 ${
+                backend.status === 'success' ? 'text-green-500' : 
+                backend.status === 'info' ? 'text-primary' : 'text-yellow-500'
+              }`} />
             )}
-          </Button>
+            <span className={`font-medium ${
+              backend.status === 'success' ? 'text-green-500' : 
+              backend.status === 'info' ? 'text-primary' : 'text-yellow-500'
+            }`}>
+              {backend.label}
+            </span>
+          </div>
+          
+          {/* Audience Badge */}
+          <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg border text-xs ${
+            audienceConfigured 
+              ? 'bg-muted/50 border-border' 
+              : 'bg-destructive/10 border-destructive/50'
+          }`}>
+            <span className="font-medium">
+              {audience.language.toUpperCase()} / {audience.country}
+            </span>
+          </div>
         </div>
-      </div>
+      </UnifiedStepSidebar>
 
-      {/* Step Indicators */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {steps.map((step) => (
-          <button
-            key={step.id}
-            onClick={() => {
-              if (step.id === 'plan' && !creativePlan) return;
-              if (step.id === 'generate' && (!creativePlan || creativePlan.status !== 'locked')) return;
-              setActiveStep(step.id);
-            }}
-            disabled={step.locked}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-medium ${
-              activeStep === step.id
-                ? "bg-primary text-primary-foreground"
-                : step.locked
-                  ? "bg-muted/50 text-muted-foreground cursor-not-allowed"
-                  : "bg-muted hover:bg-accent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <step.icon className="w-4 h-4" />
-            <span>{step.label}</span>
-            {step.count !== undefined && step.count > 0 && (
-              <Badge variant={activeStep === step.id ? "secondary" : "outline"} className="ml-1 h-5 text-xs">
-                {step.count}
-              </Badge>
-            )}
-            {step.locked && <Lock className="w-3 h-3 ml-1" />}
-          </button>
-        ))}
-      </div>
+      {/* Main Content Area */}
+      <div className="flex-1 p-6 space-y-6 overflow-auto">
+        {/* Project Context Banner - REQUIRED */}
+        <ProjectContextBanner toolName="Creative Replicator" />
 
-      {/* Content */}
-      <Card className="border-border bg-card">
-        <CardContent className="p-6">
-          {activeStep === "upload" && (
-            <AdUploader
-              uploadedAds={uploadedAds}
-              setUploadedAds={setUploadedAds}
-              projectName={projectName}
-              setProjectName={setProjectName}
-              onContinue={() => setActiveStep("settings")}
-            />
-          )}
+        {/* Audience Warning Banner */}
+        {!audienceLoading && !audienceConfigured && (
+          <Alert variant="destructive" className="border-destructive/50">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Default Audience Not Configured</AlertTitle>
+            <AlertDescription>
+              Go to <strong>Settings → Preferences</strong> to set your default language and country.
+              Generation is blocked until audience is configured.
+            </AlertDescription>
+          </Alert>
+        )}
 
-          {activeStep === "settings" && (
-            <AICreativeConfigPanel
-              config={variationConfig}
-              setConfig={setVariationConfig}
-              sourceVideoDuration={uploadedAds[0]?.duration || 30}
-              availableApiKeys={availableApiKeys}
-              onBack={() => setActiveStep("upload")}
-              onGenerate={() => handleGeneratePlan()}
-            />
-          )}
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Brain className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold text-foreground">AI Creative Replicator</h1>
+              <p className="text-sm text-muted-foreground">
+                Upload ads, AI generates 1-100 optimized variations
+              </p>
+            </div>
+          </div>
 
-          {activeStep === "plan" && (
-            <PlanPreviewPanel
-              plan={creativePlan}
-              isGenerating={isGenerating}
-              validationErrors={planValidationErrors}
-              validationWarnings={planValidationWarnings}
-              onBack={() => setActiveStep("settings")}
-              onLockAndGenerate={handleLockAndGenerate}
-            />
-          )}
+          <div className="flex items-center gap-3">
+            {/* Drive Sync Status */}
+            <DriveSyncIndicator />
 
-          {activeStep === "generate" && (
-            <div className="space-y-6">
-              {/* Plan Lock Status */}
-              {creativePlan && (
-                <Alert className="border-green-500/50 bg-green-500/10">
-                  <Lock className="h-4 w-4 text-green-500" />
-                  <AlertTitle className="text-green-500">Plan Locked</AlertTitle>
-                  <AlertDescription className="text-green-500/80">
-                    Executing {creativePlan.variations.length} variations using {creativePlan.executionStrategy.description}
-                  </AlertDescription>
-                </Alert>
+            <Button
+              onClick={handleLockAndGenerate}
+              disabled={generateDisabled || !audienceConfigured}
+              className="gap-2"
+            >
+              {creativePlan?.status === 'locked' ? (
+                <><Lock className="w-4 h-4" /> Locked</>
+              ) : (
+                <><Zap className="w-4 h-4" /> Generate Variations</>
               )}
-              
-              {/* Real-time pipeline progress */}
-              <PipelineProgressPanel
-                jobId={currentJobId}
-                onComplete={() => {
-                  setIsGenerating(false);
-                  setActiveStep("results");
-                  toast.success("Generation complete!");
-                }}
-                onVideoReady={(videoId, url) => {
-                  setGeneratedVideos(prev => prev.map(v =>
-                    v.id === videoId ? { ...v, url, status: 'completed' as const } : v
-                  ));
-                  // Auto-upload completed video to Google Drive
-                  if (url && isUploadAvailable) {
-                    const videoName = `replicator_${videoId}`;
-                    uploadVideo(url, videoName, {
-                      jobId: currentJobId,
-                      videoId,
-                      source: 'creative-replicator',
-                    });
-                    console.log(`[CreativeReplicator] Auto-uploading video ${videoId} to Google Drive`);
+            </Button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <Card className="border-border bg-card">
+          <CardContent className="p-6">
+            {currentStep === 1 && (
+              <AdUploader
+                uploadedAds={uploadedAds}
+                setUploadedAds={setUploadedAds}
+                projectName={projectName}
+                setProjectName={setProjectName}
+                onContinue={() => {
+                  if (uploadedAds.length > 0) {
+                    completeStep(1);
+                    setCurrentStep(2);
                   }
                 }}
               />
-              {/* Legacy processing timeline for compatibility */}
-              {currentJobId && (
-                <ProcessingTimeline
+            )}
+
+            {currentStep === 2 && (
+              <AICreativeConfigPanel
+                config={variationConfig}
+                setConfig={setVariationConfig}
+                sourceVideoDuration={uploadedAds[0]?.duration || 30}
+                availableApiKeys={availableApiKeys}
+                onBack={() => setCurrentStep(1)}
+                onGenerate={() => handleGeneratePlan()}
+              />
+            )}
+
+            {currentStep === 3 && (
+              <PlanPreviewPanel
+                plan={creativePlan}
+                isGenerating={isGenerating}
+                validationErrors={planValidationErrors}
+                validationWarnings={planValidationWarnings}
+                onBack={() => setCurrentStep(2)}
+                onLockAndGenerate={handleLockAndGenerate}
+              />
+            )}
+
+            {currentStep === 4 && (
+              <div className="space-y-6">
+                {/* Plan Lock Status */}
+                {creativePlan && (
+                  <Alert className="border-green-500/50 bg-green-500/10">
+                    <Lock className="h-4 w-4 text-green-500" />
+                    <AlertTitle className="text-green-500">Plan Locked</AlertTitle>
+                    <AlertDescription className="text-green-500/80">
+                      Executing {creativePlan.variations.length} variations using {creativePlan.executionStrategy.description}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                
+                {/* Real-time pipeline progress */}
+                <PipelineProgressPanel
                   jobId={currentJobId}
-                  totalVideos={variationConfig.count * variationConfig.ratios.length}
-                  onComplete={(urls) => {
+                  onComplete={() => {
                     setIsGenerating(false);
-                    setActiveStep("results");
-                    toast.success(`Generated ${urls.length} videos!`);
+                    completeStep(4);
+                    setCurrentStep(5);
+                    toast.success("Generation complete!");
                   }}
-                  onError={(errors) => {
-                    toast.error(errors[0] || "Generation failed");
+                  onVideoReady={(videoId, url) => {
+                    setGeneratedVideos(prev => prev.map(v =>
+                      v.id === videoId ? { ...v, url, status: 'completed' as const } : v
+                    ));
+                    // Auto-upload completed video to Google Drive
+                    if (url && isUploadAvailable) {
+                      const videoName = `replicator_${videoId}`;
+                      uploadVideo(url, videoName, {
+                        jobId: currentJobId,
+                        videoId,
+                        source: 'creative-replicator',
+                      });
+                      console.log(`[CreativeReplicator] Auto-uploading video ${videoId} to Google Drive`);
+                    }
                   }}
                 />
-              )}
-            </div>
-          )}
+                {/* Legacy processing timeline for compatibility */}
+                {currentJobId && (
+                  <ProcessingTimeline
+                    jobId={currentJobId}
+                    totalVideos={variationConfig.count * variationConfig.ratios.length}
+                    onComplete={(urls) => {
+                      setIsGenerating(false);
+                      completeStep(4);
+                      setCurrentStep(5);
+                      toast.success(`Generated ${urls.length} videos!`);
+                    }}
+                    onError={(errors) => {
+                      toast.error(errors[0] || "Generation failed");
+                    }}
+                  />
+                )}
+              </div>
+            )}
 
-          {activeStep === "results" && (
-            <EnhancedResultsGallery
-              videos={generatedVideos}
-              setVideos={setGeneratedVideos}
-              jobId={currentJobId || undefined}
-              onRegenerate={() => {
-                setCreativePlan(null);
-                setActiveStep("settings");
-              }}
-            />
-          )}
-        </CardContent>
-      </Card>
+            {currentStep === 5 && (
+              <EnhancedResultsGallery
+                videos={generatedVideos}
+                setVideos={setGeneratedVideos}
+                jobId={currentJobId || undefined}
+                onRegenerate={() => {
+                  setCreativePlan(null);
+                  setCurrentStep(2);
+                }}
+              />
+            )}
+          </CardContent>
+        </Card>
 
-      {debugInfo && (
-        <RenderDebugPanel debugInfo={debugInfo} isOpen={true} />
-      )}
+        {debugInfo && (
+          <RenderDebugPanel debugInfo={debugInfo} isOpen={true} />
+        )}
+      </div>
     </div>
   );
 };
