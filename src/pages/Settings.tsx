@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
-import { Save, Plus, Trash2, FileText, Loader2, Pencil, Copy, CheckCircle, XCircle, ExternalLink, Key, Eye, EyeOff, Bot, RefreshCw, ChevronDown, Power, Database, ShieldCheck } from "lucide-react";
+import { Save, Plus, Trash2, FileText, Loader2, Pencil, CheckCircle, XCircle, ExternalLink, Key, Eye, EyeOff, Bot, RefreshCw, ChevronDown, Power, Database, ShieldCheck, Settings as SettingsIcon, Globe, Sliders } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -21,6 +21,9 @@ import StudioPrompts from "@/components/StudioPrompts";
 import DeploymentSettings from "@/components/DeploymentSettings";
 import { useSecureApiKeys } from "@/hooks/useSecureApiKeys";
 import { SystemIntelligencePanel } from "@/components/SystemIntelligencePanel";
+import { SectionCard } from "@/components/ui/section-card";
+import { LoadingState, EmptyState } from "@/components/ui/page-components";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 
 interface PromptTemplate {
@@ -736,46 +739,47 @@ export default function Settings() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-8 flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="p-6 flex items-center justify-center min-h-[50vh]">
+        <LoadingState message="Loading settings..." />
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-8 space-y-8 animate-in fade-in duration-500">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-foreground mb-2">Settings</h1>
-          <p className="text-muted-foreground">
-            Manage API keys, prompt templates, and integrations
-          </p>
-        </div>
-        
-        {/* AI Agent Status Indicator */}
-        <Card className="bg-green-500/10 border-green-500/30 px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <Bot className="w-5 h-5 text-green-500" />
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-green-500">AI Agent Active</p>
-              <p className="text-xs text-muted-foreground">All operations use AI Operator</p>
-            </div>
+    <div className="p-6 space-y-6 animate-fade-in">
+      {/* Status Badge */}
+      <div className="flex items-center justify-end">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-success/10 border border-success/20">
+          <div className="relative">
+            <Bot className="w-4 h-4 text-success" />
+            <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-success rounded-full animate-pulse" />
           </div>
-        </Card>
+          <span className="text-xs font-medium text-success">AI Agent Active</span>
+        </div>
       </div>
 
       <Tabs defaultValue="deployment" className="space-y-6">
-        <TabsList className="bg-muted/50 flex-wrap h-auto p-1">
-          <TabsTrigger value="deployment">Deployment</TabsTrigger>
-          <TabsTrigger value="api-keys">API Keys</TabsTrigger>
-          <TabsTrigger value="prompts">Prompts</TabsTrigger>
-          <TabsTrigger value="data">Data</TabsTrigger>
-          <TabsTrigger value="templates">Templates</TabsTrigger>
-          
-          <TabsTrigger value="preferences">Preferences</TabsTrigger>
+        <TabsList className="w-full max-w-2xl bg-muted/30 p-1">
+          <TabsTrigger value="deployment" className="gap-2">
+            <Sliders className="w-4 h-4" />
+            <span className="hidden sm:inline">System</span>
+          </TabsTrigger>
+          <TabsTrigger value="api-keys" className="gap-2">
+            <Key className="w-4 h-4" />
+            <span className="hidden sm:inline">API Keys</span>
+          </TabsTrigger>
+          <TabsTrigger value="prompts" className="gap-2">
+            <FileText className="w-4 h-4" />
+            <span className="hidden sm:inline">Prompts</span>
+          </TabsTrigger>
+          <TabsTrigger value="data" className="gap-2">
+            <Database className="w-4 h-4" />
+            <span className="hidden sm:inline">Data</span>
+          </TabsTrigger>
+          <TabsTrigger value="preferences" className="gap-2">
+            <Globe className="w-4 h-4" />
+            <span className="hidden sm:inline">Preferences</span>
+          </TabsTrigger>
         </TabsList>
 
         {/* Deployment Tab */}
@@ -786,41 +790,34 @@ export default function Settings() {
 
         {/* API Keys Tab */}
         <TabsContent value="api-keys" className="space-y-6">
-          <Card className="bg-gradient-card border-border shadow-card">
-            <CardHeader>
-              <CardTitle className="text-foreground flex items-center gap-2">
-                <Key className="w-5 h-5 text-primary" />
-                API Keys Management
-              </CardTitle>
-              <CardDescription className="text-muted-foreground">
-                Connect your own API keys to use premium AI video services. Keys are encrypted and stored securely.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="p-4 bg-muted/30 rounded-lg mb-4">
-                <h4 className="font-medium text-foreground flex items-center gap-2 mb-2">
+          <SectionCard
+            title="API Keys Management"
+            description="Connect your own API keys to use premium AI video services. Keys are encrypted and stored securely."
+            icon={Key}
+          >
+            <div className="space-y-6">
+              <div className="p-3 bg-muted/30 rounded-lg">
+                <h4 className="text-sm font-medium text-foreground flex items-center gap-2 mb-2">
                   <Bot className="w-4 h-4 text-primary" />
                   AI Assistant Access
                 </h4>
-                <p className="text-sm text-muted-foreground mb-3">
-                  With API keys configured, you can use the AI Assistant in the Create Video page:
+                <p className="text-xs text-muted-foreground mb-2">
+                  Configure API keys to unlock additional AI assistants:
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">Lovable AI (Free)</Badge>
-                  {hasApiKey('OPENAI_API_KEY') && <Badge className="bg-green-500/20 text-green-500">ChatGPT ✓</Badge>}
-                  {hasApiKey('GEMINI_API_KEY') && <Badge className="bg-blue-500/20 text-blue-500">Gemini ✓</Badge>}
-                  {!hasApiKey('OPENAI_API_KEY') && <Badge variant="outline">ChatGPT (needs key)</Badge>}
-                  {!hasApiKey('GEMINI_API_KEY') && <Badge variant="outline">Gemini (needs key)</Badge>}
+                  <Badge variant="secondary" className="text-xs">Lovable AI (Free)</Badge>
+                  {hasApiKey('OPENAI_API_KEY') && <Badge className="bg-success/20 text-success text-xs">ChatGPT ✓</Badge>}
+                  {hasApiKey('GEMINI_API_KEY') && <Badge className="bg-primary/20 text-primary text-xs">Gemini ✓</Badge>}
+                  {!hasApiKey('OPENAI_API_KEY') && <Badge variant="outline" className="text-xs">ChatGPT (needs key)</Badge>}
+                  {!hasApiKey('GEMINI_API_KEY') && <Badge variant="outline" className="text-xs">Gemini (needs key)</Badge>}
                 </div>
               </div>
 
               {/* Global API Keys Section */}
-
-              {/* Global API Keys Section */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-semibold text-foreground">🌐 Global API Keys</h3>
-                  <Badge variant="secondary" className="text-xs bg-primary/20 text-primary">
+                  <h3 className="text-sm font-semibold text-foreground">Global API Keys</h3>
+                  <Badge variant="secondary" className="text-xs bg-primary/10 text-primary">
                     Multi-Model Providers
                   </Badge>
                 </div>
@@ -1218,26 +1215,19 @@ export default function Settings() {
                 {savingKeys ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
                 Save All API Keys
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </SectionCard>
         </TabsContent>
 
         {/* Data Tab */}
         <TabsContent value="data" className="space-y-6">
-          <Card className="bg-gradient-card border-border shadow-card">
-            <CardHeader>
-              <CardTitle className="text-foreground flex items-center gap-2">
-                <Database className="w-5 h-5 text-primary" />
-                Data Integrations
-              </CardTitle>
-              <CardDescription className="text-muted-foreground">
-                Connect Google Drive and Google Sheets for seamless Studio workflow automation
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <StudioDataSettings />
-            </CardContent>
-          </Card>
+          <SectionCard
+            title="Data Integrations"
+            description="Connect Google Drive and Google Sheets for seamless Studio workflow automation"
+            icon={Database}
+          >
+            <StudioDataSettings />
+          </SectionCard>
         </TabsContent>
 
         {/* Prompts Tab */}
@@ -1245,170 +1235,23 @@ export default function Settings() {
           <StudioPrompts />
         </TabsContent>
 
-        {/* Templates Tab */}
-        <TabsContent value="templates" className="space-y-6">
-          <Card className="bg-gradient-card border-border shadow-card">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-foreground flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-primary" />
-                    Prompt Templates
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Create and manage script generation templates with variables
-                  </CardDescription>
-                </div>
-                <Dialog open={dialogOpen} onOpenChange={(open) => {
-                  setDialogOpen(open);
-                  if (!open) {
-                    setEditingTemplate(null);
-                    setFormData({ name: "", template_text: "", language: "en", category: "script" });
-                  }
-                }}>
-                  <DialogTrigger asChild>
-                    <Button className="bg-gradient-primary text-primary-foreground">
-                      <Plus className="w-4 h-4 mr-2" />
-                      New Template
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-2xl">
-                    <DialogHeader>
-                      <DialogTitle>{editingTemplate ? "Edit Template" : "Create Template"}</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Template Name</Label>
-                          <Input
-                            placeholder="e.g., UGC Product Ad"
-                            value={formData.name}
-                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Category</Label>
-                          <Select value={formData.category} onValueChange={(v) => setFormData({ ...formData, category: v })}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="script">Script</SelectItem>
-                              <SelectItem value="hook">Hook</SelectItem>
-                              <SelectItem value="cta">Call to Action</SelectItem>
-                              <SelectItem value="testimonial">Testimonial</SelectItem>
-                              <SelectItem value="carousel">Carousel</SelectItem>
-                              <SelectItem value="story">Story</SelectItem>
-                              <SelectItem value="explainer">Explainer</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Language</Label>
-                        <Select value={formData.language} onValueChange={(v) => setFormData({ ...formData, language: v })}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="en">English</SelectItem>
-                            <SelectItem value="ar">Arabic</SelectItem>
-                            <SelectItem value="es">Spanish</SelectItem>
-                            <SelectItem value="fr">French</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Template Text</Label>
-                        <Textarea
-                          placeholder="Use {{variable_name}} for dynamic content..."
-                          value={formData.template_text}
-                          onChange={(e) => setFormData({ ...formData, template_text: e.target.value })}
-                          rows={8}
-                          className="font-mono text-sm"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Available variables: {"{{product_name}}, {{problem}}, {{benefits}}, {{cta}}, {{audience}}, {{brand_tone}}, {{hooks}}, {{offer}}"}
-                        </p>
-                      </div>
-                      {formData.template_text && (
-                        <div className="p-3 bg-muted/50 rounded-lg">
-                          <p className="text-xs text-muted-foreground mb-1">Detected variables:</p>
-                          <div className="flex flex-wrap gap-1">
-                            {extractVariables(formData.template_text).map((v) => (
-                              <Badge key={v} variant="secondary">{v}</Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <Button onClick={handleSaveTemplate} disabled={saving} className="w-full">
-                        {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                        {editingTemplate ? "Update Template" : "Save Template"}
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {templates.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">No templates yet. Create your first one!</p>
-              ) : (
-                <div className="space-y-3">
-                  {templates.map((template) => (
-                    <div key={template.id} className="flex items-start justify-between p-4 bg-muted/30 rounded-lg border border-border">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-medium text-foreground">{template.name}</h4>
-                          {template.is_default && <Badge variant="outline">Default</Badge>}
-                          <Badge variant="secondary">{template.language}</Badge>
-                          <Badge variant="outline">{template.category}</Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                          {template.template_text}
-                        </p>
-                        <div className="flex flex-wrap gap-1">
-                          {template.variables.map((v) => (
-                            <Badge key={v} variant="secondary" className="text-xs">{v}</Badge>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="flex gap-2 ml-4">
-                        <Button size="icon" variant="ghost" onClick={() => handleEditTemplate(template)}>
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        {!template.is_default && (
-                          <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDeleteTemplate(template.id)}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
+        {/* Templates Tab - Removed, merged into Prompts */}
 
         {/* Preferences Tab */}
         <TabsContent value="preferences" className="space-y-6">
-          <Card className="bg-gradient-card border-border shadow-card">
-            <CardHeader>
-              <CardTitle className="text-foreground">Preferences</CardTitle>
-              <CardDescription className="text-muted-foreground">
-                Customize your default content generation settings
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
+          <SectionCard
+            title="Preferences"
+            description="Customize your default content generation settings"
+            icon={Globe}
+          >
+            <div className="space-y-6">
               {/* AI Agent Settings */}
-              <div className="space-y-3">
-                <Label className="text-foreground text-lg font-semibold flex items-center gap-2">
-                  <Bot className="w-5 h-5 text-primary" />
+              <div className="space-y-2">
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  <Bot className="w-4 h-4 text-primary" />
                   Default AI Agent
                 </Label>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Choose which AI model to use for text content generation
                 </p>
               </div>
@@ -1416,7 +1259,7 @@ export default function Settings() {
               <RadioGroup
                 value={(settings as any)?.ai_agent || "gemini"}
                 onValueChange={(v) => setSettings(s => s ? { ...s, ai_agent: v } as any : null)}
-                className="grid grid-cols-2 lg:grid-cols-3 gap-4"
+                className="grid grid-cols-2 lg:grid-cols-3 gap-3"
               >
                 {/* ChatGPT */}
                 <div
@@ -1947,12 +1790,12 @@ export default function Settings() {
                 </div>
               </div>
 
-              <Button onClick={handleSaveSettings} disabled={saving} className="bg-gradient-primary text-primary-foreground shadow-glow">
+              <Button onClick={handleSaveSettings} disabled={saving} className="bg-gradient-primary text-primary-foreground">
                 {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
                 Save Preferences
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </SectionCard>
         </TabsContent>
 
       </Tabs>
