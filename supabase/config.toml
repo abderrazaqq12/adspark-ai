@@ -137,3 +137,6 @@ verify_jwt = true
 
 [functions.ai-fallback]
 verify_jwt = false
+
+[functions.upload-to-google-drive]
+verify_jwt = false

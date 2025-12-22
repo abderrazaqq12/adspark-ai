@@ -29,6 +29,7 @@ import { PipelineProgressPanel } from "@/components/replicator/PipelineProgressP
 import { RenderDebugPanel } from "@/components/replicator/RenderDebugPanel";
 import { ProjectContextBanner } from "@/components/project";
 import { useGlobalProject } from "@/contexts/GlobalProjectContext";
+import { useAssetUpload } from "@/hooks/useAssetUpload";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AdvancedEngineRouter, RoutingRequest, RenderingMode } from "@/lib/video-engines/AdvancedRouter";
@@ -130,6 +131,9 @@ type StepId = "upload" | "settings" | "plan" | "generate" | "results";
 const CreativeReplicator = () => {
   // Global project context
   const { activeProject, hasActiveProject } = useGlobalProject();
+  
+  // Asset upload hook for auto-uploading generated videos to Google Drive
+  const { uploadVideo, isUploadAvailable } = useAssetUpload();
   
   // Global audience context (inherited from Settings)
   const { resolved: audience, isLoading: audienceLoading } = useAudience();
@@ -820,6 +824,16 @@ const CreativeReplicator = () => {
                   setGeneratedVideos(prev => prev.map(v =>
                     v.id === videoId ? { ...v, url, status: 'completed' as const } : v
                   ));
+                  // Auto-upload completed video to Google Drive
+                  if (url && isUploadAvailable) {
+                    const videoName = `replicator_${videoId}`;
+                    uploadVideo(url, videoName, {
+                      jobId: currentJobId,
+                      videoId,
+                      source: 'creative-replicator',
+                    });
+                    console.log(`[CreativeReplicator] Auto-uploading video ${videoId} to Google Drive`);
+                  }
                 }}
               />
               {/* Legacy processing timeline for compatibility */}

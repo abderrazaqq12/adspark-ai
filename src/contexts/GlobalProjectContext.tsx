@@ -1,6 +1,13 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { 
+  uploadAssetToDrive, 
+  uploadAssetsToDriveBackground, 
+  generateAssetFileName,
+  getMimeTypeFromUrl,
+  type AssetType 
+} from '@/lib/google-drive';
 
 // ============================================
 // GLOBAL PROJECT CONTEXT SYSTEM
@@ -39,6 +46,8 @@ interface GlobalProjectContextType {
   
   // Drive integration
   createDriveFolderForProject: (projectId: string, folderName: string) => Promise<string | null>;
+  uploadAsset: (assetType: AssetType, fileName: string, fileUrl: string, metadata?: Record<string, any>) => Promise<boolean>;
+  uploadAssetBackground: (assetType: AssetType, fileName: string, fileUrl: string, metadata?: Record<string, any>) => void;
   
   // Validation
   hasActiveProject: boolean;
@@ -256,6 +265,52 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(STORAGE_KEY);
   }, []);
 
+  // Upload asset to active project's Google Drive folder
+  const uploadAsset = useCallback(async (
+    assetType: AssetType, 
+    fileName: string, 
+    fileUrl: string, 
+    metadata?: Record<string, any>
+  ): Promise<boolean> => {
+    if (!activeProject) {
+      console.warn('[GlobalProjectContext] No active project for upload');
+      return false;
+    }
+
+    const result = await uploadAssetToDrive({
+      projectId: activeProject.id,
+      assetType,
+      fileName,
+      fileUrl,
+      mimeType: getMimeTypeFromUrl(fileUrl),
+      metadata,
+    });
+
+    return result.success;
+  }, [activeProject]);
+
+  // Upload asset in background (fire and forget)
+  const uploadAssetBackground = useCallback((
+    assetType: AssetType,
+    fileName: string,
+    fileUrl: string,
+    metadata?: Record<string, any>
+  ): void => {
+    if (!activeProject) {
+      console.warn('[GlobalProjectContext] No active project for background upload');
+      return;
+    }
+
+    uploadAssetsToDriveBackground([{
+      projectId: activeProject.id,
+      assetType,
+      fileName,
+      fileUrl,
+      mimeType: getMimeTypeFromUrl(fileUrl),
+      metadata,
+    }]);
+  }, [activeProject]);
+
   const value: GlobalProjectContextType = {
     activeProject,
     projects,
@@ -266,6 +321,8 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
     refreshProjects,
     clearActiveProject,
     createDriveFolderForProject,
+    uploadAsset,
+    uploadAssetBackground,
     hasActiveProject: activeProject !== null,
     isProjectReady: activeProject !== null && !isLoading,
   };
