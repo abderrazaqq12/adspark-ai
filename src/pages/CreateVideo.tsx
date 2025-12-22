@@ -66,7 +66,7 @@ import { UnifiedSceneBuilder, UnifiedScene } from "@/components/video/UnifiedSce
 import { AutoAdFactory } from "@/components/video/AutoAdFactory";
 import { SmartSceneBuilderV2 } from "@/components/smart-scene-builder";
 import { UnifiedVideoCreation } from "@/components/video/UnifiedVideoCreation";
-import { ProjectContextBanner } from "@/components/project";
+import { ProjectContextBanner, DriveSyncIndicator } from "@/components/project";
 import { useGlobalProject } from "@/contexts/GlobalProjectContext";
 
 // ElevenLabs voices - expanded list with categories
@@ -967,7 +967,10 @@ export default function CreateVideo() {
 
       {/* Main Content */}
       <div className="flex-1 p-8 space-y-8 overflow-auto">
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-between">
+          {/* Drive Sync Status */}
+          <DriveSyncIndicator />
+          
           <PipelineStatusIndicator
             pipelineStatus={{
               product_info: currentStage > 0 ? 'completed' : expandedStage === 0 ? 'in_progress' : 'pending',
