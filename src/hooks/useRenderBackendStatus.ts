@@ -1,6 +1,11 @@
 /**
- * Auto-detect available render backends
- * Checks VPS server and cloud APIs availability
+ * RENDER BACKEND AUTO-DETECTION
+ * 
+ * This hook auto-detects available render backends (VPS, Edge, Cloud).
+ * UI components should consume this as read-only status.
+ * 
+ * DO NOT allow manual backend configuration in UI.
+ * The system automatically selects the best available backend.
  */
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';

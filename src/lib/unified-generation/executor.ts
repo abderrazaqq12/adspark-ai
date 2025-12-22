@@ -2,6 +2,9 @@
  * Unified Execution Layer
  * Switches between Agent and Edge modes
  * Same prompt, same schema, different execution
+ * 
+ * NOTE: All AI execution now goes through edge functions.
+ * Client-side AI adapters have been removed to simplify architecture.
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -9,8 +12,6 @@ import { UnifiedInput, UnifiedOutput, ExecutionResult, ExecutionMode } from './t
 import { getPromptForExecution } from './prompts';
 
 export type { ExecutionMode } from './types';
-
-import { GeminiAdapter } from '../ai/gemini';
 
 export async function executeUnified(
   input: UnifiedInput,
@@ -25,7 +26,8 @@ export async function executeUnified(
       case 'edge':
         return await callEdgeFunction(input, customPrompt, startTime);
       case 'gemini':
-        return await runGeminiDirect(input, customPrompt, startTime);
+        // Gemini now runs via edge function, not client-side
+        return await callEdgeFunction(input, customPrompt, startTime, 'gemini');
       default:
         return await runLovableAgent(input, customPrompt, startTime);
     }
@@ -66,13 +68,15 @@ async function runLovableAgent(
 
 /**
  * Edge Function - High-performance API execution
+ * Also handles Gemini mode when specified
  */
 async function callEdgeFunction(
   input: UnifiedInput,
   customPrompt: string | undefined,
-  startTime: number
+  startTime: number,
+  preferredModel?: 'gemini' | 'default'
 ): Promise<ExecutionResult> {
-  console.log('[Edge] Calling edge function');
+  console.log('[Edge] Calling edge function', preferredModel ? `with model: ${preferredModel}` : '');
 
   const { systemPrompt, userPrompt } = getPromptForExecution(input, customPrompt);
 
@@ -81,54 +85,13 @@ async function callEdgeFunction(
       input,
       prompt: userPrompt,
       systemPrompt,
-      mode: 'edge'
+      mode: preferredModel === 'gemini' ? 'gemini' : 'edge'
     }
   });
 
   if (error) throw error;
 
-  return parseResponse(data, 'edge', startTime);
-}
-
-/**
- * Google AI Studio - Direct Client-Side Execution
- */
-async function runGeminiDirect(
-  input: UnifiedInput,
-  customPrompt: string | undefined,
-  startTime: number
-): Promise<ExecutionResult> {
-  console.log('[Gemini] Starting direct execution');
-
-  const adapter = new GeminiAdapter();
-  if (!await adapter.isAvailable()) {
-    throw new Error('Google AI Studio API key not configured. Please add it in Settings.');
-  }
-
-  const { systemPrompt, userPrompt } = getPromptForExecution(input, customPrompt);
-
-  // Combine system and user prompt for Gemini
-  // We'll use a chat structure where the first message is the system context
-  const messages = [
-    { role: 'system' as const, content: systemPrompt },
-    { role: 'user' as const, content: userPrompt }
-  ];
-
-  try {
-    const response = await adapter.chat({
-      messages,
-      temperature: 0.7,
-      maxTokens: 8192 // Large context window for HTML generation
-    });
-
-    // Parse the JSON response from the model
-    // Gemini often wraps JSON in code blocks, handled by parseResponse
-    return parseResponse(response.content, 'gemini', startTime);
-
-  } catch (error: any) {
-    console.error('[Gemini] Execution error:', error);
-    throw error;
-  }
+  return parseResponse(data, preferredModel === 'gemini' ? 'gemini' : 'edge', startTime);
 }
 
 /**
