@@ -1,60 +1,58 @@
 /**
- * DASHBOARD - Production Control Center
+ * DASHBOARD - Production Operational Dashboard
  * 
- * This is NOT a navigation or marketing page.
- * This is a real-time operational dashboard for monitoring system health,
- * active jobs, failures, and making operational decisions.
+ * This is a READ-ONLY operational awareness dashboard.
+ * It answers ONE question: "What is happening right now in my system?"
  * 
- * CORE QUESTIONS THIS ANSWERS:
- * 1. Is my system healthy right now?
- * 2. What is running?
- * 3. What failed?
- * 4. What needs my attention?
- * 5. Where is money/time being spent?
+ * ARCHITECTURAL CONTRACT:
+ * 1. NOT a duplicate of sidebar navigation
+ * 2. READ-ONLY - No creation flows, no configuration
+ * 3. GLOBAL and CONTEXT-AWARE - Reflects active project and system health
+ * 
+ * SECTIONS:
+ * 1. System Status Bar - VPS, FFmpeg, GPU, Queue, Storage
+ * 2. Active Project Snapshot - Current project context
+ * 3. Live Pipeline Activity - Running and failed jobs
+ * 4. Cost & Usage Snapshot - AI costs with breakdown
+ * 5. Recent Outputs - Last 5 generated files
  */
 
 import { 
-  SystemStatusPanel,
-  LiveOperationsPanel,
-  OperationalMetricsPanel,
-  AttentionQueuePanel,
-  PrimaryActionsPanel,
-  TodayStatsPanel
+  SystemStatusBar,
+  ActiveProjectSnapshot,
+  LivePipelineActivity,
+  CostUsageSnapshot,
+  RecentOutputs
 } from '@/components/dashboard';
 
 export default function Dashboard() {
   return (
     <div className="p-6 space-y-6 animate-fade-in max-w-7xl mx-auto">
       {/* Page Header - Minimal */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Control Center</h1>
-          <p className="text-sm text-muted-foreground">
-            Real-time system monitoring and operations
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+        <p className="text-sm text-muted-foreground">
+          Real-time system overview
+        </p>
       </div>
 
-      {/* 1. SYSTEM STATUS - Always visible at top */}
-      <SystemStatusPanel />
+      {/* SECTION 1 - System Status Bar (Always Visible) */}
+      <SystemStatusBar />
 
-      {/* TODAY'S STATS - Costs, Creations, Achievements */}
-      <TodayStatsPanel />
-
-      {/* 2. PRIMARY ACTIONS - Task-oriented entry */}
-      <PrimaryActionsPanel />
+      {/* SECTION 2 - Active Project Snapshot */}
+      <ActiveProjectSnapshot />
 
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 3. LIVE OPERATIONS - Active and failed jobs */}
-        <LiveOperationsPanel />
+        {/* SECTION 3 - Live Pipeline Activity */}
+        <LivePipelineActivity />
 
-        {/* 5. ATTENTION QUEUE - Blocking issues */}
-        <AttentionQueuePanel />
+        {/* SECTION 4 - Cost & Usage Snapshot */}
+        <CostUsageSnapshot />
       </div>
 
-      {/* 4. COST & PERFORMANCE - Operational metrics */}
-      <OperationalMetricsPanel />
+      {/* SECTION 5 - Recent Outputs */}
+      <RecentOutputs />
     </div>
   );
 }
