@@ -2,13 +2,88 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* 
+ * FlowScale Design System
+ * ======================
+ * This is the single source of truth for all visual styling.
+ * All colors use HSL format for theme compatibility.
+ * DO NOT add custom colors outside this file.
+ */
 
 @layer base {
   :root {
-    /* Dark theme per spec: Background #0e0f12, Card #13141a */
+    /* Background surfaces */
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Brand colors - FlowScale Purple */
+    --primary: 244 76% 59%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 265 76% 55%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 265 83% 57%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Semantic colors */
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 0%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* UI elements */
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 244 76% 59%;
+
+    --radius: 0.5rem;
+
+    /* Sidebar - Light */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 244 76% 59%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 244 76% 59%;
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(244 76% 59%), hsl(280 80% 56%));
+    --gradient-hero: linear-gradient(135deg, hsl(244 76% 59%), hsl(280 80% 56%));
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 14% 98%));
+    --gradient-subtle: linear-gradient(180deg, hsl(220 14% 98%), hsl(220 14% 96%));
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.1), 0 2px 4px -2px hsl(0 0% 0% / 0.1);
+    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.1), 0 4px 6px -4px hsl(0 0% 0% / 0.1);
+    --shadow-glow: 0 0 20px hsl(244 76% 59% / 0.15);
+    --shadow-card: 0 1px 3px 0 hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+    
+    /* Transitions */
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark {
+    /* Background surfaces - Dark */
     --background: 225 14% 6%;
     --foreground: 180 5% 98%;
 
@@ -18,10 +93,9 @@ All colors MUST be HSL.
     --popover: 228 15% 9%;
     --popover-foreground: 180 5% 98%;
 
-    /* Accent Gradient: from-[#4f46e5] to-[#9333ea] */
+    /* Brand colors remain consistent */
     --primary: 244 76% 59%;
     --primary-foreground: 0 0% 100%;
-    
     --primary-glow: 265 76% 55%;
 
     --secondary: 280 80% 56%;
@@ -33,16 +107,22 @@ All colors MUST be HSL.
     --accent: 265 83% 57%;
     --accent-foreground: 0 0% 100%;
 
+    /* Semantic colors */
+    --success: 142 70% 45%;
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 0%;
+    
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    /* Stroke Subtle: rgba(255,255,255,0.08) */
+    /* UI elements */
     --border: 0 0% 100% / 0.08;
     --input: 225 12% 16%;
     --ring: 244 76% 59%;
 
-    --radius: 0.75rem;
-
+    /* Sidebar - Dark */
     --sidebar-background: 228 15% 9%;
     --sidebar-foreground: 220 10% 85%;
     --sidebar-primary: 244 76% 59%;
@@ -52,22 +132,18 @@ All colors MUST be HSL.
     --sidebar-border: 0 0% 100% / 0.08;
     --sidebar-ring: 244 76% 59%;
     
-    /* Custom gradients - Accent Gradient: from-[#4f46e5] to-[#9333ea] */
+    /* Gradients - Dark */
     --gradient-primary: linear-gradient(135deg, hsl(244 76% 59%), hsl(280 80% 56%));
     --gradient-hero: linear-gradient(135deg, hsl(244 76% 59%), hsl(280 80% 56%));
     --gradient-card: linear-gradient(180deg, hsl(228 15% 9%), hsl(228 15% 11%));
+    --gradient-subtle: linear-gradient(180deg, hsl(228 15% 11%), hsl(228 15% 13%));
     
-    /* Shadows - Button Glow: rgba(147,51,234,0.45) */
+    /* Shadows - Dark */
+    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.3);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.4), 0 2px 4px -2px hsl(0 0% 0% / 0.3);
+    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.5), 0 4px 6px -4px hsl(0 0% 0% / 0.4);
     --shadow-glow: 0 0 40px hsl(265 83% 56% / 0.45);
     --shadow-card: 0 10px 30px -10px hsl(0 0% 0% / 0.5);
-    
-    /* Animations */
-    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .dark {
-    --background: 220 15% 6%;
-    --foreground: 180 5% 98%;
   }
 }
 
@@ -76,7 +152,138 @@ All colors MUST be HSL.
     @apply border-border;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Typography Scale */
+@layer components {
+  .text-page-title {
+    @apply text-2xl md:text-3xl font-bold tracking-tight text-foreground;
+  }
+  
+  .text-section-title {
+    @apply text-lg md:text-xl font-semibold text-foreground;
+  }
+  
+  .text-card-title {
+    @apply text-base font-medium text-foreground;
+  }
+  
+  .text-body {
+    @apply text-sm text-foreground;
+  }
+  
+  .text-body-muted {
+    @apply text-sm text-muted-foreground;
+  }
+  
+  .text-caption {
+    @apply text-xs text-muted-foreground;
+  }
+  
+  .text-label {
+    @apply text-xs font-medium uppercase tracking-wider text-muted-foreground;
+  }
+}
+
+/* Unified Card Styles */
+@layer components {
+  .card-base {
+    @apply bg-card border border-border rounded-lg;
+  }
+  
+  .card-elevated {
+    @apply bg-card border border-border rounded-lg shadow-card;
+  }
+  
+  .card-interactive {
+    @apply bg-card border border-border rounded-lg shadow-card transition-all duration-200 hover:shadow-lg hover:border-primary/20;
+  }
+  
+  .card-gradient {
+    @apply rounded-lg border border-border;
+    background: var(--gradient-card);
+  }
+}
+
+/* Status Indicators */
+@layer components {
+  .status-healthy {
+    @apply bg-success/10 text-success border-success/20;
+  }
+  
+  .status-warning {
+    @apply bg-warning/10 text-warning border-warning/20;
+  }
+  
+  .status-error {
+    @apply bg-destructive/10 text-destructive border-destructive/20;
+  }
+  
+  .status-inactive {
+    @apply bg-muted text-muted-foreground border-border;
+  }
+}
+
+/* Animations */
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+  
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+  
+  .animate-scale-in {
+    animation: scaleIn 0.2s ease-out;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Scrollbar Styling */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted)) transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted));
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
   }
 }
