@@ -356,14 +356,8 @@ const CreativeReplicator = () => {
           requiredCapabilities: ["trim", "merge", "text_overlay", "resize"] as any
         };
 
-        // ROUTE TO ENGINE based on AI Brain decision
-        const autoRenderingMode: RenderingMode = decision.useFFMPEGOnly
-          ? 'server_only'
-          : backendStatus.vpsServer.available 
-            ? 'server_only' 
-            : backendStatus.edgeFunctions.available 
-              ? 'auto' 
-              : 'cloudinary_only';
+        // ROUTE TO ENGINE - VPS-First (Cloudinary removed per architectural contract)
+        const autoRenderingMode: RenderingMode = 'server_only';
 
         const routingReq: RoutingRequest = {
           plan,
