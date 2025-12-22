@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
-import { Save, Plus, Trash2, FileText, Loader2, Pencil, Copy, CheckCircle, XCircle, ExternalLink, Key, Eye, EyeOff, Bot, RefreshCw, DollarSign, Sparkles, TrendingUp, Crown, ChevronDown, Power, Database, ShieldCheck } from "lucide-react";
+import { Save, Plus, Trash2, FileText, Loader2, Pencil, Copy, CheckCircle, XCircle, ExternalLink, Key, Eye, EyeOff, Bot, RefreshCw, ChevronDown, Power, Database, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -44,40 +44,7 @@ interface UserSettings {
   api_keys: Record<string, string> | null;
 }
 
-const PRICING_TIERS = [
-  {
-    value: "free",
-    label: "Free Tier",
-    description: "Only use free AI engines",
-    icon: Sparkles,
-    color: "text-green-500",
-    bgColor: "bg-green-500/10 border-green-500/30"
-  },
-  {
-    value: "cheap",
-    label: "Budget",
-    description: "Low-cost engines like Hailuo, Wan Video",
-    icon: DollarSign,
-    color: "text-blue-500",
-    bgColor: "bg-blue-500/10 border-blue-500/30"
-  },
-  {
-    value: "normal",
-    label: "Standard",
-    description: "Balanced cost & quality engines",
-    icon: TrendingUp,
-    color: "text-primary",
-    bgColor: "bg-primary/10 border-primary/30"
-  },
-  {
-    value: "expensive",
-    label: "Premium",
-    description: "Best quality: Runway, Sora, HeyGen",
-    icon: Crown,
-    color: "text-amber-500",
-    bgColor: "bg-amber-500/10 border-amber-500/30"
-  },
-];
+// Note: Engine cost tiers are now handled internally by AI routing logic
 
 interface APIKeyConfig {
   key: string;
@@ -1431,115 +1398,69 @@ export default function Settings() {
         <TabsContent value="preferences" className="space-y-6">
           <Card className="bg-gradient-card border-border shadow-card">
             <CardHeader>
-              <CardTitle className="text-foreground">Generation Preferences</CardTitle>
+              <CardTitle className="text-foreground">Preferences</CardTitle>
               <CardDescription className="text-muted-foreground">
-                Customize your default video generation settings
+                Customize your default content generation settings
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Pricing Tier Selector */}
-              <div className="space-y-3">
-                <Label className="text-foreground text-lg font-semibold">Engine Cost Tier</Label>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Select which tier of AI engines to use for video generation
-                </p>
-                <RadioGroup
-                  value={settings?.pricing_tier || "normal"}
-                  onValueChange={(v) => setSettings(s => s ? { ...s, pricing_tier: v } : null)}
-                  className="grid grid-cols-2 gap-4"
-                >
-                  {PRICING_TIERS.map((tier) => {
-                    const IconComponent = tier.icon;
-                    return (
-                      <div
-                        key={tier.value}
-                        className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${settings?.pricing_tier === tier.value
-                          ? tier.bgColor
-                          : "bg-muted/20 border-border hover:border-primary/50"
-                          }`}
-                      >
-                        <RadioGroupItem value={tier.value} id={tier.value} className="sr-only" />
-                        <Label htmlFor={tier.value} className="cursor-pointer">
-                          <div className="flex items-center gap-3 mb-2">
-                            <IconComponent className={`w-5 h-5 ${tier.color}`} />
-                            <span className="font-semibold text-foreground">{tier.label}</span>
-                          </div>
-                          <p className="text-sm text-muted-foreground">{tier.description}</p>
-                        </Label>
-                        {settings?.pricing_tier === tier.value && (
-                          <CheckCircle className={`absolute top-3 right-3 w-5 h-5 ${tier.color}`} />
-                        )}
-                      </div>
-                    );
-                  })}
-                </RadioGroup>
-              </div>
-
-              <Separator className="bg-border" />
-
               {/* AI Agent Settings */}
               <div className="space-y-3">
                 <Label className="text-foreground text-lg font-semibold flex items-center gap-2">
                   <Bot className="w-5 h-5 text-primary" />
-                  AI Agent
+                  Default AI Agent
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  Choose which AI model to use for text content generation in Studio
+                  Choose which AI model to use for text content generation
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-foreground">AI Model for Text Generation</Label>
-                <RadioGroup
-                  value={(settings as any)?.ai_agent || "gemini"}
-                  onValueChange={(v) => setSettings(s => s ? { ...s, ai_agent: v } as any : null)}
-                  className="grid grid-cols-2 gap-4"
+              <RadioGroup
+                value={(settings as any)?.ai_agent || "gemini"}
+                onValueChange={(v) => setSettings(s => s ? { ...s, ai_agent: v } as any : null)}
+                className="grid grid-cols-2 gap-4"
+              >
+                <div
+                  className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${(settings as any)?.ai_agent === "chatgpt"
+                    ? "bg-green-500/10 border-green-500/30"
+                    : "bg-muted/20 border-border hover:border-primary/50"
+                    }`}
                 >
-                  <div
-                    className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${(settings as any)?.ai_agent === "chatgpt"
-                      ? "bg-green-500/10 border-green-500/30"
-                      : "bg-muted/20 border-border hover:border-primary/50"
-                      }`}
-                  >
-                    <RadioGroupItem value="chatgpt" id="ai-chatgpt" className="sr-only" />
-                    <Label htmlFor="ai-chatgpt" className="cursor-pointer">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="w-8 h-8 rounded-lg bg-[#10a37f] flex items-center justify-center text-white font-bold text-sm">
-                          G
-                        </div>
-                        <span className="font-semibold text-foreground">ChatGPT</span>
+                  <RadioGroupItem value="chatgpt" id="ai-chatgpt" className="sr-only" />
+                  <Label htmlFor="ai-chatgpt" className="cursor-pointer">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-[#10a37f] flex items-center justify-center text-white font-bold text-sm">
+                        G
                       </div>
-                      <p className="text-sm text-muted-foreground">OpenAI GPT-4 for high-quality content</p>
-                    </Label>
-                    {(settings as any)?.ai_agent === "chatgpt" && (
-                      <CheckCircle className="absolute top-3 right-3 w-5 h-5 text-green-500" />
-                    )}
-                  </div>
-                  <div
-                    className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${(settings as any)?.ai_agent === "gemini" || !(settings as any)?.ai_agent
-                      ? "bg-blue-500/10 border-blue-500/30"
-                      : "bg-muted/20 border-border hover:border-primary/50"
-                      }`}
-                  >
-                    <RadioGroupItem value="gemini" id="ai-gemini" className="sr-only" />
-                    <Label htmlFor="ai-gemini" className="cursor-pointer">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm">
-                          G
-                        </div>
-                        <span className="font-semibold text-foreground">Gemini</span>
+                      <span className="font-semibold text-foreground">ChatGPT</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">OpenAI GPT-4 for high-quality content</p>
+                  </Label>
+                  {(settings as any)?.ai_agent === "chatgpt" && (
+                    <CheckCircle className="absolute top-3 right-3 w-5 h-5 text-green-500" />
+                  )}
+                </div>
+                <div
+                  className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${(settings as any)?.ai_agent === "gemini" || !(settings as any)?.ai_agent
+                    ? "bg-blue-500/10 border-blue-500/30"
+                    : "bg-muted/20 border-border hover:border-primary/50"
+                    }`}
+                >
+                  <RadioGroupItem value="gemini" id="ai-gemini" className="sr-only" />
+                  <Label htmlFor="ai-gemini" className="cursor-pointer">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm">
+                        G
                       </div>
-                      <p className="text-sm text-muted-foreground">Google Gemini for fast & efficient content</p>
-                    </Label>
-                    {((settings as any)?.ai_agent === "gemini" || !(settings as any)?.ai_agent) && (
-                      <CheckCircle className="absolute top-3 right-3 w-5 h-5 text-blue-500" />
-                    )}
-                  </div>
-                </RadioGroup>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Note: Make sure you have the corresponding API key configured in the API Keys section
-                </p>
-              </div>
+                      <span className="font-semibold text-foreground">Gemini</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Google Gemini for fast & efficient content</p>
+                  </Label>
+                  {((settings as any)?.ai_agent === "gemini" || !(settings as any)?.ai_agent) && (
+                    <CheckCircle className="absolute top-3 right-3 w-5 h-5 text-blue-500" />
+                  )}
+                </div>
+              </RadioGroup>
 
               <Separator className="bg-border" />
 
