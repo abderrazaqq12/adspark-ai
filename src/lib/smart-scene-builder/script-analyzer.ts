@@ -34,6 +34,25 @@ export interface SceneSegment {
   matchedAsset?: VisualAsset;
 }
 
+// Product data for context
+export interface ProductData {
+  name: string;
+  description?: string;
+  imageUrl?: string;
+  category?: string;
+  benefits?: string[];
+  targetAudience?: string;
+}
+
+// Recommended template based on AI analysis
+export interface TemplateRecommendation {
+  templateId: string;
+  templateName: string;
+  reason: string;
+  confidence: number;
+  sceneCount: number;
+}
+
 // Script analysis result
 export interface ScriptAnalysisResult {
   segments: SceneSegment[];
@@ -41,6 +60,8 @@ export interface ScriptAnalysisResult {
   scriptSpecificScenes: SceneSegment[]; // Scenes unique to each script
   recommendedSceneCount: number;
   scalingFactor: number; // How many variations can be generated
+  recommendedTemplate?: TemplateRecommendation;
+  totalDuration: number;
 }
 
 // Keywords that indicate different scene types
@@ -275,6 +296,7 @@ export function analyzeScriptsForScenes(
       scriptSpecificScenes: [],
       recommendedSceneCount: 5,
       scalingFactor: 1,
+      totalDuration: 0,
     };
   }
   
@@ -296,12 +318,16 @@ export function analyzeScriptsForScenes(
   // Calculate scaling factor (more assets = more scene variations possible)
   const scalingFactor = Math.max(1, Math.floor(assets.length / 2) + 1);
   
+  // Calculate total duration
+  const totalDuration = segmentsWithAssets.reduce((sum, s) => sum + s.suggestedDuration, 0);
+  
   return {
     segments: segmentsWithAssets,
     reusableScenes: reusable,
     scriptSpecificScenes: specific,
     recommendedSceneCount: segmentsWithAssets.length,
     scalingFactor,
+    totalDuration,
   };
 }
 
@@ -389,13 +415,257 @@ export function convertAnalysisToScenePlans(
   return scenes;
 }
 
+// Template definitions with scene structures
+const TEMPLATES = {
+  product_focused: {
+    name: 'Product Focus',
+    description: 'Highlight product features',
+    scenes: ['product_closeup', 'feature_highlight', 'lifestyle_usage', 'social_proof', 'cta_background'],
+    keywords: ['product', 'feature', 'quality', 'premium', 'new'],
+  },
+  problem_solution: {
+    name: 'Problem/Solution',
+    description: 'PAS framework',
+    scenes: ['problem_visualization', 'lifestyle_usage', 'product_closeup', 'before_after', 'cta_background'],
+    keywords: ['problem', 'struggle', 'solution', 'fix', 'help', 'tired'],
+  },
+  testimonial: {
+    name: 'Testimonial',
+    description: 'Customer stories',
+    scenes: ['testimonial', 'before_after', 'product_closeup', 'social_proof', 'cta_background'],
+    keywords: ['review', 'customer', 'said', 'love', 'amazing', 'changed'],
+  },
+  unboxing: {
+    name: 'Unboxing',
+    description: 'First impressions',
+    scenes: ['unboxing', 'product_closeup', 'feature_highlight', 'lifestyle_usage', 'cta_background'],
+    keywords: ['unbox', 'package', 'first', 'reveal', 'open', 'new'],
+  },
+  comparison: {
+    name: 'Comparison',
+    description: 'vs competitors',
+    scenes: ['comparison', 'feature_highlight', 'product_closeup', 'social_proof', 'cta_background'],
+    keywords: ['vs', 'compare', 'better', 'unlike', 'competitor', 'different'],
+  },
+};
+
+// AI-powered template recommendation based on product data and scripts
+export function recommendTemplate(
+  productData?: ProductData,
+  scripts: VideoScript[] = [],
+  videoCount: number = 3
+): TemplateRecommendation {
+  const templateScores: Record<string, number> = {};
+  
+  // Initialize scores
+  for (const templateId of Object.keys(TEMPLATES)) {
+    templateScores[templateId] = 0;
+  }
+  
+  // Analyze product data
+  if (productData) {
+    const productText = `${productData.name} ${productData.description || ''} ${productData.benefits?.join(' ') || ''}`.toLowerCase();
+    
+    for (const [templateId, template] of Object.entries(TEMPLATES)) {
+      const matches = template.keywords.filter(kw => productText.includes(kw)).length;
+      templateScores[templateId] += matches * 10;
+    }
+    
+    // Boost based on product category
+    if (productData.category) {
+      const category = productData.category.toLowerCase();
+      if (category.includes('beauty') || category.includes('skin')) {
+        templateScores['testimonial'] += 20;
+        templateScores['before_after'] += 15;
+      } else if (category.includes('tech') || category.includes('gadget')) {
+        templateScores['unboxing'] += 20;
+        templateScores['product_focused'] += 15;
+      } else if (category.includes('food') || category.includes('health')) {
+        templateScores['lifestyle_usage'] += 20;
+      }
+    }
+  }
+  
+  // Analyze scripts for template fit
+  for (const script of scripts) {
+    const scriptText = script.text.toLowerCase();
+    
+    for (const [templateId, template] of Object.entries(TEMPLATES)) {
+      const matches = template.keywords.filter(kw => scriptText.includes(kw)).length;
+      templateScores[templateId] += matches * 5;
+    }
+  }
+  
+  // Find best template
+  let bestTemplate = 'product_focused';
+  let bestScore = 0;
+  
+  for (const [templateId, score] of Object.entries(templateScores)) {
+    if (score > bestScore) {
+      bestScore = score;
+      bestTemplate = templateId;
+    }
+  }
+  
+  // Calculate scene count based on video count and duration constraints (20-35 seconds)
+  // Average scene is 5 seconds, so 4-7 scenes per video
+  const scenesPerVideo = Math.min(7, Math.max(4, Math.ceil(25 / 5))); // Target ~25 seconds (middle of 20-35)
+  const totalScenes = scenesPerVideo * Math.max(1, Math.ceil(videoCount / 2)); // Share some scenes across videos
+  
+  const template = TEMPLATES[bestTemplate as keyof typeof TEMPLATES];
+  const confidence = Math.min(100, 50 + bestScore);
+  
+  return {
+    templateId: bestTemplate,
+    templateName: template.name,
+    reason: generateTemplateReason(bestTemplate, productData, scripts),
+    confidence,
+    sceneCount: Math.min(15, totalScenes),
+  };
+}
+
+function generateTemplateReason(
+  templateId: string,
+  productData?: ProductData,
+  scripts: VideoScript[] = []
+): string {
+  const reasons: string[] = [];
+  
+  if (productData?.name) {
+    reasons.push(`Based on "${productData.name}"`);
+  }
+  
+  if (scripts.length > 0) {
+    reasons.push(`analyzed ${scripts.length} script${scripts.length > 1 ? 's' : ''}`);
+  }
+  
+  const template = TEMPLATES[templateId as keyof typeof TEMPLATES];
+  if (template) {
+    reasons.push(`best for ${template.description.toLowerCase()}`);
+  }
+  
+  return reasons.length > 0 ? reasons.join(', ') : 'Default recommendation';
+}
+
+// Calculate optimal scene count for target duration
+export function calculateOptimalSceneCount(
+  minDuration: number,
+  maxDuration: number,
+  avgSceneDuration: number = 5
+): { min: number; max: number; recommended: number } {
+  const targetDuration = (minDuration + maxDuration) / 2;
+  const minScenes = Math.ceil(minDuration / avgSceneDuration);
+  const maxScenes = Math.floor(maxDuration / avgSceneDuration);
+  const recommended = Math.round(targetDuration / avgSceneDuration);
+  
+  return { min: minScenes, max: maxScenes, recommended };
+}
+
+// Generate scenes from template with duration constraints
+export function generateScenesFromTemplateWithConstraints(
+  templateId: string,
+  config: VideoConfig,
+  assets: VisualAsset[] = [],
+  productData?: ProductData
+): SmartScenePlan[] {
+  const template = TEMPLATES[templateId as keyof typeof TEMPLATES];
+  if (!template) {
+    return [];
+  }
+  
+  const { min: minScenes, max: maxScenes, recommended } = calculateOptimalSceneCount(
+    config.minVideoDuration,
+    config.maxVideoDuration,
+    config.defaultSceneDuration
+  );
+  
+  const scenes: SmartScenePlan[] = [];
+  const sceneCount = Math.min(maxScenes, Math.max(minScenes, template.scenes.length));
+  
+  for (let i = 0; i < sceneCount; i++) {
+    const structure = template.scenes[i % template.scenes.length] as SceneStructure;
+    const matchedAsset = assets[i % assets.length];
+    
+    // Generate visual prompt based on template and product
+    let visualPrompt = generateVisualPrompt('', structure);
+    if (productData?.name) {
+      visualPrompt = visualPrompt.replace('the product', productData.name);
+    }
+    
+    const partialScene: Partial<SmartScenePlan> = {
+      structure,
+      goal: getGoalForStructure(structure),
+      motionIntensity: getMotionForStructure(structure),
+      duration: config.defaultSceneDuration,
+      sourceAsset: matchedAsset,
+      productImageUrl: matchedAsset?.type === 'image' ? matchedAsset.url : productData?.imageUrl,
+    };
+    
+    const engineDecision = selectEngineForScene(partialScene, config.budgetPreference);
+    
+    scenes.push({
+      id: `scene-template-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`,
+      index: i,
+      structure,
+      goal: getGoalForStructure(structure),
+      visualIntent: visualPrompt,
+      motionIntensity: getMotionForStructure(structure),
+      textSafeArea: config.enableTextOverlays,
+      duration: config.defaultSceneDuration,
+      sourceAsset: matchedAsset,
+      productImageUrl: matchedAsset?.type === 'image' ? matchedAsset.url : productData?.imageUrl,
+      selectedEngine: engineDecision,
+      status: 'pending',
+    });
+  }
+  
+  return scenes;
+}
+
+function getGoalForStructure(structure: SceneStructure): SceneGoal {
+  const mapping: Record<SceneStructure, SceneGoal> = {
+    product_closeup: 'explain',
+    problem_visualization: 'hook',
+    lifestyle_usage: 'explain',
+    social_proof: 'proof',
+    cta_background: 'cta',
+    before_after: 'proof',
+    unboxing: 'hook',
+    testimonial: 'proof',
+    feature_highlight: 'explain',
+    comparison: 'explain',
+  };
+  return mapping[structure];
+}
+
+function getMotionForStructure(structure: SceneStructure): MotionIntensity {
+  const mapping: Record<SceneStructure, MotionIntensity> = {
+    product_closeup: 'low',
+    problem_visualization: 'medium',
+    lifestyle_usage: 'high',
+    social_proof: 'low',
+    cta_background: 'low',
+    before_after: 'medium',
+    unboxing: 'high',
+    testimonial: 'low',
+    feature_highlight: 'medium',
+    comparison: 'medium',
+  };
+  return mapping[structure];
+}
+
 // Generate scenes directly from scripts (main entry point)
 export function generateScenesFromScripts(
   scripts: VideoScript[],
   assets: VisualAsset[],
-  config: VideoConfig
+  config: VideoConfig,
+  productData?: ProductData
 ): { scenes: SmartScenePlan[]; analysis: ScriptAnalysisResult } {
   const analysis = analyzeScriptsForScenes(scripts, assets, config);
+  
+  // Add template recommendation to analysis
+  analysis.recommendedTemplate = recommendTemplate(productData, scripts, config.videoCount);
+  
   const scenes = convertAnalysisToScenePlans(analysis, config, true);
   
   return { scenes, analysis };

@@ -106,6 +106,16 @@ export interface SceneDebugInfo {
   fallbacksAvailable: string[];
 }
 
+// Product Data for AI Analysis
+export interface ProductData {
+  name: string;
+  description?: string;
+  imageUrl?: string;
+  category?: string;
+  benefits?: string[];
+  targetAudience?: string;
+}
+
 // Video Configuration
 export interface VideoConfig {
   aspectRatio: AspectRatio;
@@ -113,6 +123,9 @@ export interface VideoConfig {
   defaultSceneDuration: SceneDuration;
   budgetPreference: BudgetPreference;
   enableTextOverlays: boolean;
+  videoCount: number; // Number of video variations to generate
+  minVideoDuration: number; // Minimum video duration in seconds (default 20)
+  maxVideoDuration: number; // Maximum video duration in seconds (default 35)
 }
 
 // Builder Input

@@ -34,14 +34,28 @@ import {
   ScriptAnalysisResult,
   generateScenesFromScripts,
   analyzeScriptsForScenes,
+  recommendTemplate,
+  generateScenesFromTemplateWithConstraints,
+  TemplateRecommendation,
+  ProductData as ScriptProductData,
 } from '@/lib/smart-scene-builder/script-analyzer';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+
+export interface ProductData {
+  name: string;
+  description?: string;
+  imageUrl?: string;
+  category?: string;
+  benefits?: string[];
+  targetAudience?: string;
+}
 
 export interface UseSmartSceneBuilderProps {
   projectId: string;
   initialConfig?: Partial<VideoConfig>;
   scripts?: VideoScript[];
+  productData?: ProductData;
 }
 
 const DEFAULT_CONFIG: VideoConfig = {
@@ -50,9 +64,12 @@ const DEFAULT_CONFIG: VideoConfig = {
   defaultSceneDuration: 5,
   budgetPreference: 'auto',
   enableTextOverlays: true,
+  videoCount: 3,
+  minVideoDuration: 20,
+  maxVideoDuration: 35,
 };
 
-export function useSmartSceneBuilder({ projectId, initialConfig, scripts = [] }: UseSmartSceneBuilderProps) {
+export function useSmartSceneBuilder({ projectId, initialConfig, scripts = [], productData }: UseSmartSceneBuilderProps) {
   const [config, setConfig] = useState<VideoConfig>({
     ...DEFAULT_CONFIG,
     ...initialConfig,
@@ -61,6 +78,7 @@ export function useSmartSceneBuilder({ projectId, initialConfig, scripts = [] }:
   const [scenes, setScenes] = useState<SmartScenePlan[]>([]);
   const [assets, setAssets] = useState<VisualAsset[]>([]);
   const [videoScripts, setVideoScripts] = useState<VideoScript[]>(scripts);
+  const [product, setProduct] = useState<ProductData | undefined>(productData);
   const [scriptAnalysis, setScriptAnalysis] = useState<ScriptAnalysisResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingSceneId, setGeneratingSceneId] = useState<string | null>(null);
@@ -138,7 +156,7 @@ export function useSmartSceneBuilder({ projectId, initialConfig, scripts = [] }:
       return;
     }
     
-    const { scenes: newScenes, analysis } = generateScenesFromScripts(videoScripts, assets, config);
+    const { scenes: newScenes, analysis } = generateScenesFromScripts(videoScripts, assets, config, product);
     setScenes(newScenes);
     setScriptAnalysis(analysis);
     
@@ -149,7 +167,39 @@ export function useSmartSceneBuilder({ projectId, initialConfig, scripts = [] }:
       `Generated ${newScenes.length} scenes from scripts. ` +
       `${reusableCount} reusable across all videos, ${specificCount} script-specific.`
     );
-  }, [videoScripts, assets, config]);
+  }, [videoScripts, assets, config, product]);
+  
+  // Get AI template recommendation
+  const getTemplateRecommendation = useCallback((): TemplateRecommendation => {
+    return recommendTemplate(product, videoScripts, config.videoCount);
+  }, [product, videoScripts, config.videoCount]);
+  
+  // Generate from AI-recommended template
+  const generateFromAITemplate = useCallback(() => {
+    const recommendation = getTemplateRecommendation();
+    const newScenes = generateScenesFromTemplateWithConstraints(
+      recommendation.templateId,
+      config,
+      assets,
+      product
+    );
+    setScenes(newScenes);
+    
+    // Create a mock analysis for consistency
+    setScriptAnalysis({
+      segments: [],
+      reusableScenes: [],
+      scriptSpecificScenes: [],
+      recommendedSceneCount: newScenes.length,
+      scalingFactor: config.videoCount,
+      recommendedTemplate: recommendation,
+      totalDuration: newScenes.reduce((sum, s) => sum + s.duration, 0),
+    });
+    
+    toast.success(
+      `AI selected "${recommendation.templateName}" template. Generated ${newScenes.length} scenes for ${config.videoCount} videos.`
+    );
+  }, [getTemplateRecommendation, config, assets, product]);
   
   // Add empty scene
   const addScene = useCallback(() => {
@@ -322,6 +372,10 @@ export function useSmartSceneBuilder({ projectId, initialConfig, scripts = [] }:
     addAsset,
     removeAsset,
     
+    // Product
+    product,
+    setProduct,
+    
     // Scripts
     videoScripts,
     updateScripts,
@@ -343,6 +397,8 @@ export function useSmartSceneBuilder({ projectId, initialConfig, scripts = [] }:
     generateFromAssets,
     generateFromTemplate,
     generateFromScripts,
+    generateFromAITemplate,
+    getTemplateRecommendation,
     generateSceneVideo,
     generateAllScenes,
     

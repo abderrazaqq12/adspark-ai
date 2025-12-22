@@ -45,9 +45,16 @@ interface VideoScriptInput {
   language?: string;
 }
 
+interface ProductDataInput {
+  name: string;
+  description?: string;
+  imageUrl?: string;
+}
+
 interface SmartSceneBuilderV2Props {
   projectId: string;
   scripts?: VideoScriptInput[];
+  productData?: ProductDataInput;
   onProceedToAssembly?: (scenePlan: any) => void;
 }
 
@@ -86,13 +93,15 @@ function StepIndicator({ step, title, description, isActive, isComplete }: {
   );
 }
 
-export function SmartSceneBuilderV2({ projectId, scripts = [], onProceedToAssembly }: SmartSceneBuilderV2Props) {
+export function SmartSceneBuilderV2({ projectId, scripts = [], productData, onProceedToAssembly }: SmartSceneBuilderV2Props) {
   const {
     config,
     updateConfig,
     assets,
     addAsset,
     removeAsset,
+    product,
+    setProduct,
     videoScripts,
     updateScripts,
     scriptAnalysis,
@@ -109,6 +118,8 @@ export function SmartSceneBuilderV2({ projectId, scripts = [], onProceedToAssemb
     generateFromAssets,
     generateFromTemplate,
     generateFromScripts,
+    generateFromAITemplate,
+    getTemplateRecommendation,
     generateSceneVideo,
     generateAllScenes,
     getScenePlan,
@@ -119,10 +130,16 @@ export function SmartSceneBuilderV2({ projectId, scripts = [], onProceedToAssemb
     completedCount,
     reusableSceneCount,
     scriptSpecificSceneCount,
-  } = useSmartSceneBuilder({ projectId, scripts });
+  } = useSmartSceneBuilder({ projectId, scripts, productData });
+  
+  // Get AI recommendation
+  const aiRecommendation = getTemplateRecommendation();
   
   // Has scripts from voiceover stage
   const hasScripts = scripts.length > 0 || videoScripts.length > 0;
+  
+  // Has product data
+  const hasProductData = productData?.name || product?.name;
   
   const handleProceed = () => {
     const validation = validate();
@@ -355,27 +372,55 @@ export function SmartSceneBuilderV2({ projectId, scripts = [], onProceedToAssemb
             </Card>
           )}
           
-          {/* Template Selector (when no scenes and no scripts) */}
-          {scenes.length === 0 && !hasScripts && assets.length === 0 && (
+          {/* AI Template Recommendation (when no scenes) */}
+          {scenes.length === 0 && !hasScripts && (
             <Card className="p-4 bg-card border-border">
               <div className="flex items-center gap-2 mb-2">
-                <LayoutTemplate className="w-4 h-4 text-primary" />
-                <h4 className="font-semibold text-sm">Quick Start Templates</h4>
+                <Brain className="w-4 h-4 text-primary" />
+                <h4 className="font-semibold text-sm">AI Scene Generator</h4>
+                <Badge variant="secondary" className="text-xs">Smart</Badge>
               </div>
               <p className="text-xs text-muted-foreground mb-4">
-                Select a template to generate scenes automatically, or add assets/scripts first.
+                AI recommends scenes based on your product data, video count ({config.videoCount} videos), 
+                and duration constraints ({config.minVideoDuration || 20}-{config.maxVideoDuration || 35}s per video).
               </p>
               
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              {/* AI Recommendation Card */}
+              <Card className="p-3 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    <span className="text-sm font-medium">Recommended: {aiRecommendation.templateName}</span>
+                  </div>
+                  <Badge variant="outline" className="text-xs">
+                    {aiRecommendation.confidence}% match
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">{aiRecommendation.reason}</p>
+                <Button onClick={generateFromAITemplate} className="w-full">
+                  <Wand2 className="w-4 h-4 mr-2" />
+                  Generate {aiRecommendation.sceneCount} Scenes for {config.videoCount} Videos
+                </Button>
+              </Card>
+              
+              {/* Manual Template Options */}
+              <div className="flex items-center gap-2 mb-2">
+                <LayoutTemplate className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Or choose manually:</span>
+              </div>
+              <div className="grid grid-cols-5 gap-2">
                 {TEMPLATES.map(template => (
                   <button
                     key={template.id}
                     onClick={() => generateFromTemplate(template.id)}
-                    className="p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-center"
+                    className={`p-2 rounded-lg border transition-all text-center ${
+                      aiRecommendation.templateId === template.id 
+                        ? 'border-primary/50 bg-primary/5' 
+                        : 'border-border hover:border-primary/30'
+                    }`}
                   >
-                    <span className="text-2xl block mb-2">{template.icon}</span>
-                    <span className="text-sm font-medium block">{template.label}</span>
-                    <span className="text-xs text-muted-foreground">{template.description}</span>
+                    <span className="text-lg block">{template.icon}</span>
+                    <span className="text-xs font-medium block">{template.label}</span>
                   </button>
                 ))}
               </div>
