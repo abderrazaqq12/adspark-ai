@@ -1,0 +1,46 @@
+api-1  | [Supabase] ⚠️  Not configured. Running in LOCAL/VPS mode (No Auth/Tracking)
+api-1  | [LocalDB] ✅ Initialized at /app/data/flowscale.db
+api-1  | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+api-1  | 🔒 FlowScale Security: Environment Validation
+api-1  | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+api-1  | 
+api-1  | 📋 Checking REQUIRED secrets...
+api-1  | 
+api-1  | 💡 Checking RECOMMENDED secrets...
+api-1  |    ⚠️  SUPABASE_URL - Auth & Tracking will be unavailable
+api-1  |    ✅ SUPABASE_SERVICE_ROLE_KEY
+api-1  |    ⚠️  GOOGLE_CLIENT_ID - Google Drive export will be unavailable
+api-1  |    ⚠️  GOOGLE_CLIENT_SECRET - Google Drive export will be unavailable
+api-1  |    ⚠️  OAUTH_ENCRYPTION_KEY - Secure OAuth token storage will be unavailable
+api-1  |    ⚠️  OPENAI_API_KEY - OpenAI content generation will be unavailable
+api-1  |    ⚠️  ANTHROPIC_API_KEY - Anthropic content generation will be unavailable
+api-1  |    ✅ ELEVENLABS_API_KEY
+api-1  | 
+api-1  | 🚫 Scanning for FORBIDDEN patterns...
+api-1  |    ✅ No forbidden patterns detected
+api-1  | 
+api-1  | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+api-1  | ✅ Environment validation PASSED
+api-1  | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+api-1  | 
+api-1  | [Setup] Created directory: /app/data/outputs
+api-1  | [Setup] Created directory: /app/data/uploads
+api-1  | [Setup] Created directory: /app/data/temp
+api-1  | [FFmpeg] Found: /usr/bin/ffmpeg (version 4.3.9-0+deb11u1)
+api-1  | [FFmpeg] GPU Acceleration: ENABLED (VAAPI)
+api-1  | [FlowScale API] Health endpoints mounted at /api/health/*
+api-1  | [FlowScale API] Analytics endpoints mounted at /api/analytics/*
+api-1  | ═══════════════════════════════════════════════════
+api-1  |   FlowScale Render Gateway API
+api-1  | ═══════════════════════════════════════════════════
+api-1  |   URL:        http://0.0.0.0:3000
+api-1  |   Mode:       server-only (Auto Source Resolution active)
+api-1  |   FFmpeg:     ✓ /usr/bin/ffmpeg
+api-1  |   Uploads:    /app/data/uploads
+api-1  |   Temp:       /app/data/temp
+api-1  |   Outputs:    /app/data/outputs
+api-1  | ═══════════════════════════════════════════════════
+api-1  | [Cleanup] Starting routine...
+api-1  | [2025-12-23T13:53:54.284Z] GET /api/
+api-1  | [2025-12-23T13:54:36.957Z] GET /api/
+api-1  | [2025-12-23T13:54:46.963Z] GET /api/

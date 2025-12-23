@@ -23,6 +23,8 @@ services:
     build:
       context: ..
       dockerfile: deployment_v2/Dockerfile.api
+    ports:
+      - "127.0.0.1:3000:3000"
     env_file:
       - .env
     environment:
@@ -42,6 +44,8 @@ services:
     build:
       context: ..
       dockerfile: deployment_v2/Dockerfile.renderflow
+    ports:
+      - "127.0.0.1:3001:3001"
     environment:
       - PORT=3001
       # We cannot easily change internal paths in worker.cjs without code change
