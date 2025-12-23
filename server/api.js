@@ -149,12 +149,33 @@ function detectFFmpeg() {
 const FFMPEG_AVAILABLE = detectFFmpeg();
 
 // ============================================
-// IN-MEMORY JOB QUEUE (Phase-2 Ready)
+// JOB QUEUE & STATE
 // ============================================
 
-const jobs = new Map(); // jobId -> JobState
-const pendingQueue = []; // Array of jobIds waiting to run
-let currentJob = null; // Currently executing jobId
+const jobs = new Map(); // In-memory job state
+const pendingQueue = []; // Job IDs waiting for processing
+let currentJob = null; // Currently processing job ID
+
+// Expose queue stats to Health Router (Manifesto Phase 4)
+app.locals.getQueueStats = () => {
+  const jobArray = Array.from(jobs.values());
+  const now = Date.now();
+  const last24h = now - (24 * 60 * 60 * 1000);
+
+  return {
+    active: currentJob ? 1 : 0,
+    waiting: pendingQueue.length,
+    completed: jobArray.filter(j => j.status === 'done').length,
+    failed: jobArray.filter(j => j.status === 'error').length,
+    failed24h: jobArray.filter(j => j.status === 'error' && new Date(j.createdAt).getTime() >= last24h).length,
+    total: jobArray.length,
+    currentJob: currentJob ? {
+      id: currentJob,
+      status: jobs.get(currentJob)?.status,
+      progress: jobs.get(currentJob)?.progressPct || 0
+    } : null
+  };
+};
 
 /**
  * Job statuses (compatible with frontend contract):
@@ -1749,30 +1770,7 @@ app.post('/api/render/renderflow/upload', (req, res) => {
 // GET /api/health
 // ============================================
 
-app.get('/api/health', (req, res) => {
-  const health = {
-    ok: FFMPEG_AVAILABLE,
-    ffmpeg: {
-      available: FFMPEG_AVAILABLE,
-      path: ffmpegPath || null,
-      version: ffmpegVersion || null,
-    },
-    outputsDir: OUTPUT_DIR,
-    uploadsDir: UPLOAD_DIR,
-    tempDir: TEMP_DIR,
-    queueLength: pendingQueue.length,
-    currentJob: currentJob || null,
-    uptime: process.uptime(),
-    time: new Date().toISOString(),
-  };
 
-  if (!FFMPEG_AVAILABLE) {
-    health.error = 'FFmpeg binary not found on server';
-    return res.status(503).json(health);
-  }
-
-  res.json(health);
-});
 
 /**
  * POST /api/upload

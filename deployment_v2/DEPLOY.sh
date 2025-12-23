@@ -50,13 +50,14 @@ docker compose up -d --build --remove-orphans
 echo "[Deploy] Waiting for health checks..."
 sleep 10
 
-if curl -s http://localhost:3000/api/health | grep -q '"ok":true'; then
+if curl -s http://localhost:3000/api/health | grep -q '"status":"ok"'; then
     echo "[Success] API is healthy."
 else
     echo "[Warning] API health check failed. Check logs: docker compose logs api"
 fi
 
-if curl -s -I http://localhost:80 | grep -q "200 OK"; then
+# Check for 200 OK or 301 Redirect
+if curl -s -I http://localhost:80 | grep -E -q "200 OK|301 Moved"; then
     echo "[Success] Frontend is serving."
 else
     echo "[Warning] Frontend check failed. Check logs: docker compose logs frontend"

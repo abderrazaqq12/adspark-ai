@@ -38,7 +38,14 @@ fi
 
 # 4. RenderFlow Link
 echo "[Check] RenderFlow Connection..."
-# Check for '"ffmpeg":true' boolean
+if curl -s http://localhost:3001/health | grep -q "OK"; then
+    echo "PASS: RenderFlow Engine is running (Port 3001)."
+else
+    echo "FAIL: RenderFlow Engine is NOT reachable."
+fi
+
+# 5. FFmpeg Capability
+echo "[Check] FFmpeg Capability..."
 if echo "$HEALTH" | grep -q '"ffmpeg":true'; then
     echo "PASS: API detects FFmpeg (Local)."
 else

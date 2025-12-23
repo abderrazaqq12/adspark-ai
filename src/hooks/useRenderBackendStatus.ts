@@ -123,9 +123,9 @@ export function useRenderBackendStatus() {
           failed24h: 0
         },
         deployment: {
-          mode: 'self-hosted',
-          environment: 'vps',
-          platform: 'linux'
+          mode: typeof data.deployment === 'string' ? data.deployment : (data.deployment?.mode || 'self-hosted'),
+          environment: data.deployment?.environment || 'vps',
+          platform: data.deployment?.platform || 'linux'
         }
       };
 
