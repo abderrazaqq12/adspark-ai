@@ -377,7 +377,6 @@ export function SystemStatusBar() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          </div>
 
           {/* VPS Status */}
           {backendStatus.loading ? (
