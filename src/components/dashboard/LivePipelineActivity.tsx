@@ -8,8 +8,8 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { 
-  Play, 
+import {
+  Play,
   AlertTriangle,
   Clock,
   Loader2,
@@ -48,7 +48,7 @@ export function LivePipelineActivity() {
 
   useEffect(() => {
     fetchJobs();
-    
+
     const channel = supabase
       .channel('live-pipeline-activity')
       .on(
@@ -79,96 +79,51 @@ export function LivePipelineActivity() {
       clearTimeout(timeout);
     };
   }, [activeProject?.id, loadAttempts]);
-
   const fetchJobs = async () => {
     setLoadAttempts(prev => prev + 1);
     setLoadError(null);
-    
+
     try {
-      // Fetch running jobs
-      let runningQuery = supabase
-        .from('pipeline_jobs')
-        .select(`
-          id,
-          stage_name,
-          progress,
-          started_at,
-          input_data,
-          projects!pipeline_jobs_project_id_fkey (name)
-        `)
-        .in('status', ['processing', 'running'])
-        .order('started_at', { ascending: false })
-        .limit(5);
+      const response = await fetch('/api/history');
+      if (!response.ok) throw new Error('Failed to fetch pipeline jobs');
 
-      if (activeProject?.id) {
-        runningQuery = runningQuery.eq('project_id', activeProject.id);
+      const data = await response.json();
+      if (data.ok && data.history) {
+        const history: any[] = data.history;
+
+        // Map running jobs
+        setRunningJobs(history
+          .filter(j => j.status === 'running' || j.status === 'processing')
+          .map(job => ({
+            id: job.id,
+            tool: extractTool(job.type),
+            stage: formatStage(job.type),
+            progress: job.progressPct || 0,
+            duration: job.createdAt
+              ? formatDistanceToNow(new Date(job.createdAt), { addSuffix: false })
+              : '0s',
+            projectName: job.input?.projectName || 'General'
+          }))
+          .slice(0, 5)
+        );
+
+        // Map failed jobs
+        setFailedJobs(history
+          .filter(j => j.status === 'error')
+          .map(job => ({
+            id: job.id,
+            tool: extractTool(job.type),
+            stage: formatStage(job.type),
+            error: humanizeError(job.error?.message),
+            failedAt: job.completedAt
+              ? formatDistanceToNow(new Date(job.completedAt), { addSuffix: true })
+              : 'Unknown',
+            projectName: job.input?.projectName || 'General'
+          }))
+          .slice(0, 5)
+        );
       }
 
-      const { data: running, error: runningError } = await runningQuery;
-
-      if (runningError) {
-        console.error('Error fetching running jobs:', runningError);
-        setLoadError('Failed to fetch running jobs');
-        setIsLoading(false);
-        return;
-      }
-
-      if (running) {
-        setRunningJobs(running.map(job => ({
-          id: job.id,
-          tool: extractTool(job.stage_name),
-          stage: formatStage(job.stage_name),
-          progress: job.progress || 0,
-          duration: job.started_at 
-            ? formatDistanceToNow(new Date(job.started_at), { addSuffix: false })
-            : '0s',
-          projectName: (job.projects as any)?.name || 'Unknown'
-        })));
-      } else {
-        setRunningJobs([]);
-      }
-
-      // Fetch failed jobs (last 24h)
-      let failedQuery = supabase
-        .from('pipeline_jobs')
-        .select(`
-          id,
-          stage_name,
-          error_message,
-          completed_at,
-          projects!pipeline_jobs_project_id_fkey (name)
-        `)
-        .eq('status', 'failed')
-        .gte('completed_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-        .order('completed_at', { ascending: false })
-        .limit(5);
-
-      if (activeProject?.id) {
-        failedQuery = failedQuery.eq('project_id', activeProject.id);
-      }
-
-      const { data: failed, error: failedError } = await failedQuery;
-
-      if (failedError) {
-        console.error('Error fetching failed jobs:', failedError);
-        // Don't block - we still got running jobs
-      }
-
-      if (failed) {
-        setFailedJobs(failed.map(job => ({
-          id: job.id,
-          tool: extractTool(job.stage_name),
-          stage: formatStage(job.stage_name),
-          error: humanizeError(job.error_message),
-          failedAt: job.completed_at 
-            ? formatDistanceToNow(new Date(job.completed_at), { addSuffix: true })
-            : 'Unknown',
-          projectName: (job.projects as any)?.name || 'Unknown'
-        })));
-      } else {
-        setFailedJobs([]);
-      }
-      
       setLoadError(null);
     } catch (error) {
       console.error('Error fetching pipeline jobs:', error);
@@ -177,6 +132,13 @@ export function LivePipelineActivity() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchJobs();
+    const interval = setInterval(fetchJobs, 10000); // 10s poll
+
+    return () => clearInterval(interval);
+  }, [activeProject?.id]);
 
   const extractTool = (stageName: string): string => {
     if (stageName?.includes('replicator')) return 'Replicator';
@@ -188,7 +150,7 @@ export function LivePipelineActivity() {
 
   const formatStage = (stageName: string): string => {
     if (!stageName) return 'Processing';
-    
+
     // Map technical stage names to human-readable
     const stageMap: Record<string, string> = {
       'analyze': 'Analyzing',
@@ -218,7 +180,7 @@ export function LivePipelineActivity() {
 
   const humanizeError = (error: string | null): string => {
     if (!error) return 'Unknown error occurred';
-    
+
     // Map common error patterns to human-readable messages
     if (error.includes('timeout') || error.includes('TIMEOUT')) {
       return 'Operation timed out - server may be overloaded';
@@ -238,7 +200,7 @@ export function LivePipelineActivity() {
     if (error.includes('memory') || error.includes('OOM')) {
       return 'Server ran out of memory';
     }
-    
+
     // Truncate long errors
     return error.length > 80 ? error.slice(0, 80) + '...' : error;
   };
@@ -319,7 +281,7 @@ export function LivePipelineActivity() {
               Running Now
             </h4>
             {runningJobs.map(job => (
-              <div 
+              <div
                 key={job.id}
                 className="p-3 rounded-lg bg-primary/5 border border-primary/20"
               >
@@ -357,7 +319,7 @@ export function LivePipelineActivity() {
               Failed (Last 24h)
             </h4>
             {failedJobs.map(job => (
-              <div 
+              <div
                 key={job.id}
                 className="p-3 rounded-lg bg-destructive/5 border border-destructive/20"
               >

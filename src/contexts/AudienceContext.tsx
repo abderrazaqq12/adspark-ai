@@ -37,24 +37,15 @@ export function AudienceProvider({ children }: { children: ReactNode }) {
 
   const loadDefaults = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setIsLoading(false);
-        return;
-      }
+      // In VPS mode, we bypass Supabase Auth
+      const userId = '170d6fb1-4e4f-4704-ab9a-a917dc86cba5';
 
-      const { data: settings } = await supabase
-        .from('user_settings')
-        .select('default_language, default_country')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (settings) {
-        setDefaults({
-          language: settings.default_language || DEFAULT_AUDIENCE.language,
-          country: settings.default_country || DEFAULT_AUDIENCE.country,
-          userId: user.id,
-        });
+      // Attempt to load from local storage or use defaults
+      const savedDefaults = localStorage.getItem('vps_audience_defaults');
+      if (savedDefaults) {
+        setDefaults({ ...JSON.parse(savedDefaults), userId });
+      } else {
+        setDefaults({ ...DEFAULT_AUDIENCE, userId });
       }
     } catch (error) {
       console.error('Error loading audience defaults:', error);
@@ -65,21 +56,11 @@ export function AudienceProvider({ children }: { children: ReactNode }) {
 
   const updateDefaults = useCallback(async (newDefaults: Partial<AudienceDefaults>): Promise<boolean> => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return false;
-
-      const updates: Record<string, string> = {};
-      if (newDefaults.language) updates.default_language = newDefaults.language;
-      if (newDefaults.country) updates.default_country = newDefaults.country;
-
-      const { error } = await supabase
-        .from('user_settings')
-        .update(updates)
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-
-      setDefaults(prev => ({ ...prev, ...newDefaults }));
+      setDefaults(prev => {
+        const updated = { ...prev, ...newDefaults };
+        localStorage.setItem('vps_audience_defaults', JSON.stringify(updated));
+        return updated;
+      });
       return true;
     } catch (error) {
       console.error('Error updating audience defaults:', error);
@@ -123,7 +104,7 @@ export function useAudience() {
 // Hook for tools that need audience with optional local override
 export function useAudienceWithOverride(localOverride?: AudienceOverride) {
   const { defaults } = useAudience();
-  
+
   return resolveAudienceContext({
     userDefaults: defaults,
     localOverride,

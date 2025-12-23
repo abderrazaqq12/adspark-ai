@@ -379,6 +379,15 @@ router.get('/', (req, res) => {
   const storage = getStorageInfo();
   const vps = getVPSInfo();
 
+  const queue = req.app.locals.getQueueStats ? req.app.locals.getQueueStats() : {
+    active: 0,
+    waiting: 0,
+    completed: 0,
+    failed: 0,
+    failed24h: 0,
+    total: 0
+  };
+
   res.json({
     status: (ffmpeg.available && storage.available) ? 'ok' : 'error',
     // Strict schema compliance for Dashboard
@@ -390,6 +399,7 @@ router.get('/', (req, res) => {
     },
     api: true, // If we are here, API is reachable
     db: true,  // We are using local FS/SQLite mostly, assume true if server is up
+    queue: queue,
 
     // Extra debug info still useful but not primary
     timestamp: new Date().toISOString(),

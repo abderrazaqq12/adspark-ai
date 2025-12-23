@@ -413,12 +413,16 @@ async function processNextJob() {
     const artifact = result.artifacts?.[0];
     if (artifact) {
       registerArtifact({
-        variationIndex: job.input.variationIndex, // Ensure this is available in job.input
+        jobId: job.id,
+        projectId: job.input.projectId,
         engine: 'server_ffmpeg',
         videoUrl: artifact.url,
         sizeBytes: artifact.sizeBytes,
         durationMs: artifact.durationMs,
-        codec: finalEncoder
+        codec: finalEncoder,
+        metadata: {
+          variationIndex: job.input.variationIndex
+        }
       });
     }
 
@@ -1370,6 +1374,54 @@ app.get('/api/history', (req, res) => {
     count: filteredJobs.length
   });
 });
+
+/**
+ * GET /api/outputs
+ * Returns recent persistent video outputs from the local DB
+ */
+app.get('/api/outputs', async (req, res) => {
+  const { projectId, limit = 50, offset = 0 } = req.query;
+
+  try {
+    const query = `
+      SELECT o.*, p.name as project_name, p.google_drive_folder_link
+      FROM video_outputs o
+      LEFT JOIN projects p ON o.project_id = p.id
+      WHERE 1=1
+      ${projectId ? 'AND o.project_id = ?' : ''}
+      ORDER BY o.created_at DESC
+      LIMIT ? OFFSET ?
+    `;
+
+    const params = [];
+    if (projectId) params.push(projectId);
+    params.push(parseInt(limit), parseInt(offset));
+
+    const rows = db.prepare(query).all(...params);
+
+    res.json({
+      ok: true,
+      outputs: rows.map(r => ({
+        id: r.id,
+        projectId: r.project_id,
+        projectName: r.project_name,
+        jobId: r.job_id,
+        type: r.type,
+        url: r.output_url,
+        thumbnail: r.thumbnail_url,
+        duration: r.duration_sec,
+        size: r.size_bytes,
+        driveLink: r.google_drive_folder_link,
+        createdAt: r.created_at,
+        metadata: r.metadata ? JSON.parse(r.metadata) : {}
+      })),
+      count: rows.length
+    });
+  } catch (err) {
+    return jsonError(res, 500, 'OUTPUT_QUERY_FAILED', err.message);
+  }
+});
+
 
 /**
  * DELETE /api/history
@@ -2451,12 +2503,31 @@ process.on('SIGINT', () => {
 // ARTIFACT REGISTRATION (MANDATORY)
 // ============================================
 
-function registerArtifact({ variationIndex, engine, videoUrl, sizeBytes, durationMs, codec }) {
-  console.log(`[Artifact] Registering artifact for variation ${variationIndex} from ${engine}`);
-  console.log(`[Artifact] URL: ${videoUrl}`);
-  console.log(`[Artifact] Size: ${sizeBytes} bytes, Duration: ${durationMs}ms, Codec: ${codec}`);
+function registerArtifact({ jobId, projectId, engine, videoUrl, sizeBytes, durationMs, codec, metadata = {} }) {
+  console.log(`[Artifact] Registering artifact for job ${jobId} from ${engine}`);
 
-  // In a real DB scenario, this would write to a 'rendered_artifacts' table.
-  // For now, we rely on updateJob() persisting it in the memory store,
-  // but explicitly logging it satisfies the requirement for "Commit".
+  try {
+    const id = `out_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+    const duration_sec = durationMs / 1000;
+
+    db.prepare(`
+      INSERT INTO video_outputs (id, project_id, job_id, type, output_url, thumbnail_url, duration_sec, size_bytes, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      projectId || null,
+      jobId,
+      'video',
+      videoUrl,
+      videoUrl, // Use video as thumbnail for now
+      duration_sec,
+      sizeBytes,
+      JSON.stringify({ ...metadata, engine, codec })
+    );
+
+    console.log(`[Artifact] Committed to local DB: ${id}`);
+  } catch (err) {
+    console.error(`[Artifact] Database error:`, err.message);
+  }
 }
+

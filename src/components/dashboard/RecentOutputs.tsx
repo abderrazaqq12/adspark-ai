@@ -10,8 +10,8 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
-  FileOutput, 
+import {
+  FileOutput,
   Video,
   Image,
   Mic,
@@ -53,88 +53,30 @@ export function RecentOutputs() {
 
   const fetchRecentOutputs = async () => {
     setLoadError(null);
-    
+
     try {
-      const results: RecentOutput[] = [];
-
-      // Fetch video outputs
-      let videoQuery = supabase
-        .from('video_outputs')
-        .select(`
-          id,
-          duration_sec,
-          final_video_url,
-          created_at,
-          projects!video_outputs_project_id_fkey (name, google_drive_folder_link)
-        `)
-        .eq('status', 'completed')
-        .order('created_at', { ascending: false })
-        .limit(5);
-
+      const url = new URL('/api/outputs', window.location.origin);
       if (activeProject?.id) {
-        videoQuery = videoQuery.eq('project_id', activeProject.id);
+        url.searchParams.append('projectId', activeProject.id);
       }
+      url.searchParams.append('limit', '5');
 
-      const { data: videos, error: videoError } = await videoQuery;
+      const response = await fetch(url.toString());
+      if (!response.ok) throw new Error('Failed to fetch recent outputs');
 
-      if (videoError) {
-        console.error('Error fetching videos:', videoError);
-        setLoadError('Failed to load outputs');
-        setIsLoading(false);
-        return;
+      const data = await response.json();
+
+      if (data.ok && data.outputs) {
+        setOutputs(data.outputs.map((o: any) => ({
+          id: o.id,
+          type: 'video', // Backend currently focuses on video
+          projectName: o.projectName || 'Unknown',
+          duration: o.duration ? `${Math.floor(o.duration / 60)}:${String(Math.floor(o.duration % 60)).padStart(2, '0')}` : null,
+          tool: 'Creative Replicator', // Hardcoded as primary tool for now
+          driveLink: o.driveLink,
+          createdAt: o.createdAt
+        })));
       }
-
-      videos?.forEach(v => {
-        results.push({
-          id: v.id,
-          type: 'video',
-          projectName: (v.projects as any)?.name || 'Unknown',
-          duration: v.duration_sec ? `${Math.floor(v.duration_sec / 60)}:${String(v.duration_sec % 60).padStart(2, '0')}` : null,
-          tool: 'Studio',
-          driveLink: (v.projects as any)?.google_drive_folder_link || null,
-          createdAt: v.created_at || ''
-        });
-      });
-
-      // Fetch image outputs
-      let imageQuery = supabase
-        .from('generated_images')
-        .select(`
-          id,
-          image_type,
-          created_at,
-          projects!generated_images_project_id_fkey (name, google_drive_folder_link)
-        `)
-        .eq('status', 'completed')
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (activeProject?.id) {
-        imageQuery = imageQuery.eq('project_id', activeProject.id);
-      }
-
-      const { data: images, error: imageError } = await imageQuery;
-
-      if (imageError) {
-        console.error('Error fetching images:', imageError);
-        // Don't block - we still have videos
-      }
-
-      images?.forEach(i => {
-        results.push({
-          id: i.id,
-          type: 'image',
-          projectName: (i.projects as any)?.name || 'Unknown',
-          duration: null,
-          tool: i.image_type === 'thumbnail' ? 'Thumbnail Generator' : 'AI Image',
-          driveLink: (i.projects as any)?.google_drive_folder_link || null,
-          createdAt: i.created_at || ''
-        });
-      });
-
-      // Sort by created_at and take top 5
-      results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setOutputs(results.slice(0, 5));
     } catch (error) {
       console.error('Error fetching recent outputs:', error);
       setLoadError('Backend connection failed');
@@ -204,13 +146,13 @@ export function RecentOutputs() {
               const config = typeConfig[output.type];
               const Icon = config.icon;
               const isSavedLocally = !output.driveLink;
-              
+
               return (
-                <div 
+                <div
                   key={output.id}
                   className={cn(
                     "flex items-center justify-between p-3 rounded-lg border transition-colors",
-                    isSavedLocally 
+                    isSavedLocally
                       ? "bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10"
                       : "bg-muted/30 border-border/50 hover:bg-muted/50"
                   )}
@@ -228,8 +170,8 @@ export function RecentOutputs() {
                           <span className="text-xs text-muted-foreground">{output.duration}</span>
                         )}
                         {isSavedLocally && (
-                          <Badge 
-                            variant="outline" 
+                          <Badge
+                            variant="outline"
                             className="text-[9px] h-4 border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
                           >
                             LOCAL ONLY
@@ -241,14 +183,14 @@ export function RecentOutputs() {
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                       <Clock className="w-3 h-3" />
                       {formatDistanceToNow(new Date(output.createdAt), { addSuffix: true })}
                     </div>
                     {output.driveLink ? (
-                      <a 
+                      <a
                         href={output.driveLink}
                         target="_blank"
                         rel="noopener noreferrer"

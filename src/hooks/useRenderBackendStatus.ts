@@ -114,13 +114,11 @@ export function useRenderBackendStatus() {
           usagePercent: data.disk?.total_gb > 0 ? Math.round((data.disk.used_gb / data.disk.total_gb) * 100) : 0
         },
         queue: {
-          // Queue stats might come from separate endpoint or included in future
-          // For now default to 0 to avoid breaking UI if not in health object
-          active: 0,
-          waiting: 0,
-          completed: 0,
-          failed: 0,
-          failed24h: 0
+          active: data.queue?.active ?? 0,
+          waiting: data.queue?.waiting ?? 0,
+          completed: data.queue?.completed ?? 0,
+          failed: data.queue?.failed ?? 0,
+          failed24h: data.queue?.failed24h ?? 0
         },
         deployment: {
           mode: typeof data.deployment === 'string' ? data.deployment : (data.deployment?.mode || 'self-hosted'),

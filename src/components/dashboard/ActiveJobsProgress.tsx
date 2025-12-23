@@ -21,15 +21,31 @@ export function ActiveJobsProgress({ projectId }: { projectId?: string }) {
   useEffect(() => {
     const fetchActiveJobs = async () => {
       try {
-        const { data, error } = await supabase
-          .from('pipeline_jobs')
-          .select('id, stage_name, stage_number, status, progress, started_at, error_message')
-          .in('status', ['pending', 'processing'])
-          .order('created_at', { ascending: false })
-          .limit(5);
+        const url = new URL('/api/history', window.location.origin);
+        if (projectId) {
+          url.searchParams.append('projectId', projectId);
+        }
 
-        if (error) throw error;
-        setActiveJobs(data || []);
+        const response = await fetch(url.toString());
+        if (!response.ok) throw new Error('Failed to fetch active jobs');
+
+        const data = await response.json();
+        if (data.ok && data.history) {
+          // Map backend job to ActiveJob shape
+          const historyJobs: ActiveJob[] = data.history
+            .filter((j: any) => j.status === 'queued' || j.status === 'running' || j.status === 'processing')
+            .map((j: any) => ({
+              id: j.id,
+              stage_name: j.type === 'execute-plan' ? 'Rendering' : 'Processing',
+              stage_number: 1,
+              status: j.status === 'queued' ? 'pending' : 'processing',
+              progress: j.progressPct || 0,
+              started_at: j.createdAt, // Using createdAt as startedAt fallback
+              error_message: j.error
+            }));
+
+          setActiveJobs(historyJobs.slice(0, 5));
+        }
       } catch (error) {
         console.error('Error fetching active jobs:', error);
       } finally {
@@ -38,47 +54,10 @@ export function ActiveJobsProgress({ projectId }: { projectId?: string }) {
     };
 
     fetchActiveJobs();
-
-    // Subscribe to real-time updates for pipeline_jobs
-    const channel = supabase
-      .channel('active-jobs-progress')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'pipeline_jobs',
-        },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const newJob = payload.new as ActiveJob;
-            if (newJob.status === 'pending' || newJob.status === 'processing') {
-              setActiveJobs(prev => [newJob, ...prev].slice(0, 5));
-            }
-          } else if (payload.eventType === 'UPDATE') {
-            const updatedJob = payload.new as ActiveJob;
-            setActiveJobs(prev => {
-              // If job is no longer active, remove it
-              if (updatedJob.status !== 'pending' && updatedJob.status !== 'processing') {
-                return prev.filter(j => j.id !== updatedJob.id);
-              }
-              // Update existing job
-              const exists = prev.find(j => j.id === updatedJob.id);
-              if (exists) {
-                return prev.map(j => j.id === updatedJob.id ? updatedJob : j);
-              }
-              // Add new active job
-              return [updatedJob, ...prev].slice(0, 5);
-            });
-          } else if (payload.eventType === 'DELETE') {
-            setActiveJobs(prev => prev.filter(j => j.id !== payload.old.id));
-          }
-        }
-      )
-      .subscribe();
+    const interval = setInterval(fetchActiveJobs, 5000); // 5s poll for active progress
 
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(interval);
     };
   }, [projectId]);
 
@@ -88,7 +67,7 @@ export function ActiveJobsProgress({ projectId }: { projectId?: string }) {
     const now = new Date();
     const diffMs = now.getTime() - start.getTime();
     const diffSec = Math.floor(diffMs / 1000);
-    
+
     if (diffSec < 60) return `${diffSec}s`;
     const diffMin = Math.floor(diffSec / 60);
     if (diffMin < 60) return `${diffMin}m ${diffSec % 60}s`;
@@ -98,17 +77,17 @@ export function ActiveJobsProgress({ projectId }: { projectId?: string }) {
 
   const getEstimatedTimeRemaining = (startedAt: string | null, progress: number) => {
     if (!startedAt || progress <= 0 || progress >= 100) return null;
-    
+
     const start = new Date(startedAt);
     const now = new Date();
     const elapsedMs = now.getTime() - start.getTime();
-    
+
     // Calculate rate: ms per percent
     const msPerPercent = elapsedMs / progress;
     const remainingPercent = 100 - progress;
     const remainingMs = msPerPercent * remainingPercent;
     const remainingSec = Math.floor(remainingMs / 1000);
-    
+
     if (remainingSec < 60) return `~${remainingSec}s left`;
     const remainingMin = Math.floor(remainingSec / 60);
     if (remainingMin < 60) return `~${remainingMin}m left`;
@@ -155,7 +134,7 @@ export function ActiveJobsProgress({ projectId }: { projectId?: string }) {
         <Loader2 className="h-4 w-4 animate-spin text-primary" />
         Active Pipeline Jobs ({activeJobs.length})
       </h3>
-      
+
       <div className="space-y-3">
         {activeJobs.map((job) => (
           <div key={job.id} className="space-y-1.5">
@@ -185,12 +164,12 @@ export function ActiveJobsProgress({ projectId }: { projectId?: string }) {
                 </span>
               </div>
             </div>
-            
-            <Progress 
-              value={job.progress} 
+
+            <Progress
+              value={job.progress}
               className="h-2"
             />
-            
+
             {job.error_message && (
               <p className="text-xs text-destructive truncate">
                 {job.error_message}

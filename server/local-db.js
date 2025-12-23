@@ -78,6 +78,23 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS video_outputs (
+    id TEXT PRIMARY KEY,
+    project_id TEXT,
+    job_id TEXT,
+    type TEXT DEFAULT 'video',
+    output_url TEXT,
+    thumbnail_url TEXT,
+    duration_sec REAL,
+    size_bytes INTEGER,
+    metadata TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY(project_id) REFERENCES projects(id)
+  );
+  
+  CREATE INDEX IF NOT EXISTS idx_outputs_project ON video_outputs(project_id);
+  CREATE INDEX IF NOT EXISTS idx_outputs_job ON video_outputs(job_id);
 `);
 
 // Auto-Migration: Blindly try to add column (safe ignore if exists)

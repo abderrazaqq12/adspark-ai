@@ -34,7 +34,6 @@ import {
 import { useRenderBackendStatus } from '@/hooks/useRenderBackendStatus';
 import { useDashboardSeverity, SeverityLevel } from '@/hooks/useDashboardSeverity';
 import { useCriticalNotifications } from '@/hooks/useCriticalNotifications';
-import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -56,8 +55,8 @@ export function SystemStatusBar() {
   const { addSignal, removeSignal, getAggregatedSeverity, getCriticalSignals, getWarningSignals } = useDashboardSeverity();
   const [queueStats, setQueueStats] = useState<QueueStats>({ active: 0, waiting: 0, failed24h: 0 });
   const [storage, setStorage] = useState<StorageStats>({ used: '0 GB', remaining: '∞', percentage: 0, isFull: false });
-  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
 
   // Initialize critical notifications with sound and browser alerts
   const { notificationPermission, requestPermission } = useCriticalNotifications({
@@ -135,13 +134,6 @@ export function SystemStatusBar() {
   }, [storage.isFull, addSignal, removeSignal]);
 
   useEffect(() => {
-    // Poll queue stats instead of Realtime to avoid Supabase dependency
-    fetchQueueStats();
-    const interval = setInterval(fetchQueueStats, 30000); // 30s poll
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
     // Update queue stats from backend
     if (backendStatus.queue) {
       setQueueStats({
@@ -161,47 +153,6 @@ export function SystemStatusBar() {
       });
     }
   }, [backendStatus]);
-
-  const fetchQueueStats = async () => {
-    try {
-      // In VPS mode, queue stats might eventually come from /api/health/queue
-      // For now, we try to fetch from supabase but fail silently if not configured
-
-      const { data: jobs, error } = await supabase
-        .from('pipeline_jobs')
-        .select('status')
-        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
-
-      if (!error && jobs) {
-        setQueueStats({
-          active: jobs.filter(j => j.status === 'processing' || j.status === 'running').length,
-          waiting: jobs.filter(j => j.status === 'pending' || j.status === 'queued').length,
-          failed24h: jobs.filter(j => j.status === 'failed').length,
-        });
-      }
-
-      // Estimate storage from file_assets
-      const { data: files, error: filesError } = await supabase
-        .from('file_assets')
-        .select('file_size')
-        .eq('status', 'active');
-
-      if (!filesError && files) {
-        const totalBytes = files.reduce((sum, f) => sum + (f.file_size || 0), 0);
-        const usedGB = totalBytes / (1024 * 1024 * 1024);
-        const maxGB = 100; // Assume 100GB quota
-        setStorage({
-          used: usedGB < 1 ? `${(usedGB * 1024).toFixed(1)} MB` : `${usedGB.toFixed(2)} GB`,
-          remaining: `${(maxGB - usedGB).toFixed(1)} GB`,
-          percentage: Math.min(usedGB / maxGB * 100, 100),
-          isFull: usedGB >= maxGB * 0.95
-        });
-      }
-    } catch (error) {
-      // Silent fail - likely no Supabase creds
-      // We let the backend health check populate storage stats via useRenderBackendStatus
-    }
-  };
 
   const aggregatedSeverity = getAggregatedSeverity();
   const criticalSignals = getCriticalSignals();
