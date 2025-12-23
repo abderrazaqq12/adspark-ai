@@ -258,30 +258,49 @@ const createProject = useCallback(async (name: string, autoCreateDriveFolder = t
     const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
     let userId = 'local-user';
 
-    if (!isSelfHosted) {
+    let newProject: Project;
+
+    if (isSelfHosted) {
+      const apiUrl = import.meta.env.VITE_REST_API_URL;
+      const projectsUrl = `${apiUrl || ''}/projects`.replace('//projects', '/projects');
+      const res = await fetch(projectsUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': 'local-user'
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          product_name: name.trim(),
+          status: 'draft',
+          settings: {}
+        })
+      });
+      if (!res.ok) throw new Error('Failed to create local project');
+      newProject = await res.json();
+    } else {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         toast.error('Please sign in to create a project');
         return null;
       }
       userId = user.id;
+
+      // Create project in database
+      const { data: project, error } = await supabase
+        .from('projects')
+        .insert({
+          user_id: userId,
+          name: name.trim(),
+          product_name: name.trim(),
+          status: 'draft'
+        })
+        .select('id, name, product_name, google_drive_folder_id, google_drive_folder_link, language, market, status, created_at, updated_at')
+        .single();
+
+      if (error) throw error;
+      newProject = project as Project;
     }
-
-    // Create project in database
-    const { data: project, error } = await supabase
-      .from('projects')
-      .insert({
-        user_id: userId,
-        name: name.trim(),
-        product_name: name.trim(),
-        status: 'draft'
-      })
-      .select('id, name, product_name, google_drive_folder_id, google_drive_folder_link, language, market, status, created_at, updated_at')
-      .single();
-
-    if (error) throw error;
-
-    const newProject = project as Project;
 
     // Try to create Google Drive folder (non-blocking)
     if (autoCreateDriveFolder) {

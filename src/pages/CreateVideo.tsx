@@ -770,32 +770,33 @@ export default function CreateVideo() {
         if (isSelfHosted) {
           const apiUrl = import.meta.env.VITE_REST_API_URL;
           const projectsUrl = `${apiUrl || ''}/projects`.replace('//projects', '/projects');
-          const res = await fetch(projectsUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-user-id': 'local-user'
-            },
-            body: JSON.stringify({
-              name: productInfo.name,
-              product_name: productInfo.name,
-              language: voiceLanguage,
-              settings: {
-                product_description: productInfo.description,
-                product_image_url: productInfo.imageUrl,
-                product_link: productInfo.link,
-              }
-            })
-          });
-          if (!res.ok) throw new Error('Failed to create local project');
-          const newProject = await res.json();
-          // Map backend response to local state if needed, but primary is existing flow
-          // We need to return an object describing the project in a compatible way
-          // The backend returns the project row directly.
-          // But existing code expects: { data: project, error } structure because it destructures below?
-          // No, wait, existing code: const { data: project, error: projectError } = await supabase...
-          // So I need to mock that structure or change the flow.
-          currentProjectId = newProject.id;
+          try {
+            // Use explicit token processing or bypass
+            const res = await fetch(projectsUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-user-id': 'local-user'
+              },
+              body: JSON.stringify({
+                name: productInfo.name,
+                product_name: productInfo.name,
+                language: voiceLanguage,
+                settings: {
+                  product_description: productInfo.description,
+                  product_image_url: productInfo.imageUrl,
+                  product_link: productInfo.link,
+                }
+              })
+            });
+            if (!res.ok) throw new Error('Failed to create local project');
+            const newProject = await res.json();
+            currentProjectId = newProject.id;
+            setProjectId(newProject.id);
+          } catch (err: any) {
+            console.error('Failed to create local project:', err);
+            throw new Error(err.message || 'Failed to create local project');
+          }
         } else {
           const { data: project, error: projectError } = await supabase
             .from("projects")
@@ -816,83 +817,78 @@ export default function CreateVideo() {
 
           if (projectError) throw projectError;
           currentProjectId = project.id;
+          setProjectId(project.id);
         }
       }
-          .select()
-    .single();
 
-  if (projectError) throw projectError;
-  currentProjectId = project.id;
-  setProjectId(project.id);
+      // Create Google Drive folder if configured
+      const { data: userSettings } = await supabase
+        .from("user_settings")
+        .select("preferences")
+        .eq("user_id", user.id)
+        .single();
 
-  // Create Google Drive folder if configured
-  const { data: userSettings } = await supabase
-    .from("user_settings")
-    .select("preferences")
-    .eq("user_id", user.id)
-    .single();
-
-  if (userSettings?.preferences) {
-    const prefs = userSettings.preferences as Record<string, any>;
-    if (prefs.google_drive_folder_url) {
-      // Trigger Google Drive folder creation (would need a separate edge function)
-      console.log("Would create Google Drive folder for:", productInfo.name);
+      if (userSettings?.preferences) {
+        const prefs = userSettings.preferences as Record<string, any>;
+        if (prefs.google_drive_folder_url) {
+          // Trigger Google Drive folder creation (would need a separate edge function)
+          console.log("Would create Google Drive folder for:", productInfo.name);
+        }
+      }
     }
-  }
-}
 
 // Create or update script
 const allScriptsText = scriptSlots.map(s => s.text).filter(t => t.trim()).join("\n\n---\n\n");
-if (!currentScriptId) {
-  const { data: scriptData, error: scriptError } = await supabase
-    .from("scripts")
-    .insert({
-      project_id: currentProjectId,
-      raw_text: allScriptsText,
-      language: voiceLanguage,
-      status: "analyzed",
-    })
-    .select()
-    .single();
+    if (!currentScriptId) {
+      const { data: scriptData, error: scriptError } = await supabase
+        .from("scripts")
+        .insert({
+          project_id: currentProjectId,
+          raw_text: allScriptsText,
+          language: voiceLanguage,
+          status: "analyzed",
+        })
+        .select()
+        .single();
 
-  if (scriptError) throw scriptError;
-  currentScriptId = scriptData.id;
-  setScriptId(scriptData.id);
-} else {
-  await supabase
-    .from("scripts")
-    .update({ raw_text: allScriptsText })
-    .eq("id", currentScriptId);
-}
+      if (scriptError) throw scriptError;
+      currentScriptId = scriptData.id;
+      setScriptId(scriptData.id);
+    } else {
+      await supabase
+        .from("scripts")
+        .update({ raw_text: allScriptsText })
+        .eq("id", currentScriptId);
+    }
 
-// Delete existing scenes for this script
-await supabase.from("scenes").delete().eq("script_id", currentScriptId);
+    // Delete existing scenes for this script
+    await supabase.from("scenes").delete().eq("script_id", currentScriptId);
 
-// Insert new scenes
-const scenesToInsert = scenes.map((scene, index) => ({
-  script_id: currentScriptId,
-  index,
-  text: scene.description || scene.title,
-  scene_type: "broll",
-  visual_prompt: scene.visualPrompt || null,
-  duration_sec: scene.duration || 5,
-  status: "pending",
-}));
+    // Insert new scenes
+    const scenesToInsert = scenes.map((scene, index) => ({
+      script_id: currentScriptId,
+      index,
+      text: scene.description || scene.title,
+      scene_type: "broll",
+      visual_prompt: scene.visualPrompt || null,
+      duration_sec: scene.duration || 5,
+      status: "pending",
+    }));
 
-const { error: scenesError } = await supabase
-  .from("scenes")
-  .insert(scenesToInsert);
+    const { error: scenesError } = await supabase
+      .from("scenes")
+      .insert(scenesToInsert);
 
-if (scenesError) throw scenesError;
+    if (scenesError) throw scenesError;
 
-toast.success("Project and scenes saved!");
-    } catch (error: any) {
-  console.error("Error saving:", error);
-  toast.error(error.message || "Failed to save project");
-} finally {
-  setIsSaving(false);
-}
-  };
+    toast.success("Project and scenes saved!");
+  } catch (error: any) {
+    console.error("Error saving:", error);
+    toast.error(error.message || "Failed to save project");
+  } finally {
+    setIsSaving(false);
+  }
+};
 
 const canProceedFromProductInfo = productInfo.name.trim().length > 0;
 const hasAnyScript = scriptSlots.some(s => s.text.trim() || s.audioUrl || s.generatedAudioUrl);
