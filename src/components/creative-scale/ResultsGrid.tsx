@@ -73,13 +73,6 @@ const ENGINE_CONFIG: Record<string, {
     description: 'Rendered on VPS server with native FFmpeg'
   },
   // Cloud APIs
-  'cloudinary': {
-    label: 'Cloudinary',
-    icon: Cloud,
-    color: 'text-purple-600',
-    bgColor: 'bg-purple-500/10 border-purple-500/30',
-    description: 'Transformed via Cloudinary Video API'
-  },
   'mux': {
     label: 'Mux',
     icon: Cloud,
@@ -158,11 +151,11 @@ function VideoThumbnail({
   const handleLoadedMetadata = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-    
+
     if (video.duration) {
       setDuration(video.duration);
     }
-    
+
     // Only seek for thumbnail if not already generated
     if (!thumbnailGenerated) {
       // Seek to 1 second or 25% for better thumbnail
@@ -176,14 +169,14 @@ function VideoThumbnail({
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas || thumbnailGenerated) return;
-    
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    
+
     canvas.width = video.videoWidth || 320;
     canvas.height = video.videoHeight || 180;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
+
     try {
       const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
       setThumbnailUrl(dataUrl);
@@ -226,7 +219,7 @@ function VideoThumbnail({
     >
       {/* Hidden canvas for thumbnail generation */}
       <canvas ref={canvasRef} className="hidden" />
-      
+
       {/* Static thumbnail image - shown when not hovering */}
       {thumbnailUrl && !isHovering && (
         <img
@@ -235,7 +228,7 @@ function VideoThumbnail({
           className="w-full h-full object-cover absolute inset-0"
         />
       )}
-      
+
       {/* Video element - hidden until hover or no thumbnail */}
       <video
         ref={videoRef}
@@ -250,25 +243,24 @@ function VideoThumbnail({
         onLoadedMetadata={handleLoadedMetadata}
         onSeeked={handleSeeked}
       />
-      
+
       {/* Play overlay - shows when not hovering */}
-      <div 
-        className={`absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity duration-200 ${
-          isHovering ? 'opacity-0' : 'opacity-100'
-        }`}
+      <div
+        className={`absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity duration-200 ${isHovering ? 'opacity-0' : 'opacity-100'
+          }`}
       >
         <div className="w-12 h-12 rounded-full bg-primary/90 flex items-center justify-center backdrop-blur-sm">
           <Play className="w-6 h-6 text-primary-foreground ml-0.5" />
         </div>
       </div>
-      
+
       {/* Duration overlay - bottom right */}
       {duration !== null && (
         <div className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-black/70 rounded text-[11px] text-white font-medium tabular-nums">
           {formatDuration(duration)}
         </div>
       )}
-      
+
       {/* Hover indicator - bottom left */}
       {isHovering && (
         <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/60 rounded text-[10px] text-white font-medium backdrop-blur-sm">
@@ -319,106 +311,21 @@ export function ResultsGrid({
           const engineConfig = getEngineConfig(item.engineUsed);
           const EngineIcon = engineConfig.icon;
 
-        return (
-          <div
-            key={item.plan.plan_id}
-            className={`rounded-lg border p-4 ${failed && !isPlanOnly ? 'border-destructive/50 bg-destructive/5' :
-              isPlanOnly ? 'border-amber-500/30 bg-amber-500/5' :
-                'border-border'
-              }`}
-          >
-            {/* Thumbnail / Placeholder with Hover Preview */}
-            <div className="aspect-video bg-muted rounded-lg mb-3 flex items-center justify-center overflow-hidden relative">
-              {hasVideo ? (
-                <VideoThumbnail
-                  videoUrl={videoUrl}
-                  hasVideo={!!hasVideo}
-                  onPlay={() => {
-                    if (videoUrl) {
-                      setPlayingVideo({
-                        url: videoUrl,
-                        title: `Variation ${item.variationIndex + 1}`,
-                        engine: engineConfig.label
-                      });
-                    }
-                  }}
-                />
-              ) : (
-                <div className="text-center p-4">
-                  {isPlanOnly ? (
-                    <FileCode className="w-8 h-8 text-amber-500 mx-auto mb-2" />
-                  ) : failed ? (
-                    <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-2" />
-                  ) : (
-                    <Play className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    {isPlanOnly ? 'Advanced rendering required' :
-                      failed ? 'Execution failed' :
-                        'No video generated'}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Info */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-sm">Variation {item.variationIndex + 1}</span>
-                <Badge variant={hasVideo ? 'default' : isPlanOnly ? 'secondary' : failed ? 'destructive' : 'secondary'}>
-                  {hasVideo ? (
-                    <>
-                      <CheckCircle2 className="w-3 h-3 mr-1" />
-                      Ready
-                    </>
-                  ) : isPlanOnly ? (
-                    'Plan Exported'
-                  ) : failed ? (
-                    'Failed'
-                  ) : (
-                    'Plan Only'
-                  )}
-                </Badge>
-              </div>
-
-              {/* Engine Badge with Tooltip */}
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs font-medium cursor-help ${engineConfig.bgColor}`}>
-                      <EngineIcon className={`w-3.5 h-3.5 ${engineConfig.color}`} />
-                      <span className={engineConfig.color}>{engineConfig.label}</span>
-                      {item.fallbackUsed && (
-                        <Badge variant="outline" className="ml-1 px-1 py-0 text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/30">
-                          Fallback
-                        </Badge>
-                      )}
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-xs">
-                    <p className="text-xs">{engineConfig.description}</p>
-                    {item.fallbackUsed && (
-                      <p className="text-xs text-amber-500 mt-1">
-                        ⚠ Used fallback engine due to primary engine limitation
-                      </p>
-                    )}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              {item.errorReason && !isPlanOnly && (
-                <p className="text-xs text-destructive">{item.errorReason}</p>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-2 pt-2">
-                {/* Play Video - ONLY if exists */}
-                {hasVideo && (
-                  <Button
-                    size="sm"
-                    variant="default"
-                    className="flex-1"
-                    onClick={() => {
+          return (
+            <div
+              key={item.plan.plan_id}
+              className={`rounded-lg border p-4 ${failed && !isPlanOnly ? 'border-destructive/50 bg-destructive/5' :
+                isPlanOnly ? 'border-amber-500/30 bg-amber-500/5' :
+                  'border-border'
+                }`}
+            >
+              {/* Thumbnail / Placeholder with Hover Preview */}
+              <div className="aspect-video bg-muted rounded-lg mb-3 flex items-center justify-center overflow-hidden relative">
+                {hasVideo ? (
+                  <VideoThumbnail
+                    videoUrl={videoUrl}
+                    hasVideo={!!hasVideo}
+                    onPlay={() => {
                       if (videoUrl) {
                         setPlayingVideo({
                           url: videoUrl,
@@ -427,60 +334,145 @@ export function ResultsGrid({
                         });
                       }
                     }}
-                  >
-                    <Play className="w-3 h-3 mr-1" />
-                    Play
-                  </Button>
-                )}
-
-                {/* Download Video - ONLY if exists */}
-                {hasVideo && onDownloadVideo && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onDownloadVideo(item)}
-                  >
-                    <Download className="w-3 h-3" />
-                  </Button>
-                )}
-
-                {/* Download Plan - ALWAYS available */}
-                <Button
-                  size="sm"
-                  variant={isPlanOnly ? 'default' : 'outline'}
-                  className={hasVideo ? '' : 'flex-1'}
-                  onClick={() => onDownloadPlan(item)}
-                >
-                  <FileJson className="w-3 h-3 mr-1" />
-                  {isPlanOnly ? 'Download Plan' : 'Plan'}
-                </Button>
-
-                {/* Retry if failed (not for plan-only) */}
-                {failed && !isPlanOnly && onRetry && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => onRetry(item)}
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                  </Button>
-                )}
-
-                {/* Duplicate & Iterate */}
-                {onDuplicate && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => onDuplicate(item)}
-                    title="Duplicate & Iterate"
-                  >
-                    <Copy className="w-3 h-3" />
-                  </Button>
+                  />
+                ) : (
+                  <div className="text-center p-4">
+                    {isPlanOnly ? (
+                      <FileCode className="w-8 h-8 text-amber-500 mx-auto mb-2" />
+                    ) : failed ? (
+                      <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-2" />
+                    ) : (
+                      <Play className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {isPlanOnly ? 'Advanced rendering required' :
+                        failed ? 'Execution failed' :
+                          'No video generated'}
+                    </p>
+                  </div>
                 )}
               </div>
+
+              {/* Info */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-sm">Variation {item.variationIndex + 1}</span>
+                  <Badge variant={hasVideo ? 'default' : isPlanOnly ? 'secondary' : failed ? 'destructive' : 'secondary'}>
+                    {hasVideo ? (
+                      <>
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        Ready
+                      </>
+                    ) : isPlanOnly ? (
+                      'Plan Exported'
+                    ) : failed ? (
+                      'Failed'
+                    ) : (
+                      'Plan Only'
+                    )}
+                  </Badge>
+                </div>
+
+                {/* Engine Badge with Tooltip */}
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs font-medium cursor-help ${engineConfig.bgColor}`}>
+                        <EngineIcon className={`w-3.5 h-3.5 ${engineConfig.color}`} />
+                        <span className={engineConfig.color}>{engineConfig.label}</span>
+                        {item.fallbackUsed && (
+                          <Badge variant="outline" className="ml-1 px-1 py-0 text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/30">
+                            Fallback
+                          </Badge>
+                        )}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs">
+                      <p className="text-xs">{engineConfig.description}</p>
+                      {item.fallbackUsed && (
+                        <p className="text-xs text-amber-500 mt-1">
+                          ⚠ Used fallback engine due to primary engine limitation
+                        </p>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                {item.errorReason && !isPlanOnly && (
+                  <p className="text-xs text-destructive">{item.errorReason}</p>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-2 pt-2">
+                  {/* Play Video - ONLY if exists */}
+                  {hasVideo && (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="flex-1"
+                      onClick={() => {
+                        if (videoUrl) {
+                          setPlayingVideo({
+                            url: videoUrl,
+                            title: `Variation ${item.variationIndex + 1}`,
+                            engine: engineConfig.label
+                          });
+                        }
+                      }}
+                    >
+                      <Play className="w-3 h-3 mr-1" />
+                      Play
+                    </Button>
+                  )}
+
+                  {/* Download Video - ONLY if exists */}
+                  {hasVideo && onDownloadVideo && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onDownloadVideo(item)}
+                    >
+                      <Download className="w-3 h-3" />
+                    </Button>
+                  )}
+
+                  {/* Download Plan - ALWAYS available */}
+                  <Button
+                    size="sm"
+                    variant={isPlanOnly ? 'default' : 'outline'}
+                    className={hasVideo ? '' : 'flex-1'}
+                    onClick={() => onDownloadPlan(item)}
+                  >
+                    <FileJson className="w-3 h-3 mr-1" />
+                    {isPlanOnly ? 'Download Plan' : 'Plan'}
+                  </Button>
+
+                  {/* Retry if failed (not for plan-only) */}
+                  {failed && !isPlanOnly && onRetry && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onRetry(item)}
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                    </Button>
+                  )}
+
+                  {/* Duplicate & Iterate */}
+                  {onDuplicate && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onDuplicate(item)}
+                      title="Duplicate & Iterate"
+                    >
+                      <Copy className="w-3 h-3" />
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        );
+          );
         })}
       </div>
     </>

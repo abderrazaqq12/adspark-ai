@@ -45,6 +45,8 @@ import { trackCost, supabase } from './supabase.js';
 import { trackResource } from './project-manager.js';
 import { enforceProject } from './middleware/project-enforcer.js';
 import { errorHandler } from './error-handler.js';
+import { healthRouter, getQueueStats } from './health-endpoints.js';
+import { analyticsRouter } from './analytics-collector.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -908,6 +910,23 @@ app.use('/api', (req, res, next) => {
 // Serve static files
 app.use('/uploads', express.static(UPLOAD_DIR));
 app.use('/outputs', express.static(OUTPUT_DIR));
+
+// ============================================
+// HEALTH ENDPOINTS - VPS Truth Enforcement
+// ============================================
+
+// Expose queue stats function for health endpoints
+app.locals.getQueueStats = () => getQueueStats(jobs, pendingQueue, currentJob);
+
+// Mount health endpoints
+app.use('/api/health', healthRouter);
+
+console.log('[FlowScale API] Health endpoints mounted at /api/health/*');
+
+// Mount analytics endpoints
+app.use('/api/analytics', analyticsRouter);
+
+console.log('[FlowScale API] Analytics endpoints mounted at /api/analytics/*');
 
 // ============================================
 // CONNECTION MANAGEMENT API

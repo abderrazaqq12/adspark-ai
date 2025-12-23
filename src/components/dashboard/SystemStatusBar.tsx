@@ -16,9 +16,9 @@
 
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Server, 
-  Film, 
+import {
+  Server,
+  Film,
   Cpu,
   HardDrive,
   Wifi,
@@ -58,7 +58,7 @@ export function SystemStatusBar() {
   const [storage, setStorage] = useState<StorageStats>({ used: '0 GB', remaining: '∞', percentage: 0, isFull: false });
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  
+
   // Initialize critical notifications with sound and browser alerts
   const { notificationPermission, requestPermission } = useCriticalNotifications({
     soundEnabled: notificationsEnabled,
@@ -136,7 +136,7 @@ export function SystemStatusBar() {
 
   useEffect(() => {
     fetchQueueStats();
-    
+
     const channel = supabase
       .channel('system-status-bar')
       .on(
@@ -147,11 +147,32 @@ export function SystemStatusBar() {
       .subscribe((status) => {
         setIsRealtimeConnected(status === 'SUBSCRIBED');
       });
-    
+
     return () => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  useEffect(() => {
+    // Update queue stats from backend
+    if (backendStatus.queue) {
+      setQueueStats({
+        active: backendStatus.queue.active,
+        waiting: backendStatus.queue.waiting,
+        failed24h: backendStatus.queue.failed24h,
+      });
+    }
+
+    // Update storage from backend
+    if (backendStatus.storage && backendStatus.storage.available) {
+      setStorage({
+        used: backendStatus.storage.used || '0 GB',
+        remaining: backendStatus.storage.free || '∞',
+        percentage: backendStatus.storage.usagePercent || 0,
+        isFull: (backendStatus.storage.usagePercent || 0) >= 95
+      });
+    }
+  }, [backendStatus]);
 
   const fetchQueueStats = async () => {
     try {
@@ -196,31 +217,31 @@ export function SystemStatusBar() {
 
   const SeverityIndicator = ({ severity }: { severity: SeverityLevel }) => {
     const config = {
-      healthy: { 
-        icon: CheckCircle2, 
-        color: 'text-green-500', 
-        bg: 'bg-green-500/10', 
+      healthy: {
+        icon: CheckCircle2,
+        color: 'text-green-500',
+        bg: 'bg-green-500/10',
         border: 'border-green-500/30',
         label: 'Healthy'
       },
-      warning: { 
-        icon: AlertTriangle, 
-        color: 'text-amber-500', 
-        bg: 'bg-amber-500/10', 
+      warning: {
+        icon: AlertTriangle,
+        color: 'text-amber-500',
+        bg: 'bg-amber-500/10',
         border: 'border-amber-500/30',
         label: 'Warning'
       },
-      critical: { 
-        icon: XCircle, 
-        color: 'text-destructive', 
-        bg: 'bg-destructive/10', 
+      critical: {
+        icon: XCircle,
+        color: 'text-destructive',
+        bg: 'bg-destructive/10',
         border: 'border-destructive/30',
         label: 'Critical'
       }
     };
-    
+
     const { icon: Icon, color, bg, border, label } = config[severity];
-    
+
     return (
       <div className={cn("flex items-center gap-2 px-3 py-1.5 rounded-md", bg, border, "border")}>
         <Icon className={cn("w-4 h-4", color)} />
@@ -229,14 +250,14 @@ export function SystemStatusBar() {
     );
   };
 
-  const StatusItem = ({ 
-    icon: Icon, 
-    label, 
-    status, 
+  const StatusItem = ({
+    icon: Icon,
+    label,
+    status,
     value,
-  }: { 
-    icon: any; 
-    label: string; 
+  }: {
+    icon: any;
+    label: string;
     status: 'online' | 'offline' | 'warning';
     value?: string;
   }) => (
@@ -283,7 +304,7 @@ export function SystemStatusBar() {
                 aggregatedSeverity === 'critical' && "text-destructive",
                 aggregatedSeverity === 'warning' && "text-amber-600 dark:text-amber-400"
               )}>
-                {aggregatedSeverity === 'critical' 
+                {aggregatedSeverity === 'critical'
                   ? `${criticalSignals.length} Critical Issue${criticalSignals.length > 1 ? 's' : ''}`
                   : `${warningSignals.length} Warning${warningSignals.length > 1 ? 's' : ''}`
                 }
@@ -350,8 +371,8 @@ export function SystemStatusBar() {
               </TooltipTrigger>
               <TooltipContent side="bottom">
                 <p className="text-xs">
-                  {notificationsEnabled 
-                    ? 'Critical alerts enabled (sound + browser)' 
+                  {notificationsEnabled
+                    ? 'Critical alerts enabled (sound + browser)'
                     : 'Critical alerts disabled'}
                 </p>
               </TooltipContent>
@@ -384,7 +405,7 @@ export function SystemStatusBar() {
               <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <StatusItem 
+            <StatusItem
               icon={Server}
               label="VPS"
               status={backendStatus.vpsServer.available ? 'online' : 'offline'}
@@ -393,18 +414,25 @@ export function SystemStatusBar() {
           )}
 
           {/* FFmpeg */}
-          <StatusItem 
+          <StatusItem
             icon={Film}
             label="FFmpeg"
-            status={backendStatus.vpsServer.available ? 'online' : 'offline'}
+            status={backendStatus.ffmpeg.available ? 'online' : 'offline'}
+            value={backendStatus.ffmpeg.available ?
+              (backendStatus.ffmpeg.version || 'Yes') :
+              'No'}
           />
 
           {/* GPU */}
-          <StatusItem 
+          <StatusItem
             icon={Cpu}
             label="GPU"
-            status="warning"
-            value="N/A"
+            status={backendStatus.gpu.available ? 'online' : 'warning'}
+            value={backendStatus.gpu.available ?
+              (backendStatus.gpu.count && backendStatus.gpu.count > 0 ?
+                `${backendStatus.gpu.gpus?.[0]?.name?.substring(0, 20) || backendStatus.gpu.vendor}` :
+                'Yes') :
+              'No GPU'}
           />
 
           {/* Queue Status */}
@@ -412,15 +440,15 @@ export function SystemStatusBar() {
             <span className="text-xs text-muted-foreground">Queue:</span>
             <Badge variant="outline" className={cn(
               "h-5 px-1.5 text-[10px]",
-              queueStats.active > 0 
-                ? "border-primary/30 bg-primary/5 text-primary" 
+              queueStats.active > 0
+                ? "border-primary/30 bg-primary/5 text-primary"
                 : "border-border bg-muted/30"
             )}>
               {queueStats.active} Active
             </Badge>
             <Badge variant="outline" className={cn(
               "h-5 px-1.5 text-[10px]",
-              queueStats.waiting > 0 
+              queueStats.waiting > 0
                 ? "border-amber-500/30 bg-amber-500/5 text-amber-600"
                 : "border-border bg-muted/30"
             )}>

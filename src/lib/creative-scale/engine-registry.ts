@@ -33,26 +33,7 @@ export const ENGINE_REGISTRY: EngineEntry[] = [
     cold_start_ms: 1000,
   },
 
-  // ========== CLOUD ENGINES ==========
-  {
-    engine_id: 'cloudinary',
-    name: 'Cloudinary',
-    location: 'cloud',
-    capabilities: {
-      max_resolution: '4k',
-      max_duration_sec: 300,
-      supports_filters: true,
-      supports_audio_tracks: true,
-      supports_speed_change: true,
-      supports_ai_generation: false,
-      supports_overlays: true,
-      supports_transitions: true,
-    },
-    cost_profile: 'medium',
-    reliability_score: 0.98,
-    available: true,
-    cold_start_ms: 1000,
-  },
+  // ========== CLOUD VIDEO API ENGINES ==========
   {
     engine_id: 'mux',
     name: 'Mux Video',
@@ -268,7 +249,7 @@ export function getEnginesByLocation(location: EngineEntry['location']): EngineE
 export function getEnginesByCost(maxCost: EngineEntry['cost_profile']): EngineEntry[] {
   const costOrder = ['free', 'low', 'medium', 'high'];
   const maxIndex = costOrder.indexOf(maxCost);
-  return ENGINE_REGISTRY.filter(e => 
+  return ENGINE_REGISTRY.filter(e =>
     e.available && costOrder.indexOf(e.cost_profile) <= maxIndex
   );
 }

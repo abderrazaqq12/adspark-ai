@@ -47,17 +47,6 @@ export const ENGINE_REGISTRY: Record<string, EngineSpecs> = {
         maxDurationSec: 600,
         tier: "free",
         coldStartLatencyMs: 100
-    },
-    "cloudinary": {
-        id: "cloudinary",
-        name: "Cloudinary Video",
-        location: "cloud-api",
-        capabilities: ["transcode", "trim", "concat", "subtitle_burn", "resize"],
-        costPerMinute: 0.05,
-        maxResolution: "4k",
-        maxDurationSec: 1800,
-        tier: "low",
-        coldStartLatencyMs: 500
     }
 };
 
