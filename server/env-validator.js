@@ -90,7 +90,7 @@ const FORBIDDEN_BACKEND_PATTERNS = [
  */
 function validateRequired(envVar) {
   const value = process.env[envVar.key];
-  
+
   if (!value || value.trim().length === 0) {
     return {
       valid: false,
@@ -100,7 +100,7 @@ function validateRequired(envVar) {
       example: envVar.example
     };
   }
-  
+
   // Check minimum length for secrets (prevent placeholder values)
   if (value.length < 10) {
     return {
@@ -111,7 +111,7 @@ function validateRequired(envVar) {
       example: envVar.example
     };
   }
-  
+
   return { valid: true, key: envVar.key };
 }
 
@@ -120,7 +120,7 @@ function validateRequired(envVar) {
  */
 function checkRecommended(envVar) {
   const value = process.env[envVar.key];
-  
+
   if (!value || value.trim().length === 0) {
     return {
       present: false,
@@ -129,7 +129,7 @@ function checkRecommended(envVar) {
       description: envVar.description
     };
   }
-  
+
   return { present: true, key: envVar.key };
 }
 
@@ -138,7 +138,7 @@ function checkRecommended(envVar) {
  */
 function scanForbiddenPatterns() {
   const violations = [];
-  
+
   for (const [key, value] of Object.entries(process.env)) {
     for (const forbidden of FORBIDDEN_BACKEND_PATTERNS) {
       if (forbidden.pattern.test(key)) {
@@ -150,7 +150,7 @@ function scanForbiddenPatterns() {
       }
     }
   }
-  
+
   return violations;
 }
 
@@ -160,25 +160,25 @@ function scanForbiddenPatterns() {
  */
 function validateEnvironment(options = {}) {
   const { silent = false, exitOnError = true } = options;
-  
+
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('🔒 FlowScale Security: Environment Validation');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('');
-  
+
   const results = {
     required: [],
     recommended: [],
     forbidden: [],
     valid: true
   };
-  
+
   // 1. Validate REQUIRED secrets
   console.log('📋 Checking REQUIRED secrets...');
   for (const envVar of REQUIRED_BACKEND_SECRETS) {
     const result = validateRequired(envVar);
     results.required.push(result);
-    
+
     if (!result.valid) {
       console.error(`   ❌ ${result.error}`);
       console.error(`      Description: ${result.description}`);
@@ -189,13 +189,13 @@ function validateEnvironment(options = {}) {
     }
   }
   console.log('');
-  
+
   // 2. Check RECOMMENDED secrets
   console.log('💡 Checking RECOMMENDED secrets...');
   for (const envVar of RECOMMENDED_SECRETS) {
     const result = checkRecommended(envVar);
     results.recommended.push(result);
-    
+
     if (!result.present) {
       console.warn(`   ⚠️  ${result.key} - ${result.feature} will be unavailable`);
     } else {
@@ -203,11 +203,11 @@ function validateEnvironment(options = {}) {
     }
   }
   console.log('');
-  
+
   // 3. Scan for FORBIDDEN patterns
   console.log('🚫 Scanning for FORBIDDEN patterns...');
   results.forbidden = scanForbiddenPatterns();
-  
+
   if (results.forbidden.length > 0) {
     console.error('   ❌ SECURITY VIOLATION: Forbidden environment variables detected!');
     for (const violation of results.forbidden) {
@@ -218,7 +218,7 @@ function validateEnvironment(options = {}) {
     console.log('   ✅ No forbidden patterns detected');
   }
   console.log('');
-  
+
   // 4. Final validation result
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   if (results.valid) {
@@ -237,7 +237,7 @@ function validateEnvironment(options = {}) {
     console.error('  - .env.example (template with all required variables)');
     console.error('  - SECURITY_ARCHITECTURE.md (security guidelines)');
     console.error('');
-    
+
     if (exitOnError) {
       process.exit(1);
     } else {
@@ -272,7 +272,7 @@ function getValidationSummary() {
 // EXPORTS
 // ============================================
 
-module.exports = {
+export {
   validateEnvironment,
   getValidationSummary,
   REQUIRED_BACKEND_SECRETS,
@@ -280,6 +280,7 @@ module.exports = {
 };
 
 // If run directly, execute validation
-if (require.main === module) {
+// Note: ES modules don't have require.main, use import.meta.url instead
+if (import.meta.url === `file://${process.argv[1]}`) {
   validateEnvironment();
 }
