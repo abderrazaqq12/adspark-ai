@@ -22,7 +22,8 @@ import {
   ActiveProjectSnapshot,
   LivePipelineActivity,
   CostUsageSnapshot,
-  RecentOutputs
+  RecentOutputs,
+  ActiveJobsProgress
 } from '@/components/dashboard';
 
 export default function Dashboard() {
@@ -41,6 +42,9 @@ export default function Dashboard() {
 
       {/* SECTION 2 - Active Project Snapshot */}
       <ActiveProjectSnapshot />
+
+      {/* SECTION 2.5 - Active Jobs Progress (Real-time) */}
+      <ActiveJobsProgress />
 
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
