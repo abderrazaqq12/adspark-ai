@@ -5,7 +5,7 @@
  * Implements the core architectural rule: NO OPERATIONS WITHOUT PROJECT.
  */
 
-import { validateProject } from './project-manager.js';
+import { validateProject } from '../project-manager.js';
 
 /**
  * Middleware to enforce project context on API endpoints
