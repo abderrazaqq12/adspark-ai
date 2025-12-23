@@ -96,6 +96,26 @@ export function ActiveJobsProgress({ projectId }: { projectId?: string }) {
     return `${diffHour}h ${diffMin % 60}m`;
   };
 
+  const getEstimatedTimeRemaining = (startedAt: string | null, progress: number) => {
+    if (!startedAt || progress <= 0 || progress >= 100) return null;
+    
+    const start = new Date(startedAt);
+    const now = new Date();
+    const elapsedMs = now.getTime() - start.getTime();
+    
+    // Calculate rate: ms per percent
+    const msPerPercent = elapsedMs / progress;
+    const remainingPercent = 100 - progress;
+    const remainingMs = msPerPercent * remainingPercent;
+    const remainingSec = Math.floor(remainingMs / 1000);
+    
+    if (remainingSec < 60) return `~${remainingSec}s left`;
+    const remainingMin = Math.floor(remainingSec / 60);
+    if (remainingMin < 60) return `~${remainingMin}m left`;
+    const remainingHour = Math.floor(remainingMin / 60);
+    return `~${remainingHour}h ${remainingMin % 60}m left`;
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'processing':
@@ -149,13 +169,18 @@ export function ActiveJobsProgress({ projectId }: { projectId?: string }) {
                   Stage {job.stage_number}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 {job.started_at && (
-                  <span className="text-xs text-muted-foreground">
+                  <span>
                     {getElapsedTime(job.started_at)}
                   </span>
                 )}
-                <span className="font-mono text-xs font-medium min-w-[40px] text-right">
+                {job.started_at && job.progress > 0 && job.progress < 100 && (
+                  <span className="text-primary font-medium">
+                    {getEstimatedTimeRemaining(job.started_at, job.progress)}
+                  </span>
+                )}
+                <span className="font-mono font-medium min-w-[40px] text-right text-foreground">
                   {job.progress}%
                 </span>
               </div>
