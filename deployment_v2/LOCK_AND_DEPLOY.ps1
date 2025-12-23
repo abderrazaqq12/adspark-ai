@@ -10,8 +10,15 @@ $env:VITE_REST_API_URL="/api"
 # Clean dist if exists
 if (Test-Path "dist") { Remove-Item "dist" -Recurse -Force }
 
-npm run build
-if ($LASTEXITCODE -ne 0) {
+# Attempt build (will likely fail on user machine, triggering fallback)
+# We relax ErrorAction because npm writes to stderr which stops execution
+$oldPre = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+npm run build 2>$null
+$buildExitCode = $LASTEXITCODE
+$ErrorActionPreference = $oldPre
+
+if ($buildExitCode -ne 0) {
     Write-Warning "Local Build Failed. Switching to RELIABLE REMOTE BUILD using VPS Swap..."
     
     # REMOTE BUILD PROTOCOL
@@ -34,6 +41,7 @@ if ($LASTEXITCODE -ne 0) {
     
     # 2. Trigger Docker Build
     Write-Host "1c. Building on VPS (This may take a moment)..." -ForegroundColor Yellow
+    # Note: We strip \r to prevent bash errors on Linux
     $buildCmd = @"
     cd $remoteDir
     tar -xzf source_bundle.tar.gz -C .
@@ -44,7 +52,7 @@ if ($LASTEXITCODE -ne 0) {
     docker create --name temp_builder flowscale-builder
     docker cp temp_builder:/app/dist ./dist
     docker rm -f temp_builder
-"@
+"@ -replace "`r", ""
     ssh -i $keyPath $vpsHost $buildCmd
     
     Write-Host "Remote Build Complete. Deployment Package will be created on remote or skipped." -ForegroundColor Yellow
@@ -84,7 +92,7 @@ docker system prune -f
 # Start locked system
 docker compose -f deployment_v2/docker-compose.lock.yml down
 docker compose -f deployment_v2/docker-compose.lock.yml up -d --build --remove-orphans
-"@
+"@ -replace "`r", ""
 
 ssh -i $keyPath $vpsHost $remoteActivateCmd
 
