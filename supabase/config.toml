@@ -140,3 +140,6 @@ verify_jwt = false
 
 [functions.upload-to-google-drive]
 verify_jwt = false
+
+[functions.scheduled-cleanup]
+verify_jwt = false
