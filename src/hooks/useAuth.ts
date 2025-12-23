@@ -3,26 +3,21 @@ import { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  // VPS SINGLE USER MODE
+  // Always authorize as Admin
+  const [user] = useState<User | null>({
+    id: '00000000-0000-0000-0000-000000000000',
+    app_metadata: { provider: 'email' },
+    user_metadata: { name: 'Admin User' },
+    aud: 'authenticated',
+    created_at: new Date().toISOString()
+  } as User);
 
-  useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+  const [loading] = useState(false);
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
+  // No-op for sign out
   const signOut = async () => {
-    await supabase.auth.signOut();
+    console.log('Sign out disabled in Single User Mode');
   };
 
   return { user, loading, signOut };

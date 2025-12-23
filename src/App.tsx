@@ -19,7 +19,7 @@ import Settings from "./pages/Settings";
 import Videos from "./pages/Videos";
 import Analytics from "./pages/Analytics";
 import Templates from "./pages/Templates";
-import Auth from "./pages/Auth";
+// import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import AITools from "./pages/AITools";
 import CreativeReplicator from "./pages/CreativeReplicator";
@@ -35,29 +35,29 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/auth" element={<Auth />} />
+            {/* <Route path="/auth" element={<Auth />} />  -- Disabled for Single User Mode */}
             <Route path="/*" element={
               <ProtectedRoute>
                 <AudienceProvider>
                   <GlobalProjectProvider>
                     <ProjectProvider>
                       <Layout>
-                      <Routes>
-                        <Route path="/" element={<Dashboard />} />
-                        <Route path="/create" element={<CreateVideo />} />
-                        <Route path="/quick-generate" element={<CreateVideo />} />
-                        <Route path="/creative-replicator" element={<CreativeReplicator />} />
-                        <Route path="/creative-scale" element={<CreativeScale />} />
-                        <Route path="/projects" element={<Projects />} />
-                        <Route path="/gallery" element={<Gallery />} />
-                        <Route path="/videos" element={<Videos />} />
-                        <Route path="/scene-builder" element={<SceneBuilder />} />
-                        <Route path="/engines" element={<Engines />} />
-                        <Route path="/settings" element={<Settings />} />
-                        <Route path="/analytics" element={<Analytics />} />
-                        <Route path="/templates" element={<Templates />} />
-                        <Route path="/ai-tools" element={<AITools />} />
-                        <Route path="*" element={<NotFound />} />
+                        <Routes>
+                          <Route path="/" element={<Dashboard />} />
+                          <Route path="/create" element={<CreateVideo />} />
+                          <Route path="/quick-generate" element={<CreateVideo />} />
+                          <Route path="/creative-replicator" element={<CreativeReplicator />} />
+                          <Route path="/creative-scale" element={<CreativeScale />} />
+                          <Route path="/projects" element={<Projects />} />
+                          <Route path="/gallery" element={<Gallery />} />
+                          <Route path="/videos" element={<Videos />} />
+                          <Route path="/scene-builder" element={<SceneBuilder />} />
+                          <Route path="/engines" element={<Engines />} />
+                          <Route path="/settings" element={<Settings />} />
+                          <Route path="/analytics" element={<Analytics />} />
+                          <Route path="/templates" element={<Templates />} />
+                          <Route path="/ai-tools" element={<AITools />} />
+                          <Route path="*" element={<NotFound />} />
                         </Routes>
                       </Layout>
                     </ProjectProvider>

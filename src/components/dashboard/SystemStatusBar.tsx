@@ -135,22 +135,10 @@ export function SystemStatusBar() {
   }, [storage.isFull, addSignal, removeSignal]);
 
   useEffect(() => {
+    // Poll queue stats instead of Realtime to avoid Supabase dependency
     fetchQueueStats();
-
-    const channel = supabase
-      .channel('system-status-bar')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'pipeline_jobs' },
-        () => fetchQueueStats()
-      )
-      .subscribe((status) => {
-        setIsRealtimeConnected(status === 'SUBSCRIBED');
-      });
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    const interval = setInterval(fetchQueueStats, 30000); // 30s poll
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -176,12 +164,15 @@ export function SystemStatusBar() {
 
   const fetchQueueStats = async () => {
     try {
-      const { data: jobs } = await supabase
+      // In VPS mode, queue stats might eventually come from /api/health/queue
+      // For now, we try to fetch from supabase but fail silently if not configured
+
+      const { data: jobs, error } = await supabase
         .from('pipeline_jobs')
         .select('status')
         .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
 
-      if (jobs) {
+      if (!error && jobs) {
         setQueueStats({
           active: jobs.filter(j => j.status === 'processing' || j.status === 'running').length,
           waiting: jobs.filter(j => j.status === 'pending' || j.status === 'queued').length,
@@ -190,12 +181,12 @@ export function SystemStatusBar() {
       }
 
       // Estimate storage from file_assets
-      const { data: files } = await supabase
+      const { data: files, error: filesError } = await supabase
         .from('file_assets')
         .select('file_size')
         .eq('status', 'active');
 
-      if (files) {
+      if (!filesError && files) {
         const totalBytes = files.reduce((sum, f) => sum + (f.file_size || 0), 0);
         const usedGB = totalBytes / (1024 * 1024 * 1024);
         const maxGB = 100; // Assume 100GB quota
@@ -207,7 +198,8 @@ export function SystemStatusBar() {
         });
       }
     } catch (error) {
-      console.error('Error fetching queue stats:', error);
+      // Silent fail - likely no Supabase creds
+      // We let the backend health check populate storage stats via useRenderBackendStatus
     }
   };
 

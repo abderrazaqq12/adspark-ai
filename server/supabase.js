@@ -19,13 +19,12 @@ if (supabaseUrl && supabaseKey) {
         console.log('[Supabase] ✅ Connected for analytics tracking');
     } catch (e) {
         console.error('[Supabase] ❌ Failed to initialize:', e.message);
-        // ENV validator should have caught this, but double-check
-        throw new Error('Supabase initialization failed - check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+        // We warn but do NOT throw, allowing server to start in VPS mode without Supabase
+        console.warn('[Supabase] Running in local/VPS mode without remote analytics');
     }
 } else {
-    // This should never happen if ENV validator ran
-    console.error('[Supabase] ❌ FATAL: Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
-    throw new Error('Supabase configuration missing - ENV validator should have caught this');
+    // Valid state for self-hosted VPS without Supabase
+    console.log('[Supabase] ⚠️  Not configured. Running in LOCAL/VPS mode (No Auth/Tracking)');
 }
 
 // Cost tracking helper

@@ -1,14 +1,12 @@
 /**
- * FlowScale Project Manager
+ * FlowScale Project Manager (VPS Edition)
  * 
- * Central project management module enforcing the Project System architecture:
- * - All operations must belong to a Project
- * - Projects own all resources (DB, Drive, files, outputs)
- * - Drive folders created automatically with projects
- * - Lifecycle management (create, archive, delete)
+ * Replaces Cloud/Supabase project management with local SQLite storage.
+ * Enforces "Single User Mode" and local resource ownership.
  */
 
-import { supabase } from './supabase.js';
+import db from './local-db.js';
+import { v4 as uuidv4 } from 'uuid'; // Standard UUID for project IDs
 
 /**
  * Creates a new project with validation
@@ -23,85 +21,77 @@ async function createProject(userId, data) {
         throw new Error('Project name is required');
     }
 
-    // Create project in database
-    const { data: project, error: projectError } = await supabase
-        .from('projects')
-        .insert({
-            user_id: userId,
-            name: name.trim(),
-            description,
-            product_name,
+    const projectId = uuidv4();
+    const now = new Date().toISOString();
+
+    const stmt = db.prepare(`
+        INSERT INTO projects (
+            id, user_id, name, description, product_name, language, settings, status, created_at, updated_at
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?
+        )
+    `);
+
+    try {
+        stmt.run(
+            projectId,
+            userId,
+            name.trim(),
+            description || null,
+            product_name || null,
             language,
-            settings,
-            status: 'active'
-        })
-        .select()
-        .single();
+            JSON.stringify(settings),
+            now,
+            now
+        );
 
-    if (projectError) {
-        throw new Error(`Failed to create project: ${projectError.message}`);
+        const project = getProjectSync(projectId);
+        console.log(`[ProjectManager] ✅ Created local project: ${projectId} (${name})`);
+        return project;
+    } catch (err) {
+        throw new Error(`Failed to create project: ${err.message}`);
     }
+}
 
-    console.log(`[ProjectManager] ✅ Created project: ${project.id} (${project.name})`);
-    return project;
+/**
+ * Helper: Synchronous get project by ID
+ */
+function getProjectSync(projectId) {
+    const row = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
+    if (!row) return null;
+
+    // Parse JSON fields
+    try { row.settings = JSON.parse(row.settings); } catch (e) { row.settings = {}; }
+    return row;
 }
 
 /**
  * Links a Google Drive folder to a project
- * @param {string} projectId - Project ID
- * @param {string} folderId - Google Drive folder ID
- * @param {string} folderLink - Google Drive folder web link
  */
 async function linkDriveFolder(projectId, folderId, folderLink) {
-    // Update project with Drive folder info
-    const { error: updateError } = await supabase
-        .from('projects')
-        .update({
-            google_drive_folder_id: folderId,
-            google_drive_folder_link: folderLink,
-            updated_at: new Date().toISOString()
-        })
-        .eq('id', projectId);
+    const stmt = db.prepare(`
+        UPDATE projects 
+        SET google_drive_folder_id = ?, google_drive_folder_link = ?, updated_at = ?
+        WHERE id = ?
+    `);
 
-    if (updateError) {
-        throw new Error(`Failed to link Drive folder: ${updateError.message}`);
-    }
-
-    // Create Drive sync record
-    const { error: syncError } = await supabase
-        .from('project_drive_sync')
-        .insert({
-            project_id: projectId,
-            drive_folder_id: folderId,
-            sync_status: 'synced',
-            last_sync_at: new Date().toISOString()
-        });
-
-    if (syncError) {
-        // Log but don't fail - sync record is optional
-        console.warn(`[ProjectManager] ⚠️  Failed to create sync record: ${syncError.message}`);
-    }
-
+    stmt.run(folderId, folderLink, new Date().toISOString(), projectId);
     console.log(`[ProjectManager] ✅ Linked Drive folder ${folderId} to project ${projectId}`);
 }
 
 /**
  * Gets a project by ID with resource stats
- * @param {string} projectId - Project ID
- * @param {string} userId - User ID (for access control)
- * @returns {Promise<object>} Project with stats
  */
 async function getProject(projectId, userId) {
-    const { data: project, error } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('id', projectId)
-        .eq('user_id', userId)
-        .single();
+    // In VPS mode, we trust the ID (userId check is mostly formal if bypassed upstream)
+    const project = getProjectSync(projectId);
 
-    if (error) {
-        throw new Error(`Project not found: ${error.message}`);
+    if (!project) {
+        throw new Error(`Project not found: ${projectId}`);
     }
+
+    // Optional: Validate User ID if strict, but for single-user VPS we can be lenient
+    // if (project.user_id !== userId) ... 
 
     // Get resource stats
     const stats = await getProjectStats(projectId);
@@ -114,157 +104,105 @@ async function getProject(projectId, userId) {
 
 /**
  * Lists all projects for a user
- * @param {string} userId - User ID
- * @param {object} options - Query options
- * @returns {Promise<Array>} List of projects
  */
 async function listProjects(userId, options = {}) {
     const { status = 'active', limit = 100, offset = 0 } = options;
 
-    let query = supabase
-        .from('projects')
-        .select('*')
-        .eq('user_id', userId);
+    let query = 'SELECT * FROM projects WHERE user_id = ?';
+    const params = [userId];
 
     if (status) {
-        query = query.eq('status', status);
+        query += ' AND status = ?';
+        params.push(status);
     }
 
-    const { data: projects, error } = await query
-        .order('updated_at', { ascending: false })
-        .range(offset, offset + limit - 1);
+    query += ' ORDER BY updated_at DESC LIMIT ? OFFSET ?';
+    params.push(limit, offset);
 
-    if (error) {
-        throw new Error(`Failed to list projects: ${error.message}`);
-    }
+    const rows = db.prepare(query).all(...params);
 
-    return projects || [];
+    return rows.map(row => {
+        try { row.settings = JSON.parse(row.settings); } catch (e) { row.settings = {}; }
+        return row;
+    });
 }
 
 /**
  * Archives a project (soft delete)
- * @param {string} projectId - Project ID
- * @param {string} userId - User ID (for access control)
  */
 async function archiveProject(projectId, userId) {
-    // Use the database function for atomic operation
-    const { error } = await supabase.rpc('archive_project', {
-        p_project_id: projectId
-    });
-
-    if (error) {
-        throw new Error(`Failed to archive project: ${error.message}`);
-    }
-
+    db.prepare("UPDATE projects SET status = 'archived', updated_at = ? WHERE id = ?")
+        .run(new Date().toISOString(), projectId);
     console.log(`[ProjectManager] ✅ Archived project: ${projectId}`);
 }
 
 /**
  * Permanently deletes a project
- * @param {string} projectId - Project ID
- * @param {string} userId - User ID (for access control)
  */
 async function deleteProject(projectId, userId) {
-    // Soft delete approach - mark as deleted
-    const { error } = await supabase
-        .from('projects')
-        .update({
-            status: 'deleted',
-            deleted_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-        })
-        .eq('id', projectId)
-        .eq('user_id', userId)
-        .eq('status', 'active'); // Only allow deleting active projects
-
-    if (error) {
-        throw new Error(`Failed to delete project: ${error.message}`);
-    }
-
-    // CASCADE will handle cleanup of related records
+    db.prepare("UPDATE projects SET status = 'deleted', deleted_at = ?, updated_at = ? WHERE id = ?")
+        .run(new Date().toISOString(), new Date().toISOString(), projectId);
     console.log(`[ProjectManager] ✅ Deleted project: ${projectId}`);
 }
 
 /**
  * Updates project metadata
- * @param {string} projectId - Project ID
- * @param {string} userId - User ID (for access control)
- * @param {object} updates - Fields to update
  */
 async function updateProject(projectId, userId, updates) {
-    // Filter allowed fields
     const allowedFields = ['name', 'description', 'product_name', 'language', 'settings'];
-    const filteredUpdates = {};
+    const sets = [];
+    const params = [];
 
     for (const field of allowedFields) {
         if (updates[field] !== undefined) {
-            filteredUpdates[field] = updates[field];
+            sets.push(`${field} = ?`);
+            let val = updates[field];
+            if (field === 'settings' && typeof val === 'object') val = JSON.stringify(val);
+            params.push(val);
         }
     }
 
-    if (Object.keys(filteredUpdates).length === 0) {
+    if (sets.length === 0) {
         throw new Error('No valid fields to update');
     }
 
-    filteredUpdates.updated_at = new Date().toISOString();
+    sets.push('updated_at = ?');
+    params.push(new Date().toISOString());
 
-    const { data: project, error } = await supabase
-        .from('projects')
-        .update(filteredUpdates)
-        .eq('id', projectId)
-        .eq('user_id', userId)
-        .select()
-        .single();
+    params.push(projectId); // WHERE id = ?
 
-    if (error) {
-        throw new Error(`Failed to update project: ${error.message}`);
-    }
+    const stmt = db.prepare(`UPDATE projects SET ${sets.join(', ')} WHERE id = ?`);
+    stmt.run(...params);
 
     console.log(`[ProjectManager] ✅ Updated project: ${projectId}`);
-    return project;
+    return getProjectSync(projectId);
 }
 
 /**
  * Gets project resource statistics
- * @param {string} projectId - Project ID
- * @returns {Promise<object>} Resource statistics
  */
 async function getProjectStats(projectId) {
-    const { data: resources, error } = await supabase
-        .from('project_resources')
-        .select('resource_type, size_bytes')
-        .eq('project_id', projectId);
+    const resources = db.prepare('SELECT resource_type, size_bytes FROM project_resources WHERE project_id = ?').all(projectId);
 
-    if (error) {
-        // Return empty stats if table doesn't exist yet or query fails
-        return {
-            total_resources: 0,
-            total_bytes: 0,
-            by_type: {}
-        };
-    }
-
-    const stats = (resources || []).reduce((acc, r) => {
+    const stats = resources.reduce((acc, r) => {
         const type = r.resource_type;
-        if (!acc[type]) {
-            acc[type] = { count: 0, bytes: 0 };
-        }
+        if (!acc[type]) acc[type] = { count: 0, bytes: 0 };
         acc[type].count++;
-        acc[type].bytes += r.size_bytes || 0;
+        acc[type].bytes += (r.size_bytes || 0);
         return acc;
     }, {});
 
+    const totalBytes = resources.reduce((sum, r) => sum + (r.size_bytes || 0), 0);
+
     return {
-        total_resources: resources?.length || 0,
-        total_bytes: (resources || []).reduce((sum, r) => sum + (r.size_bytes || 0), 0),
+        total_resources: resources.length,
+        total_bytes: totalBytes,
         by_type: stats
     };
 }
 
 /**
  * Tracks a resource for a project
- * @param {string} projectId - Project ID
- * @param {object} resource - Resource details
  */
 async function trackResource(projectId, resource) {
     const { type, id, path, size = 0, metadata = {} } = resource;
@@ -273,63 +211,42 @@ async function trackResource(projectId, resource) {
         throw new Error('Resource type and ID are required');
     }
 
-    const { error } = await supabase
-        .from('project_resources')
-        .insert({
-            project_id: projectId,
-            resource_type: type,
-            resource_id: id,
-            resource_path: path,
-            size_bytes: size,
-            metadata
-        });
-
-    if (error) {
-        // If duplicate, that's okay (unique constraint)
-        if (error.code !== '23505') {
-            console.warn(`[ProjectManager] ⚠️  Failed to track resource: ${error.message}`);
-        }
-    } else {
+    try {
+        db.prepare(`
+            INSERT INTO project_resources (
+                project_id, resource_type, resource_id, resource_path, size_bytes, metadata
+            ) VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+            projectId,
+            type,
+            id,
+            path,
+            size,
+            JSON.stringify(metadata)
+        );
         console.log(`[ProjectManager] ✅ Tracked ${type} resource: ${id}`);
+    } catch (err) {
+        console.warn(`[ProjectManager] ⚠️  Failed to track resource: ${err.message}`);
     }
 }
 
 /**
  * Removes a resource tracking entry
- * @param {string} resourceType - Resource type
- * @param {string} resourceId - Resource ID
  */
 async function untrackResource(resourceType, resourceId) {
-    const { error } = await supabase
-        .from('project_resources')
-        .delete()
-        .eq('resource_type', resourceType)
-        .eq('resource_id', resourceId);
-
-    if (error) {
-        console.warn(`[ProjectManager] ⚠️  Failed to untrack resource: ${error.message}`);
-    } else {
-        console.log(`[ProjectManager] ✅ Untracked ${resourceType} resource: ${resourceId}`);
-    }
+    db.prepare('DELETE FROM project_resources WHERE resource_type = ? AND resource_id = ?')
+        .run(resourceType, resourceId);
+    console.log(`[ProjectManager] ✅ Untracked ${resourceType} resource: ${resourceId}`);
 }
 
 /**
  * Validates that a project exists and is active
- * @param {string} projectId - Project ID
- * @param {string} userId - User ID (for access control)
- * @returns {Promise<object>} Project if valid
- * @throws {Error} If project invalid or inaccessible
  */
 async function validateProject(projectId, userId) {
-    const { data: project, error } = await supabase
-        .from('projects')
-        .select('id, name, status, google_drive_folder_id')
-        .eq('id', projectId)
-        .eq('user_id', userId)
-        .single();
+    const project = getProjectSync(projectId);
 
-    if (error || !project) {
-        throw new Error(`Project ${projectId} not found or access denied`);
+    if (!project) {
+        throw new Error(`Project ${projectId} not found`);
     }
 
     if (project.status !== 'active') {

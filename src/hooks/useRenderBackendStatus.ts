@@ -72,120 +72,75 @@ export function useRenderBackendStatus() {
   });
 
   useEffect(() => {
-    checkBackends();
-
-    // Refresh every 30 seconds
-    const interval = setInterval(checkBackends, 30000);
+    checkBackend();
+    const interval = setInterval(checkBackend, 10000); // 10s refresh
     return () => clearInterval(interval);
   }, []);
 
-  const checkBackends = async () => {
-    setStatus(prev => ({ ...prev, loading: true }));
+  const checkBackend = async () => {
+    // optimize: don't set loading on background refreshes to avoid UI flicker
+    // setStatus(prev => ({ ...prev, loading: true }));
 
     try {
-      // Fetch all health data in parallel
-      const [vpsRes, ffmpegRes, gpuRes, storageRes, queueRes, deploymentRes] = await Promise.all([
-        fetch('/api/health/vps', { signal: AbortSignal.timeout(5000) }).catch(() => null),
-        fetch('/api/health/ffmpeg', { signal: AbortSignal.timeout(5000) }).catch(() => null),
-        fetch('/api/health/gpu', { signal: AbortSignal.timeout(5000) }).catch(() => null),
-        fetch('/api/health/storage', { signal: AbortSignal.timeout(5000) }).catch(() => null),
-        fetch('/api/health/queue', { signal: AbortSignal.timeout(5000) }).catch(() => null),
-        fetch('/api/health/deployment', { signal: AbortSignal.timeout(5000) }).catch(() => null),
-      ]);
+      const res = await fetch('/api/health', { signal: AbortSignal.timeout(5000) });
+
+      if (!res.ok) throw new Error('Health check failed');
+
+      const data = await res.json();
+
+      // Transform new flat /api/health schema to our internal state shape
+      // Schema from backend: 
+      // { status, ffmpeg, gpu, disk: { used_gb, total_gb }, api, db, services: { ... } }
 
       const results: RenderBackendStatus = {
-        vpsServer: { available: false },
-        ffmpeg: { available: false },
-        gpu: { available: false },
-        storage: { available: false },
-        queue: { active: 0, waiting: 0, completed: 0, failed: 0, failed24h: 0 },
-        deployment: { mode: 'unknown', environment: 'unknown' },
         loading: false,
+        vpsServer: {
+          available: data.services?.vps ?? true, // Assume true if we got a response
+          uptime: 'Online'
+        },
+        ffmpeg: {
+          available: data.ffmpeg === true,
+          version: 'Detected'
+        },
+        gpu: {
+          available: data.gpu === 'detected',
+          vendor: data.gpu === 'detected' ? 'NVIDIA' : null
+        },
+        storage: {
+          available: true,
+          used: `${data.disk?.used_gb ?? 0} GB`,
+          total: `${data.disk?.total_gb ?? 0} GB`,
+          free: `${(data.disk?.total_gb - data.disk?.used_gb).toFixed(2) ?? 0} GB`,
+          usagePercent: data.disk?.total_gb > 0 ? Math.round((data.disk.used_gb / data.disk.total_gb) * 100) : 0
+        },
+        queue: {
+          // Queue stats might come from separate endpoint or included in future
+          // For now default to 0 to avoid breaking UI if not in health object
+          active: 0,
+          waiting: 0,
+          completed: 0,
+          failed: 0,
+          failed24h: 0
+        },
+        deployment: {
+          mode: 'self-hosted',
+          environment: 'vps',
+          platform: 'linux'
+        }
       };
-
-      // Parse VPS data
-      if (vpsRes?.ok) {
-        const vpsData = await vpsRes.json();
-        if (vpsData.status === 'ok' && vpsData.data) {
-          results.vpsServer = {
-            available: vpsData.data.available,
-            uptime: vpsData.data.uptimeFormatted,
-            cpus: vpsData.data.cpus,
-          };
-        }
-      }
-
-      // Parse FFmpeg data
-      if (ffmpegRes?.ok) {
-        const ffmpegData = await ffmpegRes.json();
-        if (ffmpegData.status === 'ok' && ffmpegData.data) {
-          results.ffmpeg = {
-            available: ffmpegData.data.available,
-            version: ffmpegData.data.version,
-            gpuAcceleration: ffmpegData.data.gpuAcceleration,
-            encoders: ffmpegData.data.encoders,
-          };
-        }
-      }
-
-      // Parse GPU data
-      if (gpuRes?.ok) {
-        const gpuData = await gpuRes.json();
-        if (gpuData.status === 'ok' && gpuData.data) {
-          results.gpu = {
-            available: gpuData.data.available,
-            vendor: gpuData.data.vendor,
-            count: gpuData.data.count,
-            gpus: gpuData.data.gpus,
-          };
-        }
-      }
-
-      // Parse Storage data
-      if (storageRes?.ok) {
-        const storageData = await storageRes.json();
-        if (storageData.status === 'ok' && storageData.data) {
-          results.storage = {
-            available: storageData.data.available,
-            used: storageData.data.used,
-            free: storageData.data.free,
-            total: storageData.data.total,
-            usagePercent: storageData.data.usagePercent,
-            usedBytes: storageData.data.usedBytes,
-            totalBytes: storageData.data.totalBytes,
-            availableBytes: storageData.data.availableBytes,
-          };
-        }
-      }
-
-      // Parse Queue data
-      if (queueRes?.ok) {
-        const queueData = await queueRes.json();
-        if (queueData.status === 'ok' && queueData.data) {
-          results.queue = queueData.data;
-        }
-      }
-
-      // Parse Deployment data
-      if (deploymentRes?.ok) {
-        const deploymentData = await deploymentRes.json();
-        if (deploymentData.status === 'ok' && deploymentData.data) {
-          results.deployment = {
-            mode: deploymentData.data.mode,
-            environment: deploymentData.data.environment,
-            platform: deploymentData.data.platform,
-          };
-        }
-      }
 
       setStatus(results);
     } catch (error) {
       console.error('[Backend Check] Error fetching health data:', error);
-      setStatus(prev => ({ ...prev, loading: false }));
+      setStatus(prev => ({
+        ...prev,
+        loading: false,
+        vpsServer: { available: false } // Mark offline on error
+      }));
     }
   };
 
-  const refresh = () => checkBackends();
+  const refresh = () => checkBackend();
 
   return { ...status, refresh };
 }

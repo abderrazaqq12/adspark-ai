@@ -42,7 +42,8 @@ import { fileURLToPath } from 'url';
 import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
 import { trackCost, supabase } from './supabase.js';
-import { trackResource } from './project-manager.js';
+import { trackResource, validateProject } from './project-manager.js';
+import db from './local-db.js';
 import { enforceProject } from './middleware/project-enforcer.js';
 import { errorHandler } from './error-handler.js';
 import { healthRouter, getQueueStats } from './health-endpoints.js';
@@ -59,9 +60,15 @@ const app = express();
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
-const OUTPUT_DIR = process.env.OUTPUT_DIR || path.join(__dirname, '../outputs');
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
-const TEMP_DIR = path.join(UPLOAD_DIR, 'temp'); // Temp dir for downloaded assets
+
+// VPS Storage Root
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../data');
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+const OUTPUT_DIR = path.join(DATA_DIR, 'outputs');
+const TEMP_DIR = path.join(DATA_DIR, 'temp');
+
+// Ensure definitions exist before use
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 const MAX_RENDER_TIME = parseInt(process.env.MAX_RENDER_TIME || '600'); // 10 min
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || String(200 * 1024 * 1024)); // 200MB
 const FFMPEG_HW_ACCEL = process.env.FFMPEG_HW_ACCEL || 'auto'; // auto, cuda, vaapi, off
@@ -442,8 +449,16 @@ async function executeFFmpegJob(job, encoder = bestEncoder) {
     throw new Error('Source file is empty (0 bytes)');
   }
 
+  // Project-Scoped Output Path (VPS Enforced)
+  let outputDirForJob = OUTPUT_DIR;
+  if (input.projectId) {
+    outputDirForJob = path.join(DATA_DIR, 'projects', input.projectId, 'outputs');
+    if (!fs.existsSync(outputDirForJob)) fs.mkdirSync(outputDirForJob, { recursive: true });
+    console.log(`[Execute] Using project output dir: ${outputDirForJob}`);
+  }
+
   const outputFilename = `${job.id}.mp4`;
-  const outputPath = path.join(OUTPUT_DIR, outputFilename);
+  const outputPath = path.join(outputDirForJob, outputFilename);
 
   let args;
   // Ensure sourcePath is set (by resolveJobSource)
@@ -556,12 +571,16 @@ async function executeFFmpegJob(job, encoder = bestEncoder) {
           const stats = fs.statSync(outputPath);
 
           if (stats.size > 0) {
+            const artifactPathUrl = input.projectId
+              ? `/projects/${input.projectId}/outputs/${outputFilename}`
+              : `/outputs/${outputFilename}`;
+
             const artifact = {
               type: 'video',
               mime: 'video/mp4',
               engine: 'server_ffmpeg',
-              path: `/outputs/${outputFilename}`,
-              url: `/outputs/${outputFilename}`,
+              path: artifactPathUrl,
+              url: artifactPathUrl,
               durationMs: Date.now() - new Date(job.startedAt).getTime(),
               sizeBytes: stats.size
             };
@@ -910,6 +929,8 @@ app.use('/api', (req, res, next) => {
 // Serve static files
 app.use('/uploads', express.static(UPLOAD_DIR));
 app.use('/outputs', express.static(OUTPUT_DIR));
+// Serve project outputs
+app.use('/projects', express.static(path.join(DATA_DIR, 'projects')));
 
 // ============================================
 // HEALTH ENDPOINTS - VPS Truth Enforcement
@@ -1785,61 +1806,51 @@ app.post('/api/upload', async (req, res) => {
       return jsonError(res, 400, 'PROJECT_REQUIRED', 'projectId is required for all uploads');
     }
 
-    // Validate project (manual validation since we can't use middleware after multer)
+    // Validate project (Local DB)
+    let project;
     try {
-      const { data: project, error } = await supabase
-        .from('projects')
-        .select('id, name, status, google_drive_folder_id')
-        .eq('id', projectId)
-        .single();
-
-      if (error || !project) {
-        try { fs.unlinkSync(req.file.path); } catch (e) { }
-        return jsonError(res, 404, 'PROJECT_NOT_FOUND', 'Project not found or access denied');
-      }
-
-      if (project.status !== 'active') {
-        try { fs.unlinkSync(req.file.path); } catch (e) { }
-        return jsonError(res, 403, 'PROJECT_INACTIVE', `Project is ${project.status}`);
-      }
-
-      const filePath = path.join(req.file.destination, req.file.filename);
-      const publicUrl = `/uploads/${req.body.projectId ? req.body.projectId + '/' : ''}${req.file.filename}`;
-      const fileId = req.file.filename.split('.')[0];
-
-      console.log(`[Upload] Saved: ${req.file.filename} (${req.file.size} bytes) to project ${projectId}`);
-
-      // Track uploaded file as project resource
-      try {
-        await trackResource(projectId, {
-          type: 'file',
-          id: fileId,
-          path: filePath,
-          size: req.file.size,
-          metadata: {
-            original_name: req.file.originalname,
-            mime_type: req.file.mimetype,
-            upload_timestamp: new Date().toISOString()
-          }
-        });
-      } catch (trackError) {
-        console.warn(`[Upload] Resource tracking failed: ${trackError.message}`);
-      }
-
-      res.json({
-        ok: true,
-        fileId,
-        projectId,
-        filePath: filePath,
-        publicUrl: publicUrl,
-        filename: req.file.filename,
-        size: req.file.size,
-        mimetype: req.file.mimetype,
-      });
-    } catch (validationError) {
-      try { fs.unlinkSync(req.file.path); } catch (e) { }
-      return jsonError(res, 500, 'VALIDATION_ERROR', validationError.message);
+      // In single user mode, userId logic is loose, but we pass what we have
+      const mockUserId = '00000000-0000-0000-0000-000000000000';
+      project = await validateProject(projectId, req.user?.id || mockUserId);
+    } catch (e) {
+      try { fs.unlinkSync(req.file.path); } catch (delErr) { }
+      return jsonError(res, 404, 'PROJECT_NOT_FOUND', e.message);
     }
+
+    const filePath = path.join(req.file.destination, req.file.filename);
+    const publicUrl = `/uploads/${req.body.projectId ? req.body.projectId + '/' : ''}${req.file.filename}`;
+    const fileId = req.file.filename.split('.')[0];
+
+    console.log(`[Upload] Saved: ${req.file.filename} (${req.file.size} bytes) to project ${projectId}`);
+
+    // Track uploaded file as project resource
+    try {
+      await trackResource(projectId, {
+        type: 'file',
+        id: fileId,
+        path: filePath,
+        size: req.file.size,
+        metadata: {
+          original_name: req.file.originalname,
+          mime_type: req.file.mimetype,
+          upload_timestamp: new Date().toISOString()
+        }
+      });
+    } catch (trackError) {
+      console.warn(`[Upload] Resource tracking failed: ${trackError.message}`);
+    }
+
+    res.json({
+      ok: true,
+      fileId,
+      projectId,
+      filePath: filePath,
+      publicUrl: publicUrl,
+      filename: req.file.filename,
+      size: req.file.size,
+      mimetype: req.file.mimetype,
+    });
+
   });
 });
 
@@ -2191,31 +2202,28 @@ app.get('/api/projects/:id/errors', async (req, res) => {
   const { resolved, category, limit = 50, offset = 0 } = req.query;
 
   try {
-    let query = supabase
-      .from('execution_errors')
-      .select('*')
-      .eq('project_id', id)
-      .order('created_at', { ascending: false })
-      .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+    const query = `
+      SELECT * FROM execution_errors 
+      WHERE project_id = ? 
+      ${resolved !== undefined ? 'AND resolved = ?' : ''}
+      ${category ? 'AND category = ?' : ''}
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `;
 
-    if (resolved !== undefined) {
-      query = query.eq('resolved', resolved === 'true');
-    }
+    const params = [id];
+    if (resolved !== undefined) params.push(resolved === 'true' ? 1 : 0);
+    if (category) params.push(category);
+    params.push(limit, offset);
 
-    if (category) {
-      query = query.eq('category', category);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      return jsonError(res, 500, 'QUERY_FAILED', error.message);
-    }
+    const data = db.prepare(query).all(...params);
+    // Convert resolved (1/0) to boolean for consistent API response
+    const formattedErrors = data.map(e => ({ ...e, resolved: Boolean(e.resolved) }));
 
     res.json({
       ok: true,
-      errors: data,
-      count: data.length
+      errors: formattedErrors,
+      count: formattedErrors.length
     });
   } catch (err) {
     return jsonError(res, 500, 'ERROR_QUERY_FAILED', err.message);
@@ -2230,22 +2238,28 @@ app.get('/api/projects/:id/error-stats', async (req, res) => {
   const { id } = req.params;
 
   try {
-    const { data, error } = await supabase.rpc('get_error_stats', {
-      p_project_id: id
-    });
+    const rows = db.prepare(`
+        SELECT category, resolved, COUNT(*) as count 
+        FROM execution_errors 
+        WHERE project_id = ? 
+        GROUP BY category, resolved
+    `).all(id);
 
-    if (error) {
-      return jsonError(res, 500, 'STATS_QUERY_FAILED', error.message);
-    }
+    const stats = {
+      total_errors: rows.reduce((sum, r) => sum + r.count, 0),
+      unresolved: rows.filter(r => !r.resolved).reduce((sum, r) => sum + r.count, 0),
+      by_category: {},
+      retry_rate: 0 // Placeholder/TODO: Calculate from execution_state
+    };
+
+    rows.forEach(r => {
+      if (!stats.by_category[r.category]) stats.by_category[r.category] = 0;
+      stats.by_category[r.category] += r.count;
+    });
 
     res.json({
       ok: true,
-      stats: data || {
-        total_errors: 0,
-        unresolved: 0,
-        by_category: {},
-        retry_rate: 0
-      }
+      stats
     });
   } catch (err) {
     return jsonError(res, 500, 'STATS_FAILED', err.message);
@@ -2260,15 +2274,11 @@ app.get('/api/jobs/:id/errors', async (req, res) => {
   const { id } = req.params;
 
   try {
-    const { data, error } = await supabase
-      .from('execution_errors')
-      .select('*')
-      .eq('job_id', id)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      return jsonError(res, 500, 'JOB_ERRORS_FAILED', error.message);
-    }
+    const data = db.prepare(`
+        SELECT * FROM execution_errors 
+        WHERE job_id = ? 
+        ORDER BY created_at DESC
+    `).all(id);
 
     res.json({
       ok: true,
@@ -2359,49 +2369,11 @@ async function startCleanupTask() {
     }
 
     // 2. Supabase Storage Cleanup (Input Assets)
-    if (supabase) {
-      try {
-        const folders = ['creative-scale', 'renderflow'];
-        for (const rootPath of folders) {
-          // List subfolders/files in the root path
-          const { data: items, error } = await supabase.storage.from('videos').list(rootPath);
-
-          if (error) {
-            console.warn(`[Cleanup] Supabase list error for ${rootPath}:`, error.message);
-            continue;
-          }
-
-          for (const item of items) {
-            // item might be a file or a folder
-            const itemCreatedAt = new Date(item.created_at).getTime();
-
-            if ((now - itemCreatedAt) > TWO_HOURS_MS) {
-              // If it's a folder (no id usually means folder or we check metadata)
-              // In Supabase Storage API, folders are objects without id/metadata sometimes
-              // But list() returns name, id, updated_at, created_at, last_accessed_at, metadata
-
-              const fullPath = `${rootPath}/${item.name}`;
-
-              if (!item.id) {
-                // It's a folder, we need to find all files inside to delete them
-                const { data: subFiles } = await supabase.storage.from('videos').list(fullPath);
-                if (subFiles && subFiles.length > 0) {
-                  const pathsToDelete = subFiles.map(sf => `${fullPath}/${sf.name}`);
-                  await supabase.storage.from('videos').remove(pathsToDelete);
-                  console.log(`[Cleanup] Deleted folder contents: ${fullPath} (${pathsToDelete.length} files)`);
-                }
-              } else {
-                // It's a file
-                await supabase.storage.from('videos').remove([fullPath]);
-                console.log(`[Cleanup] Deleted old file from Supabase: ${fullPath}`);
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.error('[Cleanup] Supabase error:', e.message);
-      }
+    // SKIPPED in VPS Mode - we only use local FS
+    if (false) {
+      // Original Supabase cloud bucket cleanup code removed/disabled
     }
+
   };
 
   // Initial run

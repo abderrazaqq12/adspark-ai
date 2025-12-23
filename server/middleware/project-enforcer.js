@@ -66,16 +66,26 @@ function enforceProject(options = {}) {
         }
 
         // Get user ID from request (assumes auth middleware ran first)
-        const userId = req.user?.id;
+        let userId = req.user?.id;
 
+        // SINGLE-USER VPS BYPASS:
+        // If no user is authenticated via Supabase, we assume the "admin" user owns everything
+        // This is critical for the "No Auth" requirement.
         if (!userId) {
-            return res.status(401).json({
-                ok: false,
-                error: {
-                    code: 'UNAUTHORIZED',
-                    message: 'Authentication required to access projects'
-                }
-            });
+            if (process.env.VPS_MODE === 'true' || true) { // Always true for this restructuring
+                userId = '00000000-0000-0000-0000-000000000000'; // Fixed Admin ID
+                // Inject fake user for downstream consumers
+                req.user = { id: userId, email: 'admin@local.vps', role: 'owner' };
+                console.log(`[ProjectEnforcer] 🔓 VPS Mode: Implicitly authorized as Admin`);
+            } else {
+                return res.status(401).json({
+                    ok: false,
+                    error: {
+                        code: 'UNAUTHORIZED',
+                        message: 'Authentication required to access projects'
+                    }
+                });
+            }
         }
 
         // Validate project exists and user has access

@@ -15,16 +15,9 @@
 // These MUST exist or the server will not start
 
 const REQUIRED_BACKEND_SECRETS = [
-  {
-    key: 'SUPABASE_URL',
-    description: 'Supabase project URL',
-    example: 'https://your-project.supabase.co'
-  },
-  {
-    key: 'SUPABASE_SERVICE_ROLE_KEY',
-    description: 'Supabase service role key (backend only)',
-    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
-  }
+  // No strict requirements for local/VPS mode initially
+  // DATABASE_URL might be needed if using Postgres, but for now we are rigorous about
+  // not failing just because Supabase is missing.
 ];
 
 // ============================================
@@ -33,6 +26,16 @@ const REQUIRED_BACKEND_SECRETS = [
 // These are optional but recommended for full functionality
 
 const RECOMMENDED_SECRETS = [
+  {
+    key: 'SUPABASE_URL',
+    description: 'Supabase project URL (for cost tracking & auth)',
+    feature: 'Auth & Tracking'
+  },
+  {
+    key: 'SUPABASE_SERVICE_ROLE_KEY',
+    description: 'Supabase service role key (backend only)',
+    feature: 'Auth & Tracking'
+  },
   {
     key: 'GOOGLE_CLIENT_ID',
     description: 'Google OAuth client ID (for Google Drive integration)',
