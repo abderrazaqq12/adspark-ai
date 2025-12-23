@@ -53,6 +53,12 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// DEBUG: Log all requests
+app.use((req, res, next) => {
+  console.log(`[Request] ${req.method} ${req.url} (original: ${req.originalUrl})`);
+  next();
+});
+
 // ============================================
 // CONFIGURATION
 // ============================================
