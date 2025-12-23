@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
-import { Save, Plus, Trash2, FileText, Loader2, Pencil, CheckCircle, XCircle, ExternalLink, Key, Eye, EyeOff, Bot, RefreshCw, ChevronDown, Power, Database, ShieldCheck, Settings as SettingsIcon, Globe, Sliders, Server } from "lucide-react";
+import { Save, Plus, Trash2, FileText, Loader2, Pencil, CheckCircle, XCircle, ExternalLink, Key, Eye, EyeOff, Bot, RefreshCw, ChevronDown, Power, Database, ShieldCheck, Settings as SettingsIcon, Globe, Sliders, Server, HardDrive } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -26,6 +26,7 @@ import { LoadingState, EmptyState } from "@/components/ui/page-components";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CountrySelector } from "@/components/audience/CountrySelector";
 import { ConnectionStatusPanel } from "@/components/settings/ConnectionStatusPanel";
+import { StorageSettings } from "@/components/settings/StorageSettings";
 
 
 interface PromptTemplate {
@@ -785,6 +786,10 @@ export default function Settings() {
           <TabsTrigger value="preferences" className="gap-2">
             <Globe className="w-4 h-4" />
             <span className="hidden sm:inline">Preferences</span>
+          </TabsTrigger>
+          <TabsTrigger value="storage" className="gap-2">
+            <HardDrive className="w-4 h-4" />
+            <span className="hidden sm:inline">Storage</span>
           </TabsTrigger>
         </TabsList>
 
@@ -1827,6 +1832,11 @@ export default function Settings() {
               </Button>
             </div>
           </SectionCard>
+        </TabsContent>
+
+        {/* Storage Tab */}
+        <TabsContent value="storage" className="space-y-6">
+          <StorageSettings />
         </TabsContent>
 
       </Tabs>
