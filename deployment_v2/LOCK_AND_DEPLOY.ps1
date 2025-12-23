@@ -4,41 +4,90 @@ Write-Host "STARTING IMMUTABLE DEPLOYMENT PROTOCOL" -ForegroundColor Cyan
 
 # 1. LOCAL BUILD PHASE
 Write-Host "1. Building Frontend Locally (Static Artifact)..." -ForegroundColor Yellow
-$env:VITE_DEPLOYMENT_MODE = "self-hosted"
-$env:VITE_REST_API_URL = "/api"
+$env:VITE_DEPLOYMENT_MODE="self-hosted"
+$env:VITE_REST_API_URL="/api"
 
 # Clean dist if exists
 if (Test-Path "dist") { Remove-Item "dist" -Recurse -Force }
 
 npm run build
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Frontend Build Failed. Deployment Aborted."
+    Write-Warning "Local Build Failed. Switching to RELIABLE REMOTE BUILD using VPS Swap..."
+    
+    # REMOTE BUILD PROTOCOL
+    
+    # 1. Upload Source for Building
+    Write-Host "1b. Uploading Source to VPS Builder..." -ForegroundColor Yellow
+    $buildSourcePath = "source_bundle.tar.gz"
+    # Create tar including everything except massive folders
+    tar --exclude='node_modules' --exclude='.git' --exclude='dist' -czf $buildSourcePath .
+    
+    $keyPath = "deployment_v2\keys\flowscale_key"
+    $vpsHost = "root@72.62.26.4"
+    $remoteDir = "/root/adspark-ai/immutable"
+    
+    # Ensure remote dir exists
+    ssh -i $keyPath $vpsHost "mkdir -p $remoteDir"
+    
+    # Upload source
+    scp -i $keyPath $buildSourcePath "$vpsHost`:$remoteDir/source_bundle.tar.gz"
+    
+    # 2. Trigger Docker Build
+    Write-Host "1c. Building on VPS (This may take a moment)..." -ForegroundColor Yellow
+    $buildCmd = @"
+    cd $remoteDir
+    tar -xzf source_bundle.tar.gz -C .
+    # Build builder image
+    # Note: We use --no-cache to ensure fresh deps
+    docker build --no-cache -t flowscale-builder -f deployment_v2/Dockerfile.builder .
+    # Extract dist
+    docker create --name temp_builder flowscale-builder
+    docker cp temp_builder:/app/dist ./dist
+    docker rm -f temp_builder
+"@
+    ssh -i $keyPath $vpsHost $buildCmd
+    
+    Write-Host "Remote Build Complete. Deployment Package will be created on remote or skipped." -ForegroundColor Yellow
+
+} else {
+    # Local build success - Standard flow
+    Write-Host "2. Packaging Artifacts..." -ForegroundColor Yellow
+    $deployPath = "deployment_package.tar.gz"
+    tar -czf $deployPath dist server deployment_v2 package.json package-lock.json .env
+    
+    $keyPath = "deployment_v2\keys\flowscale_key"
+    $vpsHost = "root@72.62.26.4"
+    $remoteDir = "/root/adspark-ai/immutable"
+
+    # Upload package
+    ssh -i $keyPath $vpsHost "mkdir -p $remoteDir"
+    scp -i $keyPath $deployPath "$vpsHost`:$remoteDir/$deployPath"
 }
 
-# 2. PACKAGING PHASE
-Write-Host "2. Packaging Artifacts..." -ForegroundColor Yellow
-$deployPath = "deployment_package.tar.gz"
-# Create tarball of dist, server, deployment_v2, package.json
-tar -czf $deployPath dist server deployment_v2 package.json package-lock.json .env
-
-# 3. UPLOAD PHASE
-Write-Host "3. Uploading to VPS..." -ForegroundColor Yellow
+# 4. REMOTE ACTIVATION PHASE
+Write-Host "4. Activating Immutable State on VPS..." -ForegroundColor Yellow
 $keyPath = "deployment_v2\keys\flowscale_key"
 $vpsHost = "root@72.62.26.4"
 $remoteDir = "/root/adspark-ai/immutable"
 
-# Create remote dir
-ssh -i $keyPath -o StrictHostKeyChecking=no $vpsHost "mkdir -p $remoteDir"
-# Upload
-scp -i $keyPath -o StrictHostKeyChecking=no $deployPath "$vpsHost`:$remoteDir/$deployPath"
+$remoteActivateCmd = @"
+cd $remoteDir
 
-# 4. REMOTE ACTIVATION PHASE
-Write-Host "4. Activating Immutable State on VPS..." -ForegroundColor Yellow
+# If we run standard flow, extract package
+if [ -f "deployment_package.tar.gz" ]; then
+    tar -xzf deployment_package.tar.gz
+fi
 
-# We construct the command carefully
-$cmds = "cd $remoteDir && tar -xzf $deployPath && docker system prune -f && docker compose -f deployment_v2/docker-compose.lock.yml down && docker compose -f deployment_v2/docker-compose.lock.yml up -d --build --remove-orphans"
+# Prune old containers
+docker system prune -f
 
-ssh -i $keyPath -o StrictHostKeyChecking=no $vpsHost $cmds
+# Start locked system
+docker compose -f deployment_v2/docker-compose.lock.yml down
+docker compose -f deployment_v2/docker-compose.lock.yml up -d --build --remove-orphans
+"@
+
+ssh -i $keyPath $vpsHost $remoteActivateCmd
 
 Write-Host "SYSTEM LOCKED AND DEPLOYED." -ForegroundColor Green
 Write-Host "Verify at http://72.62.26.4" -ForegroundColor White
+exit 0

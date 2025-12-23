@@ -7,11 +7,15 @@
     "type": "git",
     "url": "https://github.com/abderrazaqq12/adspark-ai.git"
   },
+  "engines": {
+    "node": ">=20.0.0 <21.0.0",
+    "npm": ">=9.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "server": "concurrently \"node server/api.js\" \"node server/renderflow/server.cjs\"",
     "dev:full": "concurrently \"npm run server\" \"npm run dev\"",
-    "build": "vite build",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=1536 vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -88,8 +92,9 @@
     "@types/node": "^22.16.5",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
-    "@vitejs/plugin-react-swc": "^3.11.0",
+    "@vitejs/plugin-react": "^5.1.2",
     "autoprefixer": "^10.4.21",
+    "cross-env": "^10.1.0",
     "eslint": "^9.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
