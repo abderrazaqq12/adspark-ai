@@ -992,52 +992,28 @@ const upload = multer({
 
 app.use(express.json({ limit: '10mb' }));
 
-// Request logging
+// Request logging with FULL URL
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  console.log(`[API REQUEST] ${req.method} ${req.url} (Original: ${req.originalUrl})`);
   next();
 });
 
-// Force JSON Content-Type for all responses
+// Force JSON Content-Type
 app.use((req, res, next) => {
   res.setHeader('Content-Type', 'application/json');
   next();
 });
 
-// CORS for API routes
-app.use('/api', (req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-  next();
-});
-
-// Serve static files
-app.use('/uploads', express.static(UPLOAD_DIR));
-app.use('/outputs', express.static(OUTPUT_DIR));
-// Serve project outputs
-app.use('/projects', express.static(path.join(DATA_DIR, 'projects')));
-
-// ============================================
-// HEALTH ENDPOINTS - VPS Truth Enforcement
-// ============================================
-
 // Expose queue stats function for health endpoints
 app.locals.getQueueStats = () => getQueueStats(jobs, pendingQueue, currentJob);
 
-// Mount health endpoints
+// Mount health endpoints explicitly at /api/health
 app.use('/api/health', healthRouter);
+console.log('[FlowScale API] Health endpoints mounted at /api/health');
 
-console.log('[FlowScale API] Health endpoints mounted at /api/health/*');
-
-// Mount analytics endpoints
+// Mount analytics endpoints explicitly at /api/analytics
 app.use('/api/analytics', analyticsRouter);
-
-console.log('[FlowScale API] Analytics endpoints mounted at /api/analytics/*');
+console.log('[FlowScale API] Analytics endpoints mounted at /api/analytics');
 
 // ============================================
 // CONNECTION MANAGEMENT API
