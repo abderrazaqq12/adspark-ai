@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $VPS_USER = "root"
-$VPS_IP = "72.62.22.13"
+$VPS_IP = "72.62.26.4"
 $KEY_PATH = Resolve-Path "deployment_v2/keys/flowscale_key"
 $KEY_PATH_ARG = $KEY_PATH.Path
 
