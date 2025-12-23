@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # ------------------------------------------------
+  # FRONTEND (Static Nginx)
+  # ------------------------------------------------
+  frontend:
+    build:
+      context: ..
+      dockerfile: deployment_v2/Dockerfile.frontend.static
+    container_name: flowscale-frontend
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api
+    volumes:
+      # Certificates only. No code volumes.
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+
+  # ------------------------------------------------
+  # API (Business Logic)
+  # ------------------------------------------------
+  api:
+    build:
+      context: ..
+      dockerfile: deployment_v2/Dockerfile.api
+    container_name: flowscale-api
+    restart: always
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - .env
+    environment:
+      - PORT=3000
+      - HOST=0.0.0.0
+      - RENDERFLOW_URL=http://render:3001/render
+      - UPLOAD_DIR=/app/uploads
+      - OUTPUT_DIR=/app/outputs
+    volumes:
+      # Persistent Data Only
+      - uploads_data:/app/uploads
+      - outputs_data:/app/outputs
+      # NO CODE VOLUMES (Immutable)
+
+      # ------------------------------------------------
+      # RENDER (FFmpeg Worker)
+      # ------------------------------------------------
+  render:
+    build:
+      context: ..
+      dockerfile: deployment_v2/Dockerfile.renderflow
+    container_name: flowscale-render
+    restart: always
+    ports:
+      - "127.0.0.1:3001:3001"
+    environment:
+      - PORT=3001
+      - NODE_ENV=production
+    volumes:
+      - uploads_data:/app/server/renderflow/temp
+      - outputs_data:/app/server/renderflow/output
+      # Shared source access for rendering
+      - uploads_data:/app/uploads
+      - render_db:/app/server/renderflow/data
+
+volumes:
+  uploads_data:
+  outputs_data:
+  render_db:

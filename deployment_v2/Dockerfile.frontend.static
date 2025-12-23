@@ -1,0 +1,15 @@
+FROM nginx:alpine
+
+# 1. Clean default Nginx assets
+RUN rm -rf /usr/share/nginx/html/*
+
+# 2. Copy pre-built static files from 'dist' folder
+# NOTE: Context must be the root folder containing 'dist'
+COPY dist /usr/share/nginx/html
+
+# 3. Copy immutable Nginx config
+COPY deployment_v2/nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80 443
+
+CMD ["nginx", "-g", "daemon off;"]
