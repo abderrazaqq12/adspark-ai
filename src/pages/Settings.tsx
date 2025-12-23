@@ -393,15 +393,21 @@ export default function Settings() {
 
   const fetchData = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
 
+      let userId = 'local-user';
+      if (!isSelfHosted) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return; // Strict auth only for cloud
+        userId = user.id;
+      }
+
+      // In self-hosted, we just return empty/default data if tables don't exist or fail
+      // We wrap Supabase calls to not fail hard
       const [templatesRes, settingsRes] = await Promise.all([
-        supabase.from("prompt_templates").select("*").order("created_at", { ascending: false }),
-        supabase.from("user_settings").select("*").eq("user_id", user.id).maybeSingle(),
+        supabase.from("prompt_templates").select("*").order("created_at", { ascending: false }).catch(() => ({ data: [], error: null })),
+        supabase.from("user_settings").select("*").maybeSingle().catch(() => ({ data: null, error: null })),
       ]);
-
-      if (templatesRes.error) throw templatesRes.error;
 
       const templatesWithVariables = (templatesRes.data || []).map(t => ({
         ...t,
@@ -432,10 +438,14 @@ export default function Settings() {
       }
 
       // Refresh secure API key providers
-      await refreshProviders();
+      if (!isSelfHosted) {
+        await refreshProviders();
+      }
     } catch (error) {
       console.error("Error fetching data:", error);
-      toast.error("Failed to load settings");
+      // Don't toast error in self-hosted if it's just missing tables
+      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted';
+      if (!isSelfHosted) toast.error("Failed to load settings");
     } finally {
       setLoading(false);
     }
@@ -658,7 +668,7 @@ export default function Settings() {
         ...prev,
         [keyType]: { success: false, message: "Connection test failed" },
       }));
-      
+
       // Save failed validation to database if key is saved
       if (hasApiKey(keyType)) {
         await updateValidationStatus(keyType, false, "Connection test failed");

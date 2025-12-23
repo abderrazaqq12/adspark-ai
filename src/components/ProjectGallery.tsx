@@ -5,12 +5,12 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  FolderOpen, 
-  Video, 
-  Image as ImageIcon, 
-  FileText, 
-  Mic, 
+import {
+  FolderOpen,
+  Video,
+  Image as ImageIcon,
+  FileText,
+  Mic,
   FileCode,
   Search,
   Grid3X3,
@@ -64,7 +64,8 @@ export const ProjectGallery = ({ onSelectProject, compact = false }: ProjectGall
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   useEffect(() => {
-    if (user) {
+    const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
+    if (user || isSelfHosted) {
       fetchProjects();
     }
   }, [user]);
@@ -80,8 +81,10 @@ export const ProjectGallery = ({ onSelectProject, compact = false }: ProjectGall
       if (error) throw error;
       setProjects(data || []);
     } catch (error: any) {
-      toast.error('Failed to load projects');
       console.error(error);
+      // In self-hosted, don't toast error on empty/missing table
+      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted';
+      if (!isSelfHosted) toast.error('Failed to load projects');
     } finally {
       setLoading(false);
     }
@@ -159,7 +162,7 @@ export const ProjectGallery = ({ onSelectProject, compact = false }: ProjectGall
 
       // Sort by created_at descending
       allAssets.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      
+
       setAssets(allAssets);
     } catch (error: any) {
       toast.error('Failed to load project assets');

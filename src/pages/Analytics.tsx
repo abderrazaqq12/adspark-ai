@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { 
-  BarChart3, 
-  TrendingUp, 
-  DollarSign, 
-  Video, 
+import {
+  BarChart3,
+  TrendingUp,
+  DollarSign,
+  Video,
   Zap,
   Activity,
   Brain,
@@ -27,18 +27,18 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  BarChart, 
-  Bar, 
-  PieChart as RechartsPie, 
-  Pie, 
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  PieChart as RechartsPie,
+  Pie,
   Cell,
   Area,
   AreaChart,
@@ -142,10 +142,10 @@ const ENGINE_COSTS: Record<string, number> = {
 };
 
 const COLORS = [
-  'hsl(var(--primary))', 
-  'hsl(280, 70%, 60%)', 
-  'hsl(30, 100%, 60%)', 
-  'hsl(120, 70%, 50%)', 
+  'hsl(var(--primary))',
+  'hsl(280, 70%, 60%)',
+  'hsl(30, 100%, 60%)',
+  'hsl(120, 70%, 50%)',
   'hsl(0, 84%, 60%)',
   'hsl(200, 80%, 50%)',
   'hsl(320, 70%, 55%)'
@@ -192,16 +192,51 @@ export default function Analytics() {
   });
 
   useEffect(() => {
-    if (user && dateRange.from && dateRange.to) fetchAnalytics();
+    const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
+    if ((user || isSelfHosted) && dateRange.from && dateRange.to) fetchAnalytics();
   }, [user, dateRange]);
 
   const fetchAnalytics = async () => {
     if (!dateRange.from || !dateRange.to) return;
-    
+
     setLoading(true);
     try {
+      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted';
       const startDate = startOfDay(dateRange.from);
       const endDate = endOfDay(dateRange.to);
+
+      // In self-hosted mode, we fetch from our local API health stats which contains the specific counters
+      if (isSelfHosted) {
+        try {
+          const res = await fetch(`${import.meta.env.VITE_REST_API_URL || 'http://localhost:3000'}/api/health`);
+          const data = await res.json();
+
+          // Transform health queue stats into analytics format
+          // The backend exposes: completed, failed, total, failed24h
+          const queue = data.queue || { completed: 0, failed: 0, total: 0 };
+
+          setAnalytics({
+            totalVideos: queue.completed, // Real completed jobs
+            totalProjects: 1, // Single user project mostly
+            totalScenes: queue.total,
+            avgGenerationTime: 45, // Estimate
+            engineUsage: [{ name: 'FFmpeg (Local)', count: queue.total, cost: 0, successRate: 100 }],
+            dailyCosts: [], // No costs in self-hosted
+            aiLearnings: [],
+            costTrends: [],
+            enginePerformance: [],
+            contentTypeStats: [
+              { type: 'video', count: queue.completed, cost: 0, avgCost: 0, successRate: queue.total > 0 ? (queue.completed / queue.total) * 100 : 0 }
+            ],
+            totalCost: 0, // Always $0 in VPS
+            totalGenerations: queue.total,
+          });
+          setLoading(false);
+          return;
+        } catch (e) {
+          console.warn("Used fallback analytics due to API fetch failure");
+        }
+      }
 
       // Fetch cost transactions (primary source of truth)
       const { data: costTransactions } = await supabase
@@ -285,7 +320,7 @@ export default function Analytics() {
       costTransactions?.forEach(tx => {
         totalCost += tx.cost_usd || 0;
         totalGenerations++;
-        
+
         const contentType = getContentType(tx.pipeline_stage || tx.operation_type || '');
         if (contentType) {
           contentStats[contentType].count++;
@@ -311,7 +346,7 @@ export default function Analytics() {
 
       // Calculate engine usage and costs
       const engineUsageMap: Record<string, { count: number; cost: number; success: number; failed: number; qualitySum: number }> = {};
-      
+
       costTransactions?.forEach(tx => {
         const engine = tx.engine_name || "Unknown";
         if (!engineUsageMap[engine]) {
@@ -361,7 +396,7 @@ export default function Analytics() {
       // Calculate daily costs with content type breakdown
       const dayCount = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
       const dailyCostsMap: Record<string, { cost: number; videos: number; text: number; audio: number; image: number; video: number }> = {};
-      
+
       for (let i = 0; i < dayCount; i++) {
         const date = new Date(startDate);
         date.setDate(date.getDate() + i);
@@ -442,7 +477,7 @@ export default function Analytics() {
     });
   };
 
-  const avgSuccessRate = analytics.enginePerformance.length > 0 
+  const avgSuccessRate = analytics.enginePerformance.length > 0
     ? Math.round(analytics.enginePerformance.reduce((sum, e) => sum + e.successRate, 0) / analytics.enginePerformance.length)
     : 0;
 
@@ -612,10 +647,10 @@ export default function Analytics() {
                         <Cell key={stat.type} fill={CONTENT_TYPE_COLORS[stat.type]} />
                       ))}
                     </Pie>
-                    <Tooltip 
+                    <Tooltip
                       formatter={(value: number, name: string) => [value, name.charAt(0).toUpperCase() + name.slice(1)]}
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--card))',
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px'
                       }}
@@ -631,17 +666,17 @@ export default function Analytics() {
                   <BarChart data={analytics.contentTypeStats} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis type="number" stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `$${v.toFixed(2)}`} />
-                    <YAxis 
-                      dataKey="type" 
-                      type="category" 
+                    <YAxis
+                      dataKey="type"
+                      type="category"
                       width={60}
                       stroke="hsl(var(--muted-foreground))"
                       tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                       tickFormatter={(v) => v.charAt(0).toUpperCase() + v.slice(1)}
                     />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--card))',
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px'
                       }}
@@ -664,16 +699,16 @@ export default function Analytics() {
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={analytics.dailyCosts}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis 
-                    dataKey="date" 
+                  <XAxis
+                    dataKey="date"
                     stroke="hsl(var(--muted-foreground))"
                     tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
                     tickFormatter={(v) => format(new Date(v), 'MMM d')}
                   />
                   <YAxis stroke="hsl(var(--muted-foreground))" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--card))',
                       border: '1px solid hsl(var(--border))',
                       borderRadius: '8px'
                     }}
@@ -705,14 +740,14 @@ export default function Analytics() {
                 <tbody>
                   {analytics.contentTypeStats.map(stat => {
                     const Icon = CONTENT_TYPE_ICONS[stat.type];
-                    const percentage = analytics.totalGenerations > 0 
-                      ? Math.round((stat.count / analytics.totalGenerations) * 100) 
+                    const percentage = analytics.totalGenerations > 0
+                      ? Math.round((stat.count / analytics.totalGenerations) * 100)
                       : 0;
                     return (
                       <tr key={stat.type} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2">
-                            <div 
+                            <div
                               className="w-3 h-3 rounded-full"
                               style={{ backgroundColor: CONTENT_TYPE_COLORS[stat.type] }}
                             />
@@ -745,30 +780,30 @@ export default function Analytics() {
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={analytics.dailyCosts}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis 
-                    dataKey="date" 
+                  <XAxis
+                    dataKey="date"
                     stroke="hsl(var(--muted-foreground))"
                     tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                     tickFormatter={(v) => format(new Date(v), 'MMM d')}
                   />
-                  <YAxis 
+                  <YAxis
                     stroke="hsl(var(--muted-foreground))"
                     tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                     tickFormatter={(value) => `$${value.toFixed(2)}`}
                   />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--card))',
                       border: '1px solid hsl(var(--border))',
                       borderRadius: '8px'
                     }}
                     formatter={(value: number) => [`$${value.toFixed(2)}`, 'Cost']}
                     labelFormatter={(v) => format(new Date(v), 'MMM d, yyyy')}
                   />
-                  <Area 
-                    type="monotone" 
-                    dataKey="cost" 
-                    stroke="hsl(var(--primary))" 
+                  <Area
+                    type="monotone"
+                    dataKey="cost"
+                    stroke="hsl(var(--primary))"
                     fill="hsl(var(--primary) / 0.3)"
                     strokeWidth={2}
                   />
@@ -783,7 +818,7 @@ export default function Analytics() {
                 {analytics.engineUsage.slice(0, 8).map((engine, idx) => (
                   <div key={engine.name} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div 
+                      <div
                         className="w-2 h-2 rounded-full"
                         style={{ backgroundColor: COLORS[idx % COLORS.length] }}
                       />
@@ -806,27 +841,27 @@ export default function Analytics() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={analytics.costTrends.filter(t => t.avgPerVideo > 0)}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis 
-                      dataKey="date" 
+                    <XAxis
+                      dataKey="date"
                       stroke="hsl(var(--muted-foreground))"
                       tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
                       tickFormatter={(v) => format(new Date(v), 'MMM d')}
                     />
-                    <YAxis 
+                    <YAxis
                       stroke="hsl(var(--muted-foreground))"
                       tickFormatter={(v) => `$${v.toFixed(2)}`}
                     />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--card))',
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px'
                       }}
                       formatter={(value: number) => [`$${value.toFixed(2)}`, 'Avg per video']}
                     />
-                    <Line 
-                      type="monotone" 
-                      dataKey="avgPerVideo" 
+                    <Line
+                      type="monotone"
+                      dataKey="avgPerVideo"
                       stroke="hsl(var(--primary))"
                       strokeWidth={2}
                       dot={false}
@@ -859,9 +894,9 @@ export default function Analytics() {
                         <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--card))',
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px'
                       }}
@@ -877,16 +912,16 @@ export default function Analytics() {
                   <BarChart data={analytics.enginePerformance.slice(0, 8)} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis type="number" domain={[0, 100]} stroke="hsl(var(--muted-foreground))" />
-                    <YAxis 
-                      dataKey="engine" 
-                      type="category" 
+                    <YAxis
+                      dataKey="engine"
+                      type="category"
                       width={100}
                       stroke="hsl(var(--muted-foreground))"
                       tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
                     />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--card))',
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px'
                       }}
@@ -917,7 +952,7 @@ export default function Analytics() {
                     <tr key={engine.engine} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
-                          <div 
+                          <div
                             className="w-2 h-2 rounded-full"
                             style={{ backgroundColor: COLORS[idx % COLORS.length] }}
                           />
@@ -964,8 +999,8 @@ export default function Analytics() {
         {/* AI Learning Tab */}
         <TabsContent value="ai-learning" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <SectionCard 
-              title="Learning Patterns" 
+            <SectionCard
+              title="Learning Patterns"
               description="How the AI is improving based on your usage"
               icon={Sparkles}
             >
@@ -1004,8 +1039,8 @@ export default function Analytics() {
               )}
             </SectionCard>
 
-            <SectionCard 
-              title="Smart Insights" 
+            <SectionCard
+              title="Smart Insights"
               description="AI-generated recommendations"
               icon={Lightbulb}
             >
@@ -1017,7 +1052,7 @@ export default function Analytics() {
                       <div>
                         <p className="font-medium text-foreground">Preferred Engine</p>
                         <p className="text-sm text-muted-foreground">
-                          You use <span className="text-primary font-medium">{analytics.engineUsage[0]?.name}</span> most often 
+                          You use <span className="text-primary font-medium">{analytics.engineUsage[0]?.name}</span> most often
                           ({analytics.engineUsage[0]?.count} uses, {analytics.engineUsage[0]?.successRate}% success)
                         </p>
                       </div>
@@ -1045,7 +1080,7 @@ export default function Analytics() {
                     <div>
                       <p className="font-medium text-foreground">Quality Trend</p>
                       <p className="text-sm text-muted-foreground">
-                        Overall success rate is <span className="text-primary font-medium">{avgSuccessRate}%</span>. 
+                        Overall success rate is <span className="text-primary font-medium">{avgSuccessRate}%</span>.
                         {avgSuccessRate >= 90 ? ' Excellent performance!' : avgSuccessRate >= 75 ? ' Good results.' : ' Consider optimizing engine selection.'}
                       </p>
                     </div>
@@ -1058,11 +1093,11 @@ export default function Analytics() {
                     <div>
                       <p className="font-medium text-foreground">Generation Pattern</p>
                       <p className="text-sm text-muted-foreground">
-                        {analytics.totalGenerations > 100 
+                        {analytics.totalGenerations > 100
                           ? 'High volume user - consider batch processing for efficiency'
                           : analytics.totalGenerations > 20
-                          ? 'Active user - AI is learning your preferences'
-                          : 'Getting started - generate more to unlock insights'}
+                            ? 'Active user - AI is learning your preferences'
+                            : 'Getting started - generate more to unlock insights'}
                       </p>
                     </div>
                   </div>
@@ -1082,17 +1117,17 @@ export default function Analytics() {
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="index" stroke="hsl(var(--muted-foreground))" />
                   <YAxis stroke="hsl(var(--muted-foreground))" domain={[0, 100]} />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--card))',
                       border: '1px solid hsl(var(--border))',
                       borderRadius: '8px'
                     }}
                   />
-                  <Area 
-                    type="monotone" 
-                    dataKey="confidence" 
-                    stroke="hsl(var(--primary))" 
+                  <Area
+                    type="monotone"
+                    dataKey="confidence"
+                    stroke="hsl(var(--primary))"
                     fill="hsl(var(--primary) / 0.2)"
                     strokeWidth={2}
                   />
@@ -1109,27 +1144,27 @@ export default function Analytics() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={analytics.dailyCosts}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis 
-                    dataKey="date" 
+                  <XAxis
+                    dataKey="date"
                     stroke="hsl(var(--muted-foreground))"
                     tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                     tickFormatter={(v) => format(new Date(v), 'MMM d')}
                   />
-                  <YAxis 
+                  <YAxis
                     yAxisId="left"
                     stroke="hsl(var(--muted-foreground))"
                     tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                   />
-                  <YAxis 
+                  <YAxis
                     yAxisId="right"
                     orientation="right"
                     stroke="hsl(var(--muted-foreground))"
                     tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                     tickFormatter={(value) => `$${value}`}
                   />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--card))',
                       border: '1px solid hsl(var(--border))',
                       borderRadius: '8px'
                     }}

@@ -380,7 +380,7 @@ export default function CreateVideo() {
       }
     }
 
-    
+
     toast.success("Pipeline reset - all data cleared");
   };
 
@@ -749,11 +749,18 @@ export default function CreateVideo() {
 
     setIsSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error("Please sign in to save");
-        return;
+      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
+      let userId = 'local-user';
+
+      if (!isSelfHosted) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          toast.error("Please sign in to save");
+          return;
+        }
+        userId = user.id;
       }
+      // If self-hosted, userId defaults to 'local-user' and we proceed.
 
       let currentProjectId = projectId;
       let currentScriptId = scriptId;
@@ -763,7 +770,7 @@ export default function CreateVideo() {
         const { data: project, error: projectError } = await supabase
           .from("projects")
           .insert({
-            user_id: user.id,
+            user_id: userId,
             name: productInfo.name,
             product_name: productInfo.name,
             language: voiceLanguage,
@@ -881,7 +888,7 @@ export default function CreateVideo() {
         <div className="flex items-center justify-between">
           {/* Drive Sync Status */}
           <DriveSyncIndicator />
-          
+
           <PipelineStatusIndicator
             pipelineStatus={{
               product_info: currentStage > 0 ? 'completed' : expandedStage === 0 ? 'in_progress' : 'pending',

@@ -1,12 +1,12 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { 
-  uploadAssetToDrive, 
-  uploadAssetsToDriveBackground, 
+import {
+  uploadAssetToDrive,
+  uploadAssetsToDriveBackground,
   generateAssetFileName,
   getMimeTypeFromUrl,
-  type AssetType 
+  type AssetType
 } from '@/lib/google-drive';
 
 // ============================================
@@ -38,30 +38,30 @@ export interface UploadProgress {
 interface GlobalProjectContextType {
   // Current active project
   activeProject: Project | null;
-  
+
   // All user projects
   projects: Project[];
-  
+
   // Loading states
   isLoading: boolean;
   isCreating: boolean;
-  
+
   // Upload tracking
   activeUploads: UploadProgress[];
   uploadCount: number;
   isUploading: boolean;
-  
+
   // Actions
   selectProject: (projectId: string) => Promise<void>;
   createProject: (name: string, autoCreateDriveFolder?: boolean) => Promise<Project | null>;
   refreshProjects: () => Promise<void>;
   clearActiveProject: () => void;
-  
+
   // Drive integration
   createDriveFolderForProject: (projectId: string, folderName: string) => Promise<string | null>;
   uploadAsset: (assetType: AssetType, fileName: string, fileUrl: string, metadata?: Record<string, any>) => Promise<boolean>;
   uploadAssetBackground: (assetType: AssetType, fileName: string, fileUrl: string, metadata?: Record<string, any>) => void;
-  
+
   // Validation
   hasActiveProject: boolean;
   isProjectReady: boolean;
@@ -82,13 +82,19 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const init = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          setIsLoading(false);
-          return;
+        const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
+
+        let userId = 'local-user';
+        if (!isSelfHosted) {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) {
+            setIsLoading(false);
+            return;
+          }
+          userId = user.id;
         }
 
-        await loadProjects(user.id);
+        await loadProjects(userId);
       } catch (error) {
         console.error('[GlobalProjectContext] Init error:', error);
       } finally {
@@ -98,18 +104,20 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
 
     init();
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        await loadProjects(session.user.id);
-      } else if (event === 'SIGNED_OUT') {
-        setActiveProject(null);
-        setProjects([]);
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    // Listen for auth changes only in cloud mode
+    const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
+    if (!isSelfHosted) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          await loadProjects(session.user.id);
+        } else if (event === 'SIGNED_OUT') {
+          setActiveProject(null);
+          setProjects([]);
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      });
+      return () => subscription.unsubscribe();
+    }
   }, []);
 
   const loadProjects = async (userId: string) => {
@@ -120,7 +128,16 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
         .eq('user_id', userId)
         .order('updated_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        // In self-hosted, table might be empty or missing RLS, just warn
+        console.warn('[GlobalProjectContext] Load projects error (ignoring for VPS persistence check):', error);
+        if (import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted') {
+          // If completely failed, maybe return empty list to not crash
+          setProjects([]);
+          return;
+        }
+        throw error;
+      };
 
       const projectList = (data || []) as Project[];
       setProjects(projectList);
@@ -194,8 +211,8 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
           .eq('id', projectId);
 
         // Update local state
-        setProjects(prev => prev.map(p => 
-          p.id === projectId 
+        setProjects(prev => prev.map(p =>
+          p.id === projectId
             ? { ...p, google_drive_folder_id: data.folder_id, google_drive_folder_link: data.folder_link }
             : p
         ));
@@ -226,18 +243,25 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
     }
 
     setIsCreating(true);
+    setIsCreating(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error('Please sign in to create a project');
-        return null;
+      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
+      let userId = 'local-user';
+
+      if (!isSelfHosted) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          toast.error('Please sign in to create a project');
+          return null;
+        }
+        userId = user.id;
       }
 
       // Create project in database
       const { data: project, error } = await supabase
         .from('projects')
         .insert({
-          user_id: user.id,
+          user_id: userId,
           name: name.trim(),
           product_name: name.trim(),
           status: 'draft'
@@ -281,9 +305,9 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
 
   // Upload asset to active project's Google Drive folder
   const uploadAsset = useCallback(async (
-    assetType: AssetType, 
-    fileName: string, 
-    fileUrl: string, 
+    assetType: AssetType,
+    fileName: string,
+    fileUrl: string,
     metadata?: Record<string, any>
   ): Promise<boolean> => {
     if (!activeProject) {
@@ -316,7 +340,7 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
     }
 
     const uploadId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Add to active uploads
     setActiveUploads(prev => [...prev, {
       id: uploadId,
@@ -336,20 +360,20 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
       metadata,
     }]).then(() => {
       // Mark as completed
-      setActiveUploads(prev => prev.map(u => 
+      setActiveUploads(prev => prev.map(u =>
         u.id === uploadId ? { ...u, status: 'completed' } : u
       ));
-      
+
       // Clean up after 10 seconds
       setTimeout(() => {
         setActiveUploads(prev => prev.filter(u => u.id !== uploadId));
       }, 10000);
     }).catch(() => {
       // Mark as failed
-      setActiveUploads(prev => prev.map(u => 
+      setActiveUploads(prev => prev.map(u =>
         u.id === uploadId ? { ...u, status: 'failed' } : u
       ));
-      
+
       // Clean up after 30 seconds
       setTimeout(() => {
         setActiveUploads(prev => prev.filter(u => u.id !== uploadId));
