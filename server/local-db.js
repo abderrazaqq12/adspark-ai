@@ -12,13 +12,17 @@ const __dirname = path.dirname(__filename);
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../data');
 const DB_PATH = path.join(DATA_DIR, 'flowscale.db');
 
-// Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+// FORCE RESET (Logic Removed for Stability)
+// The database is now persistent.
+
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
+
+
 
 // Initialize Schema
 db.exec(`
@@ -76,6 +80,14 @@ db.exec(`
   );
 `);
 
-console.log(`[LocalDB] ✅ Initialized at ${DB_PATH}`);
+// Auto-Migration: Blindly try to add column (safe ignore if exists)
+try {
+  db.exec('ALTER TABLE projects ADD COLUMN google_drive_folder_link TEXT');
+  console.log('[LocalDB] Migrated: Added google_drive_folder_link');
+} catch (e) {
+  // Ignore "duplicate column name" error
+}
+
+console.log(`[LocalDB] ✅ Initialized at ${DB_PATH} `);
 
 export default db;

@@ -55,6 +55,12 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // ============================================
+// MIDDLEWARE
+// ============================================
+app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ extended: true, limit: '500mb' }));
+
+// ============================================
 // CONFIGURATION
 // ============================================
 
@@ -166,7 +172,7 @@ import { listProjects, getProject, createProject as createProjectFn, updateProje
 
 app.get('/api/projects', async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'] || 'local-user'; // Simple auth bypass for VPS
+    const userId = req.headers['x-user-id'] || '170d6fb1-4e4f-4704-ab9a-a917dc86cba5'; // Simple auth bypass for VPS
     const projects = await listProjects(userId);
     res.json(projects);
   } catch (err) {
@@ -176,7 +182,7 @@ app.get('/api/projects', async (req, res) => {
 
 app.get('/api/projects/:id', async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'] || 'local-user';
+    const userId = req.headers['x-user-id'] || '170d6fb1-4e4f-4704-ab9a-a917dc86cba5';
     const project = await getProject(req.params.id, userId);
     res.json(project);
   } catch (err) {
@@ -186,7 +192,7 @@ app.get('/api/projects/:id', async (req, res) => {
 
 app.post('/api/projects', async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'] || 'local-user';
+    const userId = req.headers['x-user-id'] || '170d6fb1-4e4f-4704-ab9a-a917dc86cba5';
     const project = await createProjectFn(userId, req.body);
     res.json(project);
   } catch (err) {
@@ -196,7 +202,7 @@ app.post('/api/projects', async (req, res) => {
 
 app.patch('/api/projects/:id', async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'] || 'local-user';
+    const userId = req.headers['x-user-id'] || '170d6fb1-4e4f-4704-ab9a-a917dc86cba5';
     const project = await updateProject(req.params.id, userId, req.body);
     res.json(project);
   } catch (err) {
@@ -206,7 +212,7 @@ app.patch('/api/projects/:id', async (req, res) => {
 
 app.delete('/api/projects/:id', async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'] || 'local-user';
+    const userId = req.headers['x-user-id'] || '170d6fb1-4e4f-4704-ab9a-a917dc86cba5';
     await deleteProject(req.params.id, userId);
     res.json({ success: true });
   } catch (err) {

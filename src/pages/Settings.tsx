@@ -395,7 +395,7 @@ export default function Settings() {
     try {
       const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
 
-      let userId = 'local-user';
+      let userId = '170d6fb1-4e4f-4704-ab9a-a917dc86cba5';
       if (!isSelfHosted) {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return; // Strict auth only for cloud

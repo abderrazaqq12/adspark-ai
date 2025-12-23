@@ -142,3 +142,19 @@ Projects (Single Source of Truth)
 🎯 **Result:** Projects enforced as single source of truth  
 
 **The Project System is architecturally complete and ready for integration.**
+
+---
+
+## 🚀 VPS Deployment Stabilization (2025-12-23)
+
+### 1. Stabilization & Recovery
+- **Resolved 502 Bad Gateway:** Identified and fixed instability in `local-db.js` by ensuring persistent database initialization and removing emergency reset logic that was deleting the database on restart.
+- **Fixed 500 Project Creation Error:** Identified missing `express.json()` middleware in `server/api.js` which caused `req.body` to be undefined, leading to crashes when creating projects. Added the middleware to process JSON payloads correctly.
+
+### 2. Security Hardening
+- **Single User Mode:** Implemented IP Allowlisting in `deployment_v2/nginx.conf` to restrict access to the authorized user IP (`160.176.134.163`), Localhost, and Docker network. This replaces insecure Basic Auth or open access.
+
+### 3. Verification
+- **Health Check:** Verified `/api/health` returns 200 OK.
+- **End-to-End Test:** Successfully created a project via the API (`POST /api/projects`) on the live VPS (`72.62.26.4`), confirming the full stack (Nginx -> Node -> SQLite) is operational.
+

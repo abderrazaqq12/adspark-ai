@@ -47,7 +47,7 @@ if ($buildExitCode -ne 0) {
     tar -xzf source_bundle.tar.gz -C .
     # Build builder image
     # Note: We use --no-cache to ensure fresh deps
-    docker build --no-cache -t flowscale-builder -f deployment_v2/Dockerfile.builder .
+    docker build --no-cache -t flowscale-builder -f deployment_v2/Dockerfile.builder . || exit 1
     # Extract dist
     docker create --name temp_builder flowscale-builder
     docker cp temp_builder:/app/dist ./dist
