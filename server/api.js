@@ -149,6 +149,75 @@ function detectFFmpeg() {
 const FFMPEG_AVAILABLE = detectFFmpeg();
 
 // ============================================
+// ROUTES
+// ============================================
+
+// Mount Health Router at /api/health
+app.use('/api/health', healthRouter);
+app.get('/health', (req, res) => res.json({ status: 'ok', msg: 'Root health check' }));
+
+// Mount Analytics
+app.use('/api', analyticsRouter);
+
+// ============================================
+// PROJECT ROUTES (VPS Edition)
+// ============================================
+import { listProjects, getProject, createProject as createProjectFn, updateProject, deleteProject } from './project-manager.js';
+
+app.get('/api/projects', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'] || 'local-user'; // Simple auth bypass for VPS
+    const projects = await listProjects(userId);
+    res.json(projects);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/projects/:id', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'] || 'local-user';
+    const project = await getProject(req.params.id, userId);
+    res.json(project);
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+app.post('/api/projects', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'] || 'local-user';
+    const project = await createProjectFn(userId, req.body);
+    res.json(project);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/projects/:id', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'] || 'local-user';
+    const project = await updateProject(req.params.id, userId, req.body);
+    res.json(project);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/projects/:id', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'] || 'local-user';
+    await deleteProject(req.params.id, userId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
+// JOB QUEUE & STATE
+
+// ============================================
 // JOB QUEUE & STATE
 // ============================================
 

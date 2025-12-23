@@ -8,7 +8,8 @@ services:
       args:
         VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}"
         VITE_SUPABASE_PUBLISHABLE_KEY: "${VITE_SUPABASE_PUBLISHABLE_KEY}"
-        VITE_REST_API_URL: "${VITE_REST_API_URL}"
+        VITE_REST_API_URL: "/api"
+        VITE_DEPLOYMENT_MODE: "self-hosted"
     ports:
       - "80:80"
       - "443:443"

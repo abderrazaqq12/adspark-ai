@@ -208,7 +208,9 @@ export default function Analytics() {
       // In self-hosted mode, we fetch from our local API health stats which contains the specific counters
       if (isSelfHosted) {
         try {
-          const res = await fetch(`${import.meta.env.VITE_REST_API_URL || 'http://localhost:3000'}/api/health`);
+          const apiUrl = import.meta.env.VITE_REST_API_URL;
+          const healthUrl = `${apiUrl || ''}/health`.replace('//health', '/health');
+          const res = await fetch(healthUrl);
           const data = await res.json();
 
           // Transform health queue stats into analytics format

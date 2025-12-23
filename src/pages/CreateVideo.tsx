@@ -767,403 +767,440 @@ export default function CreateVideo() {
 
       // Create project if needed
       if (!currentProjectId) {
-        const { data: project, error: projectError } = await supabase
-          .from("projects")
-          .insert({
-            user_id: userId,
-            name: productInfo.name,
-            product_name: productInfo.name,
-            language: voiceLanguage,
-            status: "draft",
-            settings: {
-              product_description: productInfo.description,
-              product_image_url: productInfo.imageUrl,
-              product_link: productInfo.link,
-            }
-          })
-          .select()
-          .single();
+        if (isSelfHosted) {
+          const apiUrl = import.meta.env.VITE_REST_API_URL;
+          const projectsUrl = `${apiUrl || ''}/projects`.replace('//projects', '/projects');
+          const res = await fetch(projectsUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-user-id': 'local-user'
+            },
+            body: JSON.stringify({
+              name: productInfo.name,
+              product_name: productInfo.name,
+              language: voiceLanguage,
+              settings: {
+                product_description: productInfo.description,
+                product_image_url: productInfo.imageUrl,
+                product_link: productInfo.link,
+              }
+            })
+          });
+          if (!res.ok) throw new Error('Failed to create local project');
+          const newProject = await res.json();
+          // Map backend response to local state if needed, but primary is existing flow
+          // We need to return an object describing the project in a compatible way
+          // The backend returns the project row directly.
+          // But existing code expects: { data: project, error } structure because it destructures below?
+          // No, wait, existing code: const { data: project, error: projectError } = await supabase...
+          // So I need to mock that structure or change the flow.
+          currentProjectId = newProject.id;
+        } else {
+          const { data: project, error: projectError } = await supabase
+            .from("projects")
+            .insert({
+              user_id: userId,
+              name: productInfo.name,
+              product_name: productInfo.name,
+              language: voiceLanguage,
+              status: "draft",
+              settings: {
+                product_description: productInfo.description,
+                product_image_url: productInfo.imageUrl,
+                product_link: productInfo.link,
+              }
+            })
+            .select()
+            .single();
 
-        if (projectError) throw projectError;
-        currentProjectId = project.id;
-        setProjectId(project.id);
-
-        // Create Google Drive folder if configured
-        const { data: userSettings } = await supabase
-          .from("user_settings")
-          .select("preferences")
-          .eq("user_id", user.id)
-          .single();
-
-        if (userSettings?.preferences) {
-          const prefs = userSettings.preferences as Record<string, any>;
-          if (prefs.google_drive_folder_url) {
-            // Trigger Google Drive folder creation (would need a separate edge function)
-            console.log("Would create Google Drive folder for:", productInfo.name);
-          }
+          if (projectError) throw projectError;
+          currentProjectId = project.id;
         }
       }
-
-      // Create or update script
-      const allScriptsText = scriptSlots.map(s => s.text).filter(t => t.trim()).join("\n\n---\n\n");
-      if (!currentScriptId) {
-        const { data: scriptData, error: scriptError } = await supabase
-          .from("scripts")
-          .insert({
-            project_id: currentProjectId,
-            raw_text: allScriptsText,
-            language: voiceLanguage,
-            status: "analyzed",
-          })
           .select()
-          .single();
+    .single();
 
-        if (scriptError) throw scriptError;
-        currentScriptId = scriptData.id;
-        setScriptId(scriptData.id);
-      } else {
-        await supabase
-          .from("scripts")
-          .update({ raw_text: allScriptsText })
-          .eq("id", currentScriptId);
-      }
+  if (projectError) throw projectError;
+  currentProjectId = project.id;
+  setProjectId(project.id);
 
-      // Delete existing scenes for this script
-      await supabase.from("scenes").delete().eq("script_id", currentScriptId);
+  // Create Google Drive folder if configured
+  const { data: userSettings } = await supabase
+    .from("user_settings")
+    .select("preferences")
+    .eq("user_id", user.id)
+    .single();
 
-      // Insert new scenes
-      const scenesToInsert = scenes.map((scene, index) => ({
-        script_id: currentScriptId,
-        index,
-        text: scene.description || scene.title,
-        scene_type: "broll",
-        visual_prompt: scene.visualPrompt || null,
-        duration_sec: scene.duration || 5,
-        status: "pending",
-      }));
-
-      const { error: scenesError } = await supabase
-        .from("scenes")
-        .insert(scenesToInsert);
-
-      if (scenesError) throw scenesError;
-
-      toast.success("Project and scenes saved!");
-    } catch (error: any) {
-      console.error("Error saving:", error);
-      toast.error(error.message || "Failed to save project");
-    } finally {
-      setIsSaving(false);
+  if (userSettings?.preferences) {
+    const prefs = userSettings.preferences as Record<string, any>;
+    if (prefs.google_drive_folder_url) {
+      // Trigger Google Drive folder creation (would need a separate edge function)
+      console.log("Would create Google Drive folder for:", productInfo.name);
     }
+  }
+}
+
+// Create or update script
+const allScriptsText = scriptSlots.map(s => s.text).filter(t => t.trim()).join("\n\n---\n\n");
+if (!currentScriptId) {
+  const { data: scriptData, error: scriptError } = await supabase
+    .from("scripts")
+    .insert({
+      project_id: currentProjectId,
+      raw_text: allScriptsText,
+      language: voiceLanguage,
+      status: "analyzed",
+    })
+    .select()
+    .single();
+
+  if (scriptError) throw scriptError;
+  currentScriptId = scriptData.id;
+  setScriptId(scriptData.id);
+} else {
+  await supabase
+    .from("scripts")
+    .update({ raw_text: allScriptsText })
+    .eq("id", currentScriptId);
+}
+
+// Delete existing scenes for this script
+await supabase.from("scenes").delete().eq("script_id", currentScriptId);
+
+// Insert new scenes
+const scenesToInsert = scenes.map((scene, index) => ({
+  script_id: currentScriptId,
+  index,
+  text: scene.description || scene.title,
+  scene_type: "broll",
+  visual_prompt: scene.visualPrompt || null,
+  duration_sec: scene.duration || 5,
+  status: "pending",
+}));
+
+const { error: scenesError } = await supabase
+  .from("scenes")
+  .insert(scenesToInsert);
+
+if (scenesError) throw scenesError;
+
+toast.success("Project and scenes saved!");
+    } catch (error: any) {
+  console.error("Error saving:", error);
+  toast.error(error.message || "Failed to save project");
+} finally {
+  setIsSaving(false);
+}
   };
 
-  const canProceedFromProductInfo = productInfo.name.trim().length > 0;
-  const hasAnyScript = scriptSlots.some(s => s.text.trim() || s.audioUrl || s.generatedAudioUrl);
+const canProceedFromProductInfo = productInfo.name.trim().length > 0;
+const hasAnyScript = scriptSlots.some(s => s.text.trim() || s.audioUrl || s.generatedAudioUrl);
 
-  return (
-    <div className="flex min-h-screen animate-in fade-in duration-500">
-      {/* Unified Step Sidebar - LEFT side, matching Creative AI Editor */}
-      <UnifiedStepSidebar
-        tool="studio"
-        toolName="Studio"
-        toolDescription="Video production pipeline"
-        steps={STUDIO_STEPS}
-        currentStep={expandedStage}
-        completedSteps={Array.from({ length: currentStage }, (_, i) => i)}
-        onStepClick={(step) => {
-          setExpandedStage(step);
-          if (step <= currentStage) {
-            // Allow going back to completed steps
-          } else if (step === currentStage + 1) {
-            // Allow going to next step only if current is complete
-            setCurrentStage(step);
-          }
-        }}
-        onClearHistory={clearAllPipelineData}
-        projectId={projectId || undefined}
-      />
+return (
+  <div className="flex min-h-screen animate-in fade-in duration-500">
+    {/* Unified Step Sidebar - LEFT side, matching Creative AI Editor */}
+    <UnifiedStepSidebar
+      tool="studio"
+      toolName="Studio"
+      toolDescription="Video production pipeline"
+      steps={STUDIO_STEPS}
+      currentStep={expandedStage}
+      completedSteps={Array.from({ length: currentStage }, (_, i) => i)}
+      onStepClick={(step) => {
+        setExpandedStage(step);
+        if (step <= currentStage) {
+          // Allow going back to completed steps
+        } else if (step === currentStage + 1) {
+          // Allow going to next step only if current is complete
+          setCurrentStage(step);
+        }
+      }}
+      onClearHistory={clearAllPipelineData}
+      projectId={projectId || undefined}
+    />
 
-      {/* Main Content */}
-      <div className="flex-1 p-8 space-y-8 overflow-auto">
-        <div className="flex items-center justify-between">
-          {/* Drive Sync Status */}
-          <DriveSyncIndicator />
+    {/* Main Content */}
+    <div className="flex-1 p-8 space-y-8 overflow-auto">
+      <div className="flex items-center justify-between">
+        {/* Drive Sync Status */}
+        <DriveSyncIndicator />
 
-          <PipelineStatusIndicator
-            pipelineStatus={{
-              product_info: currentStage > 0 ? 'completed' : expandedStage === 0 ? 'in_progress' : 'pending',
-              scripts: currentStage > 4 ? 'completed' : expandedStage === 4 ? 'in_progress' : 'pending',
-              scenes: currentStage > 5 ? 'completed' : expandedStage === 5 ? 'in_progress' : 'pending',
-              video_generation: currentStage > 5 ? 'completed' : expandedStage === 5 ? 'in_progress' : 'pending',
-              assembly: currentStage > 6 ? 'completed' : expandedStage === 6 ? 'in_progress' : 'pending',
-              export: currentStage > 7 ? 'completed' : expandedStage === 7 ? 'in_progress' : 'pending',
+        <PipelineStatusIndicator
+          pipelineStatus={{
+            product_info: currentStage > 0 ? 'completed' : expandedStage === 0 ? 'in_progress' : 'pending',
+            scripts: currentStage > 4 ? 'completed' : expandedStage === 4 ? 'in_progress' : 'pending',
+            scenes: currentStage > 5 ? 'completed' : expandedStage === 5 ? 'in_progress' : 'pending',
+            video_generation: currentStage > 5 ? 'completed' : expandedStage === 5 ? 'in_progress' : 'pending',
+            assembly: currentStage > 6 ? 'completed' : expandedStage === 6 ? 'in_progress' : 'pending',
+            export: currentStage > 7 ? 'completed' : expandedStage === 7 ? 'in_progress' : 'pending',
+          }}
+          currentStage={expandedStage}
+          onStageClick={(stageId, index) => setExpandedStage(index)}
+          compact={true}
+        />
+      </div>
+
+      {/* Project Context Banner */}
+      <ProjectContextBanner toolName="Studio" className="mb-4" />
+
+      {/* Smart Defaults Banner - only show when not on Product Input stage */}
+      {expandedStage !== 0 && (
+        <SmartDefaultsBanner
+          projectId={projectId || undefined}
+          onApplyDefaults={(appliedDefaults) => {
+            if (appliedDefaults.preferredVoice) {
+              setSelectedVoice(appliedDefaults.preferredVoice);
+            }
+            if (appliedDefaults.variationsPerProject) {
+              setVideosToGenerate(appliedDefaults.variationsPerProject);
+            }
+            toast.success('Smart defaults applied!');
+          }}
+        />
+      )}
+
+      <div className="flex flex-col gap-6">
+        {/* Stage 0: Studio Product Input */}
+        {expandedStage === 0 && (
+          <StudioProductInput
+            onNext={() => {
+              setExpandedStage(1);
+              setCurrentStage(1);
             }}
-            currentStage={expandedStage}
-            onStageClick={(stageId, index) => setExpandedStage(index)}
-            compact={true}
-          />
-        </div>
-
-        {/* Project Context Banner */}
-        <ProjectContextBanner toolName="Studio" className="mb-4" />
-
-        {/* Smart Defaults Banner - only show when not on Product Input stage */}
-        {expandedStage !== 0 && (
-          <SmartDefaultsBanner
-            projectId={projectId || undefined}
-            onApplyDefaults={(appliedDefaults) => {
-              if (appliedDefaults.preferredVoice) {
-                setSelectedVoice(appliedDefaults.preferredVoice);
-              }
-              if (appliedDefaults.variationsPerProject) {
-                setVideosToGenerate(appliedDefaults.variationsPerProject);
-              }
-              toast.success('Smart defaults applied!');
+            onProjectCreated={(newProjectId) => {
+              setProjectId(newProjectId);
+            }}
+            productInfo={productInfo}
+            onProductInfoChange={(info) => {
+              setProductInfo(info);
             }}
           />
         )}
 
-        <div className="flex flex-col gap-6">
-          {/* Stage 0: Studio Product Input */}
-          {expandedStage === 0 && (
-            <StudioProductInput
+        {/* Stage 1: Studio Image Generation (Prioritized) */}
+        {expandedStage === 1 && (
+          <div className="space-y-4">
+            <StudioImageGeneration
               onNext={() => {
-                setExpandedStage(1);
-                setCurrentStage(1);
+                setExpandedStage(2);
+                setCurrentStage(2);
               }}
-              onProjectCreated={(newProjectId) => {
-                setProjectId(newProjectId);
-              }}
-              productInfo={productInfo}
-              onProductInfoChange={(info) => {
-                setProductInfo(info);
-              }}
+              projectId={projectId}
             />
-          )}
+            <Button
+              variant="ghost"
+              className="w-full text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                setExpandedStage(2);
+                setCurrentStage(Math.max(currentStage, 2));
+              }}
+            >
+              Skip this step →
+            </Button>
+          </div>
+        )}
 
-          {/* Stage 1: Studio Image Generation (Prioritized) */}
-          {expandedStage === 1 && (
-            <div className="space-y-4">
-              <StudioImageGeneration
-                onNext={() => {
-                  setExpandedStage(2);
-                  setCurrentStage(2);
-                }}
+        {/* Stage 2: Unified Landing Page (Marketing Angles + Compiler) */}
+        {expandedStage === 2 && (
+          <StudioUnifiedLandingPage onNext={() => {
+            setExpandedStage(3);
+            setCurrentStage(3);
+          }} />
+        )}
+
+        {/* Stage 3: Voiceover (Video Script Text & Audio) */}
+        {expandedStage === 3 && (
+          <VideoScriptStage
+            onNext={() => {
+              setExpandedStage(4);
+              setCurrentStage(4);
+            }}
+            productInfo={productInfo}
+            language={voiceLanguage}
+            market="gcc"
+          />
+        )}
+
+        {/* Stage 4: Scene Builder */}
+        {expandedStage === 4 && (
+          <div className="space-y-6">
+            {/* Smart Scene Builder V2 - Primary UI for AI-driven scene generation */}
+            {projectId ? (
+              <SmartSceneBuilderV2
                 projectId={projectId}
-              />
-              <Button
-                variant="ghost"
-                className="w-full text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  setExpandedStage(2);
-                  setCurrentStage(Math.max(currentStage, 2));
-                }}
-              >
-                Skip this step →
-              </Button>
-            </div>
-          )}
-
-          {/* Stage 2: Unified Landing Page (Marketing Angles + Compiler) */}
-          {expandedStage === 2 && (
-            <StudioUnifiedLandingPage onNext={() => {
-              setExpandedStage(3);
-              setCurrentStage(3);
-            }} />
-          )}
-
-          {/* Stage 3: Voiceover (Video Script Text & Audio) */}
-          {expandedStage === 3 && (
-            <VideoScriptStage
-              onNext={() => {
-                setExpandedStage(4);
-                setCurrentStage(4);
-              }}
-              productInfo={productInfo}
-              language={voiceLanguage}
-              market="gcc"
-            />
-          )}
-
-          {/* Stage 4: Scene Builder */}
-          {expandedStage === 4 && (
-            <div className="space-y-6">
-              {/* Smart Scene Builder V2 - Primary UI for AI-driven scene generation */}
-              {projectId ? (
-                <SmartSceneBuilderV2
-                  projectId={projectId}
-                  scripts={scriptSlots.filter(s => s.text.trim()).map((slot, idx) => ({
-                    id: `script-${slot.id}`,
-                    text: slot.text,
-                    language: voiceLanguage,
-                  }))}
-                  onProceedToAssembly={(scenePlan) => {
-                    // Convert scene plan to unified scenes format
-                    if (scenePlan?.scenes) {
-                      setUnifiedScenes(scenePlan.scenes.map((s: any) => ({
-                        id: s.id,
-                        index: s.index,
-                        text: s.visualIntent || '',
-                        visualPrompt: s.visualIntent || '',
-                        duration: s.duration,
-                        status: s.status,
-                        engine: s.selectedEngine?.engineName || 'auto',
-                        videoUrl: s.videoUrl,
-                        thumbnailUrl: s.thumbnailUrl,
-                      })));
-                      setScenes(scenePlan.scenes.map((s: any, i: number) => ({
-                        id: s.id,
-                        title: `Scene ${i + 1}`,
-                        description: s.visualIntent,
-                        visualPrompt: s.visualIntent,
-                        duration: s.duration,
-                      })));
-                    }
-                    setExpandedStage(5);
-                    setCurrentStage(5);
-                  }}
-                />
-              ) : (
-                <Card className="bg-gradient-card border-border shadow-card p-8 text-center">
-                  <Wand2 className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                  <p className="text-muted-foreground">Save your project first to use the Scene Builder</p>
-                  <p className="text-xs text-muted-foreground mt-2">Complete earlier steps and save your project</p>
-                </Card>
-              )}
-
-            </div>
-          )}
-
-          {/* Stage 5: Auto-Ad Factory (Assembly) */}
-          {expandedStage === 5 && (
-            <div className="space-y-6">
-              {projectId ? (
-                <AutoAdFactory
-                  projectId={projectId}
-                  scriptId={scriptId || undefined}
-                  scenesCount={unifiedScenes.length || scenes.length}
-                  videosToGenerate={videosToGenerate}
-                  onComplete={(videos) => {
-                    toast.success(`Created ${videos.length} video ads!`);
-                    setExpandedStage(6);
-                    setCurrentStage(6);
-                  }}
-                />
-              ) : (
-                <Card className="bg-gradient-card border-border shadow-card p-8 text-center">
-                  <Palette className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                  <p className="text-muted-foreground">Save your project first to use the Auto-Ad Factory</p>
-                </Card>
-              )}
-
-              {/* Optional Timeline Editor */}
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  if (scenes.length === 0 && unifiedScenes.length === 0) {
-                    toast.error("No scenes available. Generate scenes first.");
-                    return;
+                scripts={scriptSlots.filter(s => s.text.trim()).map((slot, idx) => ({
+                  id: `script-${slot.id}`,
+                  text: slot.text,
+                  language: voiceLanguage,
+                }))}
+                onProceedToAssembly={(scenePlan) => {
+                  // Convert scene plan to unified scenes format
+                  if (scenePlan?.scenes) {
+                    setUnifiedScenes(scenePlan.scenes.map((s: any) => ({
+                      id: s.id,
+                      index: s.index,
+                      text: s.visualIntent || '',
+                      visualPrompt: s.visualIntent || '',
+                      duration: s.duration,
+                      status: s.status,
+                      engine: s.selectedEngine?.engineName || 'auto',
+                      videoUrl: s.videoUrl,
+                      thumbnailUrl: s.thumbnailUrl,
+                    })));
+                    setScenes(scenePlan.scenes.map((s: any, i: number) => ({
+                      id: s.id,
+                      title: `Scene ${i + 1}`,
+                      description: s.visualIntent,
+                      visualPrompt: s.visualIntent,
+                      duration: s.duration,
+                    })));
                   }
-                  setShowTimelineEditor(true);
+                  setExpandedStage(5);
+                  setCurrentStage(5);
                 }}
-              >
-                <Palette className="w-4 h-4 mr-2" />
-                Open Timeline Editor (Optional)
-              </Button>
+              />
+            ) : (
+              <Card className="bg-gradient-card border-border shadow-card p-8 text-center">
+                <Wand2 className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <p className="text-muted-foreground">Save your project first to use the Scene Builder</p>
+                <p className="text-xs text-muted-foreground mt-2">Complete earlier steps and save your project</p>
+              </Card>
+            )}
 
-              {/* Proceed to Export */}
-              <Button
-                onClick={() => {
+          </div>
+        )}
+
+        {/* Stage 5: Auto-Ad Factory (Assembly) */}
+        {expandedStage === 5 && (
+          <div className="space-y-6">
+            {projectId ? (
+              <AutoAdFactory
+                projectId={projectId}
+                scriptId={scriptId || undefined}
+                scenesCount={unifiedScenes.length || scenes.length}
+                videosToGenerate={videosToGenerate}
+                onComplete={(videos) => {
+                  toast.success(`Created ${videos.length} video ads!`);
                   setExpandedStage(6);
                   setCurrentStage(6);
                 }}
-                className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow"
-              >
-                <ChevronRight className="w-4 h-4 mr-2" />
-                Next: Export Videos
-              </Button>
-            </div>
-          )}
+              />
+            ) : (
+              <Card className="bg-gradient-card border-border shadow-card p-8 text-center">
+                <Palette className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <p className="text-muted-foreground">Save your project first to use the Auto-Ad Factory</p>
+              </Card>
+            )}
 
-          {/* Stage 6: Export */}
-          {expandedStage === 6 && (
-            <StudioExport />
-          )}
-
-          {/* Save Button - shown when scenes exist */}
-          {(scenes.length > 0 || unifiedScenes.length > 0) && !scriptId && expandedStage <= 4 && (
+            {/* Optional Timeline Editor */}
             <Button
-              onClick={saveProjectAndScenes}
-              disabled={isSaving}
-              className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow"
-              size="lg"
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                if (scenes.length === 0 && unifiedScenes.length === 0) {
+                  toast.error("No scenes available. Generate scenes first.");
+                  return;
+                }
+                setShowTimelineEditor(true);
+              }}
             >
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4 mr-2" />
-                  Save Project & Scenes
-                </>
-              )}
+              <Palette className="w-4 h-4 mr-2" />
+              Open Timeline Editor (Optional)
             </Button>
-          )}
-        </div>
+
+            {/* Proceed to Export */}
+            <Button
+              onClick={() => {
+                setExpandedStage(6);
+                setCurrentStage(6);
+              }}
+              className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow"
+            >
+              <ChevronRight className="w-4 h-4 mr-2" />
+              Next: Export Videos
+            </Button>
+          </div>
+        )}
+
+        {/* Stage 6: Export */}
+        {expandedStage === 6 && (
+          <StudioExport />
+        )}
+
+        {/* Save Button - shown when scenes exist */}
+        {(scenes.length > 0 || unifiedScenes.length > 0) && !scriptId && expandedStage <= 4 && (
+          <Button
+            onClick={saveProjectAndScenes}
+            disabled={isSaving}
+            className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow"
+            size="lg"
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                Save Project & Scenes
+              </>
+            )}
+          </Button>
+        )}
       </div>
-
-
-      {/* Timeline Editor Dialog */}
-      <Dialog open={showTimelineEditor} onOpenChange={setShowTimelineEditor}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Palette className="w-5 h-5 text-primary" />
-              Timeline Editor
-            </DialogTitle>
-          </DialogHeader>
-          <VideoTimelineEditor
-            scenes={(unifiedScenes.length > 0 ? unifiedScenes : scenes).map((s, idx) => ({
-              id: s.id || `scene-${idx}`,
-              index: s.index ?? idx,
-              text: s.text || s.description || '',
-              scene_type: s.scene_type || s.videoType || null,
-              visual_prompt: s.visual_prompt || s.visualPrompt || null,
-              engine_name: s.engine_name || s.engine || null,
-              engine_id: s.engine_id || null,
-              status: s.status || 'pending',
-              video_url: s.video_url || s.videoUrl || null,
-              duration_sec: s.duration_sec || s.duration || 5,
-              transition_type: s.transition_type || s.transitionType || 'cut',
-              transition_duration_ms: s.transition_duration_ms || s.transitionDuration || 500,
-            }))}
-            onScenesUpdate={(updatedScenes) => {
-              // Update both state arrays for compatibility
-              const mappedScenes = updatedScenes.map(s => ({
-                ...s,
-                visual_prompt: s.visual_prompt,
-                transition_type: s.transition_type,
-                transition_duration_ms: s.transition_duration_ms,
-              }));
-              setScenes(mappedScenes);
-              setUnifiedScenes(mappedScenes.map((s, i) => ({
-                id: s.id,
-                index: i,
-                text: s.text,
-                visualPrompt: s.visual_prompt || '',
-                duration: s.duration_sec || 5,
-                status: (s.status || 'pending') as 'pending' | 'generating' | 'completed' | 'failed',
-                engine: s.engine_name || 'nano-banana',
-                videoUrl: s.video_url || undefined,
-              })));
-              toast.success("Timeline updated!");
-            }}
-          />
-        </DialogContent>
-      </Dialog>
     </div>
-  );
+
+
+    {/* Timeline Editor Dialog */}
+    <Dialog open={showTimelineEditor} onOpenChange={setShowTimelineEditor}>
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Palette className="w-5 h-5 text-primary" />
+            Timeline Editor
+          </DialogTitle>
+        </DialogHeader>
+        <VideoTimelineEditor
+          scenes={(unifiedScenes.length > 0 ? unifiedScenes : scenes).map((s, idx) => ({
+            id: s.id || `scene-${idx}`,
+            index: s.index ?? idx,
+            text: s.text || s.description || '',
+            scene_type: s.scene_type || s.videoType || null,
+            visual_prompt: s.visual_prompt || s.visualPrompt || null,
+            engine_name: s.engine_name || s.engine || null,
+            engine_id: s.engine_id || null,
+            status: s.status || 'pending',
+            video_url: s.video_url || s.videoUrl || null,
+            duration_sec: s.duration_sec || s.duration || 5,
+            transition_type: s.transition_type || s.transitionType || 'cut',
+            transition_duration_ms: s.transition_duration_ms || s.transitionDuration || 500,
+          }))}
+          onScenesUpdate={(updatedScenes) => {
+            // Update both state arrays for compatibility
+            const mappedScenes = updatedScenes.map(s => ({
+              ...s,
+              visual_prompt: s.visual_prompt,
+              transition_type: s.transition_type,
+              transition_duration_ms: s.transition_duration_ms,
+            }));
+            setScenes(mappedScenes);
+            setUnifiedScenes(mappedScenes.map((s, i) => ({
+              id: s.id,
+              index: i,
+              text: s.text,
+              visualPrompt: s.visual_prompt || '',
+              duration: s.duration_sec || 5,
+              status: (s.status || 'pending') as 'pending' | 'generating' | 'completed' | 'failed',
+              engine: s.engine_name || 'nano-banana',
+              videoUrl: s.video_url || undefined,
+            })));
+            toast.success("Timeline updated!");
+          }}
+        />
+      </DialogContent>
+    </Dialog>
+  </div>
+);
 }

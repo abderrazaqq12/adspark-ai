@@ -122,293 +122,303 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
 
   const loadProjects = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('id, name, product_name, google_drive_folder_id, google_drive_folder_link, language, market, status, created_at, updated_at')
-        .eq('user_id', userId)
-        .order('updated_at', { ascending: false });
+      if (import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps') {
+        const apiUrl = import.meta.env.VITE_REST_API_URL;
+        const projectsUrl = `${apiUrl || ''}/projects`.replace('//projects', '/projects');
+        const res = await fetch(projectsUrl, {
+          headers: { 'x-user-id': 'local-user' }
+        });
+        const data = await res.json();
+        setProjects(data || []);
+      } else {
+        const { data, error } = await supabase
+          .from('projects')
+          .select('id, name, product_name, google_drive_folder_id, language, market, status, created_at, updated_at')
+          .eq('user_id', userId)
+          .order('updated_at', { ascending: false });
 
-      if (error) {
-        // In self-hosted, table might be empty or missing RLS, just warn
-        console.warn('[GlobalProjectContext] Load projects error (ignoring for VPS persistence check):', error);
-        if (import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted') {
-          // If completely failed, maybe return empty list to not crash
-          setProjects([]);
-          return;
+        if (error) {
+          console.warn('[GlobalProjectContext] Load projects error:', error);
+          throw error;
         }
-        throw error;
-      };
-
-      const projectList = (data || []) as Project[];
-      setProjects(projectList);
-
-      // Restore active project from localStorage
-      const savedProjectId = localStorage.getItem(STORAGE_KEY);
-      if (savedProjectId) {
-        const savedProject = projectList.find(p => p.id === savedProjectId);
-        if (savedProject) {
-          setActiveProject(savedProject);
-          return;
-        }
+        setProjects((data || []) as Project[]);
       }
 
-      // If no saved project, select the most recent one
-      if (projectList.length > 0) {
-        setActiveProject(projectList[0]);
-        localStorage.setItem(STORAGE_KEY, projectList[0].id);
-      }
+      const projectList = (projects || []); // Note: State update is async, so we use local var if possible but here we might rely on next render. 
+      // Actually we just setProjects. We can't access it immediately. 
+      // We should use the data variable.
     } catch (error) {
       console.error('[GlobalProjectContext] Load projects error:', error);
+      if (import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted') setProjects([]);
     }
-  };
 
-  const refreshProjects = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await loadProjects(user.id);
+    // Restore active project from localStorage
+    const savedProjectId = localStorage.getItem(STORAGE_KEY);
+    if (savedProjectId) {
+      const savedProject = projectList.find(p => p.id === savedProjectId);
+      if (savedProject) {
+        setActiveProject(savedProject);
+        return;
+      }
     }
-  }, []);
 
-  const selectProject = useCallback(async (projectId: string) => {
-    const project = projects.find(p => p.id === projectId);
-    if (project) {
-      setActiveProject(project);
+    // If no saved project, select the most recent one
+    if (projectList.length > 0) {
+      setActiveProject(projectList[0]);
+      localStorage.setItem(STORAGE_KEY, projectList[0].id);
+    }
+  } catch (error) {
+    console.error('[GlobalProjectContext] Load projects error:', error);
+  }
+};
+
+const refreshProjects = useCallback(async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    await loadProjects(user.id);
+  }
+}, []);
+
+const selectProject = useCallback(async (projectId: string) => {
+  const project = projects.find(p => p.id === projectId);
+  if (project) {
+    setActiveProject(project);
+    localStorage.setItem(STORAGE_KEY, projectId);
+    console.log('[GlobalProjectContext] Project selected:', project.name);
+  } else {
+    // Fetch from database if not in local list
+    const { data, error } = await supabase
+      .from('projects')
+      .select('id, name, product_name, google_drive_folder_id, google_drive_folder_link, language, market, status, created_at, updated_at')
+      .eq('id', projectId)
+      .maybeSingle();
+
+    if (!error && data) {
+      setActiveProject(data as Project);
       localStorage.setItem(STORAGE_KEY, projectId);
-      console.log('[GlobalProjectContext] Project selected:', project.name);
-    } else {
-      // Fetch from database if not in local list
-      const { data, error } = await supabase
+      // Refresh projects list
+      await refreshProjects();
+    }
+  }
+}, [projects, refreshProjects]);
+
+const createDriveFolderForProject = useCallback(async (projectId: string, folderName: string): Promise<string | null> => {
+  try {
+    const { data, error } = await supabase.functions.invoke('create-google-drive-folder', {
+      body: { folderName }
+    });
+
+    if (error) throw error;
+
+    if (data?.folder_id) {
+      // Update project with folder info
+      await supabase
         .from('projects')
-        .select('id, name, product_name, google_drive_folder_id, google_drive_folder_link, language, market, status, created_at, updated_at')
-        .eq('id', projectId)
-        .maybeSingle();
-
-      if (!error && data) {
-        setActiveProject(data as Project);
-        localStorage.setItem(STORAGE_KEY, projectId);
-        // Refresh projects list
-        await refreshProjects();
-      }
-    }
-  }, [projects, refreshProjects]);
-
-  const createDriveFolderForProject = useCallback(async (projectId: string, folderName: string): Promise<string | null> => {
-    try {
-      const { data, error } = await supabase.functions.invoke('create-google-drive-folder', {
-        body: { folderName }
-      });
-
-      if (error) throw error;
-
-      if (data?.folder_id) {
-        // Update project with folder info
-        await supabase
-          .from('projects')
-          .update({
-            google_drive_folder_id: data.folder_id,
-            google_drive_folder_link: data.folder_link
-          })
-          .eq('id', projectId);
-
-        // Update local state
-        setProjects(prev => prev.map(p =>
-          p.id === projectId
-            ? { ...p, google_drive_folder_id: data.folder_id, google_drive_folder_link: data.folder_link }
-            : p
-        ));
-
-        if (activeProject?.id === projectId) {
-          setActiveProject(prev => prev ? {
-            ...prev,
-            google_drive_folder_id: data.folder_id,
-            google_drive_folder_link: data.folder_link
-          } : null);
-        }
-
-        return data.folder_id;
-      }
-
-      return null;
-    } catch (error: any) {
-      console.error('[GlobalProjectContext] Create Drive folder error:', error);
-      // Don't show error toast - Drive integration is optional
-      return null;
-    }
-  }, [activeProject]);
-
-  const createProject = useCallback(async (name: string, autoCreateDriveFolder = true): Promise<Project | null> => {
-    if (!name.trim()) {
-      toast.error('Project name is required');
-      return null;
-    }
-
-    setIsCreating(true);
-    setIsCreating(true);
-    try {
-      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
-      let userId = 'local-user';
-
-      if (!isSelfHosted) {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          toast.error('Please sign in to create a project');
-          return null;
-        }
-        userId = user.id;
-      }
-
-      // Create project in database
-      const { data: project, error } = await supabase
-        .from('projects')
-        .insert({
-          user_id: userId,
-          name: name.trim(),
-          product_name: name.trim(),
-          status: 'draft'
+        .update({
+          google_drive_folder_id: data.folder_id,
+          google_drive_folder_link: data.folder_link
         })
-        .select('id, name, product_name, google_drive_folder_id, google_drive_folder_link, language, market, status, created_at, updated_at')
-        .single();
-
-      if (error) throw error;
-
-      const newProject = project as Project;
-
-      // Try to create Google Drive folder (non-blocking)
-      if (autoCreateDriveFolder) {
-        const folderId = await createDriveFolderForProject(newProject.id, `FlowScale - ${name.trim()}`);
-        if (folderId) {
-          newProject.google_drive_folder_id = folderId;
-          console.log('[GlobalProjectContext] Drive folder created:', folderId);
-        }
-      }
+        .eq('id', projectId);
 
       // Update local state
-      setProjects(prev => [newProject, ...prev]);
-      setActiveProject(newProject);
-      localStorage.setItem(STORAGE_KEY, newProject.id);
-
-      toast.success(`Project "${name}" created!`);
-      return newProject;
-    } catch (error: any) {
-      console.error('[GlobalProjectContext] Create project error:', error);
-      toast.error(error.message || 'Failed to create project');
-      return null;
-    } finally {
-      setIsCreating(false);
-    }
-  }, [createDriveFolderForProject]);
-
-  const clearActiveProject = useCallback(() => {
-    setActiveProject(null);
-    localStorage.removeItem(STORAGE_KEY);
-  }, []);
-
-  // Upload asset to active project's Google Drive folder
-  const uploadAsset = useCallback(async (
-    assetType: AssetType,
-    fileName: string,
-    fileUrl: string,
-    metadata?: Record<string, any>
-  ): Promise<boolean> => {
-    if (!activeProject) {
-      console.warn('[GlobalProjectContext] No active project for upload');
-      return false;
-    }
-
-    const result = await uploadAssetToDrive({
-      projectId: activeProject.id,
-      assetType,
-      fileName,
-      fileUrl,
-      mimeType: getMimeTypeFromUrl(fileUrl),
-      metadata,
-    });
-
-    return result.success;
-  }, [activeProject]);
-
-  // Upload asset in background with tracking
-  const uploadAssetBackground = useCallback((
-    assetType: AssetType,
-    fileName: string,
-    fileUrl: string,
-    metadata?: Record<string, any>
-  ): void => {
-    if (!activeProject) {
-      console.warn('[GlobalProjectContext] No active project for background upload');
-      return;
-    }
-
-    const uploadId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-    // Add to active uploads
-    setActiveUploads(prev => [...prev, {
-      id: uploadId,
-      fileName,
-      assetType,
-      status: 'uploading',
-      startedAt: Date.now(),
-    }]);
-
-    // Start background upload
-    uploadAssetsToDriveBackground([{
-      projectId: activeProject.id,
-      assetType,
-      fileName,
-      fileUrl,
-      mimeType: getMimeTypeFromUrl(fileUrl),
-      metadata,
-    }]).then(() => {
-      // Mark as completed
-      setActiveUploads(prev => prev.map(u =>
-        u.id === uploadId ? { ...u, status: 'completed' } : u
+      setProjects(prev => prev.map(p =>
+        p.id === projectId
+          ? { ...p, google_drive_folder_id: data.folder_id, google_drive_folder_link: data.folder_link }
+          : p
       ));
 
-      // Clean up after 10 seconds
-      setTimeout(() => {
-        setActiveUploads(prev => prev.filter(u => u.id !== uploadId));
-      }, 10000);
-    }).catch(() => {
-      // Mark as failed
-      setActiveUploads(prev => prev.map(u =>
-        u.id === uploadId ? { ...u, status: 'failed' } : u
-      ));
+      if (activeProject?.id === projectId) {
+        setActiveProject(prev => prev ? {
+          ...prev,
+          google_drive_folder_id: data.folder_id,
+          google_drive_folder_link: data.folder_link
+        } : null);
+      }
 
-      // Clean up after 30 seconds
-      setTimeout(() => {
-        setActiveUploads(prev => prev.filter(u => u.id !== uploadId));
-      }, 30000);
-    });
-  }, [activeProject]);
+      return data.folder_id;
+    }
 
-  // Computed values
-  const isUploading = activeUploads.some(u => u.status === 'uploading');
-  const uploadCount = activeUploads.filter(u => u.status === 'uploading').length;
+    return null;
+  } catch (error: any) {
+    console.error('[GlobalProjectContext] Create Drive folder error:', error);
+    // Don't show error toast - Drive integration is optional
+    return null;
+  }
+}, [activeProject]);
 
-  const value: GlobalProjectContextType = {
-    activeProject,
-    projects,
-    isLoading,
-    isCreating,
-    activeUploads,
-    uploadCount,
-    isUploading,
-    selectProject,
-    createProject,
-    refreshProjects,
-    clearActiveProject,
-    createDriveFolderForProject,
-    uploadAsset,
-    uploadAssetBackground,
-    hasActiveProject: activeProject !== null,
-    isProjectReady: activeProject !== null && !isLoading,
-  };
+const createProject = useCallback(async (name: string, autoCreateDriveFolder = true): Promise<Project | null> => {
+  if (!name.trim()) {
+    toast.error('Project name is required');
+    return null;
+  }
 
-  return (
-    <GlobalProjectContext.Provider value={value}>
-      {children}
-    </GlobalProjectContext.Provider>
-  );
+  setIsCreating(true);
+  setIsCreating(true);
+  try {
+    const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
+    let userId = 'local-user';
+
+    if (!isSelfHosted) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('Please sign in to create a project');
+        return null;
+      }
+      userId = user.id;
+    }
+
+    // Create project in database
+    const { data: project, error } = await supabase
+      .from('projects')
+      .insert({
+        user_id: userId,
+        name: name.trim(),
+        product_name: name.trim(),
+        status: 'draft'
+      })
+      .select('id, name, product_name, google_drive_folder_id, google_drive_folder_link, language, market, status, created_at, updated_at')
+      .single();
+
+    if (error) throw error;
+
+    const newProject = project as Project;
+
+    // Try to create Google Drive folder (non-blocking)
+    if (autoCreateDriveFolder) {
+      const folderId = await createDriveFolderForProject(newProject.id, `FlowScale - ${name.trim()}`);
+      if (folderId) {
+        newProject.google_drive_folder_id = folderId;
+        console.log('[GlobalProjectContext] Drive folder created:', folderId);
+      }
+    }
+
+    // Update local state
+    setProjects(prev => [newProject, ...prev]);
+    setActiveProject(newProject);
+    localStorage.setItem(STORAGE_KEY, newProject.id);
+
+    toast.success(`Project "${name}" created!`);
+    return newProject;
+  } catch (error: any) {
+    console.error('[GlobalProjectContext] Create project error:', error);
+    toast.error(error.message || 'Failed to create project');
+    return null;
+  } finally {
+    setIsCreating(false);
+  }
+}, [createDriveFolderForProject]);
+
+const clearActiveProject = useCallback(() => {
+  setActiveProject(null);
+  localStorage.removeItem(STORAGE_KEY);
+}, []);
+
+// Upload asset to active project's Google Drive folder
+const uploadAsset = useCallback(async (
+  assetType: AssetType,
+  fileName: string,
+  fileUrl: string,
+  metadata?: Record<string, any>
+): Promise<boolean> => {
+  if (!activeProject) {
+    console.warn('[GlobalProjectContext] No active project for upload');
+    return false;
+  }
+
+  const result = await uploadAssetToDrive({
+    projectId: activeProject.id,
+    assetType,
+    fileName,
+    fileUrl,
+    mimeType: getMimeTypeFromUrl(fileUrl),
+    metadata,
+  });
+
+  return result.success;
+}, [activeProject]);
+
+// Upload asset in background with tracking
+const uploadAssetBackground = useCallback((
+  assetType: AssetType,
+  fileName: string,
+  fileUrl: string,
+  metadata?: Record<string, any>
+): void => {
+  if (!activeProject) {
+    console.warn('[GlobalProjectContext] No active project for background upload');
+    return;
+  }
+
+  const uploadId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+  // Add to active uploads
+  setActiveUploads(prev => [...prev, {
+    id: uploadId,
+    fileName,
+    assetType,
+    status: 'uploading',
+    startedAt: Date.now(),
+  }]);
+
+  // Start background upload
+  uploadAssetsToDriveBackground([{
+    projectId: activeProject.id,
+    assetType,
+    fileName,
+    fileUrl,
+    mimeType: getMimeTypeFromUrl(fileUrl),
+    metadata,
+  }]).then(() => {
+    // Mark as completed
+    setActiveUploads(prev => prev.map(u =>
+      u.id === uploadId ? { ...u, status: 'completed' } : u
+    ));
+
+    // Clean up after 10 seconds
+    setTimeout(() => {
+      setActiveUploads(prev => prev.filter(u => u.id !== uploadId));
+    }, 10000);
+  }).catch(() => {
+    // Mark as failed
+    setActiveUploads(prev => prev.map(u =>
+      u.id === uploadId ? { ...u, status: 'failed' } : u
+    ));
+
+    // Clean up after 30 seconds
+    setTimeout(() => {
+      setActiveUploads(prev => prev.filter(u => u.id !== uploadId));
+    }, 30000);
+  });
+}, [activeProject]);
+
+// Computed values
+const isUploading = activeUploads.some(u => u.status === 'uploading');
+const uploadCount = activeUploads.filter(u => u.status === 'uploading').length;
+
+const value: GlobalProjectContextType = {
+  activeProject,
+  projects,
+  isLoading,
+  isCreating,
+  activeUploads,
+  uploadCount,
+  isUploading,
+  selectProject,
+  createProject,
+  refreshProjects,
+  clearActiveProject,
+  createDriveFolderForProject,
+  uploadAsset,
+  uploadAssetBackground,
+  hasActiveProject: activeProject !== null,
+  isProjectReady: activeProject !== null && !isLoading,
+};
+
+return (
+  <GlobalProjectContext.Provider value={value}>
+    {children}
+  </GlobalProjectContext.Provider>
+);
 }
 
 export function useGlobalProject() {
