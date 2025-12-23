@@ -48,6 +48,9 @@ import { enforceProject } from './middleware/project-enforcer.js';
 import { errorHandler } from './error-handler.js';
 import { healthRouter, getQueueStats } from './health-endpoints.js';
 import { analyticsRouter } from './analytics-collector.js';
+import { JobQueueManager } from './job-queue.js';
+import { compileRenderPlan } from './render-plan.js';
+import { detectEngineCapabilities } from './engine-utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -106,53 +109,18 @@ const ALLOWED_MIME_TYPES = [
 // FFMPEG AVAILABILITY CHECK
 // ============================================
 
-let ffmpegPath = null;
-let ffmpegVersion = null;
-let bestEncoder = 'libx264'; // Default to CPU
+// ============================================
+// FFMPEG AVAILABILITY CHECK (Phase 2B)
+// ============================================
 
-function detectFFmpeg() {
-  try {
-    const version = execSync('ffmpeg -version 2>&1').toString();
-    const match = version.match(/ffmpeg version (\S+)/);
-    ffmpegVersion = match ? match[1] : 'unknown';
+const engineCaps = detectEngineCapabilities();
+const FFMPEG_AVAILABLE = engineCaps.ffmpeg.available;
 
-    try {
-      ffmpegPath = execSync('which ffmpeg').toString().trim();
-    } catch {
-      ffmpegPath = '/usr/bin/ffmpeg';
-    }
-
-    console.log(`[FFmpeg] Found: ${ffmpegPath} (version ${ffmpegVersion})`);
-
-    // Hardware Acceleration Detection
-    if (FFMPEG_HW_ACCEL !== 'off') {
-      try {
-        const encoders = execSync('ffmpeg -encoders 2>&1').toString();
-
-        if ((FFMPEG_HW_ACCEL === 'auto' || FFMPEG_HW_ACCEL === 'cuda') && encoders.includes('h264_nvenc')) {
-          bestEncoder = 'h264_nvenc';
-          console.log('[FFmpeg] GPU Acceleration: ENABLED (NVIDIA NVENC)');
-        } else if ((FFMPEG_HW_ACCEL === 'auto' || FFMPEG_HW_ACCEL === 'vaapi') && encoders.includes('h264_vaapi')) {
-          bestEncoder = 'h264_vaapi';
-          console.log('[FFmpeg] GPU Acceleration: ENABLED (VAAPI)');
-        } else {
-          console.log('[FFmpeg] GPU Acceleration: NOT AVAILABLE (Falling back to libx264)');
-        }
-      } catch (e) {
-        console.warn('[FFmpeg] Failed to detect encoders, defaulting to libx264');
-      }
-    } else {
-      console.log('[FFmpeg] GPU Acceleration: DISABLED (Configured to off)');
-    }
-
-    return true;
-  } catch (err) {
-    console.error('[FFmpeg] NOT FOUND - video processing will fail');
-    return false;
-  }
+console.log(`[FFmpeg] Status: ${FFMPEG_AVAILABLE ? 'AVAILABLE' : 'NOT FOUND'}`);
+if (FFMPEG_AVAILABLE) {
+  console.log(`[FFmpeg] GPU Acceleration: ${engineCaps.gpu.available ? `ENABLED (${engineCaps.gpu.vendor})` : 'NOT FOUND'}`);
+  console.log(`[FFmpeg] Best Encoder: ${engineCaps.bestEncoder}`);
 }
-
-const FFMPEG_AVAILABLE = detectFFmpeg();
 
 // ============================================
 // ROUTES
@@ -221,36 +189,17 @@ app.delete('/api/projects/:id', async (req, res) => {
 });
 
 // ============================================
-// JOB QUEUE & STATE
-
-// ============================================
-// JOB QUEUE & STATE
+// JOB QUEUE & ENGINE (Phase 2B Optimized)
 // ============================================
 
-const jobs = new Map(); // In-memory job state
-const pendingQueue = []; // Job IDs waiting for processing
-let currentJob = null; // Currently processing job ID
+const queue = new JobQueueManager(app);
+queue.initialize();
 
-// Expose queue stats to Health Router (Manifesto Phase 4)
-app.locals.getQueueStats = () => {
-  const jobArray = Array.from(jobs.values());
-  const now = Date.now();
-  const last24h = now - (24 * 60 * 60 * 1000);
+// Expose queue stats to Health Router
+app.locals.getQueueStats = () => queue.getStats();
 
-  return {
-    active: currentJob ? 1 : 0,
-    waiting: pendingQueue.length,
-    completed: jobArray.filter(j => j.status === 'done').length,
-    failed: jobArray.filter(j => j.status === 'error').length,
-    failed24h: jobArray.filter(j => j.status === 'error' && new Date(j.createdAt).getTime() >= last24h).length,
-    total: jobArray.length,
-    currentJob: currentJob ? {
-      id: currentJob,
-      status: jobs.get(currentJob)?.status,
-      progress: jobs.get(currentJob)?.progressPct || 0
-    } : null
-  };
-};
+// Legacy compatibility wrappers (internal)
+function getJob(id) { return queue.getJob(id); }
 
 /**
  * Job statuses (compatible with frontend contract):
@@ -268,13 +217,16 @@ function generateFileId() {
   return crypto.randomBytes(8).toString('hex');
 }
 
-function createJob(jobId, type, input) {
+function createJob(jobId, type, input, priority = 'normal') {
+  // Compile Immutable Render Plan (Phase 2B)
+  const renderPlan = compileRenderPlan({ type, input, priority });
+
   const job = {
     id: jobId,
     type,
     input,
+    renderPlan, // Single source of truth for execution
     status: 'queued',
-    progressPct: 0,
     progressPct: 0,
     logsTail: '',
     fullLogs: [], // Capture full logs for streaming
@@ -286,25 +238,21 @@ function createJob(jobId, type, input) {
     error: null,
     tempFiles: [], // Track temp files for cleanup
   };
-  jobs.set(jobId, job);
+  queue.jobs.set(jobId, job);
   return job;
 }
 
-function getJob(jobId) {
-  return jobs.get(jobId) || null;
-}
-
 function updateJob(jobId, updates) {
-  const job = jobs.get(jobId);
+  const job = queue.jobs.get(jobId);
   if (job) {
     Object.assign(job, updates);
-    jobs.set(jobId, job);
+    queue.jobs.set(jobId, job);
   }
   return job;
 }
 
 function appendLog(jobId, message) {
-  const job = jobs.get(jobId);
+  const job = queue.jobs.get(jobId);
   if (job) {
     job.logsTail = (job.logsTail + '\n' + message).slice(-2000);
     // Keep full history for debug console
@@ -315,13 +263,13 @@ function appendLog(jobId, message) {
 
 // Clean old jobs (keep last 100)
 function cleanOldJobs() {
-  if (jobs.size > 100) {
-    const sortedJobs = Array.from(jobs.entries())
-      .sort((a, b) => new Date(b[1].createdAt) - new Date(a[1].createdAt));
+  if (queue.jobs.size > 100) {
+    const sortedJobs = Array.from(queue.jobs.entries())
+      .sort((a, b) => new Date(b[1].createdAt).getTime() - new Date(a[1].createdAt).getTime());
 
     sortedJobs.slice(100).forEach(([jobId]) => {
       // NOTE: In a real system you'd clean up output files too
-      jobs.delete(jobId);
+      queue.jobs.delete(jobId);
     });
   }
 }
@@ -365,51 +313,34 @@ async function downloadRemoteFile(url, jobId) {
 // JOB PROCESSOR
 // ============================================
 
+// ============================================
+// JOB PROCESSOR (Phase 2B Optimized)
+// ============================================
+
 async function processNextJob() {
-  if (currentJob || pendingQueue.length === 0) {
-    return;
-  }
+  const jobId = queue.getNextJob();
+  if (!jobId) return;
 
-  const jobId = pendingQueue.shift();
   const job = getJob(jobId);
-
-  if (!job) {
-    processNextJob();
-    return;
-  }
-
-  currentJob = jobId;
   updateJob(jobId, {
     status: 'running',
-    startedAt: new Date().toISOString()
+    startedAt: new Date().toISOString(),
+    progressPct: 0
   });
-  appendLog(jobId, `[${new Date().toISOString()}] Job started`);
+
+  appendLog(jobId, `[Processing] Job ${jobId} started using RenderPlan ${job.renderPlan.id}`);
+  appendLog(jobId, `[Strategy] ${job.renderPlan.execution.isGPU ? 'GPU' : 'CPU'} Acceleration active`);
 
   try {
-    // Phase 3: Auto Source Resolution (Download first if needed)
+    // 1. Resolve Sources
+    appendLog(jobId, `[Stage] Source Resolution`);
     await resolveJobSource(job);
 
-    // Try with best detected encoder first
-    let finalEncoder = bestEncoder;
-    let result;
+    // 2. Main Render Step
+    appendLog(jobId, `[Stage] Video Rendering`);
+    const result = await executeFFmpegJob(job);
 
-    try {
-      result = await executeFFmpegJob(job, finalEncoder);
-    } catch (err) {
-      // Automatic Fallback Logic
-      if (finalEncoder !== 'libx264') {
-        console.warn(`[Job ${jobId}] GPU render failed (${err.message}). Falling back to CPU.`);
-        appendLog(jobId, `[Warning] GPU render failed: ${err.message}`);
-        appendLog(jobId, `[Fallback] Retrying with CPU (libx264)...`);
-
-        finalEncoder = 'libx264';
-        result = await executeFFmpegJob(job, finalEncoder);
-      } else {
-        throw err; // It was already CPU or critical failure
-      }
-    }
-
-    // 1️⃣ Add Explicit Artifact Commit
+    // 3. Register Artifacts (Persistent DB)
     const artifact = result.artifacts?.[0];
     if (artifact) {
       registerArtifact({
@@ -419,66 +350,92 @@ async function processNextJob() {
         videoUrl: artifact.url,
         sizeBytes: artifact.sizeBytes,
         durationMs: artifact.durationMs,
-        codec: finalEncoder,
+        codec: job.renderPlan.execution.encoder,
         metadata: {
-          variationIndex: job.input.variationIndex
+          variationIndex: job.input.variationIndex,
+          renderPlanId: job.renderPlan.id,
+          costUnits: job.renderPlan.estimation.costUnits
         }
       });
     }
 
-    // 2️⃣ Final Result Must Be Updated Immediately
-    const finalResult = {
-      status: 'success',
-      engineUsed: 'server_ffmpeg',
-      videoUrl: result.outputUrl || (artifact ? artifact.url : null)
-    };
-
+    // 4. Update Final State
     updateJob(jobId, {
       status: 'done',
       completedAt: new Date().toISOString(),
       output: result,
       progressPct: 100,
-      encoderUsed: finalEncoder,
-      artifacts: result.artifacts || [],
-      finalResult // Persist finalResult
+      encoderUsed: job.renderPlan.execution.encoder
     });
-    console.log(`[Job ${jobId}] Artifacts registered:`, JSON.stringify(result.artifacts));
-    appendLog(jobId, `[${new Date().toISOString()}] Job completed successfully (Encoder: ${finalEncoder})`);
+
+    appendLog(jobId, `[Success] Render completed in ${((Date.now() - new Date(job.startedAt)) / 1000).toFixed(1)}s`);
+
   } catch (err) {
-    updateJob(jobId, {
-      status: 'error',
-      completedAt: new Date().toISOString(),
-      error: {
-        code: err.code || 'EXECUTION_ERROR',
-        message: err.message,
-      },
-    });
-    appendLog(jobId, `[${new Date().toISOString()}] Job failed: ${err.message}`);
+    reportFailure(jobId, err);
   } finally {
-    // CLEANUP TEMP FILES
-    if (job.tempFiles && job.tempFiles.length > 0) {
+    // Cleanup
+    if (job.tempFiles?.length > 0) {
       job.tempFiles.forEach(file => {
-        try {
-          if (fs.existsSync(file)) {
-            fs.unlinkSync(file);
-            console.log(`[Cleanup] Deleted temp file: ${file}`);
-          }
-        } catch (e) {
-          console.error(`[Cleanup] Failed to delete ${file}:`, e);
-        }
+        try { if (fs.existsSync(file)) fs.unlinkSync(file); } catch (e) { }
       });
     }
 
-    currentJob = null;
+    queue.completeJob(jobId);
     cleanOldJobs();
+
+    // Check for next job immediately
     setImmediate(processNextJob);
   }
+}
+
+/**
+ * Enhanced Failure Intelligence (Requirement 6)
+ */
+function reportFailure(jobId, error) {
+  const job = getJob(jobId);
+  const failureMeta = {
+    code: error.code || 'UNKNOWN_RENDER_ERROR',
+    stage: error.stage || 'execution',
+    command: job?.command || 'none',
+    message: error.message || 'An unexpected error occurred during rendering',
+    suggestedAction: getFailureSuggestion(error),
+    timestamp: new Date().toISOString()
+  };
+
+  updateJob(jobId, {
+    status: 'error',
+    completedAt: new Date().toISOString(),
+    error: failureMeta
+  });
+
+  appendLog(jobId, `[FAILED] Stage: ${failureMeta.stage} | Error: ${failureMeta.message}`);
+  appendLog(jobId, `[Action] ${failureMeta.suggestedAction}`);
+
+  // Also persist to DB for cross-session analysis
+  if (db && job?.input?.projectId) {
+    try {
+      db.prepare(`
+        INSERT INTO execution_errors (project_id, job_id, category, message, stack)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(job.input.projectId, jobId, failureMeta.stage, failureMeta.message, error.stack);
+    } catch (e) {
+      console.error('[ErrorLog] Failed to persist error:', e.message);
+    }
+  }
+}
+
+function getFailureSuggestion(error) {
+  if (error.code === 'TIMEOUT_ERROR') return 'Reduce video resolution or duration and try again.';
+  if (error.code === 'FFMPEG_EXIT_ERROR') return 'Check input codec compatibility or watermark transparency.';
+  if (error.code === 'EMPTY_OUTPUT') return 'The source file might be corrupted or inaccessible.';
+  if (error.message.includes('Encoder not found')) return 'Update system FFmpeg build to include required hardware drivers.';
+  return 'Verify input parameters or contact system administrator.';
 }
 
 async function resolveJobSource(job) {
   const { input } = job;
 
-  // HANDLE MULTIPLE INPUTS (Complex Jobs)
+  // 1. Resolve Primary Sources (Videos)
   if (input.sources && Array.isArray(input.sources)) {
     appendLog(job.id, `Resolving ${input.sources.length} sources...`);
     input.sourcePaths = [];
@@ -486,110 +443,146 @@ async function resolveJobSource(job) {
     for (let i = 0; i < input.sources.length; i++) {
       const url = input.sources[i];
       if (!url) continue;
-
-      try {
-        const localPath = await downloadRemoteFile(url, `${job.id}_src_${i}`);
-        input.sourcePaths.push(localPath);
-        job.tempFiles.push(localPath);
-        appendLog(job.id, `Source ${i} ready: ${localPath}`);
-      } catch (err) {
-        throw new Error(`Failed to download source ${i} (${url}): ${err.message}`);
+      if (typeof url === 'string' && (url.startsWith('http') || url.startsWith('https'))) {
+        try {
+          const localPath = await downloadRemoteFile(url, `${job.id}_src_${i}`);
+          input.sourcePaths.push(localPath);
+          job.tempFiles.push(localPath);
+          appendLog(job.id, `Source ${i} ready: ${localPath}`);
+        } catch (err) {
+          throw new Error(`Failed to download source ${i} (${url}): ${err.message}`);
+        }
+      } else if (typeof url === 'string' && fs.existsSync(url)) {
+        input.sourcePaths.push(url);
       }
     }
-    return;
   }
 
-  // Decide which field holds the remote URL based on job type/payload
+  // Handle single source
   let remoteUrl = input.inputFileUrl || input.sourceVideoUrl;
-
-  // If we already have a valid local sourcePath, use it
-  if (input.sourcePath && fs.existsSync(input.sourcePath)) {
-    appendLog(job.id, `Using local source: ${input.sourcePath}`);
-    return;
-  }
-
-  if (remoteUrl) {
+  if (!input.sourcePaths && !input.sourcePath && remoteUrl) {
     appendLog(job.id, `Resolving remote source: ${remoteUrl}`);
     try {
       const localPath = await downloadRemoteFile(remoteUrl, job.id);
-
-      // Update job input to point to local file
       job.input.sourcePath = localPath;
-      job.tempFiles.push(localPath); // Mark for cleanup
-
+      job.tempFiles.push(localPath);
       appendLog(job.id, `Downloaded to: ${localPath}`);
     } catch (err) {
       throw new Error(`Failed to download source file: ${err.message}`);
     }
-  } else {
+  }
+
+  // 2. Resolve Background Music
+  if (input.backgroundMusic && typeof input.backgroundMusic === 'string' && input.backgroundMusic.startsWith('http')) {
+    appendLog(job.id, 'Resolving background music...');
+    try {
+      const bgmPath = await downloadRemoteFile(input.backgroundMusic, `${job.id}_bgm`);
+      input.backgroundMusicPath = bgmPath;
+      job.tempFiles.push(bgmPath);
+    } catch (err) {
+      console.warn(`[Resolve] BGM download failed: ${err.message}`);
+    }
+  } else if (input.backgroundMusic && fs.existsSync(input.backgroundMusic)) {
+    input.backgroundMusicPath = input.backgroundMusic;
+  }
+
+  // 3. Resolve Image Overlays
+  if (input.imageOverlays && Array.isArray(input.imageOverlays)) {
+    for (let i = 0; i < input.imageOverlays.length; i++) {
+      const img = input.imageOverlays[i];
+      if (img.url && img.url.startsWith('http')) {
+        try {
+          const localImgPath = await downloadRemoteFile(img.url, `${job.id}_img_${i}`);
+          img.localPath = localImgPath;
+          job.tempFiles.push(localImgPath);
+        } catch (err) {
+          console.warn(`[Resolve] Image overlay ${i} download failed: ${err.message}`);
+        }
+      }
+    }
+  }
+
+  // 4. Resolve Watermark
+  if (input.watermark && input.watermark.url && input.watermark.url.startsWith('http')) {
+    try {
+      const wmPath = await downloadRemoteFile(input.watermark.url, `${job.id}_wm`);
+      input.watermark.localPath = wmPath;
+      job.tempFiles.push(wmPath);
+    } catch (err) {
+      console.warn(`[Resolve] Watermark download failed: ${err.message}`);
+    }
+  }
+
+  // 5. Resolve Subtitles
+  if (input.subtitles && input.subtitles.url && input.subtitles.url.startsWith('http')) {
+    try {
+      const subPath = await downloadRemoteFile(input.subtitles.url, `${job.id}_sub`);
+      input.subtitles.localPath = subPath;
+      job.tempFiles.push(subPath);
+    } catch (err) {
+      console.warn(`[Resolve] Subtitles download failed: ${err.message}`);
+    }
+  }
+
+  if (!input.sourcePaths && !input.sourcePath && !input.sourceVideoUrl && !input.inputFileUrl) {
     throw new Error('No sourcePath or valid remote URL provided');
   }
 }
 
-async function executeFFmpegJob(job, encoder = bestEncoder) {
-  const { type, input } = job;
+async function executeFFmpegJob(job) {
+  const { type, input, renderPlan } = job;
 
   if (!FFMPEG_AVAILABLE) {
     const err = new Error('FFmpeg binary not available on server');
     err.code = 'FFMPEG_UNAVAILABLE';
+    err.stage = 'pre-flight';
     throw err;
   }
 
   // Pre-flight checks
   if (type !== 'complex' && (!input.sourcePath || !fs.existsSync(input.sourcePath))) {
-    throw new Error(`Source file not found: ${input.sourcePath}`);
+    const err = new Error(`Source file not found: ${input.sourcePath}`);
+    err.code = 'MISSING_SOURCE_FILE';
+    err.stage = 'pre-flight';
+    throw err;
   }
 
-  if (type === 'complex' && (!input.sourcePaths || input.sourcePaths.length === 0)) {
-    throw new Error('No source files resolved for complex job');
-  }
-
-  const sourceStats = fs.statSync(input.sourcePath);
-  if (sourceStats.size === 0) {
-    throw new Error('Source file is empty (0 bytes)');
-  }
-
-  // Project-Scoped Output Path (VPS Enforced)
+  // Project-Scoped Output Path
   let outputDirForJob = OUTPUT_DIR;
   if (input.projectId) {
     outputDirForJob = path.join(DATA_DIR, 'projects', input.projectId, 'outputs');
     if (!fs.existsSync(outputDirForJob)) fs.mkdirSync(outputDirForJob, { recursive: true });
-    console.log(`[Execute] Using project output dir: ${outputDirForJob}`);
   }
 
   const outputFilename = `${job.id}.mp4`;
   const outputPath = path.join(outputDirForJob, outputFilename);
 
+  // BUILD ARGUMENTS FROM RENDER PLAN (Requirement 3)
   let args;
-  // Ensure sourcePath is set (by resolveJobSource)
-  if (type !== 'complex' && !input.sourcePath) {
-    throw new Error('Internal Error: Source path not resolved before execution');
-  }
-
   try {
     if (type === 'execute') {
-      args = buildFFmpegArgs(input, outputPath, encoder);
+      args = buildFFmpegArgs(input, outputPath, renderPlan.execution.encoder);
     } else if (type === 'execute-plan') {
-      args = buildPlanArgs(input, outputPath, encoder);
+      args = buildPlanArgs(input, outputPath, renderPlan.execution.encoder);
     } else if (type === 'complex') {
-      args = buildComplexArgs(input, outputPath, encoder);
+      args = buildComplexArgs(input, outputPath, renderPlan.execution.encoder);
     } else {
       throw new Error(`Unknown job type: ${type}`);
     }
   } catch (err) {
-    throw new Error(`Failed to build FFmpeg arguments: ${err.message}`);
+    err.stage = 'build-args';
+    throw err;
   }
 
   return new Promise((resolve, reject) => {
-    appendLog(job.id, `FFmpeg command: ffmpeg ${args.join(' ')}`);
+    updateJob(job.id, { command: `ffmpeg ${args.join(' ')}` });
 
     let ffmpeg;
     try {
-      ffmpeg = spawn('ffmpeg', args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
+      ffmpeg = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
     } catch (err) {
       err.code = 'SPAWN_ERROR';
+      err.stage = 'spawn';
       reject(err);
       return;
     }
@@ -599,13 +592,10 @@ async function executeFFmpegJob(job, encoder = bestEncoder) {
 
     const timeout = setTimeout(() => {
       killed = true;
-      try {
-        ffmpeg.kill('SIGKILL');
-      } catch (e) {
-        console.error('Failed to kill ffmpeg process:', e);
-      }
-      const err = new Error(`FFmpeg timeout after ${MAX_RENDER_TIME}s`);
+      try { ffmpeg.kill('SIGKILL'); } catch (e) { }
+      const err = new Error(`Render timed out after ${MAX_RENDER_TIME}s`);
       err.code = 'TIMEOUT_ERROR';
+      err.stage = 'execution';
       reject(err);
     }, MAX_RENDER_TIME * 1000);
 
@@ -613,7 +603,7 @@ async function executeFFmpegJob(job, encoder = bestEncoder) {
       const chunk = data.toString();
       stderr += chunk;
 
-      // Parse progress
+      // Deterministic Progress Parsing (Requirement 7)
       const timeMatch = stderr.match(/time=(\d+):(\d+):(\d+\.\d+)/);
       if (timeMatch) {
         const hours = parseInt(timeMatch[1]);
@@ -621,96 +611,67 @@ async function executeFFmpegJob(job, encoder = bestEncoder) {
         const secs = parseFloat(timeMatch[3]);
         const currentSec = (hours * 3600) + (mins * 60) + secs;
 
-        // Calculate Total Duration
-        let totalDurationSec = 30; // Default fallback
-        if (job.type === 'execute-plan' && job.input.plan?.validation?.total_duration_ms) {
-          totalDurationSec = job.input.plan.validation.total_duration_ms / 1000;
-        } else if (job.input.trim && job.input.trim.end > 0) {
-          // Approximation for simple execute jobs
-          totalDurationSec = job.input.trim.end - (job.input.trim.start || 0);
-        }
-
+        const totalDurationSec = renderPlan.execution.durationSec;
         const progressPct = Math.min(99, Math.round((currentSec / totalDurationSec) * 100));
 
-        // Calculate ETA
+        // Dynamic ETA
         let etaSec = null;
         if (progressPct > 5 && job.startedAt) {
           const elapsed = (Date.now() - new Date(job.startedAt).getTime()) / 1000;
-          if (elapsed > 0) {
-            const rate = currentSec / elapsed; // video seconds per real second
-            const remaining = (totalDurationSec - currentSec) / rate;
-            etaSec = remaining > 0 ? remaining : 0;
-          }
+          const rate = currentSec / elapsed;
+          etaSec = Math.max(0, (totalDurationSec - currentSec) / rate);
         }
 
         updateJob(job.id, { progressPct, etaSec });
       }
-
-      // Keep full logs
       appendLog(job.id, chunk.trim());
     });
 
-    // Handle error event on the process object
-    ffmpeg.on('error', (err) => {
-      clearTimeout(timeout);
-      err.code = 'FFMPEG_SPAWN_ERROR';
-      reject(err);
-    });
-
-    // Capture Command
-    updateJob(job.id, { command: `ffmpeg ${args.join(' ')}` });
-    appendLog(job.id, `[Command] ffmpeg ${args.join(' ')}`);
-
     ffmpeg.on('close', (code) => {
       clearTimeout(timeout);
-
       if (killed) return;
 
       if (code === 0) {
         if (fs.existsSync(outputPath)) {
           const stats = fs.statSync(outputPath);
-
           if (stats.size > 0) {
             const artifactPathUrl = input.projectId
               ? `/projects/${input.projectId}/outputs/${outputFilename}`
               : `/outputs/${outputFilename}`;
 
-            const artifact = {
-              type: 'video',
-              mime: 'video/mp4',
-              engine: 'server_ffmpeg',
-              path: artifactPathUrl,
-              url: artifactPathUrl,
-              durationMs: Date.now() - new Date(job.startedAt).getTime(),
-              sizeBytes: stats.size
-            };
-
             resolve({
               outputPath,
-              outputUrl: artifact.url,
+              outputUrl: artifactPathUrl,
               outputSize: stats.size,
-              durationMs: artifact.durationMs,
-              artifacts: [artifact]
+              durationMs: renderPlan.execution.durationSec * 1000,
+              artifacts: [{
+                type: 'video',
+                mime: 'video/mp4',
+                engine: 'server_ffmpeg',
+                url: artifactPathUrl,
+                durationMs: renderPlan.execution.durationSec * 1000,
+                sizeBytes: stats.size
+              }]
             });
           } else {
-            const err = new Error('FFmpeg completed but output file is empty (0 bytes)');
+            const err = new Error('FFmpeg output is 0 bytes');
             err.code = 'EMPTY_OUTPUT';
+            err.stage = 'validation';
             reject(err);
           }
         } else {
-          const err = new Error('FFmpeg completed but output file not found');
+          const err = new Error('FFmpeg output file not found');
           err.code = 'NO_OUTPUT';
+          err.stage = 'validation';
           reject(err);
         }
       } else {
         const err = new Error(`FFmpeg exited with code ${code}`);
         err.code = 'FFMPEG_EXIT_ERROR';
+        err.stage = 'execution';
         reject(err);
       }
     });
-
-    // Removed the separate error handler here to avoid double registration issues, 
-    // it's now handled before close
   });
 }
 
@@ -719,188 +680,182 @@ async function executeFFmpegJob(job, encoder = bestEncoder) {
 // ============================================
 
 function buildFFmpegArgs(input, outputPath, encoder = 'libx264') {
-  const args = ['-y']; // Overwrite output
+  const { sourcePath, textOverlays, imageOverlays, watermark, subtitles, backgroundMusicPath } = input;
+  const args = ['-y'];
 
-  // sourcePath is guaranteed to be local and valid by resolveJobSource
-  args.push('-i', input.sourcePath);
-
-  // Trim (optional)
-  if (input.trim && typeof input.trim === 'object') {
-    const start = parseFloat(input.trim.start);
-    const end = parseFloat(input.trim.end);
-    if (!isNaN(start) && start >= 0) {
-      args.push('-ss', String(start));
-    }
-    if (!isNaN(end) && end > start) {
-      args.push('-t', String(end - start));
-    }
+  args.push('-i', sourcePath);
+  let bgmIndex = -1;
+  if (backgroundMusicPath) {
+    bgmIndex = 1;
+    args.push('-i', backgroundMusicPath);
   }
 
-  const filters = [];
+  // Handle image inputs for overlays
+  if (imageOverlays) {
+    imageOverlays.forEach(img => {
+      if (img.localPath) args.push('-i', img.localPath);
+    });
+  }
+  if (watermark && watermark.localPath) args.push('-i', watermark.localPath);
 
-  // Speed adjustment (whitelist: 0.25-4.0)
-  if (input.speed && typeof input.speed === 'number') {
-    const speed = Math.max(0.25, Math.min(4.0, input.speed));
-    filters.push(`setpts=${1 / speed}*PTS`);
+  // Filters
+  let filters = [];
+  const res = input.resolution || { width: 1080, height: 1920 };
+  filters.push(`scale=${res.width}:${res.height}:force_original_aspect_ratio=decrease,pad=${res.width}:${res.height}:(ow-iw)/2:(oh-ih)/2,setsar=1`);
+
+  if (textOverlays) {
+    textOverlays.forEach((to, idx) => {
+      filters.push(`drawtext=text='${to.text}':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=h-200:enable='between(t,${to.startTime || 0},${to.endTime || 999})'`);
+    });
   }
 
-  // Resize (whitelist: 100-4096 pixels)
-  if (input.resize && typeof input.resize === 'object') {
-    const w = Math.max(100, Math.min(4096, parseInt(input.resize.width) || 0));
-    const h = Math.max(100, Math.min(4096, parseInt(input.resize.height) || 0));
-    if (w && h) {
-      filters.push(`scale=${w}:${h}`);
-    }
+  if (subtitles && subtitles.localPath) {
+    const subPath = subtitles.localPath.replace(/\\/g, '/').replace(/:/g, '\\:');
+    filters.push(`subtitles='${subPath}'`);
   }
 
-  if (filters.length > 0) {
-    args.push('-vf', filters.join(','));
+  args.push('-vf', filters.join(','));
+
+  // Audio
+  if (bgmIndex !== -1) {
+    args.push('-filter_complex', `[0:a][1:a]amix=inputs=2:duration=first[aout]`, '-map', '0:v', '-map', '[aout]');
   }
 
-  // Audio options
-  if (input.audio) {
-    if (input.audio.mute) {
-      args.push('-an');
-    } else if (input.audio.volume !== undefined) {
-      const vol = Math.max(0, Math.min(2, parseFloat(input.audio.volume) || 1));
-      args.push('-af', `volume=${vol}`);
-    }
-  }
+  args.push('-c:v', encoder, '-pix_fmt', 'yuv420p');
+  if (encoder === 'h264_nvenc') args.push('-preset', 'p4');
+  else args.push('-preset', 'fast', '-crf', '23');
 
-  // Output codec (Dynamic Selection)
-  if (encoder === 'h264_nvenc') {
-    args.push('-c:v', 'h264_nvenc');
-    args.push('-preset', 'p4'); // NVENC preset (p1-p7)
-    args.push('-rc', 'vbr');
-  } else if (encoder === 'h264_vaapi') {
-    args.push('-vaapi_device', '/dev/dri/renderD128');
-    args.push('-vf', 'format=nv12,hwupload'); // Required for VAAPI
-    args.push('-c:v', 'h264_vaapi');
-  } else {
-    args.push('-c:v', 'libx264');
-    args.push('-preset', 'fast');
-    args.push('-crf', '23');
-  }
-
-  args.push('-c:a', 'aac');
-  if (encoder === 'libx264') {
-    // these flags might conflict with hw encoders depending on version
-    args.push('-movflags', '+faststart');
-  }
+  args.push('-c:a', 'aac', '-movflags', '+faststart');
   args.push(outputPath);
 
   return args;
 }
 
 function buildPlanArgs(input, outputPath, encoder = 'libx264') {
-  const { plan } = input;
-
-  // sourcePath is guaranteed to be local and valid by resolveJobSource
-  const args = ['-y', '-i', input.sourcePath];
-  const filters = [];
-
-  // Process timeline segments
-  if (plan.timeline && Array.isArray(plan.timeline) && plan.timeline.length > 0) {
-    const segment = plan.timeline[0];
-
-    // Trim
-    if (segment.trim_start_ms !== undefined && segment.trim_end_ms !== undefined) {
-      const startSec = Math.max(0, segment.trim_start_ms / 1000);
-      const endSec = Math.max(startSec, segment.trim_end_ms / 1000);
-      args.splice(1, 0, '-ss', String(startSec), '-t', String(endSec - startSec));
-    }
-
-    // Speed (whitelist: 0.25-4.0)
-    if (segment.speed_multiplier && typeof segment.speed_multiplier === 'number') {
-      const speed = Math.max(0.25, Math.min(4.0, segment.speed_multiplier));
-      filters.push(`setpts=${1 / speed}*PTS`);
-    }
-  }
-
-  // Output format
-  if (plan.output_format && typeof plan.output_format === 'object') {
-    const w = Math.max(100, Math.min(4096, parseInt(plan.output_format.width) || 0));
-    const h = Math.max(100, Math.min(4096, parseInt(plan.output_format.height) || 0));
-    if (w && h) {
-      filters.push(`scale=${w}:${h}`);
-    }
-  }
-
-  if (filters.length > 0) {
-    args.push('-vf', filters.join(','));
-  }
-
-  args.push('-c:v', encoder);
-
-  if (encoder === 'h264_nvenc') {
-    args.push('-preset', 'p4');
-  } else if (encoder === 'libx264') {
-    args.push('-preset', 'fast', '-crf', '23');
-  }
-
-  args.push('-c:a', 'aac', '-movflags', '+faststart');
-  args.push(outputPath);
-
-  return args;
+  // Map Plan-style input to a complex-like builder
+  // execute-plan is essentially a complex job with a single source and a plan object
+  return buildComplexArgs({
+    ...input,
+    sourcePaths: [input.sourcePath],
+    clipDuration: (input.plan?.validation?.total_duration_ms / 1000) || 30
+  }, outputPath, encoder);
 }
 
 function buildComplexArgs(input, outputPath, encoder = 'libx264') {
-  const { sourcePaths, transitions, clipDuration, maxDuration } = input;
+  const { sourcePaths, transitions, clipDuration, maxDuration, textOverlays, imageOverlays, watermark, subtitles, backgroundMusicPath, voiceoverPath } = input;
 
-  // Validate inputs
   if (!sourcePaths || sourcePaths.length === 0) throw new Error('No source paths for complex build');
 
-  // Inputs
-  const inputArgs = [];
-  sourcePaths.forEach(p => inputArgs.push('-i', p));
+  const args = ['-y'];
 
-  // Filter Complex Construction
-  let filterComplex = '';
-  const transitionDuration = 0.5;
-  const durationPerClip = clipDuration || 3;
-  const totalMax = maxDuration || 30;
+  // 1. Inputs
+  sourcePaths.forEach(p => args.push('-i', p));
+  let bgmIndex = -1;
+  if (backgroundMusicPath) {
+    bgmIndex = sourcePaths.length;
+    args.push('-i', backgroundMusicPath);
+  }
 
-  // 1. Prepare Inputs (Scale/Pad/Trim)
+  let imgIndexes = [];
+  if (imageOverlays) {
+    imageOverlays.forEach((img, idx) => {
+      if (img.localPath) {
+        imgIndexes.push(args.length / 2); // Approximation of index
+        args.push('-i', img.localPath);
+      }
+    });
+  }
+
+  if (watermark && watermark.localPath) {
+    args.push('-i', watermark.localPath);
+  }
+
+  // 2. Filter Complex
+  let filters = [];
+  const durationPerClip = clipDuration || 5;
+  const transDur = 0.5;
+  const res = input.resolution || { width: 1080, height: 1920 };
+
+  // A. Video Pre-processing (Scale/Trim/FPS)
   for (let i = 0; i < sourcePaths.length; i++) {
-    filterComplex += `[${i}:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,trim=duration=${durationPerClip},setpts=PTS-STARTPTS[v${i}];`;
+    filters.push(`[${i}:v]scale=${res.width}:${res.height}:force_original_aspect_ratio=decrease,pad=${res.width}:${res.height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,trim=duration=${durationPerClip},setpts=PTS-STARTPTS[v${i}]`);
+    filters.push(`[${i}:a]atrim=duration=${durationPerClip},asetpts=PTS-STARTPTS[a${i}]`);
   }
 
-  // 2. Apply Transitions (if > 1 clip)
+  // B. Video Stitching with Transitions
+  let lastV = 'v0';
+  let lastA = 'a0';
   if (sourcePaths.length > 1) {
-    let lastOutput = 'v0';
     for (let i = 1; i < sourcePaths.length; i++) {
-      const transType = transitions && transitions[(i - 1) % transitions.length] ? transitions[(i - 1) % transitions.length] : 'fade';
-      const xfade = transType === 'whip-pan' ? 'wipeleft' :
-        transType === 'slide' ? 'slideleft' :
-          transType === 'zoom' ? 'circlecrop' : 'fade';
-
-      const offset = (i * durationPerClip) - (i * transitionDuration);
-      const outputLabel = (i === sourcePaths.length - 1) ? 'vout' : `t${i}`;
-
-      filterComplex += `[${lastOutput}][v${i}]xfade=transition=${xfade}:duration=${transitionDuration}:offset=${offset}[${outputLabel}];`;
-      lastOutput = outputLabel;
+      const offset = (i * durationPerClip) - (i * transDur);
+      filters.push(`[${lastV}][v${i}]xfade=transition=fade:duration=${transDur}:offset=${offset}[vout${i}]`);
+      filters.push(`[${lastA}][a${i}]acrossfade=d=${transDur}:c1=tri:c2=tri[aout${i}]`);
+      lastV = `vout${i}`;
+      lastA = `aout${i}`;
     }
-  } else {
-    filterComplex = filterComplex.slice(0, -1); // remove trailing ; usually [v0] remains
   }
 
-  const args = ['-y', ...inputArgs, '-filter_complex', filterComplex];
+  // C. Overlays (Text/Image/Watermark)
+  let currentV = lastV;
 
-  // Map
-  if (sourcePaths.length > 1) {
-    args.push('-map', '[vout]');
-  } else {
-    args.push('-map', '[v0]');
+  // Watermark
+  if (watermark && watermark.localPath) {
+    const wmIdx = args.length / 2 - 1; // Last input if watermark added
+    filters.push(`[${currentV}][${wmIdx}:v]overlay=main_w-overlay_w-20:20[vwm]`);
+    currentV = 'vwm';
   }
 
-  // Encoding Options
-  args.push('-t', String(totalMax));
+  // Text Overlays
+  if (textOverlays && Array.isArray(textOverlays)) {
+    textOverlays.forEach((to, idx) => {
+      const fontPath = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'; // Common VPS font
+      const startTime = to.startTime || 0;
+      const endTime = to.endTime || durationPerClip * sourcePaths.length;
+      filters.push(`[${currentV}]drawtext=text='${to.text}':fontfile=${fontPath}:fontsize=48:fontcolor=white:x=(w-text_w)/2:y=h-200:enable='between(t,${startTime},${endTime})'[vtxt${idx}]`);
+      currentV = `vtxt${idx}`;
+    });
+  }
+
+  // Subtitles
+  if (subtitles && subtitles.localPath) {
+    // Note: subtitles filter usually needs a path relative to current dir or absolute
+    // On Windows, paths need extra escaping for FFmpeg filters
+    const subPath = subtitles.localPath.replace(/\\/g, '/').replace(/:/g, '\\:');
+    filters.push(`[${currentV}]subtitles='${subPath}'[vsub]`);
+    currentV = 'vsub';
+  }
+
+  // D. Audio Pipeline (Normalization/Mixing)
+  let currentA = lastA;
+
+  // Voiceover mixing
+  if (voiceoverPath) {
+    // TODO: implement voiceover mixing logic
+  }
+
+  // Background Music mixing
+  if (bgmIndex !== -1) {
+    filters.push(`[${currentA}]volume=1.0[amain]`);
+    filters.push(`[${bgmIndex}:a]volume=0.2,aloop=loop=-1:size=2e9[abgm]`);
+    filters.push(`[amain][abgm]amix=inputs=2:duration=first[amix]`);
+    currentA = 'amix';
+  }
+
+  // Final Audio Normalization
+  filters.push(`[${currentA}]dynaudnorm[afinal]`);
+
+  args.push('-filter_complex', filters.join(';'));
+  args.push('-map', `[${currentV}]`);
+  args.push('-map', '[afinal]');
+
+  // 3. Encoder Settings
   args.push('-c:v', encoder);
-
   if (encoder === 'h264_nvenc') args.push('-preset', 'p4');
   else args.push('-preset', 'fast', '-crf', '23');
 
-  args.push('-c:a', 'aac', '-movflags', '+faststart');
+  args.push('-c:a', 'aac', '-b:a', '192k');
+  args.push('-t', String(maxDuration || (durationPerClip * sourcePaths.length)));
+  args.push('-movflags', '+faststart');
   args.push(outputPath);
 
   return args;
@@ -1015,7 +970,7 @@ app.use((req, res, next) => {
 });
 
 // Expose queue stats function for health endpoints
-app.locals.getQueueStats = () => getQueueStats(jobs, pendingQueue, currentJob);
+app.locals.getQueueStats = () => queue.getStats();
 
 // Mount health endpoints explicitly at /api/health
 app.use('/api/health', healthRouter);
@@ -1353,12 +1308,12 @@ app.get('/api/history', (req, res) => {
   console.log(`[History] Fetching history for project: ${projectId}, tool: ${tool}`);
 
   // Get relevant jobs from in-memory store
-  const allJobs = Array.from(jobs.values());
+  const allJobs = Array.from(queue.jobs.values());
   const filteredJobs = allJobs.filter(job => {
     if (projectId && job.input?.projectId !== projectId) return false;
     if (tool && job.type !== tool) return false;
     return true;
-  }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   res.json({
     ok: true,
@@ -1442,7 +1397,7 @@ app.delete('/api/history', async (req, res) => {
   try {
     // 1. Delete jobs from in-memory queue
     const jobsToDelete = [];
-    for (const [jobId, job] of jobs.entries()) {
+    for (const [jobId, job] of queue.jobs.entries()) {
       const shouldDelete =
         (scope === 'all') ||
         (projectId && job.input?.projectId === projectId) ||
@@ -1454,7 +1409,7 @@ app.delete('/api/history', async (req, res) => {
     }
 
     for (const jobId of jobsToDelete) {
-      const job = jobs.get(jobId);
+      const job = queue.jobs.get(jobId);
 
       // Clean up temp files associated with this job
       if (job?.tempFiles && Array.isArray(job.tempFiles)) {
@@ -1471,15 +1426,14 @@ app.delete('/api/history', async (req, res) => {
         }
       }
 
-      jobs.delete(jobId);
+      queue.jobs.delete(jobId);
       deletedItems.jobs++;
     }
 
     // 2. Remove from pending queue
-    const pendingBefore = pendingQueue.length;
-    pendingQueue.length = 0;
-    pendingQueue.push(...pendingQueue.filter(id => !jobsToDelete.includes(id)));
-    deletedItems.pipelines = pendingBefore - pendingQueue.length;
+    const pendingBefore = queue.pendingQueue.length;
+    queue.pendingQueue = queue.pendingQueue.filter(p => !jobsToDelete.includes(p.id));
+    deletedItems.pipelines = pendingBefore - queue.pendingQueue.length;
 
     // 3. Clean up project-specific temp directory
     if (projectId) {
@@ -2061,10 +2015,8 @@ function handleExecute(req, res) {
   // Detect Complex Job (Multi-source)
   const jobType = (req.body.sources && Array.isArray(req.body.sources)) ? 'complex' : 'execute';
 
-  createJob(jobId, jobType, jobPayload);
-  pendingQueue.push(jobId);
-
-  console.log(`[Queue] Job ${jobId} queued (queue length: ${pendingQueue.length})`);
+  const job = createJob(jobId, jobType, jobPayload, req.body.priority || 'normal');
+  queue.addJob(jobId, job, req.body.priority || 'normal');
 
   setImmediate(processNextJob);
 
@@ -2073,7 +2025,7 @@ function handleExecute(req, res) {
     ids: [jobId],
     jobId,
     status: 'queued',
-    queuePosition: pendingQueue.length,
+    queuePosition: queue.pendingQueue.length,
     statusUrl: `/api/jobs/${jobId}`,
     debug: {
       engine: 'server_ffmpeg',
@@ -2117,14 +2069,12 @@ async function handleExecutePlan(req, res) {
 
   const jobId = outputName || generateJobId();
 
-  createJob(jobId, 'execute-plan', {
+  const job = createJob(jobId, 'execute-plan', {
     plan,
     sourceVideoUrl,
     sourcePath: validPath
-  });
-  pendingQueue.push(jobId);
-
-  console.log(`[Queue] Plan job ${jobId} queued (queue length: ${pendingQueue.length})`);
+  }, req.body.priority || 'normal');
+  queue.addJob(jobId, job, req.body.priority || 'normal');
 
   setImmediate(processNextJob);
 
@@ -2133,7 +2083,7 @@ async function handleExecutePlan(req, res) {
     ids: [jobId], // Variations contract expects 'ids' array
     jobId,
     status: 'queued',
-    queuePosition: pendingQueue.length,
+    queuePosition: queue.pendingQueue.length,
     statusUrl: `/api/jobs/${jobId}`,
   });
 }

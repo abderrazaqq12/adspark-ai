@@ -13,6 +13,7 @@ import os from 'os';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { detectEngineCapabilities } from './engine-utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -66,107 +67,33 @@ const CACHE_DURATION = 60000; // 1 minute
  * Detect FFmpeg availability, version, and GPU support
  */
 function detectFFmpeg() {
-  const now = Date.now();
-  if (ffmpegCache && (now - ffmpegCacheTime) < CACHE_DURATION) {
-    return ffmpegCache;
-  }
-
-  try {
-    // Check FFmpeg version
-    const version = execSync('ffmpeg -version 2>&1', { encoding: 'utf-8' });
-    const versionMatch = version.match(/ffmpeg version (\S+)/);
-    const ffmpegVersion = versionMatch ? versionMatch[1] : 'unknown';
-
-    // Check available encoders
-    const encoders = execSync('ffmpeg -encoders 2>&1', { encoding: 'utf-8' });
-
-    const hasNVENC = encoders.includes('h264_nvenc');
-    const hasVAAPI = encoders.includes('h264_vaapi');
-    const hasQSV = encoders.includes('h264_qsv');
-
-    // Determine best encoder
-    let bestEncoder = 'libx264'; // CPU fallback
-    let gpuAcceleration = 'none';
-
-    if (hasNVENC) {
-      bestEncoder = 'h264_nvenc';
-      gpuAcceleration = 'nvidia';
-    } else if (hasVAAPI) {
-      bestEncoder = 'h264_vaapi';
-      gpuAcceleration = 'vaapi';
-    } else if (hasQSV) {
-      bestEncoder = 'h264_qsv';
-      gpuAcceleration = 'intel-qsv';
-    }
-
-    ffmpegCache = {
+  const caps = detectEngineCapabilities();
+  if (caps.ffmpeg.available) {
+    return {
       available: true,
-      version: ffmpegVersion,
-      encoders: {
-        cpu: 'libx264',
-        gpu: bestEncoder !== 'libx264' ? bestEncoder : null
-      },
-      gpuAcceleration: gpuAcceleration,
-      path: execSync('which ffmpeg 2>&1', { encoding: 'utf-8' }).trim()
+      version: caps.ffmpeg.version,
+      encoders: caps.encoders,
+      gpuAcceleration: caps.gpu.available ? 'detected' : 'none',
+      path: 'ffmpeg'
     };
-
-    ffmpegCacheTime = now;
-    return ffmpegCache;
-  } catch (error) {
-    ffmpegCache = {
+  } else {
+    return {
       available: false,
-      error: 'FFmpeg not found on system',
-      errorDetails: error.message
+      error: 'FFmpeg not found on system'
     };
-    ffmpegCacheTime = now;
-    return ffmpegCache;
   }
 }
 
-// ============================================
-// GPU DETECTION
-// ============================================
-
-let gpuCache = null;
-let gpuCacheTime = 0;
-
 /**
- * Detect GPU via nvidia-smi
+ * Detect GPU via centralized engine utils
  */
 function detectGPU() {
-  const now = Date.now();
-  if (gpuCache && (now - gpuCacheTime) < CACHE_DURATION) {
-    return gpuCache;
-  }
-
-  try {
-    const nvidiaSmi = execSync('nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader 2>&1', {
-      encoding: 'utf-8'
-    });
-
-    const lines = nvidiaSmi.trim().split('\n');
-    const gpus = lines.map(line => {
-      const [name, memory, driver] = line.split(',').map(s => s.trim());
-      return { name, memory, driver };
-    });
-
-    gpuCache = {
-      available: true,
-      count: gpus.length,
-      gpus: gpus,
-      vendor: 'nvidia'
-    };
-  } catch (error) {
-    // No NVIDIA GPU or nvidia-smi not installed
-    gpuCache = {
-      available: false,
-      message: 'No GPU detected or nvidia-smi not available',
-      vendor: null
-    };
-  }
-
-  gpuCacheTime = now;
-  return gpuCache;
+  const caps = detectEngineCapabilities();
+  return {
+    available: caps.gpu.available,
+    vendor: caps.gpu.vendor,
+    details: caps.gpu.details
+  };
 }
 
 // ============================================
