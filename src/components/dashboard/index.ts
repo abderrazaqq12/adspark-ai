@@ -4,6 +4,7 @@ export { ActiveProjectSnapshot } from './ActiveProjectSnapshot';
 export { LivePipelineActivity } from './LivePipelineActivity';
 export { CostUsageSnapshot } from './CostUsageSnapshot';
 export { RecentOutputs } from './RecentOutputs';
+export { ActiveJobsProgress } from './ActiveJobsProgress';
 
 // Legacy exports (kept for compatibility)
 export { SystemStatusPanel } from './SystemStatusPanel';
