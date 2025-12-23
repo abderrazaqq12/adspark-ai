@@ -23,13 +23,14 @@ services:
     build:
       context: ..
       dockerfile: deployment_v2/Dockerfile.api
+    env_file:
+      - .env
     environment:
       - PORT=3000
       - HOST=0.0.0.0
       - UPLOAD_DIR=/app/uploads
       - OUTPUT_DIR=/app/outputs
       - RENDERFLOW_URL=http://renderflow:3001/render
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
     volumes:
       - uploads_data:/app/uploads
       - outputs_data:/app/outputs
