@@ -17,7 +17,7 @@ interface DataSettings {
 }
 
 export const StudioDataSettings = () => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [settings, setSettings] = useState<DataSettings>({
     google_drive_folder_url: '',
     google_drive_access_token: '',
@@ -30,15 +30,15 @@ export const StudioDataSettings = () => {
   const [sheetConnected, setSheetConnected] = useState(false);
 
   useEffect(() => {
-    if (user) {
+    if (user && token) {
       loadSettings();
     }
-  }, [user]);
+  }, [user, token]);
 
   const loadSettings = async () => {
     try {
       const response = await fetch('/api/settings', {
-        headers: user?.token ? { 'Authorization': `Bearer ${user.token}` } : {}
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
 
       if (!response.ok) throw new Error('Failed to load settings');
@@ -98,11 +98,11 @@ export const StudioDataSettings = () => {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      if (!user) throw new Error('Not authenticated');
+      if (!user || !token) throw new Error('Not authenticated');
 
       // 1. Get current settings to merge
       const response = await fetch('/api/settings', {
-        headers: { 'Authorization': `Bearer ${user.token}` }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
 
       let currentPrefs: Record<string, any> = {};
@@ -120,7 +120,7 @@ export const StudioDataSettings = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.token}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           key: 'preferences',
