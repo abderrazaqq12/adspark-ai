@@ -677,16 +677,37 @@ export default function Settings() {
 
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("user_settings")
-        .update({
-          default_language: settings.default_language,
-          default_country: settings.default_country,
-          pricing_tier: settings.pricing_tier,
-        })
-        .eq("id", settings.id);
+      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted';
 
-      if (error) throw error;
+      if (isSelfHosted) {
+        // VPS Mode: Use Proxy API
+        const res = await fetch('/api/settings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}` // Ensure token is passed
+          },
+          body: JSON.stringify({
+            default_language: settings.default_language,
+            default_country: settings.default_country,
+            pricing_tier: settings.pricing_tier,
+          })
+        });
+
+        if (!res.ok) throw new Error('Failed to save settings to VPS');
+      } else {
+        // Cloud Mode: Use Supabase Direct
+        const { error } = await supabase
+          .from("user_settings")
+          .update({
+            default_language: settings.default_language,
+            default_country: settings.default_country,
+            pricing_tier: settings.pricing_tier,
+          })
+          .eq("id", settings.id);
+
+        if (error) throw error;
+      }
       toast.success("Settings saved");
     } catch (error) {
       console.error("Error saving settings:", error);
@@ -705,32 +726,55 @@ export default function Settings() {
   const saveGoogleDriveSettings = async () => {
     setSavingGoogleDrive(true);
     try {
-      if (!user) throw new Error("Not authenticated");
+      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted';
 
-      // Get current preferences and merge
-      const { data: currentSettings } = await supabase
-        .from("user_settings")
-        .select("preferences")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      if (!user && !isSelfHosted) throw new Error("Not authenticated");
 
-      const currentPrefs = (currentSettings?.preferences as Record<string, any>) || {};
-      const updatedPrefs = {
-        ...currentPrefs,
-        google_drive_folder_url: googleDriveFolderUrl,
-      };
-
-      // Use upsert to create row if it doesn't exist
-      const { error } = await supabase
-        .from("user_settings")
-        .upsert({ 
-          user_id: user.id,
-          preferences: updatedPrefs 
-        }, {
-          onConflict: 'user_id'
+      if (isSelfHosted) {
+        // VPS Mode: Use Proxy API
+        // Note: fetch will include local credentials/token logic if configured globally, 
+        // but explicit header helps ensure we use the VPS token
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/settings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            preferences: { google_drive_folder_url: googleDriveFolderUrl }
+          })
         });
 
-      if (error) throw error;
+        if (!res.ok) throw new Error('Failed to save settings to VPS');
+      } else {
+        // Cloud Mode: Use Supabase Direct
+        // Get current preferences and merge
+        const { data: currentSettings } = await supabase
+          .from("user_settings")
+          .select("preferences")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        const currentPrefs = (currentSettings?.preferences as Record<string, any>) || {};
+        const updatedPrefs = {
+          ...currentPrefs,
+          google_drive_folder_url: googleDriveFolderUrl,
+        };
+
+        // Use upsert to create row if it doesn't exist
+        const { error } = await supabase
+          .from("user_settings")
+          .upsert({
+            user_id: user.id,
+            preferences: updatedPrefs
+          }, {
+            onConflict: 'user_id'
+          });
+
+        if (error) throw error;
+      }
+
       toast.success("Google Drive settings saved. New projects will auto-create folders.");
     } catch (error) {
       console.error("Error saving Google Drive settings:", error);

@@ -230,6 +230,55 @@ const ALLOWED_MIME_TYPES = [
 });
 
 // ============================================
+// MULTER CONFIGURATION
+// ============================================
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const projectId = req.body.projectId;
+    let uploadPath = UPLOAD_DIR;
+
+    // Optional project subdirectory
+    if (projectId && /^[a-zA-Z0-9_-]+$/.test(projectId)) {
+      uploadPath = path.join(UPLOAD_DIR, projectId);
+      if (!fs.existsSync(uploadPath)) {
+        fs.mkdirSync(uploadPath, { recursive: true });
+      }
+    }
+
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    const fileId = generateFileId();
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/gi, '') || '.mp4';
+    const filename = `${fileId}${ext}`;
+    cb(null, filename);
+  },
+});
+
+const fileFilter = (req, file, cb) => {
+  if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+    return cb(new Error(`Invalid file type: ${file.mimetype}. Allowed: ${ALLOWED_MIME_TYPES.join(', ')}`), false);
+  }
+
+  // Block path traversal in filename
+  if (file.originalname.includes('..') || file.originalname.includes('/') || file.originalname.includes('\\')) {
+    return cb(new Error('Invalid filename'), false);
+  }
+
+  cb(null, true);
+};
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: MAX_FILE_SIZE,
+    files: 1,
+  },
+});
+
+// ============================================
 // FFMPEG AVAILABILITY CHECK
 // ============================================
 
@@ -389,61 +438,41 @@ app.delete('/api/scenes/:id', async (req, res) => {
 });
 
 // ============================================
-// SYSTEM SETTINGS & TEMPLATES
+// UPLOAD API (Local - VPS Mode)
 // ============================================
 
-app.get('/api/settings', async (req, res) => {
-  try {
-    const rows = db.prepare('SELECT * FROM user_settings').all();
-    const settings = rows.reduce((acc, row) => {
-      acc[row.key] = row.value;
-      return acc;
-    }, {});
-    res.json(settings);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+const uploadMiddleware = upload.single('file'); // Defined in middleware section
+
+app.post('/api/upload', (req, res) => {
+  uploadMiddleware(req, res, (err) => {
+    if (err) {
+      return jsonError(res, 400, 'UPLOAD_FAILED', err.message);
+    }
+
+    if (!req.file) {
+      return jsonError(res, 400, 'NO_FILE', 'No file uploaded');
+    }
+
+    // Return public URL (served by Nginx or Express static)
+    // Assuming Nginx maps /uploads -> /root/adspark-ai/data/uploads
+    // Or we serve it via Express
+    const baseUrl = process.env.RENDERFLOW_URL || '';
+    const fileUrl = `${baseUrl}/uploads/${req.file.filename}`;
+
+    res.json({
+      ok: true,
+      url: fileUrl,
+      path: req.file.path,
+      filename: req.file.filename,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    });
+  });
 });
 
-app.post('/api/settings', async (req, res) => {
-  try {
-    const { key, value } = req.body;
-    db.prepare('INSERT OR REPLACE INTO user_settings (key, value, updated_at) VALUES (?, ?, datetime("now"))')
-      .run(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// Serve uploads statically to ensure access if Nginx config is tricky
+app.use('/uploads', express.static(UPLOAD_DIR));
 
-app.get('/api/templates', async (req, res) => {
-  try {
-    const templates = db.prepare('SELECT * FROM prompt_templates ORDER BY category, name').all();
-    res.json(templates);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/templates', async (req, res) => {
-  try {
-    const { id = uuidv4(), name, category, system_prompt, user_prompt } = req.body;
-    db.prepare('INSERT INTO prompt_templates (id, name, category, system_prompt, user_prompt) VALUES (?, ?, ?, ?, ?)')
-      .run(id, name, category, system_prompt, user_prompt);
-    res.json({ id, name, category });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.delete('/api/templates/:id', async (req, res) => {
-  try {
-    db.prepare('DELETE FROM prompt_templates WHERE id = ?').run(req.params.id);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // ============================================
 // JOB QUEUE & ENGINE (Phase 2B Optimized)
@@ -1181,54 +1210,7 @@ function jsonError(res, status, code, message, details = null) {
   return res.status(status).json(response);
 }
 
-// ============================================
-// MULTER CONFIGURATION
-// ============================================
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const projectId = req.body.projectId;
-    let uploadPath = UPLOAD_DIR;
-
-    // Optional project subdirectory
-    if (projectId && /^[a-zA-Z0-9_-]+$/.test(projectId)) {
-      uploadPath = path.join(UPLOAD_DIR, projectId);
-      if (!fs.existsSync(uploadPath)) {
-        fs.mkdirSync(uploadPath, { recursive: true });
-      }
-    }
-
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    const fileId = generateFileId();
-    const ext = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/gi, '') || '.mp4';
-    const filename = `${fileId}${ext}`;
-    cb(null, filename);
-  },
-});
-
-const fileFilter = (req, file, cb) => {
-  if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-    return cb(new Error(`Invalid file type: ${file.mimetype}. Allowed: ${ALLOWED_MIME_TYPES.join(', ')}`), false);
-  }
-
-  // Block path traversal in filename
-  if (file.originalname.includes('..') || file.originalname.includes('/') || file.originalname.includes('\\')) {
-    return cb(new Error('Invalid filename'), false);
-  }
-
-  cb(null, true);
-};
-
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: {
-    fileSize: MAX_FILE_SIZE,
-    files: 1,
-  },
-});
 
 // ============================================
 // MIDDLEWARE
@@ -2694,6 +2676,114 @@ app.get('/api/jobs/:id/errors', async (req, res) => {
     });
   } catch (err) {
     return jsonError(res, 500, 'JOB_ERRORS_FAILED', err.message);
+  }
+});
+
+// ============================================
+// SETTINGS & TEMPLATES API (VPS Proxy to Supabase)
+// ============================================
+
+/**
+ * GET /api/settings
+ * Proxy to fetch user_settings for the VPS Admin
+ */
+app.get('/api/settings', async (req, res) => {
+  if (!supabase) {
+    console.warn('[API] Supabase not connected, returning empty settings');
+    return res.json({ preferences: {} });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('user_settings')
+      .select('*')
+      .eq('user_id', DEFAULT_USER_ID)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!data) {
+      return res.json({
+        user_id: DEFAULT_USER_ID,
+        preferences: {}
+      });
+    }
+
+    res.json(data);
+  } catch (err) {
+    console.error('[API] Settings fetch failed:', err);
+    jsonError(res, 500, 'SETTINGS_FETCH_FAILED', err.message);
+  }
+});
+
+/**
+ * POST /api/settings
+ * Proxy to upsert user_settings for the VPS Admin
+ */
+app.post('/api/settings', async (req, res) => {
+  if (!supabase) return jsonError(res, 503, 'DB_UNAVAILABLE', 'Supabase not connected');
+
+  const { preferences, default_language, default_country, pricing_tier } = req.body;
+
+  try {
+    // Fetch existing to merge preferences
+    const { data: existing } = await supabase
+      .from('user_settings')
+      .select('preferences')
+      .eq('user_id', DEFAULT_USER_ID)
+      .maybeSingle();
+
+    const currentPrefs = (existing?.preferences && typeof existing.preferences === 'object')
+      ? existing.preferences
+      : {};
+
+    const newPrefs = preferences ? { ...currentPrefs, ...preferences } : currentPrefs;
+
+    const updateData = {
+      user_id: DEFAULT_USER_ID,
+      preferences: newPrefs,
+      updated_at: new Date().toISOString()
+    };
+
+    if (default_language) updateData.default_language = default_language;
+    if (default_country) updateData.default_country = default_country;
+    if (pricing_tier) updateData.pricing_tier = pricing_tier;
+
+    const { data, error } = await supabase
+      .from('user_settings')
+      .upsert(updateData, { onConflict: 'user_id' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ ok: true, settings: data });
+  } catch (err) {
+    console.error('[API] Settings save failed:', err);
+    jsonError(res, 500, 'SAVE_FAILED', err.message);
+  }
+});
+
+/**
+ * GET /api/templates
+ * Proxy to fetch prompt_templates for the VPS Admin
+ */
+app.get('/api/templates', async (req, res) => {
+  if (!supabase) return res.json([]);
+
+  try {
+    // In VPS mode, we serve templates owned by the Admin + Defaults (if any logic exists)
+    const { data, error } = await supabase
+      .from('prompt_templates')
+      .select('*')
+      // For simplicity in VPS mode, just get all templates for this user
+      .eq('user_id', DEFAULT_USER_ID)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json(data || []);
+  } catch (err) {
+    console.error('[API] Templates fetch failed:', err);
+    jsonError(res, 500, 'TEMPLATES_FETCH_FAILED', err.message);
   }
 });
 
