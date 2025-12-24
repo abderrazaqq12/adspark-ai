@@ -10,7 +10,7 @@ export type BackendProvider = 'supabase' | 'rest' | 'local';
 interface AppConfig {
   // Deployment
   deploymentTarget: DeploymentTarget;
-  
+
   // Backend
   backend: {
     provider: BackendProvider;
@@ -19,7 +19,7 @@ interface AppConfig {
     supabaseProjectId: string;
     restApiUrl?: string;
   };
-  
+
   // AI Providers
   ai: {
     defaultProvider: AIProvider;
@@ -28,14 +28,14 @@ interface AppConfig {
     ollamaUrl: string;
     customApiUrl?: string;
   };
-  
+
   // Features
   features: {
     enableLocalMode: boolean;
     enableMockData: boolean;
     enableDebugLogs: boolean;
   };
-  
+
   // URLs
   urls: {
     app: string;
@@ -55,16 +55,19 @@ const getEnvVar = (key: string, fallback: string = ''): string => {
 // Detect deployment target
 const detectDeploymentTarget = (): DeploymentTarget => {
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-  
+
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return 'local';
   }
   if (getEnvVar('VITE_DOCKER_MODE') === 'true') {
     return 'docker';
   }
-  if (getEnvVar('VITE_SUPABASE_URL')) {
+
+  const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
+  if (supabaseUrl && supabaseUrl.includes('supabase.co')) {
     return 'cloud';
   }
+
   return 'self-hosted';
 };
 
@@ -72,10 +75,10 @@ const detectDeploymentTarget = (): DeploymentTarget => {
 const buildConfig = (): AppConfig => {
   const supabaseUrl = getEnvVar('VITE_SUPABASE_URL', '');
   const supabaseProjectId = getEnvVar('VITE_SUPABASE_PROJECT_ID', '');
-  
+
   return {
     deploymentTarget: detectDeploymentTarget(),
-    
+
     backend: {
       provider: (getEnvVar('VITE_BACKEND_PROVIDER', 'supabase') as BackendProvider),
       supabaseUrl,
@@ -83,7 +86,7 @@ const buildConfig = (): AppConfig => {
       supabaseProjectId,
       restApiUrl: getEnvVar('VITE_REST_API_URL'),
     },
-    
+
     ai: {
       defaultProvider: (getEnvVar('VITE_AI_PROVIDER', 'gemini') as AIProvider),
       openaiApiUrl: getEnvVar('VITE_OPENAI_API_URL', 'https://api.openai.com/v1'),
@@ -91,13 +94,13 @@ const buildConfig = (): AppConfig => {
       ollamaUrl: getEnvVar('VITE_OLLAMA_URL', 'http://localhost:11434'),
       customApiUrl: getEnvVar('VITE_CUSTOM_AI_API_URL'),
     },
-    
+
     features: {
       enableLocalMode: getEnvVar('VITE_ENABLE_LOCAL_MODE') === 'true',
       enableMockData: getEnvVar('VITE_ENABLE_MOCK_DATA') === 'true',
       enableDebugLogs: getEnvVar('VITE_DEBUG') === 'true',
     },
-    
+
     urls: {
       app: typeof window !== 'undefined' ? window.location.origin : '',
       edgeFunctions: supabaseUrl ? `${supabaseUrl}/functions/v1` : '',

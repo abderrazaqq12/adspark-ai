@@ -171,23 +171,7 @@ export const AdUploader = ({ uploadedAds, setUploadedAds, projectName, setProjec
         <Badge variant="outline">{uploadedAds.length}/10 ads</Badge>
       </div>
 
-      {/* Project Name Input */}
-      <div className="p-4 rounded-lg bg-accent/30 border border-border space-y-2">
-        <Label className="flex items-center gap-2 text-sm font-medium">
-          <FolderOpen className="w-4 h-4 text-primary" />
-          Project Name
-          <Badge variant="secondary" className="text-xs">For Google Drive</Badge>
-        </Label>
-        <Input
-          placeholder="e.g., Summer Campaign 2025, Product X Launch..."
-          value={projectName}
-          onChange={(e) => setProjectName(e.target.value)}
-          className="bg-background"
-        />
-        <p className="text-xs text-muted-foreground">
-          A folder with this name will be created in your linked Google Drive when generation completes
-        </p>
-      </div>
+
 
       {/* Upload Zone */}
       <div
@@ -199,8 +183,8 @@ export const AdUploader = ({ uploadedAds, setUploadedAds, projectName, setProjec
         onDragLeave={() => setIsDragging(false)}
         onClick={() => fileInputRef.current?.click()}
         className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${isDragging
-            ? "border-primary bg-primary/5"
-            : "border-border hover:border-primary/50 hover:bg-accent/50"
+          ? "border-primary bg-primary/5"
+          : "border-border hover:border-primary/50 hover:bg-accent/50"
           }`}
       >
         <input
