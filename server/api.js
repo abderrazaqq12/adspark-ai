@@ -51,7 +51,8 @@ import { healthRouter, getQueueStats } from './health-endpoints.js';
 import { analyticsRouter } from './analytics-collector.js';
 import { JobQueueManager } from './job-queue.js';
 import { compileRenderPlan } from './render-plan.js';
-import { detectEngineCapabilities } from './engine-utils.js';
+import { detectEngineCapabilities, getRecommendedEncoders } from './engine-utils.js';
+import { decideExecution } from './decision-layer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -936,7 +937,26 @@ async function executeFFmpegJob(job) {
 // ============================================
 
 function buildFFmpegArgs(input, outputPath, encoder = 'libx264') {
-  const { sourcePath, textOverlays, imageOverlays, watermark, subtitles, backgroundMusicPath } = input;
+  const { sourcePath, textOverlays, imageOverlays, watermark, subtitles, backgroundMusicPath, executionDecision } = input;
+
+  // PHASE 4: DECISION RECORD OVERRIDES
+  // If a system decision exists, it mandates the execution parameters.
+  let res = input.resolution || { width: 1080, height: 1920 };
+  let preset = (encoder === 'h264_nvenc') ? 'p4' : 'fast';
+  let crf = '23';
+
+  if (executionDecision) {
+    console.log(`[FFmpeg] Applying Immutable Decision: ${executionDecision.decisionId}`);
+    res = executionDecision.parameters.resolution;
+    preset = executionDecision.parameters.preset;
+    crf = executionDecision.parameters.crf;
+    // Encoder is passed in args but we double check
+    if (executionDecision.strategy.encoder !== encoder) {
+      console.warn(`[FFmpeg] Encoder mismatch! Plan says ${encoder}, Decision says ${executionDecision.strategy.encoder}. Preferring Decision.`);
+      encoder = executionDecision.strategy.encoder;
+    }
+  }
+
   const args = ['-y'];
 
   args.push('-i', sourcePath);
@@ -956,7 +976,6 @@ function buildFFmpegArgs(input, outputPath, encoder = 'libx264') {
 
   // Filters
   let filters = [];
-  const res = input.resolution || { width: 1080, height: 1920 };
   filters.push(`scale=${res.width}:${res.height}:force_original_aspect_ratio=decrease,pad=${res.width}:${res.height}:(ow-iw)/2:(oh-ih)/2,setsar=1`);
 
   if (textOverlays) {
@@ -978,8 +997,12 @@ function buildFFmpegArgs(input, outputPath, encoder = 'libx264') {
   }
 
   args.push('-c:v', encoder, '-pix_fmt', 'yuv420p');
-  if (encoder === 'h264_nvenc') args.push('-preset', 'p4');
-  else args.push('-preset', 'fast', '-crf', '23');
+  args.push('-preset', preset);
+
+  // NVENC doesn't use CRF in the same way (uses -cq or -rc vbr), but for simplicity in this phase we keep it standard flags unless specific hardware tuning needed
+  if (encoder !== 'h264_nvenc') {
+    args.push('-crf', crf.toString());
+  }
 
   args.push('-c:a', 'aac', '-movflags', '+faststart');
   args.push(outputPath);
@@ -2273,7 +2296,7 @@ function validateExecutionRequest(body) {
   }
 }
 
-// Internal Handler for Execute (Modularized)
+// INTERNAL HANDLER - Phase 4 Enforced
 function handleExecute(req, res) {
   try {
     validateExecutionRequest(req.body);
@@ -2309,6 +2332,23 @@ function handleExecute(req, res) {
     }
   }
 
+  // PHASE 4: EXECUTION INTELLIGENCE - DECISION LAYER
+  // The system decides execution strategy, not the user/frontend.
+  const caps = getRecommendedEncoders();
+  const intent = {
+    primaryGoal: req.body.primaryGoal, // quality, speed, balanced
+    platform: req.body.platform,
+    tool: req.body.tool,
+    priority: req.body.priority || 'normal'
+  };
+
+  const decision = decideExecution(intent, {
+    isGPU: caps.isGPU,
+    load: queue.pendingQueue.length / 50 // Rough load metric
+  });
+
+  console.log(`[Decision] Strategy locked for job: ${decision.decisionId} (${decision.strategy.engine})`);
+
   const jobId = outputName || generateJobId();
 
   // Job Payload Strict Structure
@@ -2317,6 +2357,7 @@ function handleExecute(req, res) {
     sourcePath: validPath || null, // Will be resolved if null
     inputFileUrl,
     executionPlan: executionPlan || {}, // Ensure plan exists
+    executionDecision: decision, // IMMUTABLE DECISION RECORD
     outputFormat: outputFormat || { format: 'mp4' } // Default format
   };
 
@@ -2338,7 +2379,8 @@ function handleExecute(req, res) {
     debug: {
       engine: 'server_ffmpeg',
       resolvedSource: validPath ? 'local' : 'remote_pending',
-      executionPlan: jobPayload.executionPlan
+      executionPlan: jobPayload.executionPlan,
+      decision: decision // Return decision to frontend for transparency (Requirement 5)
     }
   });
 }
