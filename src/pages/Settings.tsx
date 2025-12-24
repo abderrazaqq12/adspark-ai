@@ -27,6 +27,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { CountrySelector } from "@/components/audience/CountrySelector";
 import { ConnectionStatusPanel } from "@/components/settings/ConnectionStatusPanel";
 import { StorageSettings } from "@/components/settings/StorageSettings";
+import { SystemDiagnostics } from "@/components/SystemDiagnostics";
 
 
 interface PromptTemplate {
@@ -794,6 +795,7 @@ export default function Settings() {
 
         {/* Deployment Tab */}
         <TabsContent value="deployment" className="space-y-6">
+          <SystemDiagnostics />
           <SystemIntelligencePanel />
           <DeploymentSettings />
         </TabsContent>
