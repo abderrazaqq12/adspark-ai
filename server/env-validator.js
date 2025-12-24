@@ -27,12 +27,12 @@ const REQUIRED_BACKEND_SECRETS = [
   }
 ];
 
-// ============================================
-// RECOMMENDED SECRETS (WARNINGS ONLY)
-// ============================================
-// These are optional but recommended for full functionality
-
 const RECOMMENDED_SECRETS = [
+  {
+    key: 'FLOWSCALE_ADMIN_USERNAME',
+    description: 'Custom username for the single-user VPS admin (optional)',
+    feature: 'Custom admin identity'
+  },
   {
     key: 'SUPABASE_URL',
     description: 'Supabase project URL (for cost tracking & auth)',

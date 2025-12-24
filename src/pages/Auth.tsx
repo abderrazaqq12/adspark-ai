@@ -13,20 +13,21 @@ export default function Auth() {
   const location = useLocation();
   const { signIn } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
 
   const from = location.state?.from?.pathname || "/";
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!password) return;
+    if (!username || !password) return;
 
     setIsLoading(true);
     try {
       const response = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
+        body: JSON.stringify({ username, password })
       });
 
       const data = await response.json();
@@ -84,21 +85,35 @@ export default function Auth() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="password">Admin Password</Label>
-                <div className="relative group">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="username">Admin Username</Label>
                   <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    id="username"
+                    type="text"
+                    placeholder="admin"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                     required
-                    autoFocus
-                    className="bg-muted/30 border-white/5 h-12 pl-4 pr-10 focus:ring-primary/50 transition-all duration-300"
+                    className="bg-muted/30 border-white/5 h-12 pl-4 focus:ring-primary/50 transition-all duration-300"
                   />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/30 group-focus-within:text-primary/50 transition-colors">
-                    <ShieldCheck className="w-5 h-5" />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password">Admin Password</Label>
+                  <div className="relative group">
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="••••••••••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      className="bg-muted/30 border-white/5 h-12 pl-4 pr-10 focus:ring-primary/50 transition-all duration-300"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/30 group-focus-within:text-primary/50 transition-colors">
+                      <ShieldCheck className="w-5 h-5" />
+                    </div>
                   </div>
                 </div>
               </div>

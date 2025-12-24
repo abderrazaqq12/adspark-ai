@@ -68,12 +68,12 @@ app.use(express.urlencoded({ extended: true, limit: '500mb' }));
 // ============================================
 
 const ADMIN_PASSWORD = process.env.FLOWSCALE_ADMIN_PASSWORD;
+const ADMIN_USERNAME = process.env.FLOWSCALE_ADMIN_USERNAME || 'admin';
 const JWT_SECRET = process.env.FLOWSCALE_JWT_SECRET;
 const DEFAULT_USER_ID = '170d6fb1-4e4f-4704-ab9a-a917dc86cba5'; // Permanent VPS Owner ID
 
 /**
- * Single-User Session Manager (In-Memory for performance, Opaque to Frontend)
- * Survives process life if using JWT-style stateless validation.
+ * Single-User Session Manager (JWT-style stateless validation)
  */
 function generateSessionToken(userId) {
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
@@ -112,20 +112,35 @@ function verifySessionToken(token) {
  * AUTH MIDDLEWARE: Perimeter Defense
  */
 const authenticate = (req, res, next) => {
-  // Public Endpoints (Bypassing Auth)
-  const publicPaths = ['/api/login', '/health'];
-  if (publicPaths.includes(req.path)) return next();
+  // Public Endpoints
+  const isPublicPath =
+    req.path === '/api/login' ||
+    req.path === '/health' ||
+    req.path.startsWith('/api/health');
+
+  if (isPublicPath) return next();
+
+  // Also allow static assets if any
+  if (req.path === '/' || req.path.startsWith('/assets/')) return next();
 
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return jsonError(res, 401, 'UNAUTHORIZED', 'Missing or malformed session token');
+    return res.status(401).json({
+      ok: false,
+      error: 'UNAUTHORIZED',
+      message: 'Missing or malformed session token'
+    });
   }
 
   const token = authHeader.split(' ')[1];
   const session = verifySessionToken(token);
 
   if (!session) {
-    return jsonError(res, 403, 'INVALID_SESSION', 'Session expired or invalid');
+    return res.status(403).json({
+      ok: false,
+      error: 'FORBIDDEN',
+      message: 'Session expired or invalid. Please login again.'
+    });
   }
 
   // Single-user enforcement
@@ -136,14 +151,22 @@ const authenticate = (req, res, next) => {
 app.use(authenticate);
 
 // ============================================
-// SECURITY: LOGIN ENDPOINT
+// SECURITY: LOGIN & LOGOUT
 // ============================================
 app.post('/api/login', (req, res) => {
-  const { password } = req.body;
+  const { username, password } = req.body;
 
-  if (!password || password !== ADMIN_PASSWORD) {
-    console.warn(`[Security] Failed login attempt from ${req.ip}`);
-    return jsonError(res, 401, 'INVALID_CREDENTIALS', 'Incorrect administrative password');
+  // Validate credentials
+  const isUsernameValid = !process.env.FLOWSCALE_ADMIN_USERNAME || username === ADMIN_USERNAME;
+  const isPasswordValid = password === ADMIN_PASSWORD;
+
+  if (!isUsernameValid || !isPasswordValid) {
+    console.warn(`[Security] Failed login attempt for "${username}" from ${req.ip}`);
+    return res.status(401).json({
+      ok: false,
+      error: 'INVALID_CREDENTIALS',
+      message: 'Incorrect administrative credentials'
+    });
   }
 
   const token = generateSessionToken(DEFAULT_USER_ID);
@@ -154,6 +177,13 @@ app.post('/api/login', (req, res) => {
     token,
     user: { id: DEFAULT_USER_ID, role: 'admin' }
   });
+});
+
+app.post('/api/logout', (req, res) => {
+  // In stateless JWT, logout is primarily client-side.
+  // We can acknowledge it for audit/UI purposes.
+  console.log(`[Security] Admin session terminated for ${req.user?.id || 'unknown'}`);
+  res.json({ ok: true });
 });
 
 // ============================================

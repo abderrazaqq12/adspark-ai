@@ -28,7 +28,12 @@ export function useAuth() {
     setUser(newUser);
   };
 
-  const signOut = () => {
+  const signOut = async () => {
+    try {
+      await fetch('/api/logout', { method: 'POST' });
+    } catch (e) {
+      console.warn("Logout notification failed:", e);
+    }
     localStorage.removeItem('flowscale_token');
     localStorage.removeItem('flowscale_user');
     setToken(null);

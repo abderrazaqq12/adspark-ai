@@ -24,18 +24,29 @@ window.fetch = async (input, init) => {
     // Only attach tokens to internal calls to prevent credential leakage to 3rd parties
     if (isInternal) {
         const token = localStorage.getItem('flowscale_token');
-        if (token) {
-            // Clone init to avoid mutating shared config objects
-            const newInit = { ...(init || {}) };
-            const headers = new Headers(newInit.headers || {});
+        const newInit = { ...(init || {}) };
+        const headers = new Headers(newInit.headers || {});
 
-            if (!headers.has('Authorization')) {
-                headers.set('Authorization', `Bearer ${token}`);
-            }
-
-            newInit.headers = headers;
-            return originalFetch(input, newInit);
+        if (token && !headers.has('Authorization')) {
+            headers.set('Authorization', `Bearer ${token}`);
         }
+
+        newInit.headers = headers;
+        const response = await originalFetch(input, newInit);
+
+        // Security Lifecycle Handling: Redirect on expired/invalid session
+        if (response.status === 401 || response.status === 403) {
+            console.warn('[Security] Unauthorized request detected. Purging session.');
+            localStorage.removeItem('flowscale_token');
+            localStorage.removeItem('flowscale_user');
+
+            // Prevent redirect loops on the login page itself
+            if (!window.location.pathname.startsWith('/auth')) {
+                window.location.href = '/auth';
+            }
+        }
+
+        return response;
     }
 
     return originalFetch(input, init);
