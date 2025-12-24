@@ -1,18 +1,28 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { 
-  Sparkles, 
-  Zap, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Sparkles,
+  Zap,
+  Clock,
+  CheckCircle,
+  XCircle,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Info
 } from 'lucide-react';
 import { usePipelineJobs } from '@/hooks/usePipelineJobs';
+import { DecisionTracePanel } from '@/components/DecisionTracePanel';
 
 interface PipelineJobsTrackerProps {
   projectId?: string;
@@ -40,6 +50,23 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function PipelineJobsTracker({ projectId }: PipelineJobsTrackerProps) {
   const { jobs, currentJob, isLoading, cancelJob, retryJob, getStageStatus } = usePipelineJobs(projectId);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [decisionData, setDecisionData] = useState<any>(null);
+  const [showDecision, setShowDecision] = useState(false);
+
+  const loadDecision = async (jobId: string) => {
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/decision`);
+      if (res.ok) {
+        const data = await res.json();
+        setDecisionData(data);
+        setSelectedJobId(jobId);
+        setShowDecision(true);
+      }
+    } catch (err) {
+      console.error('Failed to load decision:', err);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -152,6 +179,15 @@ export function PipelineJobsTracker({ projectId }: PipelineJobsTrackerProps) {
                       ${job.actual_cost.toFixed(3)}
                     </span>
                   )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => loadDecision(job.id)}
+                    className="h-5 px-1"
+                    title="View Decision Trace"
+                  >
+                    <Info className="h-3 w-3" />
+                  </Button>
                 </div>
               </div>
             ))}
@@ -165,6 +201,25 @@ export function PipelineJobsTracker({ projectId }: PipelineJobsTrackerProps) {
           </div>
         )}
       </CardContent>
+
+      {/* Decision Trace Dialog */}
+      <Dialog open={showDecision} onOpenChange={setShowDecision}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Execution Decision Trace</DialogTitle>
+            <DialogDescription>
+              Read-only view of the system's execution decision for Job ID: {selectedJobId}
+            </DialogDescription>
+          </DialogHeader>
+          {decisionData && (
+            <DecisionTracePanel
+              jobId={selectedJobId!}
+              decision={decisionData.decision}
+              jobStatus={decisionData.meta.jobStatus}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

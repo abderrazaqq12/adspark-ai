@@ -2525,6 +2525,46 @@ app.get('/api/jobs/:jobId', (req, res) => {
 });
 
 // ============================================
+// GET /api/jobs/:jobId/decision - PHASE 4.1
+// Decision Trace UI - Read-Only Observability
+// ============================================
+app.get('/api/jobs/:jobId/decision', (req, res) => {
+  const job = getJob(req.params.jobId);
+
+  if (!job) {
+    return jsonError(res, 404, 'JOB_NOT_FOUND', `Job ${req.params.jobId} not found`);
+  }
+
+  // Extract execution decision from job creation payload
+  const decision = job.payload?.executionDecision || job.executionDecision;
+
+  if (!decision) {
+    return jsonError(res, 404, 'DECISION_NOT_FOUND',
+      'No execution decision found. Job may predate Phase 4 decision layer.');
+  }
+
+  // Return pure decision data (immutable, read-only)
+  res.json({
+    ok: true,
+    jobId: job.id,
+    decision: {
+      decisionId: decision.decisionId,
+      strategy: decision.strategy,
+      parameters: decision.parameters,
+      constraints: decision.constraints,
+      reasoning: decision.reasoning || []
+    },
+    meta: {
+      jobStatus: job.status,
+      createdAt: job.createdAt,
+      locked: true, // Decisions are immutable
+      mutable: false // No frontend modification allowed
+    }
+  });
+});
+
+
+// ============================================
 // GET /api/jobs/:id/logs - Full execution logs
 // ============================================
 
