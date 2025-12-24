@@ -1,6 +1,11 @@
 import { createRoot } from "react-dom/client";
+import { injectBuilderMocks } from "./utils/dev-adapter";
 import App from "./App.tsx";
 import "./index.css";
+
+// 🛡️ FRONTEND DEV ADAPTER (Builder Mode)
+// Must be initialized BEFORE any other fetch interceptors
+injectBuilderMocks();
 
 /**
  * FlowScale Security Perimeter: Fetch Interceptor

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isBuilderMode } from "../utils/dev-adapter";
 
 export interface User {
   id: string;
@@ -11,6 +12,14 @@ export function useAuth() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('flowscale_token'));
 
   useEffect(() => {
+    // 🛠️ BUILDER MODE BYPASS
+    if (isBuilderMode()) {
+      setUser({ id: 'builder', role: 'dev' });
+      setToken('mock-builder-token');
+      setLoading(false);
+      return;
+    }
+
     const storedToken = localStorage.getItem('flowscale_token');
     const storedUser = localStorage.getItem('flowscale_user');
 

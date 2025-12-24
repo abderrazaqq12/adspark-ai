@@ -24,6 +24,13 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   if (!authenticated) {
+    // 🛠️ BUILDER MODE BYPASS
+    // Never redirect in builder/preview environments
+    // The dev-adapter will handle API mocking
+    if (window.location.hostname.includes('lovable') || window.location.search.includes('builder=true') || window !== window.parent) {
+      return <>{children}</>;
+    }
+
     // Redirect to login but save the current location to redirect back after login
     return <Navigate to="/auth" state={{ from: location }} replace />;
   }
