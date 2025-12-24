@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { FolderOpen, Link2, Sheet, CheckCircle2, Loader2, Save, ExternalLink } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 interface DataSettings {
@@ -17,6 +17,7 @@ interface DataSettings {
 }
 
 export const StudioDataSettings = () => {
+  const { user } = useAuth();
   const [settings, setSettings] = useState<DataSettings>({
     google_drive_folder_url: '',
     google_drive_access_token: '',
@@ -29,22 +30,26 @@ export const StudioDataSettings = () => {
   const [sheetConnected, setSheetConnected] = useState(false);
 
   useEffect(() => {
-    loadSettings();
-  }, []);
+    if (user) {
+      loadSettings();
+    }
+  }, [user]);
 
   const loadSettings = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const response = await fetch('/api/settings', {
+        headers: user?.token ? { 'Authorization': `Bearer ${user.token}` } : {}
+      });
 
-      const { data } = await supabase
-        .from('user_settings')
-        .select('preferences')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      if (!response.ok) throw new Error('Failed to load settings');
+
+      const data = await response.json();
 
       if (data?.preferences) {
-        const prefs = data.preferences as Record<string, string>;
+        const prefs = typeof data.preferences === 'string'
+          ? JSON.parse(data.preferences)
+          : data.preferences;
+
         const loadedSettings = {
           google_drive_folder_url: prefs.google_drive_folder_url || '',
           google_drive_access_token: prefs.google_drive_access_token || '',
@@ -57,6 +62,7 @@ export const StudioDataSettings = () => {
       }
     } catch (error) {
       console.error('Error loading settings:', error);
+      // Don't toast error on load to avoid spamming user
     } finally {
       setIsLoading(false);
     }
@@ -92,31 +98,44 @@ export const StudioDataSettings = () => {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const { data: currentSettings } = await supabase
-        .from('user_settings')
-        .select('preferences')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      // 1. Get current settings to merge
+      const response = await fetch('/api/settings', {
+        headers: { 'Authorization': `Bearer ${user.token}` }
+      });
 
-      const currentPrefs = (currentSettings?.preferences as Record<string, unknown>) || {};
+      let currentPrefs: Record<string, any> = {};
+      if (response.ok) {
+        const data = await response.json();
+        if (data.preferences) {
+          currentPrefs = typeof data.preferences === 'string'
+            ? JSON.parse(data.preferences)
+            : data.preferences;
+        }
+      }
 
-      const { error } = await supabase
-        .from('user_settings')
-        .update({
-          preferences: {
+      // 2. Merge and Save
+      const saveResponse = await fetch('/api/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.token}`
+        },
+        body: JSON.stringify({
+          key: 'preferences',
+          value: {
             ...currentPrefs,
-            ...settings,
+            ...settings
           }
         })
-        .eq('user_id', user.id);
+      });
 
-      if (error) throw error;
+      if (!saveResponse.ok) throw new Error('Failed to save settings');
 
       toast.success('Data settings saved successfully');
     } catch (error: any) {
+      console.error('Save error:', error);
       toast.error(error.message || 'Failed to save settings');
     } finally {
       setIsSaving(false);
