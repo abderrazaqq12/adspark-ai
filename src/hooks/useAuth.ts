@@ -1,24 +1,47 @@
 import { useEffect, useState } from "react";
-import { User } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+
+export interface User {
+  id: string;
+  role: string;
+}
 
 export function useAuth() {
-  // VPS SINGLE USER MODE
-  // Always authorize as Admin
-  const [user] = useState<User | null>({
-    id: '00000000-0000-0000-0000-000000000000',
-    app_metadata: { provider: 'email' },
-    user_metadata: { name: 'Admin User' },
-    aud: 'authenticated',
-    created_at: new Date().toISOString()
-  } as User);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState<string | null>(localStorage.getItem('flowscale_token'));
 
-  const [loading] = useState(false);
+  useEffect(() => {
+    const storedToken = localStorage.getItem('flowscale_token');
+    const storedUser = localStorage.getItem('flowscale_user');
 
-  // No-op for sign out
-  const signOut = async () => {
-    console.log('Sign out disabled in Single User Mode');
+    if (storedToken && storedUser) {
+      setToken(storedToken);
+      setUser(JSON.parse(storedUser));
+    }
+    setLoading(false);
+  }, []);
+
+  const signIn = (newToken: string, newUser: User) => {
+    localStorage.setItem('flowscale_token', newToken);
+    localStorage.setItem('flowscale_user', JSON.stringify(newUser));
+    setToken(newToken);
+    setUser(newUser);
   };
 
-  return { user, loading, signOut };
+  const signOut = () => {
+    localStorage.removeItem('flowscale_token');
+    localStorage.removeItem('flowscale_user');
+    setToken(null);
+    setUser(null);
+    window.location.href = '/auth';
+  };
+
+  return {
+    user,
+    loading,
+    token,
+    authenticated: !!token,
+    signIn,
+    signOut
+  };
 }

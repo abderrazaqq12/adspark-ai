@@ -15,9 +15,16 @@
 // These MUST exist or the server will not start
 
 const REQUIRED_BACKEND_SECRETS = [
-  // No strict requirements for local/VPS mode initially
-  // DATABASE_URL might be needed if using Postgres, but for now we are rigorous about
-  // not failing just because Supabase is missing.
+  {
+    key: 'FLOWSCALE_ADMIN_PASSWORD',
+    description: 'Master password for the single-user VPS admin',
+    example: 'a-strong-32-character-password'
+  },
+  {
+    key: 'FLOWSCALE_JWT_SECRET',
+    description: 'Secret key for signing session tokens (JWT)',
+    example: 'random-bytes-for-hmac-sha256'
+  }
 ];
 
 // ============================================

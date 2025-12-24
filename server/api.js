@@ -54,14 +54,106 @@ import { detectEngineCapabilities } from './engine-utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 const app = express();
 
 // ============================================
-// MIDDLEWARE
+// MIDDLEWARE (Order is critical for Security)
 // ============================================
 app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ extended: true, limit: '500mb' }));
+
+// ============================================
+// SECURITY: SESSION & AUTH (Single-User VPS)
+// ============================================
+
+const ADMIN_PASSWORD = process.env.FLOWSCALE_ADMIN_PASSWORD;
+const JWT_SECRET = process.env.FLOWSCALE_JWT_SECRET;
+const DEFAULT_USER_ID = '170d6fb1-4e4f-4704-ab9a-a917dc86cba5'; // Permanent VPS Owner ID
+
+/**
+ * Single-User Session Manager (In-Memory for performance, Opaque to Frontend)
+ * Survives process life if using JWT-style stateless validation.
+ */
+function generateSessionToken(userId) {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({
+    sub: userId,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // 7 days
+  })).toString('base64url');
+
+  const signature = crypto.createHmac('sha256', JWT_SECRET)
+    .update(`${header}.${payload}`)
+    .digest('base64url');
+
+  return `${header}.${payload}.${signature}`;
+}
+
+function verifySessionToken(token) {
+  try {
+    const [header, payload, signature] = token.split('.');
+    const expectedSignature = crypto.createHmac('sha256', JWT_SECRET)
+      .update(`${header}.${payload}`)
+      .digest('base64url');
+
+    if (signature !== expectedSignature) return null;
+
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    if (data.exp < Math.floor(Date.now() / 1000)) return null;
+
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * AUTH MIDDLEWARE: Perimeter Defense
+ */
+const authenticate = (req, res, next) => {
+  // Public Endpoints (Bypassing Auth)
+  const publicPaths = ['/api/login', '/health'];
+  if (publicPaths.includes(req.path)) return next();
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return jsonError(res, 401, 'UNAUTHORIZED', 'Missing or malformed session token');
+  }
+
+  const token = authHeader.split(' ')[1];
+  const session = verifySessionToken(token);
+
+  if (!session) {
+    return jsonError(res, 403, 'INVALID_SESSION', 'Session expired or invalid');
+  }
+
+  // Single-user enforcement
+  req.user = { id: session.sub, role: 'admin' };
+  next();
+};
+
+app.use(authenticate);
+
+// ============================================
+// SECURITY: LOGIN ENDPOINT
+// ============================================
+app.post('/api/login', (req, res) => {
+  const { password } = req.body;
+
+  if (!password || password !== ADMIN_PASSWORD) {
+    console.warn(`[Security] Failed login attempt from ${req.ip}`);
+    return jsonError(res, 401, 'INVALID_CREDENTIALS', 'Incorrect administrative password');
+  }
+
+  const token = generateSessionToken(DEFAULT_USER_ID);
+  console.log(`[Security] Admin session started for ${DEFAULT_USER_ID}`);
+
+  res.json({
+    ok: true,
+    token,
+    user: { id: DEFAULT_USER_ID, role: 'admin' }
+  });
+});
 
 // ============================================
 // CONFIGURATION
@@ -140,7 +232,7 @@ import { listProjects, getProject, createProject as createProjectFn, updateProje
 
 app.get('/api/projects', async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'] || '170d6fb1-4e4f-4704-ab9a-a917dc86cba5'; // Simple auth bypass for VPS
+    const userId = req.user.id;
     const projects = await listProjects(userId);
     res.json(projects);
   } catch (err) {
@@ -150,7 +242,7 @@ app.get('/api/projects', async (req, res) => {
 
 app.get('/api/projects/:id', async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'] || '170d6fb1-4e4f-4704-ab9a-a917dc86cba5';
+    const userId = req.user.id;
     const project = await getProject(req.params.id, userId);
     res.json(project);
   } catch (err) {
@@ -158,9 +250,19 @@ app.get('/api/projects/:id', async (req, res) => {
   }
 });
 
+app.get('/api/projects/:id/resources', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const resources = db.prepare('SELECT * FROM project_resources WHERE project_id = ?').all(req.params.id);
+    res.json(resources);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/projects', async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'] || '170d6fb1-4e4f-4704-ab9a-a917dc86cba5';
+    const userId = req.user.id;
     const project = await createProjectFn(userId, req.body);
     res.json(project);
   } catch (err) {
@@ -170,7 +272,7 @@ app.post('/api/projects', async (req, res) => {
 
 app.patch('/api/projects/:id', async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'] || '170d6fb1-4e4f-4704-ab9a-a917dc86cba5';
+    const userId = req.user.id;
     const project = await updateProject(req.params.id, userId, req.body);
     res.json(project);
   } catch (err) {
@@ -180,7 +282,7 @@ app.patch('/api/projects/:id', async (req, res) => {
 
 app.delete('/api/projects/:id', async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'] || '170d6fb1-4e4f-4704-ab9a-a917dc86cba5';
+    const userId = req.user.id;
     await deleteProject(req.params.id, userId);
     res.json({ success: true });
   } catch (err) {

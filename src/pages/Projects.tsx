@@ -4,12 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  FolderOpen, 
-  Plus, 
-  Search, 
-  Video, 
-  Clock, 
+import {
+  FolderOpen,
+  Plus,
+  Search,
+  Video,
+  Clock,
   MoreVertical,
   Trash2,
   Edit,
@@ -146,39 +146,28 @@ export default function Projects() {
   const fetchProjects = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("projects")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const response = await fetch('/api/projects');
+      if (!response.ok) throw new Error(`API Error: ${response.status}`);
+      const data = await response.json();
 
-      if (error) throw error;
       setProjects(data || []);
       setSelectedProject(null);
 
-      // Fetch asset counts for each project
-      if (data && data.length > 0) {
-        const projectIds = data.map(p => p.id);
-        const [videoCounts, imageCounts, scriptCounts, landingPageCounts] = await Promise.all([
-          supabase.from("video_outputs").select("project_id").in("project_id", projectIds),
-          supabase.from("generated_images").select("project_id").in("project_id", projectIds),
-          supabase.from("scripts").select("project_id").in("project_id", projectIds),
-          supabase.from("landing_pages").select("project_id").in("project_id", projectIds),
-        ]);
+      // Map local resource stats to frontend format
+      const counts: Record<string, AssetCounts> = {};
+      data.forEach((p: any) => {
+        counts[p.id] = {
+          videos: p.stats?.by_type?.video?.count || 0,
+          images: p.stats?.by_type?.image?.count || 0,
+          scripts: p.stats?.by_type?.script?.count || 0,
+          voiceovers: p.stats?.by_type?.voiceover?.count || 0,
+          landingPages: p.stats?.by_type?.landing_page?.count || 0,
+        };
+      });
+      setProjectAssetCounts(counts);
 
-        const counts: Record<string, AssetCounts> = {};
-        projectIds.forEach(id => {
-          counts[id] = {
-            videos: videoCounts.data?.filter(v => v.project_id === id).length || 0,
-            images: imageCounts.data?.filter(i => i.project_id === id).length || 0,
-            scripts: scriptCounts.data?.filter(s => s.project_id === id).length || 0,
-            voiceovers: 0,
-            landingPages: landingPageCounts.data?.filter(l => l.project_id === id).length || 0,
-          };
-        });
-        setProjectAssetCounts(counts);
-      }
     } catch (error: any) {
-      toast.error("Failed to load projects");
+      toast.error("Failed to load projects from VPS");
       console.error(error);
     } finally {
       setLoading(false);
@@ -188,32 +177,40 @@ export default function Projects() {
   const fetchProjectDetails = async (projectId: string) => {
     setLoading(true);
     try {
-      // Fetch project
-      const { data: project, error: projectError } = await supabase
-        .from("projects")
-        .select("*")
-        .eq("id", projectId)
-        .single();
-
-      if (projectError) throw projectError;
+      // 1. Fetch project metadata
+      const projectRes = await fetch(`/api/projects/${projectId}`);
+      if (!projectRes.ok) throw new Error("Project not found");
+      const project = await projectRes.json();
       setSelectedProject(project);
 
-      // Fetch all assets for this project in parallel
-      const [scriptsRes, imagesRes, videosRes, landingPagesRes, voiceoversRes] = await Promise.all([
-        supabase.from("scripts").select("*").eq("project_id", projectId).order("created_at", { ascending: false }),
-        supabase.from("generated_images").select("*").eq("project_id", projectId).order("created_at", { ascending: false }),
-        supabase.from("video_outputs").select("*").eq("project_id", projectId).order("created_at", { ascending: false }),
-        supabase.from("landing_pages").select("*").eq("project_id", projectId).order("created_at", { ascending: false }),
-        supabase.from("audio_tracks").select("*").order("created_at", { ascending: false }),
-      ]);
+      // 2. Fetch all resources linked to this project
+      const resourcesRes = await fetch(`/api/projects/${projectId}/resources`);
+      if (resourcesRes.ok) {
+        const allResources = await resourcesRes.json();
 
-      if (scriptsRes.data) setScripts(scriptsRes.data);
-      if (imagesRes.data) setImages(imagesRes.data);
-      if (videosRes.data) setVideos(videosRes.data);
-      if (landingPagesRes.data) setLandingPages(landingPagesRes.data);
-      if (voiceoversRes.data) setVoiceovers(voiceoversRes.data);
+        // Map local resources back to frontend states
+        setScripts(allResources.filter((r: any) => r.resource_type === 'script').map((r: any) => ({
+          id: r.resource_id,
+          raw_text: r.metadata?.text || 'Script Asset',
+          created_at: r.created_at
+        })));
+
+        setImages(allResources.filter((r: any) => r.resource_type === 'image').map((r: any) => ({
+          id: r.resource_id,
+          image_url: r.resource_path,
+          image_type: r.metadata?.type || 'generated',
+          created_at: r.created_at
+        })));
+
+        setVideos(allResources.filter((r: any) => r.resource_type === 'video').map((r: any) => ({
+          id: r.resource_id,
+          final_video_url: r.resource_path,
+          status: 'completed',
+          created_at: r.created_at
+        })));
+      }
     } catch (error: any) {
-      toast.error("Failed to load project details");
+      toast.error("Failed to load project details from VPS");
       console.error(error);
     } finally {
       setLoading(false);
@@ -247,13 +244,13 @@ export default function Projects() {
 
       if (scripts && scripts.length > 0) {
         const scriptIds = scripts.map(s => s.id);
-        
+
         // Delete scenes for these scripts
         for (const scriptId of scriptIds) {
           await supabase.from("scenes").delete().eq("script_id", scriptId);
           await supabase.from("audio_tracks").delete().eq("script_id", scriptId);
         }
-        
+
         // Delete scripts
         await supabase.from("scripts").delete().eq("project_id", projectId);
       }
@@ -316,8 +313,8 @@ export default function Projects() {
           <div className="flex items-center gap-2">
             <Badge className={getStatusColor(selectedProject.status)}>{selectedProject.status}</Badge>
             {selectedProject.google_drive_folder_id ? (
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 className="border-primary/30 text-primary hover:bg-primary/10"
                 onClick={() => {
@@ -341,8 +338,8 @@ export default function Projects() {
 
         {/* Quick Access Tools */}
         <div className="flex flex-wrap gap-2">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             size="sm"
             onClick={() => navigate(`/studio?project=${selectedProject.id}`)}
             className="border-border hover:bg-primary/10 hover:text-primary"
@@ -350,8 +347,8 @@ export default function Projects() {
             <Wand2 className="w-4 h-4 mr-2" />
             Open in Studio
           </Button>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             size="sm"
             onClick={() => navigate(`/creative-replicator?project=${selectedProject.id}`)}
             className="border-border hover:bg-primary/10 hover:text-primary"
@@ -359,8 +356,8 @@ export default function Projects() {
             <Palette className="w-4 h-4 mr-2" />
             Creative Replicator
           </Button>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             size="sm"
             onClick={() => navigate(`/scene-builder?project=${selectedProject.id}`)}
             className="border-border hover:bg-primary/10 hover:text-primary"
@@ -661,7 +658,7 @@ export default function Projects() {
             All your video ad projects with their assets
           </p>
         </div>
-        <Button 
+        <Button
           onClick={() => navigate("/studio")}
           className="bg-gradient-primary text-primary-foreground shadow-glow"
         >
@@ -723,7 +720,7 @@ export default function Projects() {
                 <>
                   <h3 className="text-lg font-semibold text-foreground mb-2">No projects yet</h3>
                   <p className="mb-4">Create your first video ad project to get started!</p>
-                  <Button 
+                  <Button
                     onClick={() => navigate("/studio")}
                     className="bg-gradient-primary text-primary-foreground"
                   >
@@ -743,8 +740,8 @@ export default function Projects() {
       ) : (
         <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "space-y-4"}>
           {filteredProjects.map((project) => (
-            <Card 
-              key={project.id} 
+            <Card
+              key={project.id}
               className="bg-gradient-card border-border shadow-card hover:border-primary/50 transition-all group cursor-pointer"
               onClick={() => openProject(project)}
             >
@@ -775,7 +772,7 @@ export default function Projects() {
                         <Download className="w-4 h-4 mr-2" />
                         Export Videos
                       </DropdownMenuItem>
-                      <DropdownMenuItem 
+                      <DropdownMenuItem
                         className="text-destructive"
                         onClick={(e) => { e.stopPropagation(); setProjectToDelete(project); }}
                       >
@@ -796,8 +793,8 @@ export default function Projects() {
                     {project.language.toUpperCase()}
                   </Badge>
                   {project.google_drive_folder_id ? (
-                    <Badge 
-                      variant="outline" 
+                    <Badge
+                      variant="outline"
                       className="border-primary/30 text-primary bg-primary/5 cursor-pointer hover:bg-primary/10"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -840,7 +837,7 @@ export default function Projects() {
                     <span className="text-muted-foreground">Pages</span>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <Clock className="w-4 h-4" />
@@ -850,8 +847,8 @@ export default function Projects() {
 
                 {/* Quick Actions */}
                 <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="flex-1 border-border hover:bg-primary/10 hover:text-primary"
                     onClick={(e) => { e.stopPropagation(); openProject(project); }}
                   >
@@ -859,12 +856,12 @@ export default function Projects() {
                     View Assets
                   </Button>
                   {project.google_drive_folder_link && (
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="icon"
                       className="border-border hover:bg-primary/10 hover:text-primary"
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
+                      onClick={(e) => {
+                        e.stopPropagation();
                         window.open(project.google_drive_folder_link!, '_blank');
                       }}
                     >
