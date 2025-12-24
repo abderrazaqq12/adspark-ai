@@ -80,7 +80,7 @@ interface UploadedVideo {
 export default function CreativeScale() {
   // Global project context
   const { hasActiveProject, activeProject } = useGlobalProject();
-  
+
   // Asset upload hook for auto-uploading generated videos to Google Drive
   const { uploadVideo, isUploadAvailable } = useAssetUpload();
 
@@ -349,7 +349,7 @@ export default function CreativeScale() {
     try {
       const video = readyVideos[selectedVideoIndex] || readyVideos[0];
 
-      const analysis = await analyzeVideo(video.url, video.id, {
+      const analysis = await analyzeVideo(video.storageUrl || video.url, video.id, {
         language: 'ar',
         market: 'gcc'
       });
@@ -376,7 +376,7 @@ export default function CreativeScale() {
 
     // Use the actual variation count from state, clamped to safe limits
     const safeVariationCount = Math.min(Math.max(1, variationCount), LIMITS.MAX_VARIATIONS);
-    
+
     console.log(`[CreativeScale] Starting strategy generation with ${safeVariationCount} variations`);
 
     try {
@@ -439,7 +439,7 @@ export default function CreativeScale() {
       // Set the blueprint in the hook state (this makes it available for compile step)
       // Note: We need to use a workaround since setCurrentBlueprint is not exposed directly
       // We'll call generateBlueprint with the enhanced blueprint data, or we compile directly
-      
+
       const videoUrl = uploadedVideos[selectedVideoIndex]?.storageUrl || uploadedVideos[0]?.storageUrl;
 
       if (videoUrl) {
