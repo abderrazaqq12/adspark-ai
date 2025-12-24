@@ -63,7 +63,7 @@ export function ExecutionConsole({
 
   const fetchLogs = async () => {
     // Handle Preview/Simulation Mode (VPS Unavailable)
-    if (jobId.startsWith('preview_') || jobId.startsWith('var_')) {
+    if (jobId.startsWith('preview_')) {
       setLogs({
         jobId,
         variationIndex,
