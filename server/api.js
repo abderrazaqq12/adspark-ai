@@ -2731,18 +2731,41 @@ app.get('/api/jobs/:id/errors', async (req, res) => {
 
 // ============================================
 // SETTINGS & TEMPLATES API (VPS Proxy to Supabase)
+// INFRASTRUCTURE CONTRACT: Supabase is OPTIONAL
 // ============================================
 
 /**
  * GET /api/settings
  * Proxy to fetch user_settings for the VPS Admin
+ * DEGRADED MODE: Falls back to local storage when Supabase unavailable
  */
 app.get('/api/settings', async (req, res) => {
+  // DEGRADED MODE: Local file fallback
   if (!supabase) {
-    console.warn('[API] Supabase not connected, returning empty settings');
-    return res.json({ preferences: {} });
+    console.warn('[API] Supabase not connected, using local settings');
+
+    const settingsFile = path.join(DATA_DIR, 'user_settings.json');
+    try {
+      if (fs.existsSync(settingsFile)) {
+        const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+        return res.json({ ok: true, settings, mode: 'local' });
+      }
+    } catch (readErr) {
+      console.warn('[API] Could not read local settings:', readErr.message);
+    }
+
+    // Return empty default settings
+    return res.json({
+      ok: true,
+      settings: {
+        preferences: {},
+        user_id: DEFAULT_USER_ID
+      },
+      mode: 'local'
+    });
   }
 
+  // NORMAL MODE: Supabase available
   try {
     const { data, error } = await supabase
       .from('user_settings')
@@ -2751,42 +2774,73 @@ app.get('/api/settings', async (req, res) => {
       .maybeSingle();
 
     if (error) throw error;
-
-    if (!data) {
-      return res.json({
-        user_id: DEFAULT_USER_ID,
-        preferences: {}
-      });
-    }
-
-    res.json(data);
+    res.json({ ok: true, settings: data || { preferences: {} }, mode: 'supabase' });
   } catch (err) {
     console.error('[API] Settings fetch failed:', err);
-    jsonError(res, 500, 'SETTINGS_FETCH_FAILED', err.message);
+
+    // FALLBACK: Even if Supabase fails, try local storage
+    const settingsFile = path.join(DATA_DIR, 'user_settings.json');
+    try {
+      if (fs.existsSync(settingsFile)) {
+        const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+        return res.json({ ok: true, settings, mode: 'local_fallback' });
+      }
+    } catch {
+      // Final fallback: empty settings
+      return res.json({ ok: true, settings: { preferences: {} }, mode: 'empty_fallback' });
+    }
   }
 });
 
 /**
  * POST /api/settings
- * Proxy to upsert user_settings for the VPS Admin
+ * Proxy to save user_settings for the VPS Admin
+ * INFRASTRUCTURE CONTRACT: Supabase is OPTIONAL, not CRITICAL
  */
 app.post('/api/settings', async (req, res) => {
-  if (!supabase) return jsonError(res, 503, 'DB_UNAVAILABLE', 'Supabase not connected');
-
-  const { preferences, default_language, default_country, pricing_tier } = req.body;
-
   try {
-    // Fetch existing to merge preferences
+    const { preferences, default_language, default_country, pricing_tier } = req.body;
+
+    // DEGRADED MODE: If Supabase unavailable, use local file storage
+    if (!supabase) {
+      console.warn('[API] Supabase unavailable - using local settings storage');
+
+      // Local file-based settings storage
+      const settingsFile = path.join(DATA_DIR, 'user_settings.json');
+      let settings = {};
+
+      try {
+        if (fs.existsSync(settingsFile)) {
+          settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+        }
+      } catch (readErr) {
+        console.warn('[API] Could not read local settings:', readErr.message);
+      }
+
+      // Update settings
+      settings.preferences = preferences ? { ...settings.preferences, ...preferences } : settings.preferences || {};
+      if (default_language) settings.default_language = default_language;
+      if (default_country) settings.default_country = default_country;
+      if (pricing_tier) settings.pricing_tier = pricing_tier;
+      settings.updated_at = new Date().toISOString();
+
+      // Save locally
+      try {
+        fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2), 'utf8');
+        return res.json({ ok: true, settings, mode: 'local' });
+      } catch (writeErr) {
+        return jsonError(res, 500, 'LOCAL_SAVE_FAILED', writeErr.message);
+      }
+    }
+
+    // NORMAL MODE: Supabase available - use it
     const { data: existing } = await supabase
       .from('user_settings')
       .select('preferences')
       .eq('user_id', DEFAULT_USER_ID)
       .maybeSingle();
 
-    const currentPrefs = (existing?.preferences && typeof existing.preferences === 'object')
-      ? existing.preferences
-      : {};
-
+    const currentPrefs = existing?.preferences || {};
     const newPrefs = preferences ? { ...currentPrefs, ...preferences } : currentPrefs;
 
     const updateData = {
@@ -2806,7 +2860,7 @@ app.post('/api/settings', async (req, res) => {
       .single();
 
     if (error) throw error;
-    res.json({ ok: true, settings: data });
+    res.json({ ok: true, settings: data, mode: 'supabase' });
   } catch (err) {
     console.error('[API] Settings save failed:', err);
     jsonError(res, 500, 'SAVE_FAILED', err.message);
