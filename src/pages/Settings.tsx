@@ -42,6 +42,7 @@ interface PromptTemplate {
 interface UserSettings {
   id: string;
   default_language: string | null;
+  default_country: string | null;
   default_voice: string | null;
   use_free_tier_only: boolean | null;
   pricing_tier: string | null;
@@ -669,6 +670,7 @@ export default function Settings() {
     }
   };
 
+
   const handleSaveSettings = async () => {
     if (!settings) return;
 
@@ -678,6 +680,7 @@ export default function Settings() {
         .from("user_settings")
         .update({
           default_language: settings.default_language,
+          default_country: settings.default_country,
           pricing_tier: settings.pricing_tier,
         })
         .eq("id", settings.id);
