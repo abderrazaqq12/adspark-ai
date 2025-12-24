@@ -67,7 +67,7 @@ export function DecisionTracePanel({
                         Decision Summary
                     </CardTitle>
                 </CardHeader>
-                <Card Content className="space-y-2">
+                <CardContent className="space-y-2">
                     <div className="grid grid-cols-2 gap-2 text-xs">
                         <div>
                             <span className="text-muted-foreground">Decision ID:</span>
