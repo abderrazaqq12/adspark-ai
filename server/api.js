@@ -111,15 +111,32 @@ function verifySessionToken(token) {
 
 /**
  * AUTH MIDDLEWARE: Perimeter Defense
+ * DEV_MODE: Allows safe routes without authentication
  */
 const authenticate = (req, res, next) => {
-  // Public Endpoints
+  // Public Endpoints (always accessible)
   const isPublicPath =
     req.path === '/api/login' ||
     req.path === '/health' ||
     req.path.startsWith('/api/health');
 
   if (isPublicPath) return next();
+
+  // DEV_MODE: Allow safe routes for frontend development
+  if (DEV_MODE) {
+    const isSafeDevRoute = SAFE_DEV_ROUTES.some(route => req.path.startsWith(route));
+    const isSafeReadOnlyGet = req.method === 'GET' && (
+      req.path.startsWith('/api/projects') ||
+      req.path.startsWith('/api/settings') ||
+      req.path.startsWith('/api/templates')
+    );
+
+    if (isSafeDevRoute || isSafeReadOnlyGet) {
+      // Mock user for DEV_MODE
+      req.user = { id: 'dev-user', role: 'dev', isDev: true };
+      return next();
+    }
+  }
 
   // Also allow static assets if any
   if (req.path === '/' || req.path.startsWith('/assets/')) return next();
@@ -129,12 +146,12 @@ const authenticate = (req, res, next) => {
     return res.status(401).json({
       ok: false,
       error: 'UNAUTHORIZED',
-      message: 'Missing or malformed session token'
+      message: 'Authentication required. Missing or invalid token.'
     });
   }
 
-  const token = authHeader.split(' ')[1];
-  const session = verifySessionToken(token);
+  const token = authHeader.substring(7);
+  const session = verifySessionToken(token); // Assuming verifyJWT is verifySessionToken
 
   if (!session) {
     return res.status(403).json({
@@ -294,6 +311,44 @@ if (FFMPEG_AVAILABLE) {
   console.log(`[FFmpeg] GPU Acceleration: ${engineCaps.gpu.available ? `ENABLED (${engineCaps.gpu.vendor})` : 'NOT FOUND'}`);
   console.log(`[FFmpeg] Best Encoder: ${engineCaps.bestEncoder}`);
 }
+
+// Validate critical environment variables
+validateEnvironment();
+
+// ============================================
+// DEV_MODE DETECTION (Development Auth Gate)
+// ============================================
+const DEV_MODE = process.env.DEV_MODE === 'ON';
+
+if (DEV_MODE) {
+  console.warn('');
+  console.warn('⚠️  ================================================');
+  console.warn('⚠️  DEV_MODE ACTIVE - Development Authentication Gate');
+  console.warn('⚠️  Frontend development access enabled');
+  console.warn('⚠️  Execution, queuing, and sensitive operations BLOCKED');
+  console.warn('⚠️  NEVER enable in production');
+  console.warn('⚠️  ================================================');
+  console.warn('');
+} else {
+  console.log('[Security] DEV_MODE: OFF (Production security active)');
+}
+
+// ============================================
+// AUTHENTICATION MIDDLEWARE
+// ============================================
+
+// Safe routes that can be accessed in DEV_MODE without authentication
+const SAFE_DEV_ROUTES = [
+  '/api/health',
+  '/api/login',
+  '/api/user/profile'
+];
+
+const publicPaths = (req) =>
+  req.path === '/health' ||
+  req.path.startsWith('/api/health') ||
+  req.path.startsWith('/render/health') ||
+  req.path === '/api/login';
 
 // ============================================
 // ROUTES
@@ -2100,8 +2155,17 @@ app.post('/api/render/renderflow/upload', (req, res) => {
  * POST /api/upload
  * Upload a video/image file
  * projectId is optional - uses 'general_assets' project if not provided
+ * DEV_MODE: Blocked
  */
 app.post('/api/upload', async (req, res) => {
+  // DEV_MODE: Block file uploads
+  if (DEV_MODE) {
+    return res.status(403).json({
+      error: 'DEV_MODE_RESTRICTED',
+      message: 'File uploads are blocked in development mode.'
+    });
+  }
+
   // First, handle the file upload
   upload.single('file')(req, res, async (err) => {
     if (err instanceof multer.MulterError) {
@@ -2191,6 +2255,14 @@ app.post('/api/upload', async (req, res) => {
 // ============================================
 
 const unifiedJobHandler = (req, res) => {
+  // DEV_MODE: Block execution
+  if (DEV_MODE) {
+    return res.status(403).json({
+      error: 'DEV_MODE_RESTRICTED',
+      message: 'Job execution is blocked in development mode. Deploy to production to execute jobs.'
+    });
+  }
+
   console.log(`[Adapter] Incoming Job Request: ${req.path}`);
   console.log('[Adapter] Payload:', JSON.stringify(req.body, null, 2));
 
@@ -2894,8 +2966,22 @@ app.get('/api/templates', async (req, res) => {
 /**
  * GET /api/user/profile
  * Mock profile for VPS Admin to prevent 406 errors on frontend
+ * DEV_MODE: Returns development profile
  */
 app.get('/api/user/profile', (req, res) => {
+  // DEV_MODE: Return mock development profile
+  if (DEV_MODE) {
+    return res.json({
+      id: 'dev-user',
+      email: 'dev@localhost',
+      plan: 'Development Mode',
+      credits: 999999,
+      mode: 'DEV_MODE',
+      warning: 'Development mode - execution blocked',
+      created_at: new Date().toISOString()
+    });
+  }
+
   res.json({
     id: DEFAULT_USER_ID,
     email: 'admin@flowscale.local',

@@ -110,18 +110,18 @@ export function UserProfileMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-64 bg-popover border-border" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
-          <div className="flex flex-col space-y-1.5">
-            <p className="text-sm font-medium leading-none text-foreground">
-              {profile.email || "User"}
+          <div className="flex flex-col space-y-1">
+            <p className="text-sm font-medium leading-none">{profile.email}</p>
+            <p className="text-xs leading-none text-muted-foreground">
+              {profile.plan} Plan {profile.credits && `• ${profile.credits} credits`}
             </p>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">
-                {profile.plan} Plan
-              </span>
-              <span className="text-xs text-primary">
-                {profile.credits} credits
-              </span>
-            </div>
+            {(profile as any).mode === 'DEV_MODE' && (
+              <div className="mt-1.5">
+                <span className="inline-flex items-center rounded-md bg-destructive px-2 py-1 text-xs font-semibold text-destructive-foreground">
+                  ⚠️ DEV MODE
+                </span>
+              </div>
+            )}
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -163,6 +163,6 @@ export function UserProfileMenu() {
           Logout
         </DropdownMenuItem>
       </DropdownMenuContent>
-    </DropdownMenu>
+    </DropdownMenu >
   );
 }
