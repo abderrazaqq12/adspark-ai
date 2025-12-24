@@ -205,993 +205,994 @@ interface PromptTemplate {
   template_text: string;
 }
 
-// Global project context and Authenticated Admin
-const { hasActiveProject } = useGlobalProject();
-const { user } = useAuth();
+export default function CreateVideo() {
+  // Global project context and Authenticated Admin
+  const { hasActiveProject } = useGlobalProject();
+  const { user } = useAuth();
 
-// Product Info state
-const [productInfo, setProductInfo] = useState<ProductInfo>({
-  name: "",
-  description: "",
-  imageUrl: "",
-  link: "",
-});
+  // Product Info state
+  const [productInfo, setProductInfo] = useState<ProductInfo>({
+    name: "",
+    description: "",
+    imageUrl: "",
+    link: "",
+  });
 
-const [scriptSlots, setScriptSlots] = useState<ScriptSlot[]>([
-  { id: 1, text: "", audioFile: null, audioUrl: null, generatedAudioUrl: null, isGenerating: false }
-]);
+  const [scriptSlots, setScriptSlots] = useState<ScriptSlot[]>([
+    { id: 1, text: "", audioFile: null, audioUrl: null, generatedAudioUrl: null, isGenerating: false }
+  ]);
 
-// Voice settings
-const [selectedVoice, setSelectedVoice] = useState("EXAVITQu4vr4xnSDxMaL"); // Sarah
-const [selectedModel, setSelectedModel] = useState("eleven_multilingual_v2");
-const [voiceLanguage, setVoiceLanguage] = useState("en");
+  // Voice settings
+  const [selectedVoice, setSelectedVoice] = useState("EXAVITQu4vr4xnSDxMaL"); // Sarah
+  const [selectedModel, setSelectedModel] = useState("eleven_multilingual_v2");
+  const [voiceLanguage, setVoiceLanguage] = useState("en");
 
-const [currentStage, setCurrentStage] = useState(0);
-const [expandedStage, setExpandedStage] = useState(0);
-const [isAnalyzing, setIsAnalyzing] = useState(false);
-const [isSaving, setIsSaving] = useState(false);
-const [scenes, setScenes] = useState<any[]>([]);
-const [unifiedScenes, setUnifiedScenes] = useState<UnifiedScene[]>([]);
-const [projectId, setProjectId] = useState<string | null>(null);
-const [scriptId, setScriptId] = useState<string | null>(null);
-const [selectedFormats, setSelectedFormats] = useState<string[]>(["9:16", "16:9", "1:1"]);
-const [playingAudio, setPlayingAudio] = useState<number | null>(null);
-const [audioElements, setAudioElements] = useState<Record<number, HTMLAudioElement>>({});
-const [myVoices, setMyVoices] = useState<ElevenLabsVoice[]>([]);
-const [isLoadingVoices, setIsLoadingVoices] = useState(false);
-const [isGeneratingScript, setIsGeneratingScript] = useState(false);
-const [voiceSource, setVoiceSource] = useState<'library' | 'my'>('library');
+  const [currentStage, setCurrentStage] = useState(0);
+  const [expandedStage, setExpandedStage] = useState(0);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [scenes, setScenes] = useState<any[]>([]);
+  const [unifiedScenes, setUnifiedScenes] = useState<UnifiedScene[]>([]);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [scriptId, setScriptId] = useState<string | null>(null);
+  const [selectedFormats, setSelectedFormats] = useState<string[]>(["9:16", "16:9", "1:1"]);
+  const [playingAudio, setPlayingAudio] = useState<number | null>(null);
+  const [audioElements, setAudioElements] = useState<Record<number, HTMLAudioElement>>({});
+  const [myVoices, setMyVoices] = useState<ElevenLabsVoice[]>([]);
+  const [isLoadingVoices, setIsLoadingVoices] = useState(false);
+  const [isGeneratingScript, setIsGeneratingScript] = useState(false);
+  const [voiceSource, setVoiceSource] = useState<'library' | 'my'>('library');
 
-// Template state
-const [templates, setTemplates] = useState<PromptTemplate[]>([]);
-const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
-const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
-const [isGeneratingFromTemplates, setIsGeneratingFromTemplates] = useState(false);
+  // Template state
+  const [templates, setTemplates] = useState<PromptTemplate[]>([]);
+  const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+  const [isGeneratingFromTemplates, setIsGeneratingFromTemplates] = useState(false);
 
-// Video upload state
-const [uploadedVideos, setUploadedVideos] = useState<Array<{
-  id: string;
-  file: File;
-  url: string;
-  thumbnail: string | null;
-  type: 'scene' | 'broll';
-  duration: number | null;
-}>>([]);
+  // Video upload state
+  const [uploadedVideos, setUploadedVideos] = useState<Array<{
+    id: string;
+    file: File;
+    url: string;
+    thumbnail: string | null;
+    type: 'scene' | 'broll';
+    duration: number | null;
+  }>>([]);
 
-// Assembly options state
-const [videosToGenerate, setVideosToGenerate] = useState(10);
-const [transitionStyle, setTransitionStyle] = useState('mixed');
-const [randomizeOrder, setRandomizeOrder] = useState(true);
-const [autoAddMusic, setAutoAddMusic] = useState(true);
+  // Assembly options state
+  const [videosToGenerate, setVideosToGenerate] = useState(10);
+  const [transitionStyle, setTransitionStyle] = useState('mixed');
+  const [randomizeOrder, setRandomizeOrder] = useState(true);
+  const [autoAddMusic, setAutoAddMusic] = useState(true);
 
-// Cost & engine preferences
-const [freeEnginesOnly, setFreeEnginesOnly] = useState(true);
+  // Cost & engine preferences
+  const [freeEnginesOnly, setFreeEnginesOnly] = useState(true);
 
-// Timeline editor state
-const [showTimelineEditor, setShowTimelineEditor] = useState(false);
+  // Timeline editor state
+  const [showTimelineEditor, setShowTimelineEditor] = useState(false);
 
 
-// Backend mode state for webhook indicators
-const [webhookConfig, setWebhookConfig] = useState<Record<string, { enabled: boolean; webhook_url: string }>>({});
+  // Backend mode state for webhook indicators
+  const [webhookConfig, setWebhookConfig] = useState<Record<string, { enabled: boolean; webhook_url: string }>>({});
 
-// Smart defaults and cost tracking hooks
-const { defaults, recordChoice, getDefaultForContext, suggestEngine } = useSmartDefaults(projectId || undefined);
-const { costs, projectCost, estimatedTotal, recordCost } = useRealTimeCost(projectId || undefined);
+  // Smart defaults and cost tracking hooks
+  const { defaults, recordChoice, getDefaultForContext, suggestEngine } = useSmartDefaults(projectId || undefined);
+  const { costs, projectCost, estimatedTotal, recordCost } = useRealTimeCost(projectId || undefined);
 
-// Clear functions for each stage
-// Clear functions for each stage - clears from UI state and user_settings
-const clearStageData = async (stageId: number) => {
-  // In VPS Lockdown, use the admin identity from useAuth
-  if (!user) return;
-
-  const clearFromSettings = async (keys: string[]) => {
+  // Clear functions for each stage
+  // Clear functions for each stage - clears from UI state and user_settings
+  const clearStageData = async (stageId: number) => {
+    // In VPS Lockdown, use the admin identity from useAuth
     if (!user) return;
-    try {
-      const { data: settings } = await supabase
-        .from('user_settings')
-        .select('preferences')
-        .eq('user_id', user.id)
-        .maybeSingle();
 
-      if (settings?.preferences) {
-        const prefs = { ...(settings.preferences as Record<string, unknown>) };
-        keys.forEach(key => { delete prefs[key]; });
-
-        await supabase
+    const clearFromSettings = async (keys: string[]) => {
+      if (!user) return;
+      try {
+        const { data: settings } = await supabase
           .from('user_settings')
-          .update({ preferences: prefs as any })
-          .eq('user_id', user.id);
+          .select('preferences')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (settings?.preferences) {
+          const prefs = { ...(settings.preferences as Record<string, unknown>) };
+          keys.forEach(key => { delete prefs[key]; });
+
+          await supabase
+            .from('user_settings')
+            .update({ preferences: prefs as any })
+            .eq('user_id', user.id);
+        }
+      } catch (error) {
+        console.error('Error clearing settings:', error);
       }
-    } catch (error) {
-      console.error('Error clearing settings:', error);
+    };
+
+    switch (stageId) {
+      case 0:
+        setProductInfo({ name: "", description: "", imageUrl: "", link: "" });
+        await clearFromSettings(['studio_product_name', 'studio_product_url', 'studio_description', 'studio_media_links', 'studio_target_market', 'studio_language', 'studio_audience_age', 'studio_audience_gender']);
+        toast.success("Product input cleared");
+        break;
+      case 1:
+        // Image generation clears generated_images in DB if needed
+        toast.success("Image generation cleared");
+        break;
+      case 2:
+        await clearFromSettings(['studio_marketing_angles', 'studio_scripts', 'studio_landing_content']);
+        toast.success("Landing page cleared");
+        break;
+      case 3:
+        setScriptSlots([{ id: 1, text: "", audioFile: null, audioUrl: null, generatedAudioUrl: null, isGenerating: false }]);
+        toast.success("Voiceover scripts cleared");
+        break;
+      case 4:
+        setScenes([]);
+        toast.success("Scenes cleared");
+        break;
+      case 5:
+        setUploadedVideos([]);
+        toast.success("Video generation cleared");
+        break;
+      case 6:
+        setSelectedFormats(["9:16", "16:9", "1:1"]);
+        toast.success("Export settings reset");
+        break;
     }
   };
 
-  switch (stageId) {
-    case 0:
-      setProductInfo({ name: "", description: "", imageUrl: "", link: "" });
-      await clearFromSettings(['studio_product_name', 'studio_product_url', 'studio_description', 'studio_media_links', 'studio_target_market', 'studio_language', 'studio_audience_age', 'studio_audience_gender']);
-      toast.success("Product input cleared");
-      break;
-    case 1:
-      // Image generation clears generated_images in DB if needed
-      toast.success("Image generation cleared");
-      break;
-    case 2:
-      await clearFromSettings(['studio_marketing_angles', 'studio_scripts', 'studio_landing_content']);
-      toast.success("Landing page cleared");
-      break;
-    case 3:
-      setScriptSlots([{ id: 1, text: "", audioFile: null, audioUrl: null, generatedAudioUrl: null, isGenerating: false }]);
-      toast.success("Voiceover scripts cleared");
-      break;
-    case 4:
-      setScenes([]);
-      toast.success("Scenes cleared");
-      break;
-    case 5:
-      setUploadedVideos([]);
-      toast.success("Video generation cleared");
-      break;
-    case 6:
-      setSelectedFormats(["9:16", "16:9", "1:1"]);
-      toast.success("Export settings reset");
-      break;
-  }
-};
+  const clearAllPipelineData = async () => {
+    // In VPS Lockdown, use the admin identity from useAuth
+    if (!user) return;
 
-const clearAllPipelineData = async () => {
-  // In VPS Lockdown, use the admin identity from useAuth
-  if (!user) return;
+    // Clear UI state
+    setProductInfo({ name: "", description: "", imageUrl: "", link: "" });
+    setScriptSlots([{ id: 1, text: "", audioFile: null, audioUrl: null, generatedAudioUrl: null, isGenerating: false }]);
+    setScenes([]);
+    setUploadedVideos([]);
+    setCurrentStage(0);
+    setExpandedStage(0);
+    setSelectedTemplates([]);
 
-  // Clear UI state
-  setProductInfo({ name: "", description: "", imageUrl: "", link: "" });
-  setScriptSlots([{ id: 1, text: "", audioFile: null, audioUrl: null, generatedAudioUrl: null, isGenerating: false }]);
-  setScenes([]);
-  setUploadedVideos([]);
-  setCurrentStage(0);
-  setExpandedStage(0);
-  setSelectedTemplates([]);
+    // Clear user_settings preferences related to studio
+    if (user) {
+      try {
+        const { data: settings } = await supabase
+          .from('user_settings')
+          .select('preferences')
+          .eq('user_id', user.id)
+          .maybeSingle();
 
-  // Clear user_settings preferences related to studio
-  if (user) {
+        if (settings?.preferences) {
+          const prefs = { ...(settings.preferences as Record<string, unknown>) };
+          const keysToRemove = [
+            'studio_product_name', 'studio_product_url', 'studio_description',
+            'studio_media_links', 'studio_target_market', 'studio_language',
+            'studio_audience_age', 'studio_audience_gender', 'studio_marketing_angles',
+            'studio_scripts', 'studio_landing_content'
+          ];
+          keysToRemove.forEach(key => { delete prefs[key]; });
+
+          await supabase
+            .from('user_settings')
+            .update({ preferences: prefs as any })
+            .eq('user_id', user.id);
+        }
+      } catch (error) {
+        console.error('Error clearing settings:', error);
+      }
+    }
+
+
+    toast.success("Pipeline reset - all data cleared");
+  };
+
+  // Load existing project, voices, templates, and webhook config
+  useEffect(() => {
+    loadLatestProject();
+    loadMyVoices();
+    loadTemplates();
+    loadWebhookConfig();
+  }, []);
+
+  const loadWebhookConfig = async () => {
     try {
+      if (!user) return;
+
       const { data: settings } = await supabase
         .from('user_settings')
         .select('preferences')
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (settings?.preferences) {
-        const prefs = { ...(settings.preferences as Record<string, unknown>) };
-        const keysToRemove = [
-          'studio_product_name', 'studio_product_url', 'studio_description',
-          'studio_media_links', 'studio_target_market', 'studio_language',
-          'studio_audience_age', 'studio_audience_gender', 'studio_marketing_angles',
-          'studio_scripts', 'studio_landing_content'
-        ];
-        keysToRemove.forEach(key => { delete prefs[key]; });
-
-        await supabase
-          .from('user_settings')
-          .update({ preferences: prefs as any })
-          .eq('user_id', user.id);
+      if (settings) {
+        const prefs = settings.preferences as Record<string, any>;
+        if (prefs?.stage_webhooks) {
+          setWebhookConfig(prefs.stage_webhooks);
+        }
       }
     } catch (error) {
-      console.error('Error clearing settings:', error);
+      console.error('Error loading webhook config:', error);
     }
-  }
+  };
 
-
-  toast.success("Pipeline reset - all data cleared");
-};
-
-// Load existing project, voices, templates, and webhook config
-useEffect(() => {
-  loadLatestProject();
-  loadMyVoices();
-  loadTemplates();
-  loadWebhookConfig();
-}, []);
-
-const loadWebhookConfig = async () => {
-  try {
+  const loadLatestProject = async () => {
     if (!user) return;
 
-    const { data: settings } = await supabase
-      .from('user_settings')
-      .select('preferences')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (settings) {
-      const prefs = settings.preferences as Record<string, any>;
-      if (prefs?.stage_webhooks) {
-        setWebhookConfig(prefs.stage_webhooks);
-      }
-    }
-  } catch (error) {
-    console.error('Error loading webhook config:', error);
-  }
-};
-
-const loadLatestProject = async () => {
-  if (!user) return;
-
-  const { data: projects } = await supabase
-    .from("projects")
-    .select("id, name, product_name")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(1);
-
-  if (projects && projects.length > 0) {
-    setProjectId(projects[0].id);
-    if (projects[0].product_name) {
-      setProductInfo(prev => ({ ...prev, name: projects[0].product_name || "" }));
-    }
-
-    // Load script for this project
-    const { data: scripts } = await supabase
-      .from("scripts")
-      .select("id, raw_text")
-      .eq("project_id", projects[0].id)
+    const { data: projects } = await supabase
+      .from("projects")
+      .select("id, name, product_name")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
       .limit(1);
 
-    if (scripts && scripts.length > 0) {
-      setScriptId(scripts[0].id);
-      if (scripts[0].raw_text) {
-        setScriptSlots([{ id: 1, text: scripts[0].raw_text, audioFile: null, audioUrl: null, generatedAudioUrl: null, isGenerating: false }]);
+    if (projects && projects.length > 0) {
+      setProjectId(projects[0].id);
+      if (projects[0].product_name) {
+        setProductInfo(prev => ({ ...prev, name: projects[0].product_name || "" }));
       }
 
-      // Load scenes
-      const { data: scenesData } = await supabase
-        .from("scenes")
-        .select("*")
-        .eq("script_id", scripts[0].id)
-        .order("index");
+      // Load script for this project
+      const { data: scripts } = await supabase
+        .from("scripts")
+        .select("id, raw_text")
+        .eq("project_id", projects[0].id)
+        .limit(1);
 
-      if (scenesData && scenesData.length > 0) {
-        setScenes(scenesData.map(s => ({
-          title: `Scene ${s.index + 1}`,
-          description: s.text,
-          duration: s.duration_sec,
-          visualPrompt: s.visual_prompt,
-        })));
-        setCurrentStage(5);
+      if (scripts && scripts.length > 0) {
+        setScriptId(scripts[0].id);
+        if (scripts[0].raw_text) {
+          setScriptSlots([{ id: 1, text: scripts[0].raw_text, audioFile: null, audioUrl: null, generatedAudioUrl: null, isGenerating: false }]);
+        }
+
+        // Load scenes
+        const { data: scenesData } = await supabase
+          .from("scenes")
+          .select("*")
+          .eq("script_id", scripts[0].id)
+          .order("index");
+
+        if (scenesData && scenesData.length > 0) {
+          setScenes(scenesData.map(s => ({
+            title: `Scene ${s.index + 1}`,
+            description: s.text,
+            duration: s.duration_sec,
+            visualPrompt: s.visual_prompt,
+          })));
+          setCurrentStage(5);
+        }
       }
     }
-  }
-};
+  };
 
-const loadMyVoices = async () => {
-  setIsLoadingVoices(true);
-  try {
-    const { data, error } = await supabase.functions.invoke("generate-voiceover", {
-      body: { action: 'get_voices' },
-    });
+  const loadMyVoices = async () => {
+    setIsLoadingVoices(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-voiceover", {
+        body: { action: 'get_voices' },
+      });
 
-    if (error) throw error;
+      if (error) throw error;
 
-    if (data.my_voices && data.my_voices.length > 0) {
-      setMyVoices(data.my_voices);
+      if (data.my_voices && data.my_voices.length > 0) {
+        setMyVoices(data.my_voices);
+      }
+    } catch (error: any) {
+      console.error("Error loading voices:", error);
+      // Don't show error toast - it's optional
+    } finally {
+      setIsLoadingVoices(false);
     }
-  } catch (error: any) {
-    console.error("Error loading voices:", error);
-    // Don't show error toast - it's optional
-  } finally {
-    setIsLoadingVoices(false);
-  }
-};
+  };
 
-const loadTemplates = async () => {
-  setIsLoadingTemplates(true);
-  try {
-    const { data, error } = await supabase
-      .from("prompt_templates")
-      .select("id, name, category, template_text")
-      .order("name");
+  const loadTemplates = async () => {
+    setIsLoadingTemplates(true);
+    try {
+      const { data, error } = await supabase
+        .from("prompt_templates")
+        .select("id, name, category, template_text")
+        .order("name");
 
-    if (error) throw error;
-    setTemplates(data || []);
-  } catch (error: any) {
-    console.error("Error loading templates:", error);
-  } finally {
-    setIsLoadingTemplates(false);
-  }
-};
+      if (error) throw error;
+      setTemplates(data || []);
+    } catch (error: any) {
+      console.error("Error loading templates:", error);
+    } finally {
+      setIsLoadingTemplates(false);
+    }
+  };
 
-const toggleTemplateSelection = (templateId: string) => {
-  setSelectedTemplates(prev =>
-    prev.includes(templateId)
-      ? prev.filter(id => id !== templateId)
-      : prev.length < 20 ? [...prev, templateId] : prev
-  );
-};
+  const toggleTemplateSelection = (templateId: string) => {
+    setSelectedTemplates(prev =>
+      prev.includes(templateId)
+        ? prev.filter(id => id !== templateId)
+        : prev.length < 20 ? [...prev, templateId] : prev
+    );
+  };
 
-const generateScriptsFromTemplates = async () => {
-  if (!productInfo.name.trim()) {
-    toast.error("Please enter product name first");
-    setExpandedStage(0);
-    return;
-  }
+  const generateScriptsFromTemplates = async () => {
+    if (!productInfo.name.trim()) {
+      toast.error("Please enter product name first");
+      setExpandedStage(0);
+      return;
+    }
 
-  if (selectedTemplates.length === 0) {
-    toast.error("Please select at least one template");
-    return;
-  }
+    if (selectedTemplates.length === 0) {
+      toast.error("Please select at least one template");
+      return;
+    }
 
-  setIsGeneratingFromTemplates(true);
-  const newSlots: ScriptSlot[] = [];
-  let successCount = 0;
+    setIsGeneratingFromTemplates(true);
+    const newSlots: ScriptSlot[] = [];
+    let successCount = 0;
 
-  try {
-    for (let i = 0; i < selectedTemplates.length; i++) {
-      const templateId = selectedTemplates[i];
-      const template = templates.find(t => t.id === templateId);
-      if (!template) continue;
+    try {
+      for (let i = 0; i < selectedTemplates.length; i++) {
+        const templateId = selectedTemplates[i];
+        const template = templates.find(t => t.id === templateId);
+        if (!template) continue;
 
-      // Fill template variables with product info
-      let filledPrompt = template.template_text
-        .replace(/\{\{product_name\}\}/g, productInfo.name)
-        .replace(/\{\{audience\}\}/g, "general consumers")
-        .replace(/\{\{benefits\}\}/g, productInfo.description || "quality and value")
-        .replace(/\{\{problem\}\}/g, "common pain points")
-        .replace(/\{\{cta\}\}/g, "Shop now!")
-        .replace(/\{\{brand_tone\}\}/g, "engaging and professional")
-        .replace(/\{\{offer\}\}/g, "limited time offer")
-        .replace(/\{\{language\}\}/g, voiceLanguage === 'ar' ? 'Arabic' : voiceLanguage === 'es' ? 'Spanish' : 'English');
+        // Fill template variables with product info
+        let filledPrompt = template.template_text
+          .replace(/\{\{product_name\}\}/g, productInfo.name)
+          .replace(/\{\{audience\}\}/g, "general consumers")
+          .replace(/\{\{benefits\}\}/g, productInfo.description || "quality and value")
+          .replace(/\{\{problem\}\}/g, "common pain points")
+          .replace(/\{\{cta\}\}/g, "Shop now!")
+          .replace(/\{\{brand_tone\}\}/g, "engaging and professional")
+          .replace(/\{\{offer\}\}/g, "limited time offer")
+          .replace(/\{\{language\}\}/g, voiceLanguage === 'ar' ? 'Arabic' : voiceLanguage === 'es' ? 'Spanish' : 'English');
 
+        const { data, error } = await supabase.functions.invoke("generate-script-from-product", {
+          body: {
+            productName: productInfo.name,
+            productDescription: filledPrompt,
+            productImageUrl: productInfo.imageUrl,
+            productLink: productInfo.link,
+            language: voiceLanguage,
+            tone: template.name,
+          },
+        });
+
+        if (!error && data.script) {
+          newSlots.push({
+            id: scriptSlots.length + i + 1,
+            text: data.script,
+            audioFile: null,
+            audioUrl: null,
+            generatedAudioUrl: null,
+            isGenerating: false,
+          });
+          successCount++;
+        }
+      }
+
+      if (newSlots.length > 0) {
+        // Replace existing empty slots or add new ones
+        const existingNonEmpty = scriptSlots.filter(s => s.text.trim());
+        const combined = [...existingNonEmpty, ...newSlots].slice(0, 20);
+
+        // Renumber IDs
+        setScriptSlots(combined.map((slot, idx) => ({ ...slot, id: idx + 1 })));
+        toast.success(`Generated ${successCount} scripts from templates!`);
+        setSelectedTemplates([]);
+      }
+    } catch (error: any) {
+      console.error("Error generating from templates:", error);
+      toast.error(error.message || "Failed to generate scripts");
+    } finally {
+      setIsGeneratingFromTemplates(false);
+    }
+  };
+  const generateScriptFromProduct = async (slotId: number) => {
+    if (!productInfo.name.trim()) {
+      toast.error("Please enter product name first");
+      setExpandedStage(4);
+      return;
+    }
+
+    setIsGeneratingScript(true);
+    try {
       const { data, error } = await supabase.functions.invoke("generate-script-from-product", {
         body: {
           productName: productInfo.name,
-          productDescription: filledPrompt,
+          productDescription: productInfo.description,
           productImageUrl: productInfo.imageUrl,
           productLink: productInfo.link,
           language: voiceLanguage,
-          tone: template.name,
         },
       });
 
-      if (!error && data.script) {
-        newSlots.push({
-          id: scriptSlots.length + i + 1,
-          text: data.script,
-          audioFile: null,
-          audioUrl: null,
-          generatedAudioUrl: null,
-          isGenerating: false,
-        });
-        successCount++;
+      if (error) throw error;
+
+      if (data.script) {
+        updateScriptSlot(slotId, "text", data.script);
+        toast.success(`Script generated! (~${data.estimated_duration_seconds}s)`);
       }
+    } catch (error: any) {
+      console.error("Error generating script:", error);
+      toast.error(error.message || "Failed to generate script");
+    } finally {
+      setIsGeneratingScript(false);
     }
+  };
 
-    if (newSlots.length > 0) {
-      // Replace existing empty slots or add new ones
-      const existingNonEmpty = scriptSlots.filter(s => s.text.trim());
-      const combined = [...existingNonEmpty, ...newSlots].slice(0, 20);
-
-      // Renumber IDs
-      setScriptSlots(combined.map((slot, idx) => ({ ...slot, id: idx + 1 })));
-      toast.success(`Generated ${successCount} scripts from templates!`);
-      setSelectedTemplates([]);
-    }
-  } catch (error: any) {
-    console.error("Error generating from templates:", error);
-    toast.error(error.message || "Failed to generate scripts");
-  } finally {
-    setIsGeneratingFromTemplates(false);
-  }
-};
-const generateScriptFromProduct = async (slotId: number) => {
-  if (!productInfo.name.trim()) {
-    toast.error("Please enter product name first");
-    setExpandedStage(4);
-    return;
-  }
-
-  setIsGeneratingScript(true);
-  try {
-    const { data, error } = await supabase.functions.invoke("generate-script-from-product", {
-      body: {
-        productName: productInfo.name,
-        productDescription: productInfo.description,
-        productImageUrl: productInfo.imageUrl,
-        productLink: productInfo.link,
-        language: voiceLanguage,
-      },
-    });
-
-    if (error) throw error;
-
-    if (data.script) {
-      updateScriptSlot(slotId, "text", data.script);
-      toast.success(`Script generated! (~${data.estimated_duration_seconds}s)`);
-    }
-  } catch (error: any) {
-    console.error("Error generating script:", error);
-    toast.error(error.message || "Failed to generate script");
-  } finally {
-    setIsGeneratingScript(false);
-  }
-};
-
-const addScriptSlot = () => {
-  if (scriptSlots.length >= 20) {
-    toast.error("Maximum 20 scripts allowed");
-    return;
-  }
-  setScriptSlots([...scriptSlots, {
-    id: scriptSlots.length + 1,
-    text: "",
-    audioFile: null,
-    audioUrl: null,
-    generatedAudioUrl: null,
-    isGenerating: false
-  }]);
-};
-
-const removeScriptSlot = (id: number) => {
-  if (scriptSlots.length <= 1) return;
-  setScriptSlots(scriptSlots.filter(slot => slot.id !== id));
-};
-
-const updateScriptSlot = (id: number, field: keyof ScriptSlot, value: any) => {
-  setScriptSlots(scriptSlots.map(slot =>
-    slot.id === id ? { ...slot, [field]: value } : slot
-  ));
-};
-
-const handleAudioUpload = (id: number, file: File) => {
-  const url = URL.createObjectURL(file);
-  updateScriptSlot(id, "audioFile", file);
-  updateScriptSlot(id, "audioUrl", url);
-};
-
-const generateVoiceover = async (slotId: number) => {
-  const slot = scriptSlots.find(s => s.id === slotId);
-  if (!slot || !slot.text.trim()) {
-    toast.error("Please enter script text first");
-    return;
-  }
-
-  updateScriptSlot(slotId, "isGenerating", true);
-
-  try {
-    const { data, error } = await supabase.functions.invoke("generate-voiceover", {
-      body: {
-        text: slot.text,
-        language: voiceLanguage,
-        voiceId: selectedVoice,
-        model: selectedModel,
-        scriptId: scriptId,
-      },
-    });
-
-    if (error) throw error;
-
-    if (data.audio_url) {
-      updateScriptSlot(slotId, "generatedAudioUrl", data.audio_url);
-      toast.success("Voice-over generated!");
-    } else if (data.audio_base64) {
-      const audioBlob = new Blob(
-        [Uint8Array.from(atob(data.audio_base64), c => c.charCodeAt(0))],
-        { type: 'audio/mpeg' }
-      );
-      const audioUrl = URL.createObjectURL(audioBlob);
-      updateScriptSlot(slotId, "generatedAudioUrl", audioUrl);
-      toast.success("Voice-over generated!");
-    }
-  } catch (error: any) {
-    console.error("Error generating voiceover:", error);
-    toast.error(error.message || "Failed to generate voice-over");
-  } finally {
-    updateScriptSlot(slotId, "isGenerating", false);
-  }
-};
-
-const playAudio = (slotId: number, url: string) => {
-  // Stop any currently playing audio
-  if (playingAudio !== null && audioElements[playingAudio]) {
-    audioElements[playingAudio].pause();
-    audioElements[playingAudio].currentTime = 0;
-  }
-
-  if (playingAudio === slotId) {
-    setPlayingAudio(null);
-    return;
-  }
-
-  let audio = audioElements[slotId];
-  if (!audio) {
-    audio = new Audio(url);
-    audio.onended = () => setPlayingAudio(null);
-    setAudioElements(prev => ({ ...prev, [slotId]: audio }));
-  }
-
-  audio.play();
-  setPlayingAudio(slotId);
-};
-
-const handleAnalyzeScript = async () => {
-  const allScripts = scriptSlots.map(s => s.text).filter(t => t.trim()).join("\n\n---\n\n");
-  if (!allScripts.trim()) {
-    toast.error("Please enter at least one script");
-    return;
-  }
-
-  setIsAnalyzing(true);
-  try {
-    const { data, error } = await supabase.functions.invoke("analyze-script", {
-      body: { script: allScripts },
-    });
-
-    if (error) throw error;
-
-    setScenes(data.scenes || []);
-    setCurrentStage(5);
-    setExpandedStage(5);
-    toast.success("Scripts analyzed successfully!");
-  } catch (error: any) {
-    console.error("Error analyzing script:", error);
-    toast.error(error.message || "Failed to analyze scripts");
-  } finally {
-    setIsAnalyzing(false);
-  }
-};
-
-const saveProjectAndScenes = async () => {
-  if (!productInfo.name.trim()) {
-    toast.error("Please enter a product name first");
-    setExpandedStage(4);
-    return;
-  }
-
-  setIsSaving(true);
-  try {
-    const isSelfHosted = true; // Forced true for VPS Deployment
-    let userId = user?.id || '170d6fb1-4e4f-4704-ab9a-a917dc86cba5';
-
-    if (!user && !isSelfHosted) {
-      toast.error("Please sign in to save");
+  const addScriptSlot = () => {
+    if (scriptSlots.length >= 20) {
+      toast.error("Maximum 20 scripts allowed");
       return;
     }
-    // If self-hosted, userId defaults to strict UUID and we proceed.
+    setScriptSlots([...scriptSlots, {
+      id: scriptSlots.length + 1,
+      text: "",
+      audioFile: null,
+      audioUrl: null,
+      generatedAudioUrl: null,
+      isGenerating: false
+    }]);
+  };
 
-    let currentProjectId = projectId;
-    let currentScriptId = scriptId;
+  const removeScriptSlot = (id: number) => {
+    if (scriptSlots.length <= 1) return;
+    setScriptSlots(scriptSlots.filter(slot => slot.id !== id));
+  };
 
-    // Create project if needed
-    if (!currentProjectId) {
-      if (isSelfHosted) {
-        const apiUrl = import.meta.env.VITE_REST_API_URL;
-        const projectsUrl = `${apiUrl || ''}/projects`.replace('//projects', '/projects');
-        try {
-          // Use explicit token processing or bypass
-          const res = await fetch(projectsUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-user-id': '170d6fb1-4e4f-4704-ab9a-a917dc86cba5'
-            },
-            body: JSON.stringify({
+  const updateScriptSlot = (id: number, field: keyof ScriptSlot, value: any) => {
+    setScriptSlots(scriptSlots.map(slot =>
+      slot.id === id ? { ...slot, [field]: value } : slot
+    ));
+  };
+
+  const handleAudioUpload = (id: number, file: File) => {
+    const url = URL.createObjectURL(file);
+    updateScriptSlot(id, "audioFile", file);
+    updateScriptSlot(id, "audioUrl", url);
+  };
+
+  const generateVoiceover = async (slotId: number) => {
+    const slot = scriptSlots.find(s => s.id === slotId);
+    if (!slot || !slot.text.trim()) {
+      toast.error("Please enter script text first");
+      return;
+    }
+
+    updateScriptSlot(slotId, "isGenerating", true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-voiceover", {
+        body: {
+          text: slot.text,
+          language: voiceLanguage,
+          voiceId: selectedVoice,
+          model: selectedModel,
+          scriptId: scriptId,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.audio_url) {
+        updateScriptSlot(slotId, "generatedAudioUrl", data.audio_url);
+        toast.success("Voice-over generated!");
+      } else if (data.audio_base64) {
+        const audioBlob = new Blob(
+          [Uint8Array.from(atob(data.audio_base64), c => c.charCodeAt(0))],
+          { type: 'audio/mpeg' }
+        );
+        const audioUrl = URL.createObjectURL(audioBlob);
+        updateScriptSlot(slotId, "generatedAudioUrl", audioUrl);
+        toast.success("Voice-over generated!");
+      }
+    } catch (error: any) {
+      console.error("Error generating voiceover:", error);
+      toast.error(error.message || "Failed to generate voice-over");
+    } finally {
+      updateScriptSlot(slotId, "isGenerating", false);
+    }
+  };
+
+  const playAudio = (slotId: number, url: string) => {
+    // Stop any currently playing audio
+    if (playingAudio !== null && audioElements[playingAudio]) {
+      audioElements[playingAudio].pause();
+      audioElements[playingAudio].currentTime = 0;
+    }
+
+    if (playingAudio === slotId) {
+      setPlayingAudio(null);
+      return;
+    }
+
+    let audio = audioElements[slotId];
+    if (!audio) {
+      audio = new Audio(url);
+      audio.onended = () => setPlayingAudio(null);
+      setAudioElements(prev => ({ ...prev, [slotId]: audio }));
+    }
+
+    audio.play();
+    setPlayingAudio(slotId);
+  };
+
+  const handleAnalyzeScript = async () => {
+    const allScripts = scriptSlots.map(s => s.text).filter(t => t.trim()).join("\n\n---\n\n");
+    if (!allScripts.trim()) {
+      toast.error("Please enter at least one script");
+      return;
+    }
+
+    setIsAnalyzing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("analyze-script", {
+        body: { script: allScripts },
+      });
+
+      if (error) throw error;
+
+      setScenes(data.scenes || []);
+      setCurrentStage(5);
+      setExpandedStage(5);
+      toast.success("Scripts analyzed successfully!");
+    } catch (error: any) {
+      console.error("Error analyzing script:", error);
+      toast.error(error.message || "Failed to analyze scripts");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const saveProjectAndScenes = async () => {
+    if (!productInfo.name.trim()) {
+      toast.error("Please enter a product name first");
+      setExpandedStage(4);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const isSelfHosted = true; // Forced true for VPS Deployment
+      let userId = user?.id || '170d6fb1-4e4f-4704-ab9a-a917dc86cba5';
+
+      if (!user && !isSelfHosted) {
+        toast.error("Please sign in to save");
+        return;
+      }
+      // If self-hosted, userId defaults to strict UUID and we proceed.
+
+      let currentProjectId = projectId;
+      let currentScriptId = scriptId;
+
+      // Create project if needed
+      if (!currentProjectId) {
+        if (isSelfHosted) {
+          const apiUrl = import.meta.env.VITE_REST_API_URL;
+          const projectsUrl = `${apiUrl || ''}/projects`.replace('//projects', '/projects');
+          try {
+            // Use explicit token processing or bypass
+            const res = await fetch(projectsUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-user-id': '170d6fb1-4e4f-4704-ab9a-a917dc86cba5'
+              },
+              body: JSON.stringify({
+                name: productInfo.name,
+                product_name: productInfo.name,
+                language: voiceLanguage,
+                settings: {
+                  product_description: productInfo.description,
+                  product_image_url: productInfo.imageUrl,
+                  product_link: productInfo.link,
+                }
+              })
+            });
+            if (!res.ok) throw new Error('Failed to create local project');
+            const newProject = await res.json();
+            currentProjectId = newProject.id;
+            setProjectId(newProject.id);
+          } catch (err: any) {
+            console.error('Failed to create local project:', err);
+            throw new Error(err.message || 'Failed to create local project');
+          }
+        } else {
+          const { data: project, error: projectError } = await supabase
+            .from("projects")
+            .insert({
+              user_id: userId,
               name: productInfo.name,
               product_name: productInfo.name,
               language: voiceLanguage,
+              status: "draft",
               settings: {
                 product_description: productInfo.description,
                 product_image_url: productInfo.imageUrl,
                 product_link: productInfo.link,
               }
             })
-          });
-          if (!res.ok) throw new Error('Failed to create local project');
-          const newProject = await res.json();
-          currentProjectId = newProject.id;
-          setProjectId(newProject.id);
-        } catch (err: any) {
-          console.error('Failed to create local project:', err);
-          throw new Error(err.message || 'Failed to create local project');
+            .select()
+            .single();
+
+          if (projectError) throw projectError;
+          currentProjectId = project.id;
+          setProjectId(project.id);
         }
-      } else {
-        const { data: project, error: projectError } = await supabase
-          .from("projects")
+      }
+
+      // Create Google Drive folder if configured
+      const { data: userSettings } = await supabase
+        .from("user_settings")
+        .select("preferences")
+        .eq("user_id", userId)
+        .single();
+
+      if (userSettings?.preferences) {
+        const prefs = userSettings.preferences as Record<string, any>;
+        if (prefs.google_drive_folder_url) {
+          // Trigger Google Drive folder creation (would need a separate edge function)
+          console.log("Would create Google Drive folder for:", productInfo.name);
+        }
+      }
+
+      // Create or update script
+      const allScriptsText = scriptSlots.map(s => s.text).filter(t => t.trim()).join("\n\n---\n\n");
+      if (!currentScriptId) {
+        const { data: scriptData, error: scriptError } = await supabase
+          .from("scripts")
           .insert({
-            user_id: userId,
-            name: productInfo.name,
-            product_name: productInfo.name,
+            project_id: currentProjectId,
+            raw_text: allScriptsText,
             language: voiceLanguage,
-            status: "draft",
-            settings: {
-              product_description: productInfo.description,
-              product_image_url: productInfo.imageUrl,
-              product_link: productInfo.link,
-            }
+            status: "analyzed",
           })
           .select()
           .single();
 
-        if (projectError) throw projectError;
-        currentProjectId = project.id;
-        setProjectId(project.id);
+        if (scriptError) throw scriptError;
+        currentScriptId = scriptData.id;
+        setScriptId(scriptData.id);
+      } else {
+        await supabase
+          .from("scripts")
+          .update({ raw_text: allScriptsText })
+          .eq("id", currentScriptId);
       }
+
+      // Delete existing scenes for this script
+      await supabase.from("scenes").delete().eq("script_id", currentScriptId);
+
+      // Insert new scenes
+      const scenesToInsert = scenes.map((scene, index) => ({
+        script_id: currentScriptId,
+        index,
+        text: scene.description || scene.title,
+        scene_type: "broll",
+        visual_prompt: scene.visualPrompt || null,
+        duration_sec: scene.duration || 5,
+        status: "pending",
+      }));
+
+      const { error: scenesError } = await supabase
+        .from("scenes")
+        .insert(scenesToInsert);
+
+      if (scenesError) throw scenesError;
+
+      toast.success("Project and scenes saved!");
+    } catch (error: any) {
+      console.error("Error saving:", error);
+      toast.error(error.message || "Failed to save project");
+    } finally {
+      setIsSaving(false);
     }
+  };
 
-    // Create Google Drive folder if configured
-    const { data: userSettings } = await supabase
-      .from("user_settings")
-      .select("preferences")
-      .eq("user_id", userId)
-      .single();
+  const canProceedFromProductInfo = productInfo.name.trim().length > 0;
+  const hasAnyScript = scriptSlots.some(s => s.text.trim() || s.audioUrl || s.generatedAudioUrl);
 
-    if (userSettings?.preferences) {
-      const prefs = userSettings.preferences as Record<string, any>;
-      if (prefs.google_drive_folder_url) {
-        // Trigger Google Drive folder creation (would need a separate edge function)
-        console.log("Would create Google Drive folder for:", productInfo.name);
-      }
-    }
+  return (
+    <div className="flex min-h-screen animate-in fade-in duration-500">
+      {/* Unified Step Sidebar - LEFT side, matching Creative AI Editor */}
+      <UnifiedStepSidebar
+        tool="studio"
+        toolName="Studio"
+        toolDescription="Video production pipeline"
+        steps={STUDIO_STEPS}
+        currentStep={expandedStage}
+        completedSteps={Array.from({ length: currentStage }, (_, i) => i)}
+        onStepClick={(step) => {
+          setExpandedStage(step);
+          if (step <= currentStage) {
+            // Allow going back to completed steps
+          } else if (step === currentStage + 1) {
+            // Allow going to next step only if current is complete
+            setCurrentStage(step);
+          }
+        }}
+        onClearHistory={clearAllPipelineData}
+        projectId={projectId || undefined}
+      />
 
-    // Create or update script
-    const allScriptsText = scriptSlots.map(s => s.text).filter(t => t.trim()).join("\n\n---\n\n");
-    if (!currentScriptId) {
-      const { data: scriptData, error: scriptError } = await supabase
-        .from("scripts")
-        .insert({
-          project_id: currentProjectId,
-          raw_text: allScriptsText,
-          language: voiceLanguage,
-          status: "analyzed",
-        })
-        .select()
-        .single();
+      {/* Main Content */}
+      <div className="flex-1 p-8 space-y-8 overflow-auto">
+        <div className="flex items-center justify-between">
+          {/* Drive Sync Status */}
+          <DriveSyncIndicator />
 
-      if (scriptError) throw scriptError;
-      currentScriptId = scriptData.id;
-      setScriptId(scriptData.id);
-    } else {
-      await supabase
-        .from("scripts")
-        .update({ raw_text: allScriptsText })
-        .eq("id", currentScriptId);
-    }
-
-    // Delete existing scenes for this script
-    await supabase.from("scenes").delete().eq("script_id", currentScriptId);
-
-    // Insert new scenes
-    const scenesToInsert = scenes.map((scene, index) => ({
-      script_id: currentScriptId,
-      index,
-      text: scene.description || scene.title,
-      scene_type: "broll",
-      visual_prompt: scene.visualPrompt || null,
-      duration_sec: scene.duration || 5,
-      status: "pending",
-    }));
-
-    const { error: scenesError } = await supabase
-      .from("scenes")
-      .insert(scenesToInsert);
-
-    if (scenesError) throw scenesError;
-
-    toast.success("Project and scenes saved!");
-  } catch (error: any) {
-    console.error("Error saving:", error);
-    toast.error(error.message || "Failed to save project");
-  } finally {
-    setIsSaving(false);
-  }
-};
-
-const canProceedFromProductInfo = productInfo.name.trim().length > 0;
-const hasAnyScript = scriptSlots.some(s => s.text.trim() || s.audioUrl || s.generatedAudioUrl);
-
-return (
-  <div className="flex min-h-screen animate-in fade-in duration-500">
-    {/* Unified Step Sidebar - LEFT side, matching Creative AI Editor */}
-    <UnifiedStepSidebar
-      tool="studio"
-      toolName="Studio"
-      toolDescription="Video production pipeline"
-      steps={STUDIO_STEPS}
-      currentStep={expandedStage}
-      completedSteps={Array.from({ length: currentStage }, (_, i) => i)}
-      onStepClick={(step) => {
-        setExpandedStage(step);
-        if (step <= currentStage) {
-          // Allow going back to completed steps
-        } else if (step === currentStage + 1) {
-          // Allow going to next step only if current is complete
-          setCurrentStage(step);
-        }
-      }}
-      onClearHistory={clearAllPipelineData}
-      projectId={projectId || undefined}
-    />
-
-    {/* Main Content */}
-    <div className="flex-1 p-8 space-y-8 overflow-auto">
-      <div className="flex items-center justify-between">
-        {/* Drive Sync Status */}
-        <DriveSyncIndicator />
-
-        <PipelineStatusIndicator
-          pipelineStatus={{
-            product_info: currentStage > 0 ? 'completed' : expandedStage === 0 ? 'in_progress' : 'pending',
-            scripts: currentStage > 4 ? 'completed' : expandedStage === 4 ? 'in_progress' : 'pending',
-            scenes: currentStage > 5 ? 'completed' : expandedStage === 5 ? 'in_progress' : 'pending',
-            video_generation: currentStage > 5 ? 'completed' : expandedStage === 5 ? 'in_progress' : 'pending',
-            assembly: currentStage > 6 ? 'completed' : expandedStage === 6 ? 'in_progress' : 'pending',
-            export: currentStage > 7 ? 'completed' : expandedStage === 7 ? 'in_progress' : 'pending',
-          }}
-          currentStage={expandedStage}
-          onStageClick={(stageId, index) => setExpandedStage(index)}
-          compact={true}
-        />
-      </div>
-
-      {/* Project Context Banner */}
-      <ProjectContextBanner toolName="Studio" className="mb-4" />
-
-      {/* Smart Defaults Banner - only show when not on Product Input stage */}
-      {expandedStage !== 0 && (
-        <SmartDefaultsBanner
-          projectId={projectId || undefined}
-          onApplyDefaults={(appliedDefaults) => {
-            if (appliedDefaults.preferredVoice) {
-              setSelectedVoice(appliedDefaults.preferredVoice);
-            }
-            if (appliedDefaults.variationsPerProject) {
-              setVideosToGenerate(appliedDefaults.variationsPerProject);
-            }
-            toast.success('Smart defaults applied!');
-          }}
-        />
-      )}
-
-      <div className="flex flex-col gap-6">
-        {/* Stage 0: Studio Product Input */}
-        {expandedStage === 0 && (
-          <StudioProductInput
-            onNext={() => {
-              setExpandedStage(1);
-              setCurrentStage(1);
+          <PipelineStatusIndicator
+            pipelineStatus={{
+              product_info: currentStage > 0 ? 'completed' : expandedStage === 0 ? 'in_progress' : 'pending',
+              scripts: currentStage > 4 ? 'completed' : expandedStage === 4 ? 'in_progress' : 'pending',
+              scenes: currentStage > 5 ? 'completed' : expandedStage === 5 ? 'in_progress' : 'pending',
+              video_generation: currentStage > 5 ? 'completed' : expandedStage === 5 ? 'in_progress' : 'pending',
+              assembly: currentStage > 6 ? 'completed' : expandedStage === 6 ? 'in_progress' : 'pending',
+              export: currentStage > 7 ? 'completed' : expandedStage === 7 ? 'in_progress' : 'pending',
             }}
-            onProjectCreated={(newProjectId) => {
-              setProjectId(newProjectId);
-            }}
-            productInfo={productInfo}
-            onProductInfoChange={(info) => {
-              setProductInfo(info);
+            currentStage={expandedStage}
+            onStageClick={(stageId, index) => setExpandedStage(index)}
+            compact={true}
+          />
+        </div>
+
+        {/* Project Context Banner */}
+        <ProjectContextBanner toolName="Studio" className="mb-4" />
+
+        {/* Smart Defaults Banner - only show when not on Product Input stage */}
+        {expandedStage !== 0 && (
+          <SmartDefaultsBanner
+            projectId={projectId || undefined}
+            onApplyDefaults={(appliedDefaults) => {
+              if (appliedDefaults.preferredVoice) {
+                setSelectedVoice(appliedDefaults.preferredVoice);
+              }
+              if (appliedDefaults.variationsPerProject) {
+                setVideosToGenerate(appliedDefaults.variationsPerProject);
+              }
+              toast.success('Smart defaults applied!');
             }}
           />
         )}
 
-        {/* Stage 1: Studio Image Generation (Prioritized) */}
-        {expandedStage === 1 && (
-          <div className="space-y-4">
-            <StudioImageGeneration
+        <div className="flex flex-col gap-6">
+          {/* Stage 0: Studio Product Input */}
+          {expandedStage === 0 && (
+            <StudioProductInput
               onNext={() => {
-                setExpandedStage(2);
-                setCurrentStage(2);
+                setExpandedStage(1);
+                setCurrentStage(1);
               }}
-              projectId={projectId}
+              onProjectCreated={(newProjectId) => {
+                setProjectId(newProjectId);
+              }}
+              productInfo={productInfo}
+              onProductInfoChange={(info) => {
+                setProductInfo(info);
+              }}
             />
-            <Button
-              variant="ghost"
-              className="w-full text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                setExpandedStage(2);
-                setCurrentStage(Math.max(currentStage, 2));
-              }}
-            >
-              Skip this step →
-            </Button>
-          </div>
-        )}
+          )}
 
-        {/* Stage 2: Unified Landing Page (Marketing Angles + Compiler) */}
-        {expandedStage === 2 && (
-          <StudioUnifiedLandingPage onNext={() => {
-            setExpandedStage(3);
-            setCurrentStage(3);
-          }} />
-        )}
-
-        {/* Stage 3: Voiceover (Video Script Text & Audio) */}
-        {expandedStage === 3 && (
-          <VideoScriptStage
-            onNext={() => {
-              setExpandedStage(4);
-              setCurrentStage(4);
-            }}
-            productInfo={productInfo}
-            language={voiceLanguage}
-            market="gcc"
-          />
-        )}
-
-        {/* Stage 4: Scene Builder */}
-        {expandedStage === 4 && (
-          <div className="space-y-6">
-            {/* Smart Scene Builder V2 - Primary UI for AI-driven scene generation */}
-            {projectId ? (
-              <SmartSceneBuilderV2
-                projectId={projectId}
-                scripts={scriptSlots.filter(s => s.text.trim()).map((slot, idx) => ({
-                  id: `script-${slot.id}`,
-                  text: slot.text,
-                  language: voiceLanguage,
-                }))}
-                onProceedToAssembly={(scenePlan) => {
-                  // Convert scene plan to unified scenes format
-                  if (scenePlan?.scenes) {
-                    setUnifiedScenes(scenePlan.scenes.map((s: any) => ({
-                      id: s.id,
-                      index: s.index,
-                      text: s.visualIntent || '',
-                      visualPrompt: s.visualIntent || '',
-                      duration: s.duration,
-                      status: s.status,
-                      engine: s.selectedEngine?.engineName || 'auto',
-                      videoUrl: s.videoUrl,
-                      thumbnailUrl: s.thumbnailUrl,
-                    })));
-                    setScenes(scenePlan.scenes.map((s: any, i: number) => ({
-                      id: s.id,
-                      title: `Scene ${i + 1}`,
-                      description: s.visualIntent,
-                      visualPrompt: s.visualIntent,
-                      duration: s.duration,
-                    })));
-                  }
-                  setExpandedStage(5);
-                  setCurrentStage(5);
+          {/* Stage 1: Studio Image Generation (Prioritized) */}
+          {expandedStage === 1 && (
+            <div className="space-y-4">
+              <StudioImageGeneration
+                onNext={() => {
+                  setExpandedStage(2);
+                  setCurrentStage(2);
                 }}
-              />
-            ) : (
-              <Card className="bg-gradient-card border-border shadow-card p-8 text-center">
-                <Wand2 className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">Save your project first to use the Scene Builder</p>
-                <p className="text-xs text-muted-foreground mt-2">Complete earlier steps and save your project</p>
-              </Card>
-            )}
-
-          </div>
-        )}
-
-        {/* Stage 5: Auto-Ad Factory (Assembly) */}
-        {expandedStage === 5 && (
-          <div className="space-y-6">
-            {projectId ? (
-              <AutoAdFactory
                 projectId={projectId}
-                scriptId={scriptId || undefined}
-                scenesCount={unifiedScenes.length || scenes.length}
-                videosToGenerate={videosToGenerate}
-                onComplete={(videos) => {
-                  toast.success(`Created ${videos.length} video ads!`);
+              />
+              <Button
+                variant="ghost"
+                className="w-full text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setExpandedStage(2);
+                  setCurrentStage(Math.max(currentStage, 2));
+                }}
+              >
+                Skip this step →
+              </Button>
+            </div>
+          )}
+
+          {/* Stage 2: Unified Landing Page (Marketing Angles + Compiler) */}
+          {expandedStage === 2 && (
+            <StudioUnifiedLandingPage onNext={() => {
+              setExpandedStage(3);
+              setCurrentStage(3);
+            }} />
+          )}
+
+          {/* Stage 3: Voiceover (Video Script Text & Audio) */}
+          {expandedStage === 3 && (
+            <VideoScriptStage
+              onNext={() => {
+                setExpandedStage(4);
+                setCurrentStage(4);
+              }}
+              productInfo={productInfo}
+              language={voiceLanguage}
+              market="gcc"
+            />
+          )}
+
+          {/* Stage 4: Scene Builder */}
+          {expandedStage === 4 && (
+            <div className="space-y-6">
+              {/* Smart Scene Builder V2 - Primary UI for AI-driven scene generation */}
+              {projectId ? (
+                <SmartSceneBuilderV2
+                  projectId={projectId}
+                  scripts={scriptSlots.filter(s => s.text.trim()).map((slot, idx) => ({
+                    id: `script-${slot.id}`,
+                    text: slot.text,
+                    language: voiceLanguage,
+                  }))}
+                  onProceedToAssembly={(scenePlan) => {
+                    // Convert scene plan to unified scenes format
+                    if (scenePlan?.scenes) {
+                      setUnifiedScenes(scenePlan.scenes.map((s: any) => ({
+                        id: s.id,
+                        index: s.index,
+                        text: s.visualIntent || '',
+                        visualPrompt: s.visualIntent || '',
+                        duration: s.duration,
+                        status: s.status,
+                        engine: s.selectedEngine?.engineName || 'auto',
+                        videoUrl: s.videoUrl,
+                        thumbnailUrl: s.thumbnailUrl,
+                      })));
+                      setScenes(scenePlan.scenes.map((s: any, i: number) => ({
+                        id: s.id,
+                        title: `Scene ${i + 1}`,
+                        description: s.visualIntent,
+                        visualPrompt: s.visualIntent,
+                        duration: s.duration,
+                      })));
+                    }
+                    setExpandedStage(5);
+                    setCurrentStage(5);
+                  }}
+                />
+              ) : (
+                <Card className="bg-gradient-card border-border shadow-card p-8 text-center">
+                  <Wand2 className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                  <p className="text-muted-foreground">Save your project first to use the Scene Builder</p>
+                  <p className="text-xs text-muted-foreground mt-2">Complete earlier steps and save your project</p>
+                </Card>
+              )}
+
+            </div>
+          )}
+
+          {/* Stage 5: Auto-Ad Factory (Assembly) */}
+          {expandedStage === 5 && (
+            <div className="space-y-6">
+              {projectId ? (
+                <AutoAdFactory
+                  projectId={projectId}
+                  scriptId={scriptId || undefined}
+                  scenesCount={unifiedScenes.length || scenes.length}
+                  videosToGenerate={videosToGenerate}
+                  onComplete={(videos) => {
+                    toast.success(`Created ${videos.length} video ads!`);
+                    setExpandedStage(6);
+                    setCurrentStage(6);
+                  }}
+                />
+              ) : (
+                <Card className="bg-gradient-card border-border shadow-card p-8 text-center">
+                  <Palette className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                  <p className="text-muted-foreground">Save your project first to use the Auto-Ad Factory</p>
+                </Card>
+              )}
+
+              {/* Optional Timeline Editor */}
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  if (scenes.length === 0 && unifiedScenes.length === 0) {
+                    toast.error("No scenes available. Generate scenes first.");
+                    return;
+                  }
+                  setShowTimelineEditor(true);
+                }}
+              >
+                <Palette className="w-4 h-4 mr-2" />
+                Open Timeline Editor (Optional)
+              </Button>
+
+              {/* Proceed to Export */}
+              <Button
+                onClick={() => {
                   setExpandedStage(6);
                   setCurrentStage(6);
                 }}
-              />
-            ) : (
-              <Card className="bg-gradient-card border-border shadow-card p-8 text-center">
-                <Palette className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">Save your project first to use the Auto-Ad Factory</p>
-              </Card>
-            )}
+                className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow"
+              >
+                <ChevronRight className="w-4 h-4 mr-2" />
+                Next: Export Videos
+              </Button>
+            </div>
+          )}
 
-            {/* Optional Timeline Editor */}
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => {
-                if (scenes.length === 0 && unifiedScenes.length === 0) {
-                  toast.error("No scenes available. Generate scenes first.");
-                  return;
-                }
-                setShowTimelineEditor(true);
-              }}
-            >
-              <Palette className="w-4 h-4 mr-2" />
-              Open Timeline Editor (Optional)
-            </Button>
+          {/* Stage 6: Export */}
+          {expandedStage === 6 && (
+            <StudioExport />
+          )}
 
-            {/* Proceed to Export */}
+          {/* Save Button - shown when scenes exist */}
+          {(scenes.length > 0 || unifiedScenes.length > 0) && !scriptId && expandedStage <= 4 && (
             <Button
-              onClick={() => {
-                setExpandedStage(6);
-                setCurrentStage(6);
-              }}
+              onClick={saveProjectAndScenes}
+              disabled={isSaving}
               className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow"
+              size="lg"
             >
-              <ChevronRight className="w-4 h-4 mr-2" />
-              Next: Export Videos
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Project & Scenes
+                </>
+              )}
             </Button>
-          </div>
-        )}
-
-        {/* Stage 6: Export */}
-        {expandedStage === 6 && (
-          <StudioExport />
-        )}
-
-        {/* Save Button - shown when scenes exist */}
-        {(scenes.length > 0 || unifiedScenes.length > 0) && !scriptId && expandedStage <= 4 && (
-          <Button
-            onClick={saveProjectAndScenes}
-            disabled={isSaving}
-            className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-glow"
-            size="lg"
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4 mr-2" />
-                Save Project & Scenes
-              </>
-            )}
-          </Button>
-        )}
+          )}
+        </div>
       </div>
+
+
+      {/* Timeline Editor Dialog */}
+      <Dialog open={showTimelineEditor} onOpenChange={setShowTimelineEditor}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Palette className="w-5 h-5 text-primary" />
+              Timeline Editor
+            </DialogTitle>
+          </DialogHeader>
+          <VideoTimelineEditor
+            scenes={(unifiedScenes.length > 0 ? unifiedScenes : scenes).map((s, idx) => ({
+              id: s.id || `scene-${idx}`,
+              index: s.index ?? idx,
+              text: s.text || s.description || '',
+              scene_type: s.scene_type || s.videoType || null,
+              visual_prompt: s.visual_prompt || s.visualPrompt || null,
+              engine_name: s.engine_name || s.engine || null,
+              engine_id: s.engine_id || null,
+              status: s.status || 'pending',
+              video_url: s.video_url || s.videoUrl || null,
+              duration_sec: s.duration_sec || s.duration || 5,
+              transition_type: s.transition_type || s.transitionType || 'cut',
+              transition_duration_ms: s.transition_duration_ms || s.transitionDuration || 500,
+            }))}
+            onScenesUpdate={(updatedScenes) => {
+              // Update both state arrays for compatibility
+              const mappedScenes = updatedScenes.map(s => ({
+                ...s,
+                visual_prompt: s.visual_prompt,
+                transition_type: s.transition_type,
+                transition_duration_ms: s.transition_duration_ms,
+              }));
+              setScenes(mappedScenes);
+              setUnifiedScenes(mappedScenes.map((s, i) => ({
+                id: s.id,
+                index: i,
+                text: s.text,
+                visualPrompt: s.visual_prompt || '',
+                duration: s.duration_sec || 5,
+                status: (s.status || 'pending') as 'pending' | 'generating' | 'completed' | 'failed',
+                engine: s.engine_name || 'nano-banana',
+                videoUrl: s.video_url || undefined,
+              })));
+              toast.success("Timeline updated!");
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
-
-
-    {/* Timeline Editor Dialog */}
-    <Dialog open={showTimelineEditor} onOpenChange={setShowTimelineEditor}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Palette className="w-5 h-5 text-primary" />
-            Timeline Editor
-          </DialogTitle>
-        </DialogHeader>
-        <VideoTimelineEditor
-          scenes={(unifiedScenes.length > 0 ? unifiedScenes : scenes).map((s, idx) => ({
-            id: s.id || `scene-${idx}`,
-            index: s.index ?? idx,
-            text: s.text || s.description || '',
-            scene_type: s.scene_type || s.videoType || null,
-            visual_prompt: s.visual_prompt || s.visualPrompt || null,
-            engine_name: s.engine_name || s.engine || null,
-            engine_id: s.engine_id || null,
-            status: s.status || 'pending',
-            video_url: s.video_url || s.videoUrl || null,
-            duration_sec: s.duration_sec || s.duration || 5,
-            transition_type: s.transition_type || s.transitionType || 'cut',
-            transition_duration_ms: s.transition_duration_ms || s.transitionDuration || 500,
-          }))}
-          onScenesUpdate={(updatedScenes) => {
-            // Update both state arrays for compatibility
-            const mappedScenes = updatedScenes.map(s => ({
-              ...s,
-              visual_prompt: s.visual_prompt,
-              transition_type: s.transition_type,
-              transition_duration_ms: s.transition_duration_ms,
-            }));
-            setScenes(mappedScenes);
-            setUnifiedScenes(mappedScenes.map((s, i) => ({
-              id: s.id,
-              index: i,
-              text: s.text,
-              visualPrompt: s.visual_prompt || '',
-              duration: s.duration_sec || 5,
-              status: (s.status || 'pending') as 'pending' | 'generating' | 'completed' | 'failed',
-              engine: s.engine_name || 'nano-banana',
-              videoUrl: s.video_url || undefined,
-            })));
-            toast.success("Timeline updated!");
-          }}
-        />
-      </DialogContent>
-    </Dialog>
-  </div>
-);
+  );
 }
