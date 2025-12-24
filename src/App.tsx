@@ -24,6 +24,7 @@ import NotFound from "./pages/NotFound";
 import AITools from "./pages/AITools";
 import CreativeReplicator from "./pages/CreativeReplicator";
 import CreativeScale from "./pages/CreativeScale";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 const queryClient = new QueryClient();
 
@@ -44,8 +45,8 @@ const App = () => (
                       <Layout>
                         <Routes>
                           <Route path="/" element={<Dashboard />} />
-                          <Route path="/create" element={<CreateVideo />} />
-                          <Route path="/quick-generate" element={<CreateVideo />} />
+                          <Route path="/create" element={<ErrorBoundary><CreateVideo /></ErrorBoundary>} />
+                          <Route path="/quick-generate" element={<ErrorBoundary><CreateVideo /></ErrorBoundary>} />
                           <Route path="/creative-replicator" element={<CreativeReplicator />} />
                           <Route path="/creative-scale" element={<CreativeScale />} />
                           <Route path="/projects" element={<Projects />} />
