@@ -712,7 +712,7 @@ export default function Settings() {
         .from("user_settings")
         .select("preferences")
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
 
       const currentPrefs = (currentSettings?.preferences as Record<string, any>) || {};
       const updatedPrefs = {
@@ -720,10 +720,15 @@ export default function Settings() {
         google_drive_folder_url: googleDriveFolderUrl,
       };
 
+      // Use upsert to create row if it doesn't exist
       const { error } = await supabase
         .from("user_settings")
-        .update({ preferences: updatedPrefs })
-        .eq("user_id", user.id);
+        .upsert({ 
+          user_id: user.id,
+          preferences: updatedPrefs 
+        }, {
+          onConflict: 'user_id'
+        });
 
       if (error) throw error;
       toast.success("Google Drive settings saved. New projects will auto-create folders.");
