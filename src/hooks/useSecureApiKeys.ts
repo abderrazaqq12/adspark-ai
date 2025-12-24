@@ -35,14 +35,35 @@ export function useSecureApiKeys(): SecureApiKeysHook {
 
   const refreshProviders = useCallback(async () => {
     try {
-      const { data, error } = await supabase.rpc('get_my_api_key_providers');
-      
-      if (error) {
-        console.error('Error fetching API key providers:', error);
-        return;
+      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted';
+
+      if (isSelfHosted) {
+        // VPS Mode: Use local API proxy
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/api-keys', {
+          headers: {
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          }
+        });
+
+        if (!res.ok) {
+          console.error('Failed to fetch API keys from VPS');
+          return;
+        }
+
+        const data = await res.json();
+        setProviders(data.providers || []);
+      } else {
+        // Cloud Mode: Use Supabase RPC
+        const { data, error } = await supabase.rpc('get_my_api_key_providers');
+
+        if (error) {
+          console.error('Error fetching API key providers:', error);
+          return;
+        }
+
+        setProviders(data || []);
       }
-      
-      setProviders(data || []);
     } catch (err) {
       console.error('Failed to fetch API key providers:', err);
     } finally {
@@ -55,29 +76,62 @@ export function useSecureApiKeys(): SecureApiKeysHook {
   }, [refreshProviders]);
 
   const saveApiKey = useCallback(async (
-    provider: string, 
-    encryptedKey: string, 
+    provider: string,
+    encryptedKey: string,
     isActive: boolean = true
   ): Promise<boolean> => {
     try {
-      const { data, error } = await supabase.rpc('upsert_secure_api_key', {
-        p_provider: provider,
-        p_encrypted_key: encryptedKey,
-        p_is_active: isActive,
-      });
+      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted';
 
-      if (error) {
-        console.error('Error saving API key:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to save API key securely',
-          variant: 'destructive',
+      if (isSelfHosted) {
+        // VPS Mode: Use local API proxy
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/api-keys', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            provider,
+            encrypted_key: encryptedKey,
+            is_active: isActive
+          })
         });
-        return false;
-      }
 
-      await refreshProviders();
-      return true;
+        if (!res.ok) {
+          console.error('Error saving API key');
+          toast({
+            title: 'Error',
+            description: 'Failed to save API key securely',
+            variant: 'destructive',
+          });
+          return false;
+        }
+
+        await refreshProviders();
+        return true;
+      } else {
+        // Cloud Mode: Use Supabase RPC
+        const { data, error } = await supabase.rpc('upsert_secure_api_key', {
+          p_provider: provider,
+          p_encrypted_key: encryptedKey,
+          p_is_active: isActive,
+        });
+
+        if (error) {
+          console.error('Error saving API key:', error);
+          toast({
+            title: 'Error',
+            description: 'Failed to save API key securely',
+            variant: 'destructive',
+          });
+          return false;
+        }
+
+        await refreshProviders();
+        return true;
+      }
     } catch (err) {
       console.error('Failed to save API key:', err);
       return false;
@@ -86,22 +140,47 @@ export function useSecureApiKeys(): SecureApiKeysHook {
 
   const deleteApiKey = useCallback(async (provider: string): Promise<boolean> => {
     try {
-      const { data, error } = await supabase.rpc('delete_my_api_key', {
-        p_provider: provider,
-      });
+      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted';
 
-      if (error) {
-        console.error('Error deleting API key:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to delete API key',
-          variant: 'destructive',
+      if (isSelfHosted) {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`/api/api-keys/${provider}`, {
+          method: 'DELETE',
+          headers: {
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          }
         });
-        return false;
-      }
 
-      await refreshProviders();
-      return true;
+        if (!res.ok) {
+          console.error('Error deleting API key');
+          toast({
+            title: 'Error',
+            description: 'Failed to delete API key',
+            variant: 'destructive',
+          });
+          return false;
+        }
+
+        await refreshProviders();
+        return true;
+      } else {
+        const { data, error } = await supabase.rpc('delete_my_api_key', {
+          p_provider: provider,
+        });
+
+        if (error) {
+          console.error('Error deleting API key:', error);
+          toast({
+            title: 'Error',
+            description: 'Failed to delete API key',
+            variant: 'destructive',
+          });
+          return false;
+        }
+
+        await refreshProviders();
+        return true;
+      }
     } catch (err) {
       console.error('Failed to delete API key:', err);
       return false;
@@ -109,22 +188,44 @@ export function useSecureApiKeys(): SecureApiKeysHook {
   }, [refreshProviders, toast]);
 
   const toggleApiKeyActive = useCallback(async (
-    provider: string, 
+    provider: string,
     isActive: boolean
   ): Promise<boolean> => {
     try {
-      const { data, error } = await supabase.rpc('toggle_api_key_active', {
-        p_provider: provider,
-        p_is_active: isActive,
-      });
+      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted';
 
-      if (error) {
-        console.error('Error toggling API key:', error);
-        return false;
+      if (isSelfHosted) {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`/api/api-keys/${provider}/toggle`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({ is_active: isActive })
+        });
+
+        if (!res.ok) {
+          console.error('Error toggling API key');
+          return false;
+        }
+
+        await refreshProviders();
+        return true;
+      } else {
+        const { data, error } = await supabase.rpc('toggle_api_key_active', {
+          p_provider: provider,
+          p_is_active: isActive,
+        });
+
+        if (error) {
+          console.error('Error toggling API key:', error);
+          return false;
+        }
+
+        await refreshProviders();
+        return true;
       }
-
-      await refreshProviders();
-      return true;
     } catch (err) {
       console.error('Failed to toggle API key:', err);
       return false;

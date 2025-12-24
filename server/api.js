@@ -2802,6 +2802,144 @@ app.get('/api/user/profile', (req, res) => {
 });
 
 // ============================================
+// API KEYS MANAGEMENT (VPS Mode)
+// ============================================
+
+// Simple file-based storage for API keys when Supabase isn't available
+const API_KEYS_FILE = path.join(DATA_DIR, 'api_keys.json');
+
+function loadApiKeys() {
+  try {
+    if (fs.existsSync(API_KEYS_FILE)) {
+      const data = fs.readFileSync(API_KEYS_FILE, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.error('[API Keys] Load error:', err);
+  }
+  return {};
+}
+
+function saveApiKeys(keys) {
+  try {
+    fs.writeFileSync(API_KEYS_FILE, JSON.stringify(keys, null, 2), 'utf8');
+    return true;
+  } catch (err) {
+    console.error('[API Keys] Save error:', err);
+    return false;
+  }
+}
+
+/**
+ * GET /api/api-keys
+ * Get all API keys for the VPS Admin (metadata only, no actual keys)
+ */
+app.get('/api/api-keys', async (req, res) => {
+  try {
+    const apiKeys = loadApiKeys();
+
+    // Return metadata only (no actual key values)
+    const providers = Object.keys(apiKeys).map(provider => ({
+      provider,
+      is_active: apiKeys[provider]?.is_active !== false,
+      last_validated_at: apiKeys[provider]?.last_validated_at || null,
+      last_validation_success: apiKeys[provider]?.last_validation_success || null,
+      last_validation_message: apiKeys[provider]?.last_validation_message || null
+    }));
+
+    res.json({ providers });
+  } catch (err) {
+    console.error('[API Keys] Fetch failed:', err);
+    jsonError(res, 500, 'FETCH_FAILED', err.message);
+  }
+});
+
+/**
+ * POST /api/api-keys
+ * Save an API key for the VPS Admin
+ */
+app.post('/api/api-keys', async (req, res) => {
+  const { provider, encrypted_key, is_active = true } = req.body;
+
+  if (!provider || !encrypted_key) {
+    return jsonError(res, 400, 'INVALID_REQUEST', 'provider and encrypted_key are required');
+  }
+
+  try {
+    const apiKeys = loadApiKeys();
+
+    // Store the key
+    apiKeys[provider] = {
+      key: encrypted_key,
+      is_active,
+      created_at: new Date().toISOString(),
+      last_validated_at: null,
+      last_validation_success: null,
+      last_validation_message: null
+    };
+
+    if (!saveApiKeys(apiKeys)) {
+      return jsonError(res, 500, 'SAVE_FAILED', 'Failed to persist API key');
+    }
+
+    res.json({ ok: true, message: 'API key saved' });
+  } catch (err) {
+    console.error('[API Keys] Save failed:', err);
+    jsonError(res, 500, 'SAVE_FAILED', err.message);
+  }
+});
+
+/**
+ * DELETE /api/api-keys/:provider
+ * Delete an API key
+ */
+app.delete('/api/api-keys/:provider', async (req, res) => {
+  const { provider } = req.params;
+
+  try {
+    const apiKeys = loadApiKeys();
+    delete apiKeys[provider];
+
+    if (!saveApiKeys(apiKeys)) {
+      return jsonError(res, 500, 'DELETE_FAILED', 'Failed to persist changes');
+    }
+
+    res.json({ ok: true, message: 'API key deleted' });
+  } catch (err) {
+    console.error('[API Keys] Delete failed:', err);
+    jsonError(res, 500, 'DELETE_FAILED', err.message);
+  }
+});
+
+/**
+ * PATCH /api/api-keys/:provider/toggle
+ * Toggle API key active status
+ */
+app.patch('/api/api-keys/:provider/toggle', async (req, res) => {
+  const { provider } = req.params;
+  const { is_active } = req.body;
+
+  try {
+    const apiKeys = loadApiKeys();
+
+    if (!apiKeys[provider]) {
+      return jsonError(res, 404, 'NOT_FOUND', 'API key not found');
+    }
+
+    apiKeys[provider].is_active = is_active;
+
+    if (!saveApiKeys(apiKeys)) {
+      return jsonError(res, 500, 'TOGGLE_FAILED', 'Failed to persist changes');
+    }
+
+    res.json({ ok: true, message: 'API key status updated' });
+  } catch (err) {
+    console.error('[API Keys] Toggle failed:', err);
+    jsonError(res, 500, 'TOGGLE_FAILED', err.message);
+  }
+});
+
+// ============================================
 // 404 HANDLER (JSON only)
 // ============================================
 

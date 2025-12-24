@@ -617,6 +617,16 @@ export default function Settings() {
   };
 
   const testApiKey = async (keyType: string) => {
+    const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted';
+
+    // In VPS mode, API testing isn't supported (no Edge Functions)
+    if (isSelfHosted) {
+      toast.info("API Key Testing Not Available", {
+        description: "Testing is not available in self-hosted mode. Your key will be saved and used directly.",
+      });
+      return;
+    }
+
     const apiKey = apiKeys[keyType];
     if (!apiKey) {
       toast.error("Please enter an API key first");
