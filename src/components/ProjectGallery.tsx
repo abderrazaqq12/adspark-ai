@@ -73,18 +73,13 @@ export const ProjectGallery = ({ onSelectProject, compact = false }: ProjectGall
   const fetchProjects = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .order('updated_at', { ascending: false });
-
-      if (error) throw error;
+      const response = await fetch('/api/projects');
+      if (!response.ok) throw new Error('Failed to fetch projects');
+      const data = await response.json();
       setProjects(data || []);
     } catch (error: any) {
       console.error(error);
-      // In self-hosted, don't toast error on empty/missing table
-      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted';
-      if (!isSelfHosted) toast.error('Failed to load projects');
+      toast.error('Failed to load projects from VPS');
     } finally {
       setLoading(false);
     }
@@ -93,79 +88,25 @@ export const ProjectGallery = ({ onSelectProject, compact = false }: ProjectGall
   const fetchProjectAssets = async (projectId: string) => {
     setLoadingAssets(true);
     try {
-      // Fetch all asset types in parallel
-      const [imagesRes, videosRes, scriptsRes, landingPagesRes] = await Promise.all([
-        supabase.from('generated_images').select('*').eq('project_id', projectId),
-        supabase.from('video_outputs').select('*').eq('project_id', projectId),
-        supabase.from('scripts').select('*').eq('project_id', projectId),
-        supabase.from('landing_pages').select('*').eq('project_id', projectId),
-      ]);
+      const response = await fetch(`/api/projects/${projectId}/resources`);
+      if (!response.ok) throw new Error('Failed to fetch resources');
+      const resourceData = await response.json();
 
-      const allAssets: Asset[] = [];
-
-      // Map images
-      if (imagesRes.data) {
-        imagesRes.data.forEach(img => {
-          allAssets.push({
-            id: img.id,
-            type: 'image',
-            url: img.image_url || undefined,
-            name: img.image_type || 'Image',
-            status: img.status || 'completed',
-            created_at: img.created_at || new Date().toISOString(),
-            metadata: { prompt: img.prompt },
-          });
-        });
-      }
-
-      // Map videos
-      if (videosRes.data) {
-        videosRes.data.forEach(vid => {
-          allAssets.push({
-            id: vid.id,
-            type: 'video',
-            url: vid.final_video_url || undefined,
-            name: `Video ${vid.duration_sec ? `(${vid.duration_sec}s)` : ''}`,
-            status: vid.status || 'completed',
-            created_at: vid.created_at || new Date().toISOString(),
-          });
-        });
-      }
-
-      // Map scripts
-      if (scriptsRes.data) {
-        scriptsRes.data.forEach(script => {
-          allAssets.push({
-            id: script.id,
-            type: 'script',
-            name: script.raw_text?.substring(0, 50) + '...' || 'Script',
-            status: script.status || 'completed',
-            created_at: script.created_at || new Date().toISOString(),
-            metadata: { language: script.language, tone: script.tone },
-          });
-        });
-      }
-
-      // Map landing pages
-      if (landingPagesRes.data) {
-        landingPagesRes.data.forEach(page => {
-          allAssets.push({
-            id: page.id,
-            type: 'landing_page',
-            name: page.title,
-            status: page.status || 'draft',
-            created_at: page.created_at || new Date().toISOString(),
-            metadata: { language: page.language },
-          });
-        });
-      }
+      const allAssets: Asset[] = resourceData.map((r: any) => ({
+        id: r.resource_id,
+        type: r.resource_type as any,
+        url: r.resource_path,
+        name: r.metadata?.name || `${r.resource_type} Asset`,
+        status: 'completed',
+        created_at: r.created_at,
+        metadata: r.metadata
+      }));
 
       // Sort by created_at descending
       allAssets.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
       setAssets(allAssets);
     } catch (error: any) {
-      toast.error('Failed to load project assets');
+      toast.error('Failed to load project assets from VPS');
       console.error(error);
     } finally {
       setLoadingAssets(false);

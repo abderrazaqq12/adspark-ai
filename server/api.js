@@ -43,6 +43,7 @@ import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
 import { trackCost, supabase } from './supabase.js';
 import { trackResource, validateProject } from './project-manager.js';
+import { v4 as uuidv4 } from 'uuid';
 import db from './local-db.js';
 import { enforceProject } from './middleware/project-enforcer.js';
 import { errorHandler } from './error-handler.js';
@@ -230,6 +231,11 @@ app.use('/api', analyticsRouter);
 // ============================================
 import { listProjects, getProject, createProject as createProjectFn, updateProject, deleteProject } from './project-manager.js';
 
+// ============================================
+// PROJECT ROUTES (VPS Edition)
+// ============================================
+import { listProjects, getProject, createProject as createProjectFn, updateProject, deleteProject } from './project-manager.js';
+
 app.get('/api/projects', async (req, res) => {
   try {
     const userId = req.user.id;
@@ -252,7 +258,6 @@ app.get('/api/projects/:id', async (req, res) => {
 
 app.get('/api/projects/:id/resources', async (req, res) => {
   try {
-    const userId = req.user.id;
     const resources = db.prepare('SELECT * FROM project_resources WHERE project_id = ?').all(req.params.id);
     res.json(resources);
   } catch (err) {
@@ -284,6 +289,130 @@ app.delete('/api/projects/:id', async (req, res) => {
   try {
     const userId = req.user.id;
     await deleteProject(req.params.id, userId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
+// CREATIVE ENTITIES (Scripts & Scenes)
+// ============================================
+
+app.get('/api/projects/:id/scripts', async (req, res) => {
+  try {
+    const scripts = db.prepare('SELECT * FROM scripts WHERE project_id = ? ORDER BY created_at DESC').all(req.params.id);
+    res.json(scripts);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/projects/:id/scripts', async (req, res) => {
+  try {
+    const { id = uuidv4(), raw_text, language, tone } = req.body;
+    db.prepare('INSERT INTO scripts (id, project_id, raw_text, language, tone) VALUES (?, ?, ?, ?, ?)')
+      .run(id, req.params.id, raw_text, language, tone);
+    res.json({ id, project_id: req.params.id, raw_text, language, tone });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/projects/:id/scenes', async (req, res) => {
+  try {
+    const scenes = db.prepare('SELECT * FROM scenes WHERE project_id = ? ORDER BY sequence_index ASC').all(req.params.id);
+    res.json(scenes);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/projects/:id/scenes', async (req, res) => {
+  try {
+    const { id = uuidv4(), script_id, sequence_index, content, media_url, media_type, duration_ms } = req.body;
+    db.prepare(`
+      INSERT INTO scenes (id, script_id, project_id, sequence_index, content, media_url, media_type, duration_ms)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, script_id, req.params.id, sequence_index, content, media_url, media_type, duration_ms);
+    res.json({ id, script_id, sequence_index, content });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/scenes/:id', async (req, res) => {
+  try {
+    const updates = req.body;
+    const fields = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+    const values = Object.values(updates);
+    db.prepare(`UPDATE scenes SET ${fields} WHERE id = ?`).run(...values, req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/scenes/:id', async (req, res) => {
+  try {
+    db.prepare('DELETE FROM scenes WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
+// SYSTEM SETTINGS & TEMPLATES
+// ============================================
+
+app.get('/api/settings', async (req, res) => {
+  try {
+    const rows = db.prepare('SELECT * FROM user_settings').all();
+    const settings = rows.reduce((acc, row) => {
+      acc[row.key] = row.value;
+      return acc;
+    }, {});
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/settings', async (req, res) => {
+  try {
+    const { key, value } = req.body;
+    db.prepare('INSERT OR REPLACE INTO user_settings (key, value, updated_at) VALUES (?, ?, datetime("now"))')
+      .run(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/templates', async (req, res) => {
+  try {
+    const templates = db.prepare('SELECT * FROM prompt_templates ORDER BY category, name').all();
+    res.json(templates);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/templates', async (req, res) => {
+  try {
+    const { id = uuidv4(), name, category, system_prompt, user_prompt } = req.body;
+    db.prepare('INSERT INTO prompt_templates (id, name, category, system_prompt, user_prompt) VALUES (?, ?, ?, ?, ?)')
+      .run(id, name, category, system_prompt, user_prompt);
+    res.json({ id, name, category });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/templates/:id', async (req, res) => {
+  try {
+    db.prepare('DELETE FROM prompt_templates WHERE id = ?').run(req.params.id);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

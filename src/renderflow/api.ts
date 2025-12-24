@@ -106,60 +106,30 @@ export const RenderFlowApi = {
         }
     },
 
-    // Upload File - tries VPS first, falls back to Supabase storage
+    // Upload File - STRICT VPS ONLY
     uploadAsset: async (file: File): Promise<UploadResponse> => {
-        // Try VPS upload first
-        try {
-            const fd = new FormData();
-            fd.append('file', file);
+        const fd = new FormData();
+        fd.append('file', file);
 
-            const res = await fetch(`${getBaseUrl()}/upload`, {
-                method: 'POST',
-                body: fd,
-                signal: AbortSignal.timeout(30000) // 30s timeout for upload
-            });
+        const res = await fetch(`${getBaseUrl()}/upload`, {
+            method: 'POST',
+            body: fd,
+            signal: AbortSignal.timeout(60000) // 60s timeout for upload
+        });
 
-            // Handle specific errors explicitly
-            if (res.status === 413) {
-                throw new Error('413 Request Entity Too Large: File exceeds maximum size (500MB)');
-            }
-            if (res.status === 415) {
-                throw new Error('415 Unsupported Media Type: Only video files allowed');
-            }
-            if (res.ok) {
-                return res.json();
-            }
-            // If VPS returns error, fall through to Supabase
-        } catch (e: any) {
-            // Network errors or timeouts - fall through to Supabase
-            console.log('VPS upload unavailable, using Supabase storage:', e.message);
+        if (res.status === 413) {
+            throw new Error('413 Request Entity Too Large: File exceeds maximum size (500MB)');
+        }
+        if (res.status === 415) {
+            throw new Error('415 Unsupported Media Type: Only video files allowed');
         }
 
-        // Fallback: Upload to Supabase storage
-        const timestamp = Date.now();
-        const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const filePath = `renderflow/${timestamp}_${sanitizedName}`;
-
-        const { data, error } = await supabase.storage
-            .from('videos')
-            .upload(filePath, file, {
-                cacheControl: '3600',
-                upsert: false
-            });
-
-        if (error) {
-            throw new Error(`Supabase upload failed: ${error.message}`);
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`Upload failed: ${res.status} - ${text}`);
         }
 
-        // Get public URL
-        const { data: urlData } = supabase.storage
-            .from('videos')
-            .getPublicUrl(filePath);
-
-        return {
-            url: urlData.publicUrl,
-            size: file.size
-        };
+        return res.json();
     },
 
     // Submit Job - POST /render/jobs
@@ -219,22 +189,14 @@ export const RenderFlowApi = {
 
     // List Jobs - GET /render/jobs
     getHistory: async (): Promise<HistoryResponse> => {
-        try {
-            const res = await fetch(`${getBaseUrl()}/jobs?limit=20`, {
-                signal: AbortSignal.timeout(5000)
-            });
-            if (!res.ok) {
-                const text = await res.text();
-                throw new Error(`Failed to fetch history: ${res.status} - ${text}`);
-            }
-            return res.json();
-        } catch (e: any) {
-            // If VPS unavailable, return empty history
-            if (e.name === 'AbortError' || e.message.includes('fetch') || e.message.includes('500')) {
-                return { jobs: [] };
-            }
-            throw e;
+        const res = await fetch(`${getBaseUrl()}/jobs?limit=20`, {
+            signal: AbortSignal.timeout(5000)
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`Failed to fetch history: ${res.status} - ${text}`);
         }
+        return res.json();
     },
 
     // Submit Execution Plan - POST /render/jobs
@@ -244,7 +206,7 @@ export const RenderFlowApi = {
         console.log('[RenderFlowApi] Plan ID:', plan.id);
         console.log('[RenderFlowApi] Plan Timeline Segments:', plan.timeline?.length || 0);
         console.log('[RenderFlowApi] Plan Audio Tracks:', plan.audio_tracks?.length || 0);
-        
+
         // Log timeline details
         if (plan.timeline) {
             plan.timeline.forEach((seg: any, i: number) => {

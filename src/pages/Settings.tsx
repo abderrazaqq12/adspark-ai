@@ -393,53 +393,41 @@ export default function Settings() {
 
   const fetchData = async () => {
     try {
-      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
+      // 1. Fetch VPS Templates
+      const templatesRes = await fetch('/api/templates');
+      if (!templatesRes.ok) throw new Error('Failed to fetch templates');
+      const templatesData = await templatesRes.json();
 
-      let userId = '170d6fb1-4e4f-4704-ab9a-a917dc86cba5';
-      if (!isSelfHosted) {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return; // Strict auth only for cloud
-        userId = user.id;
-      }
-
-      // In self-hosted, we just return empty/default data if tables don't exist or fail
-      // We wrap Supabase calls to not fail hard
-      const [templatesRes, settingsRes] = await Promise.all([
-        supabase.from("prompt_templates").select("*").order("created_at", { ascending: false }).catch(() => ({ data: [], error: null })),
-        supabase.from("user_settings").select("*").maybeSingle().catch(() => ({ data: null, error: null })),
-      ]);
-
-      const templatesWithVariables = (templatesRes.data || []).map(t => ({
+      const templatesWithVariables = (templatesData || []).map((t: any) => ({
         ...t,
-        variables: Array.isArray(t.variables) ? (t.variables as string[]) : []
+        variables: Array.isArray(t.variables) ? t.variables : []
       }));
       setTemplates(templatesWithVariables as PromptTemplate[]);
 
-      if (settingsRes.data) {
-        setSettings(settingsRes.data as UserSettings);
-        // Only load activated models from user_settings (not API keys)
-        if (settingsRes.data.api_keys) {
-          const keys = settingsRes.data.api_keys as Record<string, any>;
-          const modelsOnly: Record<string, string[]> = {};
+      // 2. Fetch VPS Settings
+      const settingsRes = await fetch('/api/settings');
+      if (!settingsRes.ok) throw new Error('Failed to fetch settings');
+      const settingsData = await settingsRes.json();
 
-          Object.entries(keys).forEach(([key, value]) => {
+      if (settingsData) {
+        setSettings(settingsData as UserSettings);
+
+        // Load configurations from VPS settings
+        const apiKeysVal = typeof settingsData.api_keys === 'string' ? JSON.parse(settingsData.api_keys) : settingsData.api_keys;
+        if (apiKeysVal) {
+          const modelsOnly: Record<string, string[]> = {};
+          Object.entries(apiKeysVal).forEach(([key, value]) => {
             if (key.endsWith('_MODELS') && Array.isArray(value)) {
               modelsOnly[key.replace('_MODELS', '')] = value;
             }
           });
-
           setActivatedModels(modelsOnly);
         }
-        // Load Google Drive from preferences
-        const prefs = settingsRes.data.preferences as Record<string, any> | null;
+
+        const prefs = typeof settingsData.preferences === 'string' ? JSON.parse(settingsData.preferences) : settingsData.preferences;
         if (prefs) {
           setGoogleDriveFolderUrl(prefs.google_drive_folder_url || "");
         }
-      }
-
-      // Refresh secure API key providers
-      if (!isSelfHosted) {
-        await refreshProviders();
       }
     } catch (error) {
       console.error("Error fetching data:", error);
