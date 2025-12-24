@@ -2099,7 +2099,7 @@ app.post('/api/render/renderflow/upload', (req, res) => {
 /**
  * POST /api/upload
  * Upload a video/image file
- * REQUIRES: projectId (enforced by middleware)
+ * projectId is optional - uses 'general_assets' project if not provided
  */
 app.post('/api/upload', async (req, res) => {
   // First, handle the file upload
@@ -2120,27 +2120,36 @@ app.post('/api/upload', async (req, res) => {
       return jsonError(res, 400, 'NO_FILE', 'No file provided. Use field name "file"');
     }
 
-    // Then enforce project context
-    const projectId = req.body.projectId;
-    if (!projectId) {
-      // Clean up uploaded file if no project
-      try { fs.unlinkSync(req.file.path); } catch (e) { }
-      return jsonError(res, 400, 'PROJECT_REQUIRED', 'projectId is required for all uploads');
-    }
+    // Use provided projectId or default to 'general_assets'
+    const projectId = req.body.projectId || 'general_assets';
 
-    // Validate project (Local DB)
+    // Validate/ensure project exists (Local DB)
     let project;
     try {
-      // In single user mode, userId logic is loose, but we pass what we have
       const mockUserId = '00000000-0000-0000-0000-000000000000';
       project = await validateProject(projectId, req.user?.id || mockUserId);
     } catch (e) {
-      try { fs.unlinkSync(req.file.path); } catch (delErr) { }
-      return jsonError(res, 404, 'PROJECT_NOT_FOUND', e.message);
+      // If project doesn't exist and it's the default, create it
+      if (projectId === 'general_assets') {
+        console.log('[Upload] Creating default general_assets project');
+        try {
+          db.prepare(`
+            INSERT OR IGNORE INTO projects (id, name, user_id, created_at)
+            VALUES (?, ?, ?, ?)
+          `).run(projectId, 'General Assets', req.user?.id || mockUserId, new Date().toISOString());
+
+        } catch (dbErr) {
+          console.warn('[Upload] Could not create default project:', dbErr.message);
+        }
+      } else {
+        // For custom projectIds, fail if project doesn't exist
+        try { fs.unlinkSync(req.file.path); } catch (delErr) { }
+        return jsonError(res, 404, 'PROJECT_NOT_FOUND', e.message);
+      }
     }
 
     const filePath = path.join(req.file.destination, req.file.filename);
-    const publicUrl = `/uploads/${req.body.projectId ? req.body.projectId + '/' : ''}${req.file.filename}`;
+    const publicUrl = `/uploads/${projectId !== 'general_assets' && req.body.projectId ? req.body.projectId + '/' : ''}${req.file.filename}`;
     const fileId = req.file.filename.split('.')[0];
 
     console.log(`[Upload] Saved: ${req.file.filename} (${req.file.size} bytes) to project ${projectId}`);
@@ -2164,6 +2173,7 @@ app.post('/api/upload', async (req, res) => {
 
     res.json({
       ok: true,
+      url: publicUrl, // Return 'url' for consistency with useVideoUpload
       fileId,
       projectId,
       filePath: filePath,
