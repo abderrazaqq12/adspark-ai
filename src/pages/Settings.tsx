@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import { Save, Plus, Trash2, FileText, Loader2, Pencil, CheckCircle, XCircle, ExternalLink, Key, Eye, EyeOff, Bot, RefreshCw, ChevronDown, Power, Database, ShieldCheck, Settings as SettingsIcon, Globe, Sliders, Server, HardDrive } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -343,6 +343,7 @@ const API_KEY_CATEGORIES: APIKeyCategory[] = [
 
 
 export default function Settings() {
+  const { user } = useAuth();
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -452,7 +453,6 @@ export default function Settings() {
 
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
       const variables = extractVariables(formData.template_text);
@@ -525,7 +525,6 @@ export default function Settings() {
   const handleSaveApiKeys = async () => {
     setSavingKeys(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
       // Save each API key securely using the secure_api_keys table
@@ -702,7 +701,6 @@ export default function Settings() {
   const saveGoogleDriveSettings = async () => {
     setSavingGoogleDrive(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
       // Get current preferences and merge

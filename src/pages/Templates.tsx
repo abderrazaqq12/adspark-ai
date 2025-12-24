@@ -5,12 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { 
-  Search, 
-  Loader2, 
-  FileText, 
-  Play, 
-  Copy, 
+import {
+  Search,
+  Loader2,
+  FileText,
+  Play,
+  Copy,
   CheckCircle2,
   Sparkles,
   ShoppingCart,
@@ -20,6 +20,7 @@ import {
   Zap
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
 interface Template {
@@ -451,6 +452,7 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 };
 
 export default function Templates() {
+  const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [templates, setTemplates] = useState<Template[]>(PRESET_TEMPLATES);
@@ -461,14 +463,13 @@ export default function Templates() {
 
   const filteredTemplates = templates.filter(t => {
     const matchesSearch = t.name.toLowerCase().includes(search.toLowerCase()) ||
-                         t.description.toLowerCase().includes(search.toLowerCase());
+      t.description.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = selectedCategory === "all" || t.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
   const handleUseTemplate = async (template: Template) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         toast.error("Please sign in to use templates");
         return;
@@ -590,8 +591,8 @@ export default function Templates() {
               <div className="flex gap-2">
                 <Dialog>
                   <DialogTrigger asChild>
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       className="flex-1"
                       onClick={() => setSelectedTemplate(template)}
                     >
@@ -629,7 +630,7 @@ export default function Templates() {
                     </div>
                   </DialogContent>
                 </Dialog>
-                <Button 
+                <Button
                   onClick={() => handleUseTemplate(template)}
                   className="flex-1 bg-gradient-primary text-primary-foreground"
                 >

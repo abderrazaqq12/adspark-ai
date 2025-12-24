@@ -9,12 +9,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
-import { 
+import {
   Wand2, Video, Image, Upload, Loader2, Users, Zap, Settings2, X, FileVideo, FileImage, Layers, Globe
 } from "lucide-react";
 import { toast } from "sonner";
 import { useExtendedAITools } from "@/hooks/useExtendedAITools";
 import { useBatchProcessing } from "@/hooks/useBatchProcessing";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { AIToolsDebugPanel } from "@/components/ai-tools/AIToolsDebugPanel";
 import { ExecutionStatusTracker } from "@/components/ai-tools/ExecutionStatusTracker";
@@ -27,17 +28,18 @@ import { CountrySelector } from "@/components/audience/CountrySelector";
 import { LANGUAGES } from "@/lib/audience/countries";
 
 export default function AITools() {
-  // Global audience context
+  // Global audience context and Authenticated Admin
   const { resolved: audience } = useAudience();
-  
-  const { 
+  const { user } = useAuth();
+
+  const {
     isExecuting, executionProgress, executeTool, getTools, getImageModels, getVideoModels,
     getTalkingActorModels, getPresets, currentDebug, executionTiming, executionHistory,
     lastOutputUrl, lastOutputType, lastSuccess, estimateCost, clearHistory, getTool, lastResults
   } = useExtendedAITools();
 
   const {
-    queue, isProcessing: isBatchProcessing, currentIndex, 
+    queue, isProcessing: isBatchProcessing, currentIndex,
     addToQueue, removeFromQueue, reorderQueue, clearQueue, startBatch, pauseBatch
   } = useBatchProcessing();
 
@@ -48,7 +50,7 @@ export default function AITools() {
   const [targetCountry, setTargetCountry] = useState("");
   const [language, setLanguage] = useState("");
   const [activeCategory, setActiveCategory] = useState("tools");
-  
+
   // Sync with global audience when loaded
   useEffect(() => {
     if (!targetCountry) setTargetCountry(audience.country);
@@ -58,14 +60,14 @@ export default function AITools() {
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [batchMode, setBatchMode] = useState(false);
-  
+
   const [imageSettings, setImageSettings] = useState<ImageOutputSettings>({
     quality: 'standard', aspectRatio: '1:1', resolution: 'auto', numOutputs: 1
   });
   const [videoSettings, setVideoSettings] = useState<VideoOutputSettings>({
     aspectRatio: '16:9', duration: 5, fps: 'auto', qualityTier: 'balanced'
   });
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const batchInputRef = useRef<HTMLInputElement>(null);
 
@@ -96,7 +98,6 @@ export default function AITools() {
     setUploadedFile(file);
     setIsUploading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) { toast.error("Please sign in"); setIsUploading(false); return; }
       const fileExt = file.name.split(".").pop();
       const fileName = `${user.id}/ai-tools/${Date.now()}.${fileExt}`;
@@ -126,7 +127,7 @@ export default function AITools() {
   const handleBatchFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    
+
     await addToQueue(Array.from(files));
     if (batchInputRef.current) batchInputRef.current.value = "";
   };
@@ -157,7 +158,7 @@ export default function AITools() {
     });
   };
 
-  const currentEstimatedCost = selectedTool 
+  const currentEstimatedCost = selectedTool
     ? estimateCost(selectedTool, activeCategory === 'image' ? imageSettings : undefined, activeCategory === 'video' ? videoSettings : undefined)
     : 0;
 
@@ -269,7 +270,7 @@ export default function AITools() {
 
         <div className="space-y-4">
           <ExecutionStatusTracker timing={executionTiming} toolName={selectedTool ? getTool(selectedTool)?.name : undefined} />
-          
+
           <Card className="bg-gradient-card border-border">
             <CardHeader>
               <CardTitle className="text-lg flex items-center justify-between">
@@ -281,9 +282,9 @@ export default function AITools() {
                   <Label htmlFor="batch-mode" className="text-sm font-normal text-muted-foreground">
                     Batch Mode
                   </Label>
-                  <Switch 
-                    id="batch-mode" 
-                    checked={batchMode} 
+                  <Switch
+                    id="batch-mode"
+                    checked={batchMode}
                     onCheckedChange={setBatchMode}
                   />
                 </div>
@@ -293,31 +294,31 @@ export default function AITools() {
               {batchMode ? (
                 // Batch Mode UI
                 <div className="space-y-3">
-                  <input 
-                    ref={batchInputRef} 
-                    type="file" 
-                    accept={getAcceptedFileTypes()} 
-                    onChange={handleBatchFileSelect} 
+                  <input
+                    ref={batchInputRef}
+                    type="file"
+                    accept={getAcceptedFileTypes()}
+                    onChange={handleBatchFileSelect}
                     multiple
-                    className="hidden" 
-                    id="batch-upload" 
+                    className="hidden"
+                    id="batch-upload"
                   />
-                  <label 
-                    htmlFor="batch-upload" 
+                  <label
+                    htmlFor="batch-upload"
                     className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-primary/50 rounded-lg cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors bg-primary/5"
                   >
                     <Layers className="w-10 h-10 text-primary mb-2" />
                     <span className="text-sm font-medium text-foreground">Drop multiple files here</span>
                     <span className="text-xs text-muted-foreground mt-1">or click to select files</span>
                   </label>
-                  
+
                   <div className="space-y-2">
                     <Label>Prompt (applies to all files)</Label>
-                    <Textarea 
-                      placeholder="Describe the transformation to apply..." 
-                      value={prompt} 
-                      onChange={(e) => setPrompt(e.target.value)} 
-                      className="bg-muted/50 min-h-[60px]" 
+                    <Textarea
+                      placeholder="Describe the transformation to apply..."
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      className="bg-muted/50 min-h-[60px]"
                     />
                   </div>
                 </div>
@@ -380,9 +381,9 @@ export default function AITools() {
           )}
 
           {(activeCategory === 'image' || activeCategory === 'video') && (
-            <OutputControlsPanel 
-              type={activeCategory as 'image' | 'video'} 
-              imageSettings={imageSettings} 
+            <OutputControlsPanel
+              type={activeCategory as 'image' | 'video'}
+              imageSettings={imageSettings}
               videoSettings={videoSettings}
               onImageSettingsChange={setImageSettings}
               onVideoSettingsChange={setVideoSettings}
@@ -390,16 +391,16 @@ export default function AITools() {
             />
           )}
 
-          <OutputResultPanel 
-            outputUrl={lastOutputUrl} 
-            outputType={lastOutputType} 
-            isSuccess={lastSuccess} 
+          <OutputResultPanel
+            outputUrl={lastOutputUrl}
+            outputType={lastOutputType}
+            isSuccess={lastSuccess}
             toolName={selectedTool ? getTool(selectedTool)?.name : undefined}
             assetId={selectedTool ? lastResults[selectedTool]?.assetId : undefined}
           />
-          
+
           <AIToolsDebugPanel debug={currentDebug} selectedTool={selectedTool} estimatedCost={currentEstimatedCost} />
-          
+
           <ExecutionHistoryPanel history={executionHistory} onClear={clearHistory} />
         </div>
       </div>

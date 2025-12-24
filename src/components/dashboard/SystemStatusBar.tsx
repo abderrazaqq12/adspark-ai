@@ -56,6 +56,7 @@ export function SystemStatusBar() {
   const [queueStats, setQueueStats] = useState<QueueStats>({ active: 0, waiting: 0, failed24h: 0 });
   const [storage, setStorage] = useState<StorageStats>({ used: '0 GB', remaining: '∞', percentage: 0, isFull: false });
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const isRealtimeConnected = false; // Realtime disabled in VPS lockdown mode
 
 
   // Initialize critical notifications with sound and browser alerts

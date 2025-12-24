@@ -19,7 +19,7 @@ import Settings from "./pages/Settings";
 import Videos from "./pages/Videos";
 import Analytics from "./pages/Analytics";
 import Templates from "./pages/Templates";
-// import Auth from "./pages/Auth";
+import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import AITools from "./pages/AITools";
 import CreativeReplicator from "./pages/CreativeReplicator";
@@ -35,7 +35,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            {/* <Route path="/auth" element={<Auth />} />  -- Disabled for Single User Mode */}
+            <Route path="/auth" element={<Auth />} />
             <Route path="/*" element={
               <ProtectedRoute>
                 <AudienceProvider>

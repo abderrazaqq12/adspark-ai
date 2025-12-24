@@ -261,11 +261,6 @@ app.use('/api', analyticsRouter);
 // ============================================
 import { listProjects, getProject, createProject as createProjectFn, updateProject, deleteProject } from './project-manager.js';
 
-// ============================================
-// PROJECT ROUTES (VPS Edition)
-// ============================================
-import { listProjects, getProject, createProject as createProjectFn, updateProject, deleteProject } from './project-manager.js';
-
 app.get('/api/projects', async (req, res) => {
   try {
     const userId = req.user.id;
@@ -2629,7 +2624,7 @@ app.listen(PORT, HOST, () => {
   console.log('═══════════════════════════════════════════════════');
   console.log(`  URL:        http://${HOST}:${PORT}`);
   console.log(`  Mode:       server-only (Auto Source Resolution active)`);
-  console.log(`  FFmpeg:     ${FFMPEG_AVAILABLE ? `✓ ${ffmpegPath}` : '✗ NOT AVAILABLE'}`);
+  console.log(`  FFmpeg:     ${FFMPEG_AVAILABLE ? `✓ ${engineCaps.ffmpeg.path || 'ffmpeg'}` : '✗ NOT AVAILABLE'}`);
   console.log(`  Uploads:    ${UPLOAD_DIR}`);
   console.log(`  Temp:       ${TEMP_DIR}`);
   console.log(`  Outputs:    ${OUTPUT_DIR}`);
