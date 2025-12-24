@@ -20,6 +20,8 @@ export interface EngineTask {
     videoUrl: string;
     config: AdVariationConfig;
     outputRatio: string;
+    projectId?: string;
+    tool?: string;
 }
 
 export interface EngineResult {

@@ -4,6 +4,8 @@ export async function createRenderJob(payload: {
   source_url: string;
   output_format: 'mp4';
   resolution: string;
+  projectId?: string;
+  tool?: string;
 }) {
   const res = await fetch(`${BASE_URL}/render/jobs`, {
     method: 'POST',

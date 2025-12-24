@@ -21,6 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { createRenderJob, getRenderJob } from '@/lib/renderflow';
 import { AudienceTargeting } from './AudienceTargeting';
+import { useGlobalProject } from "@/contexts/GlobalProjectContext";
 
 interface ExportFormat {
   id: string;
@@ -50,6 +51,7 @@ interface ExportedVideo {
 }
 
 export const StudioExport = () => {
+  const { currentProject } = useGlobalProject();
   const { toast } = useToast();
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
@@ -183,6 +185,8 @@ export const StudioExport = () => {
           source_url: sourceUrl,
           output_format: 'mp4',
           resolution: '1280x720',
+          projectId: currentProject?.id,
+          tool: 'studio'
         });
 
         setCurrentJobId(job.id);

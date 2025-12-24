@@ -47,6 +47,8 @@ class VPSFFmpegEngine implements IVideoEngine {
           source_url: task.videoUrl,
           output_format: 'mp4',
           resolution: task.outputRatio === '9:16' ? '1080x1920' : '1920x1080',
+          projectId: task.projectId,
+          tool: task.tool,
           metadata: {
             taskId: task.id,
             engine: 'vps-ffmpeg',
@@ -135,18 +137,18 @@ export class AdvancedEngineRouter {
   static selectEngine(req: RoutingRequest): EngineSpecs {
     const scorer = getDecisionScorer();
     const capabilities = req.plan.requiredCapabilities || [];
-    
+
     // Log routing decision
     console.log(`[Router] Analyzing capabilities: ${capabilities.join(', ')}`);
-    
+
     // Check FFmpeg capability using decision scorer
     const ffmpegOps = scorer.getFFmpegOperations(capabilities);
     const aiOps = scorer.getAIOperations(capabilities);
-    
+
     if (aiOps.length > 0) {
       console.warn(`[Router] AI required for: ${aiOps.join(', ')} - these will be handled separately`);
     }
-    
+
     // ALWAYS route to VPS FFmpeg for video rendering
     return this.getVPSSpec(`FFmpeg handles: ${ffmpegOps.join(', ') || 'all operations'}`);
   }
@@ -161,7 +163,7 @@ export class AdvancedEngineRouter {
       maxDurationSec: 600,
       costPerMinute: 0,
       capabilities: [
-        "trim", "merge", "concat", "text_overlay", 
+        "trim", "merge", "concat", "text_overlay",
         "transitions", "audio_mix", "resize", "speed_change",
         "zoom_pan", "subtitle_burn", "transcode"
       ],

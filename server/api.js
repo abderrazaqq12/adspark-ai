@@ -1968,6 +1968,12 @@ const RENDERFLOW_API = process.env.RENDERFLOW_URL || 'http://localhost:3001/rend
 // Proxies render requests to RenderFlow Engine
 app.post('/api/render/renderflow', async (req, res) => {
   try {
+    try {
+      validateExecutionRequest(req.body);
+    } catch (validationErr) {
+      return jsonError(res, 403, validationErr.code || 'FORBIDDEN', validationErr.message);
+    }
+
     const { projectId, scenes, variations: outputVariations } = req.body;
 
     // Translation: FlowScale Scenes -> RenderFlow Variations
@@ -2227,8 +2233,54 @@ const unifiedJobHandler = (req, res) => {
   return jsonError(res, 400, 'INVALID_PAYLOAD', 'Unsupported job structure. Must contain "variations" with "plan" or "source_url".');
 };
 
+// ============================================
+// SYSTEM DISCIPLINE ENFORCEMENT (Phase 3)
+// ============================================
+function validateExecutionRequest(body) {
+  // 1. Project = Single Source of Truth
+  if (!body.projectId) {
+    const err = new Error('Execution requires active project context (projectId missing)');
+    err.code = 'PROJECT_REQUIRED';
+    err.stage = 'guard';
+    throw err;
+  }
+
+  // 2. Tool Responsibility Contracts
+  const tool = body.tool;
+
+  if (tool === 'studio') {
+    // Studio - Zero-to-Hero
+    // No specific restrictions yet, but presence is good
+  }
+
+  if (tool === 'replicator') {
+    // Replicator - High Volume, Strict Duration
+    const duration = body.duration || body.maxDuration || body.input?.duration;
+    if (duration && (duration < 20 || duration > 35)) {
+      const err = new Error('Creative Replicator duration restricted to 20-35s system limit');
+      err.code = 'CONTRACT_VIOLATION';
+      err.stage = 'guard';
+      throw err;
+    }
+
+    // Must have source
+    if (!body.sourcePath && !body.sourceVideoUrl && !body.inputFileUrl && !body.scenes) {
+      const err = new Error('Creative Replicator requires source asset');
+      err.code = 'CONTRACT_VIOLATION';
+      err.stage = 'guard';
+      throw err;
+    }
+  }
+}
+
 // Internal Handler for Execute (Modularized)
 function handleExecute(req, res) {
+  try {
+    validateExecutionRequest(req.body);
+  } catch (err) {
+    return jsonError(res, 403, err.code || 'FORBIDDEN', err.message);
+  }
+
   if (!FFMPEG_AVAILABLE) {
     return jsonError(res, 503, 'FFMPEG_UNAVAILABLE', 'FFmpeg binary not available on server');
   }
@@ -2300,6 +2352,12 @@ app.post('/api/execute', handleExecute);
 
 // Internal Handler for Execute Plan (Modularized)
 async function handleExecutePlan(req, res) {
+  try {
+    validateExecutionRequest(req.body);
+  } catch (err) {
+    return jsonError(res, 403, err.code || 'FORBIDDEN', err.message);
+  }
+
   if (!FFMPEG_AVAILABLE) {
     return jsonError(res, 503, 'FFMPEG_UNAVAILABLE', 'FFmpeg binary not available on server');
   }

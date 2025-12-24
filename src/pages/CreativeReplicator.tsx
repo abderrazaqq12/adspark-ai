@@ -431,6 +431,7 @@ const CreativeReplicator = () => {
         const task = {
           id: variationIdStr,
           projectId: activeProject?.id,
+          tool: 'replicator',
           videoUrl: currentAd.url,
           outputRatio: ratio,
           config: {
