@@ -2787,6 +2787,20 @@ app.get('/api/templates', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/user/profile
+ * Mock profile for VPS Admin to prevent 406 errors on frontend
+ */
+app.get('/api/user/profile', (req, res) => {
+  res.json({
+    id: DEFAULT_USER_ID,
+    email: 'admin@flowscale.local',
+    plan: 'Enterprise',
+    credits: 999999, // Unlimited for VPS Admin
+    created_at: new Date().toISOString()
+  });
+});
+
 // ============================================
 // 404 HANDLER (JSON only)
 // ============================================

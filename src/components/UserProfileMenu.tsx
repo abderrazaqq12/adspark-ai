@@ -37,17 +37,45 @@ export function UserProfileMenu() {
 
   useEffect(() => {
     const fetchProfile = async () => {
+      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted';
+
+      if (isSelfHosted) {
+        try {
+          // In VPS mode, fetch from our local API proxy with Auth token
+          const token = localStorage.getItem('token');
+          const res = await fetch('/api/user/profile', {
+            headers: {
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            }
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            setProfile({
+              email: data.email,
+              plan: data.plan,
+              credits: data.credits
+            });
+            setInitials("A"); // Admin
+          }
+        } catch (e) {
+          console.error("Failed to fetch VPS profile:", e);
+        }
+        return;
+      }
+
+      // Cloud Mode: Fetch from Supabase
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const email = user.email || "";
         setInitials(email.charAt(0).toUpperCase());
-        
+
         const { data: profileData } = await supabase
           .from("profiles")
           .select("email, plan, credits")
           .eq("id", user.id)
           .single();
-        
+
         setProfile({
           email: profileData?.email || user.email,
           plan: profileData?.plan || "Pro",
@@ -55,7 +83,7 @@ export function UserProfileMenu() {
         });
       }
     };
-    
+
     fetchProfile();
   }, []);
 
