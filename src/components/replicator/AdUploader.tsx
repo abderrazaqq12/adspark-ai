@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Upload, X, Clock, Sparkles, ArrowRight, Loader2, FolderOpen } from "lucide-react";
+import { Upload, X, Clock, Sparkles, ArrowRight, Loader2, FolderOpen, FileVideo, Play } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { UploadedAd, AdAnalysis } from "@/pages/CreativeReplicator";
@@ -21,6 +21,7 @@ interface AdUploaderProps {
 export const AdUploader = ({ uploadedAds, setUploadedAds, projectName, setProjectName, onContinue }: AdUploaderProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [loadingDemo, setLoadingDemo] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { uploadVideo, uploading } = useVideoUpload();
@@ -29,7 +30,7 @@ export const AdUploader = ({ uploadedAds, setUploadedAds, projectName, setProjec
     e.preventDefault();
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files).filter(
-      (f) => f.type.startsWith("video/") && f.size < 100 * 1024 * 1024
+      (f) => f.type.startsWith("video/") && f.size < 200 * 1024 * 1024
     );
     await processFiles(files);
   };
@@ -92,6 +93,45 @@ export const AdUploader = ({ uploadedAds, setUploadedAds, projectName, setProjec
           resolve();
         };
       });
+    }
+  };
+
+  const loadDemoVideo = async () => {
+    setLoadingDemo(true);
+    try {
+      // Demo video URL - using a sample video
+      const demoUrl = "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4";
+
+      const id = `demo-${Date.now()}`;
+
+      const demoAd: UploadedAd = {
+        id,
+        file: new File([], "demo_video.mp4", { type: "video/mp4" }),
+        url: demoUrl,
+        duration: 15,
+        analysis: {
+          transcript: "A demo product showcase with hook, benefits, and call to action.",
+          scenes: [
+            { startTime: 0, endTime: 3, description: "Attention hook", type: "hook" },
+            { startTime: 3, endTime: 10, description: "Product showcase", type: "showcase" },
+            { startTime: 10, endTime: 15, description: "Call to action", type: "cta" }
+          ],
+          hook: "curiosity",
+          pacing: "dynamic",
+          style: "Product Demo",
+          transitions: ["zoom", "fade"],
+          voiceTone: "confident",
+          musicType: "upbeat",
+          aspectRatio: "9:16"
+        }
+      };
+
+      setUploadedAds(prev => [...prev, demoAd]);
+      toast.success("Demo video loaded!");
+    } catch (err) {
+      toast.error("Failed to load demo video");
+    } finally {
+      setLoadingDemo(false);
     }
   };
 
@@ -161,19 +201,15 @@ export const AdUploader = ({ uploadedAds, setUploadedAds, projectName, setProjec
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">Step 1: Upload Ads</h2>
-          <p className="text-muted-foreground text-sm">
-            Upload 1-10 existing ads (MP4, MOV, WebM) - max 60 seconds each
-          </p>
-        </div>
-        <Badge variant="outline">{uploadedAds.length}/10 ads</Badge>
+      {/* Header */}
+      <div>
+        <h2 className="text-2xl font-semibold text-primary">Upload Video Assets</h2>
+        <p className="text-muted-foreground mt-1">
+          Add 1-10 video ads to analyze. Maximum 60 seconds each.
+        </p>
       </div>
 
-
-
-      {/* Upload Zone */}
+      {/* Upload Zone - Enhanced Design */}
       <div
         onDrop={handleDrop}
         onDragOver={(e) => {
@@ -182,9 +218,9 @@ export const AdUploader = ({ uploadedAds, setUploadedAds, projectName, setProjec
         }}
         onDragLeave={() => setIsDragging(false)}
         onClick={() => fileInputRef.current?.click()}
-        className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${isDragging
-          ? "border-primary bg-primary/5"
-          : "border-border hover:border-primary/50 hover:bg-accent/50"
+        className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all ${isDragging
+            ? "border-primary bg-primary/10"
+            : "border-border hover:border-primary/50 hover:bg-accent/30"
           }`}
       >
         <input
@@ -195,96 +231,141 @@ export const AdUploader = ({ uploadedAds, setUploadedAds, projectName, setProjec
           onChange={handleFileSelect}
           className="hidden"
         />
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-            <Upload className="w-8 h-8 text-primary" />
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
+            <Upload className="w-7 h-7 text-primary" />
           </div>
           <div>
-            <p className="font-medium text-foreground">Drop your ads here</p>
-            <p className="text-sm text-muted-foreground">or click to browse</p>
-          </div>
-          <div className="flex gap-2 mt-2">
-            <Badge variant="secondary">MP4</Badge>
-            <Badge variant="secondary">MOV</Badge>
-            <Badge variant="secondary">WebM</Badge>
+            <p className="font-semibold text-foreground text-lg">Drop videos here or click to browse</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              MP4, MOV, WebM • Max 200MB per file
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Uploaded Ads Grid */}
-      {uploadedAds.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {uploadedAds.map((ad) => (
-            <Card key={ad.id} className="overflow-hidden border-border/50">
-              <div className="relative aspect-video bg-black">
-                <video
-                  src={ad.url}
-                  className="w-full h-full object-contain"
-                  controls
-                />
-                <button
-                  onClick={() => removeAd(ad.id)}
-                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 hover:bg-destructive flex items-center justify-center transition-colors"
-                >
-                  <X className="w-4 h-4 text-white" />
-                </button>
-                <div className="absolute bottom-2 left-2 flex gap-2">
-                  <Badge className="bg-black/60 text-white">
-                    <Clock className="w-3 h-3 mr-1" />
-                    {ad.duration}s
-                  </Badge>
-                </div>
-              </div>
-              <CardContent className="p-3 space-y-2">
-                <p className="text-sm font-medium truncate">{ad.file.name}</p>
+      {/* Load Demo Video Button */}
+      <div className="flex justify-center">
+        <Button
+          variant="outline"
+          onClick={(e) => {
+            e.stopPropagation();
+            loadDemoVideo();
+          }}
+          disabled={loadingDemo}
+          className="gap-2"
+        >
+          {loadingDemo ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Play className="w-4 h-4" />
+          )}
+          Load Demo Video
+        </Button>
+      </div>
 
-                {analyzingId === ad.id ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Analyzing with AI...
-                  </div>
-                ) : ad.analysis ? (
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap gap-1">
-                      <Badge variant="outline" className="text-xs">
-                        {ad.analysis.style}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {ad.analysis.pacing} pacing
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {ad.analysis.hook} hook
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-2">
-                      {ad.analysis.transcript}
-                    </p>
-                  </div>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => analyzeAd(ad)}
-                    className="w-full"
-                  >
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Analyze Ad
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+      {/* Empty State */}
+      {uploadedAds.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+            <FileVideo className="w-8 h-8 text-muted-foreground" />
+          </div>
+          <p className="text-muted-foreground font-medium">No videos uploaded yet</p>
+          <p className="text-sm text-muted-foreground/70 mt-1">Upload videos to begin analysis</p>
         </div>
       )}
 
-      {/* Continue Button */}
+      {/* Uploaded Ads Grid */}
       {uploadedAds.length > 0 && (
-        <div className="flex justify-end">
-          <Button onClick={onContinue} className="bg-primary">
-            Continue to Settings
-            <ArrowRight className="w-4 h-4 ml-2" />
-          </Button>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-muted-foreground">
+              Uploaded Videos
+            </span>
+            <Badge variant="outline" className="text-primary border-primary/30">
+              {uploadedAds.length}/10 ads
+            </Badge>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {uploadedAds.map((ad) => (
+              <Card key={ad.id} className="overflow-hidden border-border/50 bg-card/50">
+                <div className="relative aspect-video bg-black">
+                  <video
+                    src={ad.url}
+                    className="w-full h-full object-contain"
+                    controls
+                  />
+                  <button
+                    onClick={() => removeAd(ad.id)}
+                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 hover:bg-destructive flex items-center justify-center transition-colors"
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                  <div className="absolute bottom-2 left-2 flex gap-2">
+                    <Badge className="bg-black/60 text-white">
+                      <Clock className="w-3 h-3 mr-1" />
+                      {ad.duration}s
+                    </Badge>
+                  </div>
+                </div>
+                <CardContent className="p-3 space-y-2">
+                  <p className="text-sm font-medium truncate">{ad.file.name}</p>
+
+                  {analyzingId === ad.id ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Analyzing with AI...
+                    </div>
+                  ) : ad.analysis ? (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-1">
+                        <Badge variant="outline" className="text-xs">
+                          {ad.analysis.style}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {ad.analysis.pacing} pacing
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {ad.analysis.hook} hook
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground line-clamp-2">
+                        {ad.analysis.transcript}
+                      </p>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => analyzeAd(ad)}
+                      className="w-full"
+                    >
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Analyze Ad
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
+      )}
+
+      {/* Continue Button - Full Width like AI Editor */}
+      <Button
+        onClick={onContinue}
+        disabled={uploadedAds.length === 0}
+        className="w-full h-12 text-base font-medium bg-primary hover:bg-primary/90"
+      >
+        Continue to Analysis
+        <ArrowRight className="w-4 h-4 ml-2" />
+      </Button>
+
+      {uploadedAds.length === 0 && (
+        <p className="text-center text-sm text-muted-foreground">
+          Upload at least one video to continue
+        </p>
       )}
     </div>
   );
