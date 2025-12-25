@@ -9,6 +9,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { getAuthToken } from '@/utils/auth-adapter';
 import { useCreativeScale } from '@/hooks/useCreativeScale';
 import { useStreamingStrategy } from '@/hooks/useStreamingStrategy';
 import { executeUnifiedStrategy, ExecutionResult, EngineId, executionDebugLogger } from '@/lib/creative-scale/execution-engine';
@@ -239,49 +240,33 @@ export default function CreativeScale() {
 
     for (const video of uploadingVideos) {
       try {
-        const fileExt = video.file.name.split('.').pop() || 'mp4';
-        const filePath = `creative-scale/${video.id}/video.${fileExt}`;
+        // VPS-First: Use backend API for uploads
+        const token = await getAuthToken();
+        if (!token) throw new Error('Not authenticated');
 
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
+        const formData = new FormData();
+        formData.append('file', video.file);
+        formData.append('folder', 'creative-scale');
+        formData.append('filename', `${video.id}_${video.file.name}`);
 
-        const uploadUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/videos/${filePath}`;
-
-        await new Promise<void>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-
-          xhr.upload.addEventListener('progress', (e) => {
-            if (e.lengthComputable) {
-              const progress = Math.round((e.loaded / e.total) * 100);
-              setUploadedVideos(prev => prev.map(v =>
-                v.id === video.id ? { ...v, uploadProgress: progress } : v
-              ));
-            }
-          });
-
-          xhr.addEventListener('load', () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              resolve();
-            } else {
-              reject(new Error(`Upload failed: ${xhr.status}`));
-            }
-          });
-
-          xhr.addEventListener('error', () => reject(new Error('Upload failed')));
-
-          xhr.open('POST', uploadUrl);
-          xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
-          xhr.setRequestHeader('x-upsert', 'true');
-          xhr.send(video.file);
+        // Upload via VPS backend
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
         });
 
-        const { data: urlData } = supabase.storage
-          .from('videos')
-          .getPublicUrl(filePath);
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || `Upload failed: ${response.status}`);
+        }
+
+        const result = await response.json();
+        const storageUrl = result.url || result.path || `/api/uploads/${video.id}_${video.file.name}`;
 
         setUploadedVideos(prev => prev.map(v =>
           v.id === video.id
-            ? { ...v, status: 'ready' as const, storageUrl: urlData.publicUrl, uploadProgress: 100 }
+            ? { ...v, status: 'ready' as const, storageUrl, uploadProgress: 100 }
             : v
         ));
 

@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { getAuthenticatedUser, getAuthToken, getAuthHeaders } from '@/utils/auth-adapter';
 import { useStudioPrompts } from '@/hooks/useStudioPrompts';
 import { useAIAgent, getModelName } from '@/hooks/useAIAgent';
 import { parseEdgeFunctionError, formatErrorForToast, createDetailedErrorLog } from '@/lib/edgeFunctionErrors';
@@ -202,21 +203,23 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   // Save content to database whenever it changes
   const saveContent = async (data: { angles?: GeneratedAngles | null; scripts?: GeneratedScript[]; landingContent?: string }) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getAuthenticatedUser();
       if (!user) return;
 
-      const { data: existingSettings } = await supabase
-        .from('user_settings')
-        .select('preferences')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      // VPS-First: Use backend API for settings
+      const token = await getAuthToken();
+      const headers = token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
 
-      const currentPrefs = (existingSettings?.preferences as Record<string, unknown>) || {};
+      // Get current settings
+      const getResp = await fetch('/api/settings', { headers });
+      let currentPrefs: Record<string, any> = {};
+      if (getResp.ok) {
+        const respData = await getResp.json();
+        currentPrefs = respData?.settings?.preferences || respData?.preferences || {};
+      }
 
-      const updatedPrefs: Record<string, unknown> = {
-        ...currentPrefs,
-      };
-
+      // Merge and save
+      const updatedPrefs: Record<string, unknown> = { ...currentPrefs };
       if (data.angles !== undefined) {
         updatedPrefs.studio_marketing_angles = JSON.parse(JSON.stringify(data.angles));
       }
@@ -227,10 +230,11 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
         updatedPrefs.studio_landing_content = data.landingContent;
       }
 
-      await supabase
-        .from('user_settings')
-        .update({ preferences: updatedPrefs as any })
-        .eq('user_id', user.id);
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ preferences: updatedPrefs })
+      });
     } catch (error) {
       console.error('Error saving content:', error);
     }
@@ -238,17 +242,16 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
 
   const loadProductInfo = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getAuthenticatedUser();
       if (!user) return;
 
-      const { data: settings } = await supabase
-        .from('user_settings')
-        .select('preferences')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      // VPS-First: Use backend API for settings
+      const headers = await getAuthHeaders();
+      const response = await fetch('/api/settings', { headers });
 
-      if (settings) {
-        const prefs = settings.preferences as Record<string, any>;
+      if (response.ok) {
+        const data = await response.json();
+        const prefs = data?.settings?.preferences || data?.preferences || {};
         if (prefs) {
           setProductInfo({
             name: prefs.studio_product_name || '',
@@ -285,8 +288,8 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
     setLastUsedPromptDebug(null);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      const token = await getAuthToken();
+      if (!token) throw new Error('Must be logged in');
 
       // Get language/market for prompt lookup
       const language = audienceTargeting.language.split('-')[0] || 'ar';
@@ -418,8 +421,8 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
     setIsGenerating(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      const token = await getAuthToken();
+      if (!token) throw new Error('Must be logged in');
 
       const tones = ['engaging', 'professional', 'urgent', 'emotional', 'casual', 'humorous', 'luxurious', 'educational', 'storytelling', 'direct'];
       const count = parseInt(scriptsCount);
@@ -498,8 +501,8 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
     setIsGenerating(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      const token = await getAuthToken();
+      if (!token) throw new Error('Must be logged in');
 
       // Get the landing page content prompt from Settings
       const landingPrompt = getPrompt('landing_page_content', {

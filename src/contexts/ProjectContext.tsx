@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { getAuthenticatedUser, getAuthToken, getAuthHeaders } from '@/utils/auth-adapter';
 import { toast } from 'sonner';
 
 export interface ProductInfo {
@@ -24,7 +25,7 @@ interface ProjectContextType {
   settings: ProjectSettings;
   isLoading: boolean;
   isSaving: boolean;
-  
+
   // Actions
   setProjectId: (id: string | null) => void;
   setScriptId: (id: string | null) => void;
@@ -76,33 +77,89 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const loadLatestProject = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getAuthenticatedUser();
       if (!user) {
         setIsLoading(false);
         return;
       }
 
-      // Try to load from user_settings first for product info
-      const { data: userSettings } = await supabase
-        .from('user_settings')
-        .select('preferences')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      const mode = import.meta.env.VITE_DEPLOYMENT_MODE;
+      const isVPSMode = mode === 'self-hosted' || mode === 'vps';
 
-      if (userSettings?.preferences) {
-        const prefs = userSettings.preferences as Record<string, any>;
-        setProductInfo({
-          name: prefs.studio_product_name || "",
-          description: prefs.studio_description || "",
-          imageUrl: prefs.studio_media_links?.split('\n')[0] || "",
-          link: prefs.studio_product_url || "",
-        });
-        setSettings({
-          language: prefs.studio_language || "en",
-          market: prefs.studio_target_market || "us",
-          audienceAge: prefs.studio_audience_age || "25-34",
-          audienceGender: prefs.studio_audience_gender || "both",
-        });
+      if (isVPSMode) {
+        // VPS-First: Use backend API
+        const headers = await getAuthHeaders();
+
+        // Load settings
+        const settingsResp = await fetch('/api/settings', { headers });
+        if (settingsResp.ok) {
+          const data = await settingsResp.json();
+          const prefs = data?.settings?.preferences || data?.preferences || {};
+          setProductInfo({
+            name: prefs.studio_product_name || "",
+            description: prefs.studio_description || "",
+            imageUrl: prefs.studio_media_links?.split('\n')[0] || "",
+            link: prefs.studio_product_url || "",
+          });
+          setSettings({
+            language: prefs.studio_language || "en",
+            market: prefs.studio_target_market || "us",
+            audienceAge: prefs.studio_audience_age || "25-34",
+            audienceGender: prefs.studio_audience_gender || "both",
+          });
+        }
+
+        // Load latest project
+        const projectsResp = await fetch('/api/projects', { headers });
+        if (projectsResp.ok) {
+          const projData = await projectsResp.json();
+          const projects = projData?.projects || [];
+          if (projects.length > 0) {
+            const project = projects[0];
+            setProjectId(project.id);
+            if (project.product_name) {
+              setProductInfo(prev => ({ ...prev, name: project.product_name || prev.name }));
+            }
+          }
+        }
+      } else {
+        // Supabase mode
+        const { data: userSettings } = await supabase
+          .from('user_settings')
+          .select('preferences')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (userSettings?.preferences) {
+          const prefs = userSettings.preferences as Record<string, any>;
+          setProductInfo({
+            name: prefs.studio_product_name || "",
+            description: prefs.studio_description || "",
+            imageUrl: prefs.studio_media_links?.split('\n')[0] || "",
+            link: prefs.studio_product_url || "",
+          });
+          setSettings({
+            language: prefs.studio_language || "en",
+            market: prefs.studio_target_market || "us",
+            audienceAge: prefs.studio_audience_age || "25-34",
+            audienceGender: prefs.studio_audience_gender || "both",
+          });
+        }
+
+        const { data: projects } = await supabase
+          .from('projects')
+          .select('id, name, product_name, language, market, settings')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (projects && projects.length > 0) {
+          const project = projects[0];
+          setProjectId(project.id);
+          if (project.product_name) {
+            setProductInfo(prev => ({ ...prev, name: project.product_name || prev.name }));
+          }
+        }
       }
 
       // Load latest project
@@ -116,7 +173,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       if (projects && projects.length > 0) {
         const project = projects[0];
         setProjectId(project.id);
-        
+
         // Override with project-specific info if available
         if (project.product_name) {
           setProductInfo(prev => ({ ...prev, name: project.product_name || prev.name }));
@@ -171,11 +228,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       if (!project) throw new Error('Project not found');
 
       setProjectId(project.id);
-      
+
       if (project.product_name) {
         setProductInfo(prev => ({ ...prev, name: project.product_name || prev.name }));
       }
-      
+
       const projectSettings = project.settings as Record<string, any> | null;
       if (projectSettings) {
         setProductInfo(prev => ({
@@ -185,7 +242,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           link: projectSettings.product_link || prev.link,
         }));
       }
-      
+
       if (project.language) {
         setSettings(prev => ({ ...prev, language: project.language }));
       }
@@ -219,37 +276,77 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     setIsSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getAuthenticatedUser();
       if (!user) {
         toast.error('Please sign in to create a project');
         return null;
       }
 
-      const { data: project, error } = await supabase
-        .from('projects')
-        .insert({
-          user_id: user.id,
-          name: productInfo.name,
-          product_name: productInfo.name,
-          language: settings.language,
-          market: settings.market,
-          audience: settings.audienceGender,
-          status: 'draft',
-          settings: {
-            product_description: productInfo.description,
-            product_image_url: productInfo.imageUrl,
-            product_link: productInfo.link,
-            audience_age: settings.audienceAge,
-          }
-        })
-        .select()
-        .single();
+      const mode = import.meta.env.VITE_DEPLOYMENT_MODE;
+      const isVPSMode = mode === 'self-hosted' || mode === 'vps';
 
-      if (error) throw error;
-      
-      setProjectId(project.id);
-      toast.success('Project created!');
-      return project.id;
+      if (isVPSMode) {
+        // VPS-First: Use backend API
+        const token = await getAuthToken();
+        const response = await fetch('/api/projects', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: productInfo.name,
+            product_name: productInfo.name,
+            language: settings.language,
+            market: settings.market,
+            status: 'draft',
+            settings: {
+              product_description: productInfo.description,
+              product_image_url: productInfo.imageUrl,
+              product_link: productInfo.link,
+              audience_age: settings.audienceAge,
+              audience_gender: settings.audienceGender
+            }
+          })
+        });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to create project');
+        }
+
+        const project = await response.json();
+        setProjectId(project.id);
+        toast.success('Project created!');
+        return project.id;
+      } else {
+        // Supabase mode
+        const { data: project, error } = await supabase
+          .from('projects')
+          .insert({
+            user_id: user.id,
+            name: productInfo.name,
+            product_name: productInfo.name,
+            language: settings.language,
+            market: settings.market,
+            audience: settings.audienceGender,
+            status: 'draft',
+            settings: {
+              product_description: productInfo.description,
+              product_image_url: productInfo.imageUrl,
+              product_link: productInfo.link,
+              audience_age: settings.audienceAge,
+            }
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        setProjectId(project.id);
+        toast.success('Project created!');
+        return project.id;
+      }
     } catch (error: any) {
       console.error('Error creating project:', error);
       toast.error(error.message || 'Failed to create project');
@@ -262,59 +359,99 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const saveProject = useCallback(async (): Promise<boolean> => {
     setIsSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getAuthenticatedUser();
       if (!user) {
         toast.error('Please sign in to save');
         return false;
       }
 
-      // Save to user_settings for persistence across sessions
-      const { data: existingSettings } = await supabase
-        .from('user_settings')
-        .select('preferences')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      const mode = import.meta.env.VITE_DEPLOYMENT_MODE;
+      const isVPSMode = mode === 'self-hosted' || mode === 'vps';
 
-      const currentPrefs = (existingSettings?.preferences as Record<string, any>) || {};
+      if (isVPSMode) {
+        // VPS-First: Use backend API
+        const token = await getAuthToken();
+        const headers = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
 
-      await supabase
-        .from('user_settings')
-        .upsert({
-          user_id: user.id,
-          preferences: {
-            ...currentPrefs,
-            studio_product_name: productInfo.name,
-            studio_product_url: productInfo.link,
-            studio_description: productInfo.description,
-            studio_media_links: productInfo.imageUrl,
-            studio_target_market: settings.market,
-            studio_language: settings.language,
-            studio_audience_age: settings.audienceAge,
-            studio_audience_gender: settings.audienceGender,
-          }
-        }, { onConflict: 'user_id' });
+        // Get current settings
+        const getResp = await fetch('/api/settings', { headers });
+        let currentPrefs: Record<string, any> = {};
+        if (getResp.ok) {
+          const data = await getResp.json();
+          currentPrefs = data?.settings?.preferences || data?.preferences || {};
+        }
 
-      // If we have a project, update it too
-      if (projectId) {
-        await supabase
-          .from('projects')
-          .update({
-            name: productInfo.name,
-            product_name: productInfo.name,
-            language: settings.language,
-            market: settings.market,
-            audience: settings.audienceGender,
-            settings: {
-              product_description: productInfo.description,
-              product_image_url: productInfo.imageUrl,
-              product_link: productInfo.link,
-              audience_age: settings.audienceAge,
+        // Save settings
+        await fetch('/api/settings', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            preferences: {
+              ...currentPrefs,
+              studio_product_name: productInfo.name,
+              studio_product_url: productInfo.link,
+              studio_description: productInfo.description,
+              studio_media_links: productInfo.imageUrl,
+              studio_target_market: settings.market,
+              studio_language: settings.language,
+              studio_audience_age: settings.audienceAge,
+              studio_audience_gender: settings.audienceGender,
             }
           })
-          .eq('id', projectId);
-      }
+        });
 
-      return true;
+        return true;
+      } else {
+        // Supabase mode
+        const { data: existingSettings } = await supabase
+          .from('user_settings')
+          .select('preferences')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        const currentPrefs = (existingSettings?.preferences as Record<string, any>) || {};
+
+        await supabase
+          .from('user_settings')
+          .upsert({
+            user_id: user.id,
+            preferences: {
+              ...currentPrefs,
+              studio_product_name: productInfo.name,
+              studio_product_url: productInfo.link,
+              studio_description: productInfo.description,
+              studio_media_links: productInfo.imageUrl,
+              studio_target_market: settings.market,
+              studio_language: settings.language,
+              studio_audience_age: settings.audienceAge,
+              studio_audience_gender: settings.audienceGender,
+            }
+          }, { onConflict: 'user_id' });
+
+        if (projectId) {
+          await supabase
+            .from('projects')
+            .update({
+              name: productInfo.name,
+              product_name: productInfo.name,
+              language: settings.language,
+              market: settings.market,
+              audience: settings.audienceGender,
+              settings: {
+                product_description: productInfo.description,
+                product_image_url: productInfo.imageUrl,
+                product_link: productInfo.link,
+                audience_age: settings.audienceAge,
+              }
+            })
+            .eq('id', projectId);
+        }
+
+        return true;
+      }
     } catch (error: any) {
       console.error('Error saving project:', error);
       toast.error(error.message || 'Failed to save');

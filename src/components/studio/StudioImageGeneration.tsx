@@ -7,10 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { 
-  ArrowRight, 
-  Loader2, 
-  Image as ImageIcon, 
+import {
+  ArrowRight,
+  Loader2,
+  Image as ImageIcon,
   Sparkles,
   RefreshCw,
   Download,
@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { getAuthenticatedUser, getAuthToken, getAuthHeaders } from '@/utils/auth-adapter';
 import { ImageGenerationProgress } from '@/components/ImageGenerationProgress';
 import { useProject } from '@/contexts/ProjectContext';
 import { parseEdgeFunctionError, formatErrorForToast, createDetailedErrorLog } from '@/lib/edgeFunctionErrors';
@@ -91,7 +92,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
   const [isLoadingProject, setIsLoadingProject] = useState(false);
   const [generationStartTime, setGenerationStartTime] = useState<number | undefined>();
   const generatingCountRef = useRef({ completed: 0, failed: 0, total: 0 });
-  
+
   // Reference images for generation
   const [referenceImageUrl, setReferenceImageUrl] = useState('');
   const [uploadedReferenceImage, setUploadedReferenceImage] = useState<string | null>(null);
@@ -168,17 +169,19 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
   const loadProductInfo = async () => {
     setIsLoadingProject(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const user = await getAuthenticatedUser();
+      if (!user) {
+        console.log('[StudioImageGeneration] No authenticated user, skipping load');
+        return;
+      }
 
-      const { data: settings } = await supabase
-        .from('user_settings')
-        .select('preferences')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      // VPS-First: Use backend API for settings
+      const headers = await getAuthHeaders();
+      const response = await fetch('/api/settings', { headers });
 
-      if (settings) {
-        const prefs = settings.preferences as Record<string, any>;
+      if (response.ok) {
+        const data = await response.json();
+        const prefs = data?.settings?.preferences || data?.preferences || {};
         if (prefs) {
           setProductInfo({
             name: prefs.studio_product_name || '',
@@ -187,39 +190,15 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
         }
       }
 
-      // Load project if not provided via props
+      // Load project ID from VPS if not provided via props
       if (!propProjectId) {
-        const { data: projects } = await supabase
-          .from('projects')
-          .select('id')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(1);
-
-        if (projects && projects.length > 0) {
-          setProjectId(projects[0].id);
-        }
-      }
-
-      // Load existing generated images for this project
-      const currentProjectId = projectId || propProjectId;
-      if (currentProjectId) {
-        const { data: existingImages, error: imgError } = await supabase
-          .from('generated_images')
-          .select('*')
-          .eq('project_id', currentProjectId)
-          .order('created_at', { ascending: false });
-
-        if (imgError) {
-          console.error('Error loading existing images:', imgError);
-        } else if (existingImages && existingImages.length > 0) {
-          setImages(existingImages.map(img => ({
-            id: img.id,
-            url: img.image_url || '',
-            type: img.image_type,
-            prompt: img.prompt || '',
-            status: img.status === 'completed' ? 'completed' : img.status === 'failed' ? 'failed' : 'generating',
-          })));
+        const projResp = await fetch('/api/projects', { headers });
+        if (projResp.ok) {
+          const projData = await projResp.json();
+          const projects = projData?.projects || [];
+          if (projects.length > 0) {
+            setProjectId(projects[0].id);
+          }
         }
       }
     } catch (error) {
@@ -230,7 +209,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
   };
 
   const toggleType = (id: string) => {
-    setSelectedTypes(prev => 
+    setSelectedTypes(prev =>
       prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]
     );
   };
@@ -261,8 +240,8 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
     generatingCountRef.current = { completed: 0, failed: 0, total: 0 };
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      const token = await getAuthToken();
+      if (!token) throw new Error('Not authenticated');
 
       const newImages: GeneratedImage[] = [];
       const totalImages = parseInt(imageCount);
@@ -271,12 +250,12 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
       for (const type of selectedTypes) {
         for (let i = 0; i < imagesPerType && newImages.length < totalImages; i++) {
           const typeInfo = imageTypes.find(t => t.id === type);
-          const basePrompt = customPrompt 
-            ? `${customPrompt}. Style: ${typeInfo?.description}` 
+          const basePrompt = customPrompt
+            ? `${customPrompt}. Style: ${typeInfo?.description}`
             : `${typeInfo?.description} for ${productInfo.name}. ${productInfo.description}`;
 
           const tempId = `img-${Date.now()}-${i}-${type}`;
-          
+
           // Add placeholder while generating
           newImages.push({
             id: tempId,
@@ -299,12 +278,12 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
         const img = newImages[idx];
         try {
           let imageUrl = '';
-          
+
           // Use AI Operator mode for image generation
           console.log('Calling Image Generation (AI Operator mode)');
           // Determine which reference image to use (uploaded takes priority)
           const effectiveReferenceUrl = uploadedReferenceImage || referenceImageUrl || undefined;
-          
+
           const response = await supabase.functions.invoke('ai-image-generator', {
             body: {
               prompt: img.prompt,
@@ -328,19 +307,19 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
 
           if (!imageUrl) {
             generatingCountRef.current.failed++;
-            setImages(prev => prev.map(p => 
-              p.id === img.id 
+            setImages(prev => prev.map(p =>
+              p.id === img.id
                 ? { ...p, status: 'failed' as const, error: 'No image URL returned' }
                 : p
             ));
           } else {
             generatingCountRef.current.completed++;
-            setImages(prev => prev.map(p => 
-              p.id === img.id 
+            setImages(prev => prev.map(p =>
+              p.id === img.id
                 ? { ...p, url: imageUrl, status: 'completed' as const }
                 : p
             ));
-            
+
             // Auto-upload to Google Drive if available
             if (isUploadAvailable && imageUrl) {
               const typeInfo = imageTypes.find(t => t.id === img.type);
@@ -356,8 +335,8 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
         } catch (genError: any) {
           console.error(`Error generating image ${idx}:`, genError);
           generatingCountRef.current.failed++;
-          setImages(prev => prev.map(p => 
-            p.id === img.id 
+          setImages(prev => prev.map(p =>
+            p.id === img.id
               ? { ...p, status: 'failed' as const, error: genError.message }
               : p
           ));
@@ -379,10 +358,10 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
         selectedTypes,
       };
       console.error('Image generation error:', createDetailedErrorLog(error, context));
-      
+
       const parsedError = parseEdgeFunctionError(error);
       const toastContent = formatErrorForToast(parsedError);
-      
+
       toast({
         title: toastContent.title,
         description: toastContent.description,
@@ -402,14 +381,14 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
     const image = images.find(img => img.id === id);
     if (!image) return;
 
-    setImages(prev => prev.map(img => 
+    setImages(prev => prev.map(img =>
       img.id === id ? { ...img, status: 'generating' as const } : img
     ));
 
     try {
       // Determine which reference image to use (uploaded takes priority)
       const effectiveReferenceUrl = uploadedReferenceImage || referenceImageUrl || undefined;
-      
+
       const response = await supabase.functions.invoke('ai-image-generator', {
         body: {
           prompt: image.prompt,
@@ -427,15 +406,15 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
 
       const imageUrl = response.data?.imageUrl || response.data?.images?.[0]?.url || '';
 
-      setImages(prev => prev.map(img => 
-        img.id === id 
-          ? { ...img, url: imageUrl || img.url, status: imageUrl ? 'completed' as const : 'failed' as const } 
+      setImages(prev => prev.map(img =>
+        img.id === id
+          ? { ...img, url: imageUrl || img.url, status: imageUrl ? 'completed' as const : 'failed' as const }
           : img
       ));
 
       if (imageUrl) {
         toast({ title: "Image regenerated successfully" });
-        
+
         // Auto-upload regenerated image to Google Drive
         if (isUploadAvailable) {
           const typeInfo = imageTypes.find(t => t.id === image.type);
@@ -450,13 +429,13 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
         }
       }
     } catch (error: any) {
-      setImages(prev => prev.map(img => 
+      setImages(prev => prev.map(img =>
         img.id === id ? { ...img, status: 'failed' as const, error: error.message } : img
       ));
-      
+
       const parsedError = parseEdgeFunctionError(error);
       const toastContent = formatErrorForToast(parsedError);
-      
+
       toast({
         title: toastContent.title,
         description: toastContent.description,
@@ -597,7 +576,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
           <p className="text-xs text-muted-foreground">
             Add a reference image to guide the AI generation style
           </p>
-          
+
           <div className="grid grid-cols-2 gap-3">
             {/* URL Input */}
             <div className="space-y-2">
@@ -609,7 +588,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
                 className="text-sm bg-background"
               />
             </div>
-            
+
             {/* File Upload */}
             <div className="space-y-2">
               <Label className="text-xs">Or Upload</Label>
@@ -629,9 +608,9 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
                   }
                 }}
               />
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 className="w-full gap-2"
                 onClick={() => fileInputRef.current?.click()}
               >
@@ -645,17 +624,17 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
           {(referenceImageUrl || uploadedReferenceImage) && (
             <div className="flex items-center gap-3 mt-2">
               <div className="w-16 h-16 rounded-lg overflow-hidden border border-border">
-                <img 
-                  src={uploadedReferenceImage || referenceImageUrl} 
-                  alt="Reference" 
+                <img
+                  src={uploadedReferenceImage || referenceImageUrl}
+                  alt="Reference"
                   className="w-full h-full object-cover"
                   onError={(e) => {
                     (e.target as HTMLImageElement).style.display = 'none';
                   }}
                 />
               </div>
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 size="sm"
                 onClick={() => {
                   setReferenceImageUrl('');
@@ -727,14 +706,13 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
         <h3 className="font-semibold mb-4">Image Types</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {imageTypes.map((type) => (
-            <div 
+            <div
               key={type.id}
               onClick={() => toggleType(type.id)}
-              className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                selectedTypes.includes(type.id) 
-                  ? 'border-primary bg-primary/5' 
+              className={`p-4 rounded-lg border cursor-pointer transition-all ${selectedTypes.includes(type.id)
+                  ? 'border-primary bg-primary/5'
                   : 'border-border hover:border-primary/50'
-              }`}
+                }`}
             >
               <div className="flex items-start gap-3">
                 <Checkbox checked={selectedTypes.includes(type.id)} />
@@ -792,8 +770,8 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
                       </Button>
                     </div>
                   ) : image.url ? (
-                    <img 
-                      src={image.url} 
+                    <img
+                      src={image.url}
                       alt={image.type}
                       className="w-full h-full object-cover"
                       onError={(e) => {
@@ -808,25 +786,25 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
                 </div>
                 {image.status === 'completed' && image.url && (
                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <Button 
-                      variant="secondary" 
-                      size="icon" 
+                    <Button
+                      variant="secondary"
+                      size="icon"
                       className="h-8 w-8"
                       onClick={() => regenerateImage(image.id)}
                     >
                       <RefreshCw className="w-4 h-4" />
                     </Button>
-                    <Button 
-                      variant="secondary" 
-                      size="icon" 
+                    <Button
+                      variant="secondary"
+                      size="icon"
                       className="h-8 w-8"
                       onClick={() => downloadImage(image.url, image.type)}
                     >
                       <Download className="w-4 h-4" />
                     </Button>
-                    <Button 
-                      variant="destructive" 
-                      size="icon" 
+                    <Button
+                      variant="destructive"
+                      size="icon"
                       className="h-8 w-8"
                       onClick={() => removeImage(image.id)}
                     >
