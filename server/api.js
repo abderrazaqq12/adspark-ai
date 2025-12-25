@@ -2946,10 +2946,20 @@ app.post('/api/settings', async (req, res) => {
 
 app.get('/api/prompt-profiles', (req, res) => {
   try {
+    const { type, language, market } = req.query;
     const profilesFile = path.join(DATA_DIR, 'prompt_profiles.json');
-    if (!fs.existsSync(profilesFile)) return res.json([]);
+    if (!fs.existsSync(profilesFile)) return res.json({ prompt: null });
+
     const profiles = JSON.parse(fs.readFileSync(profilesFile, 'utf8'));
-    res.json(profiles); // Return array
+
+    const match = profiles.find(p =>
+      (!type || p.type === type) &&
+      (!language || p.language === language) &&
+      (!market || p.market === market) &&
+      p.is_active !== false
+    );
+
+    res.json({ prompt: match || null });
   } catch (e) {
     jsonError(res, 500, 'LOAD_FAILED', e.message);
   }
@@ -2958,24 +2968,55 @@ app.get('/api/prompt-profiles', (req, res) => {
 app.post('/api/prompt-profiles', (req, res) => {
   try {
     const profile = req.body;
-    if (!profile || !profile.id) return jsonError(res, 400, 'INVALID', 'Profile ID required');
+    if (!profile) return jsonError(res, 400, 'INVALID', 'Profile data required');
 
     const profilesFile = path.join(DATA_DIR, 'prompt_profiles.json');
     let profiles = [];
     if (fs.existsSync(profilesFile)) profiles = JSON.parse(fs.readFileSync(profilesFile, 'utf8'));
 
-    const idx = profiles.findIndex(p => p.id === profile.id);
-    const now = new Date().toISOString();
+    let targetIdx = -1;
+    if (profile.id) {
+      targetIdx = profiles.findIndex(p => p.id === profile.id);
+    }
 
-    if (idx >= 0) {
-      profiles[idx] = { ...profiles[idx], ...profile, updated_at: now };
+    if (targetIdx === -1 && profile.type) {
+      targetIdx = profiles.findIndex(p =>
+        p.type === profile.type &&
+        p.language === profile.language &&
+        p.market === profile.market &&
+        p.is_active !== false
+      );
+    }
+
+    const now = new Date().toISOString();
+    let savedProfile;
+
+    if (targetIdx >= 0) {
+      const existing = profiles[targetIdx];
+      savedProfile = {
+        ...existing,
+        ...profile,
+        id: existing.id,
+        version: (existing.version || 1) + 1,
+        updated_at: now
+      };
+      profiles[targetIdx] = savedProfile;
     } else {
-      profiles.push({ ...profile, created_at: now, updated_at: now });
+      savedProfile = {
+        ...profile,
+        id: `prompt_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        version: 1,
+        is_active: true,
+        created_at: now,
+        updated_at: now
+      };
+      profiles.push(savedProfile);
     }
 
     fs.writeFileSync(profilesFile, JSON.stringify(profiles, null, 2));
-    res.json(profiles[idx >= 0 ? idx : profiles.length - 1]);
+    res.json({ prompt: savedProfile });
   } catch (e) {
+    console.error('Prompt save error:', e);
     jsonError(res, 500, 'SAVE_FAILED', e.message);
   }
 });
