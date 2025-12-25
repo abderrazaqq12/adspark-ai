@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { getUser, getAuthHeaders } from "@/utils/auth";
 
 // Default prompts for each function
 const DEFAULT_PROMPTS: Record<string, string> = {
@@ -83,28 +83,30 @@ export function useStudioPrompts(): UseStudioPromptsReturn {
       setLoading(true);
       setError(null);
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = getUser();
       if (!user) {
         setPrompts(DEFAULT_PROMPTS);
         return;
       }
 
-      const { data: settings, error: fetchError } = await supabase
-        .from("user_settings")
-        .select("preferences")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      // VPS-First: Use backend API
+      const headers = getAuthHeaders();
+      const response = await fetch('/api/settings', { headers });
 
-      if (fetchError) throw fetchError;
+      if (!response.ok) {
+        setPrompts(DEFAULT_PROMPTS);
+        return;
+      }
 
-      const prefs = settings?.preferences as Record<string, any>;
+      const data = await response.json();
+      const prefs = data?.settings?.preferences || data?.preferences || {};
       const savedPromptsV2 = prefs?.studio_prompts_v2?.prompts || {};
       const savedPromptsV1 = prefs?.studio_prompts || {};
       const customPrompts = prefs?.studio_prompts_v2?.custom_prompts || [];
 
       // Merge default prompts with saved prompts (saved takes priority)
       const mergedPrompts = { ...DEFAULT_PROMPTS };
-      
+
       // First apply v1 format (backward compatibility)
       Object.entries(savedPromptsV1).forEach(([key, value]) => {
         if (typeof value === 'string' && value.trim()) {
@@ -171,7 +173,7 @@ export function useStudioPrompts(): UseStudioPromptsReturn {
 }
 
 // Export function types for Studio components
-export type StudioPromptFunction = 
+export type StudioPromptFunction =
   | 'product_content'
   | 'landing_page_content'
   | 'voiceover_scripts'

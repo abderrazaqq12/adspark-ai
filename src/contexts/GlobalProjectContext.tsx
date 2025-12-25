@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { getUser, getAuthHeaders, getUserId } from '@/utils/auth';
+import { supabase } from '@/integrations/supabase/client'; // Only for non-auth database calls
 import { toast } from 'sonner';
 import {
   uploadAssetToDrive,
@@ -82,19 +83,14 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const init = async () => {
       try {
-        const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
-
-        let userId = '170d6fb1-4e4f-4704-ab9a-a917dc86cba5';
-        if (!isSelfHosted) {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) {
-            setIsLoading(false);
-            return;
-          }
-          userId = user.id;
+        // VPS-ONLY: Use centralized auth
+        const user = getUser();
+        if (!user) {
+          setIsLoading(false);
+          return;
         }
 
-        await loadProjects(userId);
+        await loadProjects(user.id);
       } catch (error) {
         console.error('[GlobalProjectContext] Init error:', error);
       } finally {
@@ -103,21 +99,7 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
     };
 
     init();
-
-    // Listen for auth changes only in cloud mode
-    const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
-    if (!isSelfHosted) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
-          await loadProjects(session.user.id);
-        } else if (event === 'SIGNED_OUT') {
-          setActiveProject(null);
-          setProjects([]);
-          localStorage.removeItem(STORAGE_KEY);
-        }
-      });
-      return () => subscription.unsubscribe();
-    }
+    // VPS-ONLY: No auth state listener. Frontend reacts to 401 responses only.
   }, []);
 
   const loadProjects = async (userId: string) => {
@@ -159,14 +141,10 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshProjects = useCallback(async () => {
-    const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
-    if (isSelfHosted) {
-      await loadProjects('local-user');
-    } else {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await loadProjects(user.id);
-      }
+    // VPS-ONLY: Use centralized auth
+    const user = getUser();
+    if (user) {
+      await loadProjects(user.id);
     }
   }, []);
 
@@ -273,26 +251,10 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
         if (!res.ok) throw new Error('Failed to create local project');
         newProject = await res.json();
       } else {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          toast.error('Please sign in to create a project');
-          return null;
-        }
-        userId = user.id;
-
-        const { data: project, error } = await supabase
-          .from('projects')
-          .insert({
-            user_id: userId,
-            name: name.trim(),
-            product_name: name.trim(),
-            status: 'draft'
-          })
-          .select('id, name, product_name, google_drive_folder_id, google_drive_folder_link, language, market, status, created_at, updated_at')
-          .single();
-
-        if (error) throw error;
-        newProject = project as Project;
+        // VPS-ONLY: This branch should not be reached
+        console.error('[GlobalProjectContext] Non-VPS mode not supported');
+        toast.error('Configuration error');
+        return null;
       }
 
       // Try to create Google Drive folder (non-blocking)

@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { DollarSign, Sparkles, TrendingUp, Crown, AlertCircle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client"; // Database only
+import { getUser } from "@/utils/auth";
 import { toast } from "sonner";
 
 interface BatchCostPreviewProps {
@@ -37,7 +38,8 @@ export default function BatchCostPreview({ scenesCount, variationsPerScene }: Ba
 
   const fetchUserSettings = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) return;
 
       const [settingsRes, enginesRes] = await Promise.all([
@@ -60,7 +62,8 @@ export default function BatchCostPreview({ scenesCount, variationsPerScene }: Ba
   const handleTierChange = async (newTier: string) => {
     setUpdating(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) {
         toast.error("Please sign in to change tier");
         return;
@@ -150,7 +153,7 @@ export default function BatchCostPreview({ scenesCount, variationsPerScene }: Ba
               {userTier === 'free' ? "Free" : `$${totalEstimatedCost.toFixed(2)}`}
             </span>
           </div>
-          
+
           {userTier !== 'free' && (
             <p className="text-xs text-muted-foreground">
               Range: ${minCost.toFixed(2)} - ${maxCost.toFixed(2)} depending on engine mix
@@ -166,17 +169,16 @@ export default function BatchCostPreview({ scenesCount, variationsPerScene }: Ba
               const Icon = config.icon;
               const isSelected = tier === userTier;
               const tierCost = tier === 'free' ? 0 : totalVideos * config.perVideo;
-              
+
               return (
-                <button 
-                  key={tier} 
+                <button
+                  key={tier}
                   onClick={() => handleTierChange(tier)}
                   disabled={updating}
-                  className={`p-2 rounded text-center transition-all cursor-pointer hover:scale-105 disabled:opacity-50 ${
-                    isSelected 
-                      ? 'bg-primary/20 ring-2 ring-primary shadow-glow' 
+                  className={`p-2 rounded text-center transition-all cursor-pointer hover:scale-105 disabled:opacity-50 ${isSelected
+                      ? 'bg-primary/20 ring-2 ring-primary shadow-glow'
                       : 'bg-muted/20 hover:bg-muted/40'
-                  }`}
+                    }`}
                 >
                   <Icon className={`w-3 h-3 mx-auto mb-1 ${config.color}`} />
                   <p className="text-[10px] text-muted-foreground">{config.label}</p>

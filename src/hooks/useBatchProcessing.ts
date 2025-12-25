@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // For database only
+import { getUser, getAuthHeaders } from '@/utils/auth';
 import { BatchQueueItem } from '@/components/ai-tools/BatchQueuePanel';
 import { useToast } from '@/hooks/use-toast';
 import { ImageOutputSettings, VideoOutputSettings } from '@/components/ai-tools/OutputControlsPanel';
@@ -20,36 +21,37 @@ export function useBatchProcessing() {
   const [isPaused, setIsPaused] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [completedOutputs, setCompletedOutputs] = useState<string[]>([]);
-  
+
   const pauseRef = useRef(false);
   const configRef = useRef<BatchProcessingConfig | null>(null);
 
   // Add files to queue
   const addToQueue = useCallback(async (files: File[]) => {
     const newItems: BatchQueueItem[] = [];
-    
+
     for (const file of files) {
-      // Upload file first
+      // VPS-ONLY: Upload file via backend
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = getUser();
         if (!user) continue;
-        
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${user.id}/batch/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
-        const bucket = file.type.startsWith('video/') ? 'videos' : 'custom-scenes';
-        
-        const { data, error } = await supabase.storage
-          .from(bucket)
-          .upload(fileName, file, { cacheControl: '3600', upsert: false });
-        
-        if (error) throw error;
-        
-        const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(data.path);
-        
+
+        const formData = new FormData();
+        formData.append('file', file);
+        const headers = getAuthHeaders();
+
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers,
+          body: formData
+        });
+
+        if (!res.ok) throw new Error('Upload failed');
+        const data = await res.json();
+
         newItems.push({
           id: crypto.randomUUID(),
           file,
-          fileUrl: publicUrl,
+          fileUrl: data.url,
           status: 'queued',
           progress: 0,
         });
@@ -57,7 +59,7 @@ export function useBatchProcessing() {
         console.error('Failed to upload file for batch:', file.name, error);
       }
     }
-    
+
     setQueue(prev => [...prev, ...newItems]);
     toast({
       title: `${newItems.length} files added to queue`,
@@ -93,18 +95,18 @@ export function useBatchProcessing() {
   // Process a single item
   const processItem = async (item: BatchQueueItem, config: BatchProcessingConfig): Promise<BatchQueueItem> => {
     const startTime = new Date();
-    
+
     // Update status to processing
-    setQueue(prev => prev.map(i => 
+    setQueue(prev => prev.map(i =>
       i.id === item.id ? { ...i, status: 'processing' as const, progress: 10, startTime } : i
     ));
 
     try {
       // Simulate progress
       const progressInterval = setInterval(() => {
-        setQueue(prev => prev.map(i => 
-          i.id === item.id && i.status === 'processing' 
-            ? { ...i, progress: Math.min(i.progress + 15, 90) } 
+        setQueue(prev => prev.map(i =>
+          i.id === item.id && i.status === 'processing'
+            ? { ...i, progress: Math.min(i.progress + 15, 90) }
             : i
         ));
       }, 500);
@@ -132,23 +134,32 @@ export function useBatchProcessing() {
       }
 
       const outputUrl = response.data?.outputUrl || response.data?.url || item.fileUrl;
-      
-      // Save to gallery
-      const { data: { user } } = await supabase.auth.getUser();
+
+      // Save to local storage/gallery via backend
+      const user = getUser();
       if (user && outputUrl) {
-        await supabase.from('generated_images').insert({
-          user_id: user.id,
-          image_url: outputUrl,
-          image_type: item.file.type.startsWith('video/') ? 'batch_video' : 'batch_image',
-          prompt: `Batch: ${config.toolId}`,
-          engine_name: response.data?.debug?.provider || 'AI Tools',
-          status: 'completed',
-          metadata: {
-            batchId: item.id,
-            originalFileName: item.file.name,
-            toolId: config.toolId,
-          },
-        } as any);
+        // Use VPS backend to save generated asset
+        try {
+          const headers = getAuthHeaders();
+          await fetch('/api/generated-assets', {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              image_url: outputUrl,
+              image_type: item.file.type.startsWith('video/') ? 'batch_video' : 'batch_image',
+              prompt: `Batch: ${config.toolId}`,
+              engine_name: response.data?.debug?.provider || 'AI Tools',
+              status: 'completed',
+              metadata: {
+                batchId: item.id,
+                originalFileName: item.file.name,
+                toolId: config.toolId,
+              },
+            })
+          });
+        } catch (e) {
+          console.error('Failed to save batch result:', e);
+        }
       }
 
       return {
@@ -195,8 +206,8 @@ export function useBatchProcessing() {
 
       setCurrentIndex(i);
       const result = await processItem(item, config);
-      
-      setQueue(prev => prev.map(queueItem => 
+
+      setQueue(prev => prev.map(queueItem =>
         queueItem.id === item.id ? result : queueItem
       ));
 

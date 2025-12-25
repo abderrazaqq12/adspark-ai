@@ -6,10 +6,10 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { 
-  ArrowRight, 
-  Loader2, 
-  Video, 
+import {
+  ArrowRight,
+  Loader2,
+  Video,
   Sparkles,
   Upload,
   Plus,
@@ -21,7 +21,8 @@ import {
   Webhook
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Database only
+import { getUser, getAuthToken } from '@/utils/auth';
 import { useStudioPrompts } from '@/hooks/useStudioPrompts';
 
 interface StudioVideoCreationProps {
@@ -80,7 +81,8 @@ export const StudioVideoCreation = ({ onNext }: StudioVideoCreationProps) => {
 
   const loadSettings = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) return;
 
       const { data: settings } = await supabase
@@ -138,10 +140,11 @@ export const StudioVideoCreation = ({ onNext }: StudioVideoCreationProps) => {
 
   const generateAllScenes = async () => {
     setIsGenerating(true);
-    
+
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      // VPS-ONLY: Use centralized auth
+      const token = getAuthToken();
+      if (!token) throw new Error('Not authenticated');
 
       // Update all to generating
       setScenes(prev => prev.map(s => ({ ...s, status: 'generating' as const })));
@@ -157,17 +160,17 @@ export const StudioVideoCreation = ({ onNext }: StudioVideoCreationProps) => {
             }
           });
 
-          setScenes(prev => prev.map(s => 
-            s.id === scene.id 
-              ? { 
-                  ...s, 
-                  videoUrl: response.data?.videoUrl || null,
-                  status: response.error ? 'failed' : 'completed' 
-                } 
+          setScenes(prev => prev.map(s =>
+            s.id === scene.id
+              ? {
+                ...s,
+                videoUrl: response.data?.videoUrl || null,
+                status: response.error ? 'failed' : 'completed'
+              }
               : s
           ));
         } catch (error) {
-          setScenes(prev => prev.map(s => 
+          setScenes(prev => prev.map(s =>
             s.id === scene.id ? { ...s, status: 'failed' } : s
           ));
         }
@@ -192,7 +195,7 @@ export const StudioVideoCreation = ({ onNext }: StudioVideoCreationProps) => {
     const scene = scenes.find(s => s.id === id);
     if (!scene) return;
 
-    setScenes(prev => prev.map(s => 
+    setScenes(prev => prev.map(s =>
       s.id === id ? { ...s, status: 'generating' } : s
     ));
 
@@ -205,17 +208,17 @@ export const StudioVideoCreation = ({ onNext }: StudioVideoCreationProps) => {
         }
       });
 
-      setScenes(prev => prev.map(s => 
-        s.id === id 
-          ? { 
-              ...s, 
-              videoUrl: response.data?.videoUrl || s.videoUrl,
-              status: response.error ? 'failed' : 'completed' 
-            } 
+      setScenes(prev => prev.map(s =>
+        s.id === id
+          ? {
+            ...s,
+            videoUrl: response.data?.videoUrl || s.videoUrl,
+            status: response.error ? 'failed' : 'completed'
+          }
           : s
       ));
     } catch (error) {
-      setScenes(prev => prev.map(s => 
+      setScenes(prev => prev.map(s =>
         s.id === id ? { ...s, status: 'failed' } : s
       ));
     }
@@ -287,9 +290,9 @@ export const StudioVideoCreation = ({ onNext }: StudioVideoCreationProps) => {
           <div className="space-y-2">
             <Label>Options</Label>
             <div className="flex items-center gap-2 h-10">
-              <Checkbox 
-                checked={addSubtitles} 
-                onCheckedChange={(c) => setAddSubtitles(c as boolean)} 
+              <Checkbox
+                checked={addSubtitles}
+                onCheckedChange={(c) => setAddSubtitles(c as boolean)}
                 id="subtitles"
               />
               <label htmlFor="subtitles" className="text-sm">Add Subtitles</label>
@@ -352,14 +355,13 @@ export const StudioVideoCreation = ({ onNext }: StudioVideoCreationProps) => {
 
         <div className="space-y-4">
           {scenes.map((scene) => (
-            <div 
-              key={scene.id} 
-              className={`p-4 rounded-lg border ${
-                scene.status === 'completed' ? 'border-green-500/30 bg-green-500/5' :
-                scene.status === 'generating' ? 'border-blue-500/30 bg-blue-500/5' :
-                scene.status === 'failed' ? 'border-destructive/30 bg-destructive/5' :
-                'border-border bg-muted/30'
-              }`}
+            <div
+              key={scene.id}
+              className={`p-4 rounded-lg border ${scene.status === 'completed' ? 'border-green-500/30 bg-green-500/5' :
+                  scene.status === 'generating' ? 'border-blue-500/30 bg-blue-500/5' :
+                    scene.status === 'failed' ? 'border-destructive/30 bg-destructive/5' :
+                      'border-border bg-muted/30'
+                }`}
             >
               <div className="flex items-start gap-4">
                 <div className="flex items-center gap-2 pt-2">
@@ -401,8 +403,8 @@ export const StudioVideoCreation = ({ onNext }: StudioVideoCreationProps) => {
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
                       <Label className="text-xs">Engine</Label>
-                      <Select 
-                        value={scene.engine} 
+                      <Select
+                        value={scene.engine}
                         onValueChange={(v) => updateScene(scene.id, { engine: v })}
                       >
                         <SelectTrigger className="h-8 text-xs bg-background">
@@ -431,25 +433,25 @@ export const StudioVideoCreation = ({ onNext }: StudioVideoCreationProps) => {
 
                 {/* Actions */}
                 <div className="flex items-center gap-1">
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     className="h-8 w-8"
                     onClick={() => regenerateScene(scene.id)}
                     disabled={scene.status === 'generating'}
                   >
                     <RefreshCw className={`w-4 h-4 ${scene.status === 'generating' ? 'animate-spin' : ''}`} />
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     className="h-8 w-8"
                   >
                     <Upload className="w-4 h-4" />
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     className="h-8 w-8 text-destructive"
                     onClick={() => removeScene(scene.id)}
                   >

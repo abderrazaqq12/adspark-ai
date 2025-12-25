@@ -7,13 +7,13 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  Sparkles, 
-  Shuffle, 
-  Zap, 
-  Film, 
-  Music, 
-  Clock, 
+import {
+  Sparkles,
+  Shuffle,
+  Zap,
+  Film,
+  Music,
+  Clock,
   DollarSign,
   Play,
   Pause,
@@ -22,7 +22,8 @@ import {
   AlertCircle,
   Loader2
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Database only
+import { getUser } from '@/utils/auth';
 import { useToast } from '@/hooks/use-toast';
 
 interface VideoVarietyEngineProps {
@@ -68,11 +69,11 @@ const TRANSITION_STYLES = [
   { id: 'glitch', label: 'Glitch' },
 ];
 
-export function VideoVarietyEngine({ 
-  projectId, 
-  scriptId, 
+export function VideoVarietyEngine({
+  projectId,
+  scriptId,
   scenesCount,
-  onComplete 
+  onComplete
 }: VideoVarietyEngineProps) {
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
@@ -80,7 +81,7 @@ export function VideoVarietyEngine({
   const [progress, setProgress] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
   const [failedCount, setFailedCount] = useState(0);
-  
+
   const [config, setConfig] = useState<VariationConfig>({
     totalVariations: 20,
     hookStyles: ['question', 'problem', 'story'],
@@ -102,8 +103,9 @@ export function VideoVarietyEngine({
     setFailedCount(0);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
+      if (!user) throw new Error('Not authenticated');
 
       // Generate variation configs
       const variations = generateVariationConfigs(config);
@@ -111,7 +113,7 @@ export function VideoVarietyEngine({
       // Insert variation records
       for (let i = 0; i < variations.length; i++) {
         const variation = variations[i];
-        
+
         await supabase
           .from('video_variations')
           .insert({
@@ -189,7 +191,7 @@ export function VideoVarietyEngine({
       if (variations && variations.length > 0) {
         await supabase
           .from('video_variations')
-          .update({ 
+          .update({
             status: 'generating',
             started_at: new Date().toISOString(),
           })
@@ -200,7 +202,7 @@ export function VideoVarietyEngine({
 
         await supabase
           .from('video_variations')
-          .update({ 
+          .update({
             status: Math.random() > 0.1 ? 'completed' : 'failed',
             completed_at: new Date().toISOString(),
             quality_score: 70 + Math.random() * 30,
@@ -229,7 +231,7 @@ export function VideoVarietyEngine({
 
   const generateVariationConfigs = (config: VariationConfig) => {
     const variations = [];
-    
+
     for (let i = 0; i < config.totalVariations; i++) {
       const hookStyle = config.hookStyles[i % config.hookStyles.length];
       const pacing = config.pacingOptions[i % config.pacingOptions.length];
@@ -387,7 +389,7 @@ export function VideoVarietyEngine({
                 <Switch
                   id="randomize-order"
                   checked={config.randomizeSceneOrder}
-                  onCheckedChange={(checked) => 
+                  onCheckedChange={(checked) =>
                     setConfig(prev => ({ ...prev, randomizeSceneOrder: checked }))
                   }
                 />
@@ -399,7 +401,7 @@ export function VideoVarietyEngine({
                 <Switch
                   id="randomize-engines"
                   checked={config.randomizeEngines}
-                  onCheckedChange={(checked) => 
+                  onCheckedChange={(checked) =>
                     setConfig(prev => ({ ...prev, randomizeEngines: checked }))
                   }
                 />
@@ -411,7 +413,7 @@ export function VideoVarietyEngine({
                 <Switch
                   id="optimize-cost"
                   checked={config.optimizeForCost}
-                  onCheckedChange={(checked) => 
+                  onCheckedChange={(checked) =>
                     setConfig(prev => ({ ...prev, optimizeForCost: checked }))
                   }
                 />

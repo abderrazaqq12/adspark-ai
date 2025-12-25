@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { getUser, getAuthHeaders } from "@/utils/auth";
 import { toast } from "sonner";
 
 interface UploadResult {
@@ -20,82 +20,46 @@ export function useVideoUpload() {
     setProgress(0);
 
     try {
-      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted';
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user && !isSelfHosted) {
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
+      if (!user) {
         toast.error("Please sign in to upload videos");
         return null;
       }
 
-      if (isSelfHosted) {
-        // VPS Mode: specific progress simulation
-        const progressInterval = setInterval(() => {
-          setProgress(prev => Math.min(prev + 20, 90));
-        }, 300);
+      // VPS Mode: Upload to backend
+      const progressInterval = setInterval(() => {
+        setProgress(prev => Math.min(prev + 20, 90));
+      }, 300);
 
-        const formData = new FormData();
-        formData.append('file', file);
-        // Note: bucket/folder logic handled by generic /api/upload into 'uploads' dir
+      const formData = new FormData();
+      formData.append('file', file);
 
-        // Ensure we pass the auth token for the VPS Admin API
-        const token = localStorage.getItem('token');
+      const headers = getAuthHeaders();
 
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          headers: {
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-          },
-          body: formData
-        });
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers,
+        body: formData
+      });
 
-        clearInterval(progressInterval);
+      clearInterval(progressInterval);
 
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || 'Upload failed');
-        }
-
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error || 'Upload failed');
-
-        setProgress(100);
-        toast.success("Video uploaded successfully");
-
-        return {
-          url: data.url,
-          path: data.filename // Use filename as "path" identifier for consistency
-        };
-
-      } else {
-        // Cloud Mode
-        const fileExt = file.name.split(".").pop();
-        const fileName = `${user!.id}/${folder ? folder + "/" : ""}${Date.now()}.${fileExt}`;
-
-        // Simulate progress (Supabase doesn't provide upload progress)
-        const progressInterval = setInterval(() => {
-          setProgress(prev => Math.min(prev + 10, 90));
-        }, 200);
-
-        const { data, error } = await supabase.storage
-          .from(bucket)
-          .upload(fileName, file, {
-            cacheControl: "3600",
-            upsert: false,
-          });
-
-        clearInterval(progressInterval);
-        setProgress(100);
-
-        if (error) throw error;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from(bucket)
-          .getPublicUrl(data.path);
-
-        toast.success("Video uploaded successfully");
-        return { url: publicUrl, path: data.path };
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Upload failed');
       }
+
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Upload failed');
+
+      setProgress(100);
+      toast.success("Video uploaded successfully");
+
+      return {
+        url: data.url,
+        path: data.filename
+      };
     } catch (error: any) {
       toast.error(error.message || "Failed to upload video");
       return null;
@@ -110,11 +74,14 @@ export function useVideoUpload() {
     path: string
   ): Promise<boolean> => {
     try {
-      const { error } = await supabase.storage
-        .from(bucket)
-        .remove([path]);
+      // VPS-ONLY: Delete via backend API
+      const headers = getAuthHeaders();
+      const res = await fetch(`/api/files/${encodeURIComponent(path)}`, {
+        method: 'DELETE',
+        headers
+      });
 
-      if (error) throw error;
+      if (!res.ok) throw new Error('Delete failed');
       toast.success("Video deleted");
       return true;
     } catch (error: any) {

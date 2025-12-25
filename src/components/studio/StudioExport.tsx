@@ -18,7 +18,8 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Database only
+import { getUser, getAuthToken } from '@/utils/auth';
 import { createRenderJob, getRenderJob } from '@/lib/renderflow';
 import { AudienceTargeting } from './AudienceTargeting';
 import { useGlobalProject } from "@/contexts/GlobalProjectContext";
@@ -72,7 +73,8 @@ export const StudioExport = () => {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        // VPS-ONLY: Use centralized auth
+        const user = getUser();
         if (!user) return;
 
         const { data: settings } = await supabase
@@ -174,8 +176,9 @@ export const StudioExport = () => {
     // ---------------------------------------------------------
     if (renderEngine === 'renderflow') {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
+        // VPS-ONLY: Use centralized auth
+        const token = getAuthToken();
+        if (!token) throw new Error('Not authenticated');
 
         // FIXED: Use the hardcoded sample video as source_url to strictly follow requirements
         // without refactoring the whole data flow yet.
@@ -211,8 +214,9 @@ export const StudioExport = () => {
     // ---------------------------------------------------------
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      // VPS-ONLY: Use centralized auth
+      const token = getAuthToken();
+      if (!token) throw new Error('Not authenticated');
 
       const totalVideos = selectedFormats.length * parseInt(variationsCount);
 

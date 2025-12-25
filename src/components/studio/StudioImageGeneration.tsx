@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { getAuthenticatedUser, getAuthToken, getAuthHeaders } from '@/utils/auth-adapter';
+import { getUser, getAuthToken, getAuthHeaders } from '@/utils/auth';
 import { ImageGenerationProgress } from '@/components/ImageGenerationProgress';
 import { useProject } from '@/contexts/ProjectContext';
 import { parseEdgeFunctionError, formatErrorForToast, createDetailedErrorLog } from '@/lib/edgeFunctionErrors';
@@ -169,7 +169,7 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
   const loadProductInfo = async () => {
     setIsLoadingProject(true);
     try {
-      const user = await getAuthenticatedUser();
+      const user = getUser();
       if (!user) {
         console.log('[StudioImageGeneration] No authenticated user, skipping load');
         return;
@@ -710,8 +710,8 @@ export const StudioImageGeneration = ({ onNext, projectId: propProjectId }: Stud
               key={type.id}
               onClick={() => toggleType(type.id)}
               className={`p-4 rounded-lg border cursor-pointer transition-all ${selectedTypes.includes(type.id)
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:border-primary/50'
+                ? 'border-primary bg-primary/5'
+                : 'border-border hover:border-primary/50'
                 }`}
             >
               <div className="flex items-start gap-3">

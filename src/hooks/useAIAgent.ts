@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { getUser, getAuthHeaders } from '@/utils/auth';
 
 export type AIAgentModel = 'chatgpt' | 'gemini' | 'claude' | 'llama' | 'deepseek';
 
@@ -19,20 +19,19 @@ export const useAIAgent = (): UseAIAgentReturn => {
 
   const loadAIAgent = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = getUser();
       if (!user) {
         setLoading(false);
         return;
       }
 
-      const { data: settings } = await supabase
-        .from('user_settings')
-        .select('preferences')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      // VPS-First: Use backend API
+      const headers = getAuthHeaders();
+      const response = await fetch('/api/settings', { headers });
 
-      if (settings?.preferences) {
-        const prefs = settings.preferences as Record<string, string>;
+      if (response.ok) {
+        const data = await response.json();
+        const prefs = data?.settings?.preferences || data?.preferences || {};
         const savedAgent = prefs.ai_agent as AIAgentModel;
         if (['chatgpt', 'gemini', 'claude', 'llama', 'deepseek'].includes(savedAgent)) {
           setAiAgent(savedAgent);

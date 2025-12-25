@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { 
+import {
   Database,
   CheckCircle2,
   AlertTriangle,
   Webhook
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Database only
+import { getUser } from '@/utils/auth';
 import { LandingPageCompiler } from '@/components/studio/LandingPageCompiler';
 
 interface StudioLandingPageProps {
@@ -32,7 +33,7 @@ interface ProductInfo {
 
 export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
   const { toast } = useToast();
-  
+
   const [productInfo, setProductInfo] = useState<ProductInfo>({ name: '', description: '', url: '', url2: '' });
   const [hasMarketingAngles, setHasMarketingAngles] = useState(false);
   const [projectId, setProjectId] = useState<string>('');
@@ -50,7 +51,8 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
 
   const loadAllData = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) return;
 
       const { data: settings } = await supabase
@@ -81,10 +83,10 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
 
           // Check Marketing Angles from previous step
           const savedAngles = prefs.studio_marketing_angles;
-          if (savedAngles && 
-              (savedAngles.problemsSolved?.length > 0 || 
-               savedAngles.customerValue?.length > 0 || 
-               savedAngles.marketingAngles?.length > 0)) {
+          if (savedAngles &&
+            (savedAngles.problemsSolved?.length > 0 ||
+              savedAngles.customerValue?.length > 0 ||
+              savedAngles.marketingAngles?.length > 0)) {
             setHasMarketingAngles(true);
           } else {
             setHasMarketingAngles(false);
@@ -93,7 +95,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
           // Load webhook URL
           const stageWebhooks = prefs.stage_webhooks || {};
           const globalWebhookUrl = prefs.n8n_global_webhook_url || prefs.global_webhook_url || '';
-          
+
           if (stageWebhooks.landing_page?.webhook_url) {
             setN8nWebhookUrl(stageWebhooks.landing_page.webhook_url);
           } else if (globalWebhookUrl) {
@@ -161,7 +163,7 @@ export const StudioLandingPage = ({ onNext }: StudioLandingPageProps) => {
           <Database className="w-4 h-4 text-primary" />
           <span className="font-medium text-sm">Pipeline Status</span>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* Product Info Status */}
           <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">

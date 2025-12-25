@@ -15,7 +15,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
-import { supabase } from "@/integrations/supabase/client";
+import { getUser, getAuthHeaders, logout } from "@/utils/auth";
 import { useTheme } from "@/components/ThemeProvider";
 import { toast } from "sonner";
 
@@ -37,49 +37,36 @@ export function UserProfileMenu() {
 
   useEffect(() => {
     const fetchProfile = async () => {
-      const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted';
+      // VPS-ONLY: Use auth utility
+      const user = getUser();
+      if (!user) return;
 
-      if (isSelfHosted) {
-        try {
-          // In VPS mode, fetch from our local API proxy with Auth token
-          const token = localStorage.getItem('token');
-          const res = await fetch('/api/user/profile', {
-            headers: {
-              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-            }
+      setInitials(user.email?.charAt(0).toUpperCase() || "A");
+
+      try {
+        const headers = getAuthHeaders();
+        const res = await fetch('/api/user/profile', { headers });
+
+        if (res.ok) {
+          const data = await res.json();
+          setProfile({
+            email: data.email || user.email,
+            plan: data.plan || "Pro",
+            credits: data.credits || 100
           });
-
-          if (res.ok) {
-            const data = await res.json();
-            setProfile({
-              email: data.email,
-              plan: data.plan,
-              credits: data.credits
-            });
-            setInitials("A"); // Admin
-          }
-        } catch (e) {
-          console.error("Failed to fetch VPS profile:", e);
+        } else {
+          setProfile({
+            email: user.email,
+            plan: "Pro",
+            credits: 100
+          });
         }
-        return;
-      }
-
-      // Cloud Mode: Fetch from Supabase
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const email = user.email || "";
-        setInitials(email.charAt(0).toUpperCase());
-
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("email, plan, credits")
-          .eq("id", user.id)
-          .single();
-
+      } catch (e) {
+        console.error("Failed to fetch profile:", e);
         setProfile({
-          email: profileData?.email || user.email,
-          plan: profileData?.plan || "Pro",
-          credits: profileData?.credits || 100,
+          email: user.email,
+          plan: "Pro",
+          credits: 100
         });
       }
     };
@@ -87,13 +74,9 @@ export function UserProfileMenu() {
     fetchProfile();
   }, []);
 
-  const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast.error("Failed to logout");
-    } else {
-      navigate("/auth");
-    }
+  const handleLogout = () => {
+    // VPS-ONLY: Use centralized logout
+    logout();
   };
 
   return (

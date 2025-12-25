@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Database only
+import { getUser } from '@/utils/auth';
 import { useAIBrain } from './useAIBrain';
 
 interface SmartDefaults {
@@ -44,8 +45,9 @@ export function useSmartDefaults(projectId?: string): UseSmartDefaultsReturn {
 
   const loadDefaults = useCallback(async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
+      if (!user) {
         setIsLoading(false);
         return;
       }
@@ -54,14 +56,14 @@ export function useSmartDefaults(projectId?: string): UseSmartDefaultsReturn {
       const { data: settings } = await supabase
         .from('user_settings')
         .select('default_language, default_voice, pricing_tier, preferences')
-        .eq('user_id', session.user.id)
+        .eq('user_id', user.id)
         .maybeSingle();
 
       // Load learnings
       const { data: learnings } = await supabase
         .from('ai_learnings')
         .select('*')
-        .eq('user_id', session.user.id)
+        .eq('user_id', user.id)
         .order('confidence_score', { ascending: false })
         .limit(20);
 
@@ -71,7 +73,7 @@ export function useSmartDefaults(projectId?: string): UseSmartDefaultsReturn {
       if (settings) {
         newDefaults.preferredLanguage = settings.default_language || 'en';
         newDefaults.preferredVoice = settings.default_voice || 'EXAVITQu4vr4xnSDxMaL';
-        
+
         const prefs = settings.preferences as Record<string, any> | null;
         if (prefs) {
           newDefaults.preferredMarket = prefs.default_market || prefs.studio_target_market || 'us';
@@ -86,9 +88,9 @@ export function useSmartDefaults(projectId?: string): UseSmartDefaultsReturn {
           // Safely cast insight - it could be any valid JSON
           const insight = learning.insight as Record<string, any> | null;
           if (!insight || typeof insight !== 'object') continue;
-          
+
           const confidenceScore = learning.confidence_score ?? 0;
-          
+
           switch (learning.learning_type) {
             case 'engine_preference':
               if (confidenceScore > 0.6 && insight.preferred_engine) {

@@ -5,7 +5,8 @@
  * Stage 3: Landing Page HTML
  */
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Database only
+import { getUser, getAuthHeaders } from '@/utils/auth';
 import { useToast } from '@/hooks/use-toast';
 
 // Stage 1: Marketing Angles Output Structure
@@ -69,16 +70,17 @@ export function usePipelineOutputs() {
   // Get current project ID from user settings
   const getCurrentProjectId = useCallback(async (): Promise<string | null> => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) return null;
 
-      const { data: settings } = await supabase
-        .from('user_settings')
-        .select('preferences')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      // VPS: Use backend API
+      const headers = getAuthHeaders();
+      const response = await fetch('/api/settings', { headers });
+      if (!response.ok) return null;
 
-      const prefs = settings?.preferences as Record<string, any>;
+      const data = await response.json();
+      const prefs = data?.settings?.preferences || data?.preferences || {};
       return prefs?.current_project_id || null;
     } catch (err) {
       console.error('[PipelineOutputs] Error getting project ID:', err);

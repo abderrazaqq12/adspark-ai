@@ -8,10 +8,10 @@
  */
 
 import { useState, useCallback, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { getAuthToken } from '@/utils/auth';
 import type { VideoAnalysis, CreativeBlueprint } from '@/lib/creative-scale/types';
-import { 
-  makeBrainV2DeterministicDecision, 
+import {
+  makeBrainV2DeterministicDecision,
   generateBrainV2Variations,
   type BrainV2StrategyObject,
   type PlatformType
@@ -77,7 +77,7 @@ function createFallbackBlueprint(
   options: { optimizationGoal: string; platform: string }
 ): CreativeBlueprint {
   const primaryStrategy = strategies[0];
-  
+
   return {
     id: `blueprint_fallback_${Date.now()}`,
     source_analysis_id: analysisId,
@@ -93,7 +93,7 @@ function createFallbackBlueprint(
       `Framework: ${primaryStrategy.framework}`,
       `Hook type: ${primaryStrategy.hook_type}`,
       `Pacing: ${primaryStrategy.pacing}`,
-      primaryStrategy.confidence_level === 'fallback' 
+      primaryStrategy.confidence_level === 'fallback'
         ? 'Fallback strategy applied for reliability'
         : `High confidence analytical decision`
     ],
@@ -115,7 +115,7 @@ export function useStreamingStrategy(): UseStreamingStrategyReturn {
   const [progress, setProgress] = useState<StrategyProgress | null>(null);
   const [variationProgress, setVariationProgress] = useState<VariationProgress | null>(null);
   const [result, setResult] = useState<StreamingStrategyResult | null>(null);
-  
+
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const cancel = useCallback(() => {
@@ -146,19 +146,19 @@ export function useStreamingStrategy(): UseStreamingStrategyReturn {
     // Helper to create deterministic fallback result
     const createFallbackResult = (): StreamingStrategyResult => {
       console.log('[Brain V2] Using deterministic fallback strategy');
-      
+
       const strategies = generateBrainV2Variations({
         platform: options.platform as PlatformType,
         funnel_stage: options.funnelStage as 'cold' | 'warm' | 'retargeting',
         variation_count: options.variationCount
       });
-      
+
       const blueprint = createFallbackBlueprint(
         analysis.id,
         strategies,
         { optimizationGoal: options.optimizationGoal, platform: options.platform }
       );
-      
+
       return {
         success: true,
         blueprint,
@@ -179,8 +179,8 @@ export function useStreamingStrategy(): UseStreamingStrategyReturn {
     };
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const accessToken = session?.access_token;
+      // VPS-ONLY: Use centralized auth
+      const accessToken = getAuthToken();
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const url = `${supabaseUrl}/functions/v1/creative-scale-strategize-stream`;
@@ -244,7 +244,7 @@ export function useStreamingStrategy(): UseStreamingStrategyReturn {
             const data = line.slice(6);
             try {
               const parsed = JSON.parse(data);
-              
+
               switch (currentEvent) {
                 case 'progress':
                   setProgress(parsed);
@@ -276,7 +276,7 @@ export function useStreamingStrategy(): UseStreamingStrategyReturn {
       }
 
       setIsStreaming(false);
-      
+
       // If no result from SSE, use deterministic fallback
       if (!finalResult || !finalResult.blueprint) {
         console.warn('[SSE] No complete event received - falling back to deterministic engine');
@@ -284,7 +284,7 @@ export function useStreamingStrategy(): UseStreamingStrategyReturn {
         setResult(fallbackResult);
         return fallbackResult;
       }
-      
+
       return finalResult;
 
     } catch (err) {
@@ -295,7 +295,7 @@ export function useStreamingStrategy(): UseStreamingStrategyReturn {
         setIsStreaming(false);
         return fallbackResult;
       }
-      
+
       // ANY error - use deterministic fallback (NEVER FAIL)
       console.warn('[SSE] Stream error - falling back to deterministic engine:', err);
       const fallbackResult = createFallbackResult();

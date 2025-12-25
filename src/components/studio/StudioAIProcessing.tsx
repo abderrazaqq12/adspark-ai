@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CheckCircle2, Clock, AlertCircle, RefreshCw, ArrowRight, Play, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Database only
+import { getAuthToken } from '@/utils/auth';
 
 interface StudioAIProcessingProps {
   onNext: () => void;
@@ -76,7 +77,7 @@ export const StudioAIProcessing = ({ onNext }: StudioAIProcessingProps) => {
 
   const updateStepsFromProgress = (progress: any, status: string) => {
     const count = parseInt(scriptsCount) || 5;
-    
+
     setSteps(prev => prev.map((step, index) => {
       let newStatus: ProcessingStep['status'] = 'pending';
 
@@ -164,8 +165,9 @@ export const StudioAIProcessing = ({ onNext }: StudioAIProcessingProps) => {
     setSteps(prev => prev.map(s => ({ ...s, status: 'pending' as const })));
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      // VPS-ONLY: Use centralized auth
+      const token = getAuthToken();
+      if (!token) {
         throw new Error('Not authenticated');
       }
 
@@ -194,7 +196,7 @@ export const StudioAIProcessing = ({ onNext }: StudioAIProcessingProps) => {
       });
 
       // Set first step to processing
-      setSteps(prev => prev.map((s, i) => 
+      setSteps(prev => prev.map((s, i) =>
         i === 0 ? { ...s, status: 'processing' as const } : s
       ));
 
@@ -293,8 +295,8 @@ export const StudioAIProcessing = ({ onNext }: StudioAIProcessingProps) => {
         </div>
 
         <div className="flex justify-end mt-6">
-          <Button 
-            onClick={startProcessing} 
+          <Button
+            onClick={startProcessing}
             disabled={isProcessing || !productName.trim()}
             className="gap-2"
           >

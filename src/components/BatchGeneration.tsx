@@ -6,19 +6,20 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { 
-  Layers, 
-  Shuffle, 
-  Zap, 
-  Clock, 
-  Play, 
+import {
+  Layers,
+  Shuffle,
+  Zap,
+  Clock,
+  Play,
   Pause,
   RefreshCw,
   CheckCircle2,
   XCircle,
   Loader2
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client"; // Database only
+import { getUser } from "@/utils/auth";
 import { toast } from "sonner";
 import SceneProgressTracker from "./SceneProgressTracker";
 import BatchCostPreview from "./BatchCostPreview";
@@ -90,13 +91,14 @@ export default function BatchGeneration({ scriptId, scenesCount, onComplete }: B
   }, [isGenerating, scriptId]);
 
   const fetchQueueStatus = async () => {
-    const { data: user } = await supabase.auth.getUser();
-    if (!user.user) return;
+    // VPS-ONLY: Use centralized auth
+    const user = getUser();
+    if (!user) return;
 
     const { data, error } = await supabase
       .from("generation_queue")
       .select("*")
-      .eq("user_id", user.user.id)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -145,7 +147,7 @@ export default function BatchGeneration({ scriptId, scenesCount, onComplete }: B
       if (error) throw error;
 
       toast.success(`Queued ${data.batch.totalVariations} video variations`);
-      
+
       // Start processing
       processQueue();
 
@@ -186,7 +188,7 @@ export default function BatchGeneration({ scriptId, scenesCount, onComplete }: B
 
   const retryFailed = async () => {
     const failedItems = queueItems.filter(i => i.status === "failed");
-    
+
     for (const item of failedItems) {
       await supabase
         .from("generation_queue")
@@ -198,7 +200,7 @@ export default function BatchGeneration({ scriptId, scenesCount, onComplete }: B
     processQueue();
   };
 
-  const progress = queueStatus 
+  const progress = queueStatus
     ? Math.round(((queueStatus.completed + queueStatus.failed) / queueStatus.total) * 100)
     : 0;
 
@@ -266,9 +268,9 @@ export default function BatchGeneration({ scriptId, scenesCount, onComplete }: B
             </div>
 
             {/* Cost Preview */}
-            <BatchCostPreview 
-              scenesCount={scenesCount} 
-              variationsPerScene={variationsPerScene} 
+            <BatchCostPreview
+              scenesCount={scenesCount}
+              variationsPerScene={variationsPerScene}
             />
 
             {/* Estimate */}
@@ -292,8 +294,8 @@ export default function BatchGeneration({ scriptId, scenesCount, onComplete }: B
         ) : (
           <>
             {/* Real-time Scene Progress Tracker */}
-            <SceneProgressTracker 
-              scriptId={scriptId} 
+            <SceneProgressTracker
+              scriptId={scriptId}
               onComplete={() => {
                 setIsGenerating(false);
                 onComplete?.();
@@ -307,7 +309,7 @@ export default function BatchGeneration({ scriptId, scenesCount, onComplete }: B
                 <span className="text-sm text-muted-foreground">{progress}%</span>
               </div>
               <Progress value={progress} className="h-2" />
-              
+
               {queueStatus && (
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="outline" className="text-green-500 border-green-500/30">
@@ -381,10 +383,10 @@ export default function BatchGeneration({ scriptId, scenesCount, onComplete }: B
                         item.status === "completed"
                           ? "text-green-500 border-green-500/30"
                           : item.status === "failed"
-                          ? "text-red-500 border-red-500/30"
-                          : item.status === "processing"
-                          ? "text-primary border-primary/30"
-                          : "text-muted-foreground"
+                            ? "text-red-500 border-red-500/30"
+                            : item.status === "processing"
+                              ? "text-primary border-primary/30"
+                              : "text-muted-foreground"
                       }
                     >
                       {item.status}

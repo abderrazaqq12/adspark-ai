@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Database only
+import { getUser, getUserId } from '@/utils/auth';
 
 interface CostTransaction {
   id: string;
@@ -77,14 +78,15 @@ export function useRealTimeCost(projectId?: string): UseRealTimeCostReturn {
 
   const recordCost = useCallback(async (transaction: Omit<CostTransaction, 'id' | 'created_at'>) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
+      if (!user) return;
 
       const { error } = await supabase
         .from('cost_transactions')
         .insert({
           ...transaction,
-          user_id: session.user.id,
+          user_id: user.id,
           project_id: projectId,
         });
 

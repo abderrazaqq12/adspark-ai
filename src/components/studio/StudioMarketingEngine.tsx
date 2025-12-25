@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { getAuthenticatedUser, getAuthToken, getAuthHeaders } from '@/utils/auth-adapter';
+import { getUser, getAuthToken, getAuthHeaders } from '@/utils/auth';
 import { useStudioPrompts } from '@/hooks/useStudioPrompts';
 import { useAIAgent, getModelName } from '@/hooks/useAIAgent';
 import { parseEdgeFunctionError, formatErrorForToast, createDetailedErrorLog } from '@/lib/edgeFunctionErrors';
@@ -203,7 +203,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
   // Save content to database whenever it changes
   const saveContent = async (data: { angles?: GeneratedAngles | null; scripts?: GeneratedScript[]; landingContent?: string }) => {
     try {
-      const user = await getAuthenticatedUser();
+      const user = getUser();
       if (!user) return;
 
       // VPS-First: Use backend API for settings
@@ -242,7 +242,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
 
   const loadProductInfo = async () => {
     try {
-      const user = await getAuthenticatedUser();
+      const user = getUser();
       if (!user) return;
 
       // VPS-First: Use backend API for settings

@@ -2,7 +2,8 @@
  * Hook for managing first-class prompt profiles with database persistence
  */
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // For database only, NOT auth
+import { getUser, getUserId } from '@/utils/auth';
 import { useToast } from '@/hooks/use-toast';
 
 export type PromptType = 'marketing_angles' | 'landing_page' | 'product_content' | 'image_generation' | 'voiceover' | 'scene_breakdown';
@@ -55,7 +56,8 @@ export function usePromptProfiles() {
     market: string = 'gcc'
   ): Promise<PromptProfile | null> => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) return null;
 
       const { data, error } = await supabase
@@ -101,7 +103,8 @@ export function usePromptProfiles() {
   ): Promise<PromptProfile | null> => {
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) {
         toast({ title: 'Error', description: 'Must be logged in', variant: 'destructive' });
         return null;
@@ -244,7 +247,7 @@ export function usePromptProfiles() {
     market: string = 'gcc'
   ): Promise<{ prompt: PromptProfile; debugInfo: { id: string; hash: string; version: number } } | null> => {
     const prompt = await getActivePrompt(type, language, market);
-    
+
     if (!prompt) {
       console.error(`[PromptProfiles] BLOCKED: No active prompt for ${type}/${language}/${market}`);
       return null;

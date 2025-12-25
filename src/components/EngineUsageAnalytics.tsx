@@ -3,7 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { BarChart3, CheckCircle, XCircle, TrendingUp, Clock } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client"; // Database only
+import { getUser } from "@/utils/auth";
 
 interface EngineStats {
   engine_name: string;
@@ -26,7 +27,8 @@ export default function EngineUsageAnalytics() {
 
   const fetchAnalytics = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) return;
 
       // Fetch raw analytics data
@@ -39,7 +41,7 @@ export default function EngineUsageAnalytics() {
 
       // Aggregate by engine
       const aggregated: Record<string, EngineStats> = {};
-      
+
       (data || []).forEach((record: any) => {
         const name = record.engine_name;
         if (!aggregated[name]) {
@@ -53,7 +55,7 @@ export default function EngineUsageAnalytics() {
             total_cost: 0,
           };
         }
-        
+
         aggregated[name].total_uses++;
         if (record.success) {
           aggregated[name].success_count++;
@@ -143,14 +145,13 @@ export default function EngineUsageAnalytics() {
                     <Badge variant="outline" className="text-xs">
                       {engine.total_uses} uses
                     </Badge>
-                    <Badge 
-                      className={`text-xs ${
-                        engine.success_rate >= 80 
-                          ? "bg-green-500/20 text-green-500" 
-                          : engine.success_rate >= 50 
+                    <Badge
+                      className={`text-xs ${engine.success_rate >= 80
+                          ? "bg-green-500/20 text-green-500"
+                          : engine.success_rate >= 50
                             ? "bg-yellow-500/20 text-yellow-500"
                             : "bg-red-500/20 text-red-500"
-                      }`}
+                        }`}
                     >
                       {engine.success_rate.toFixed(0)}% success
                     </Badge>

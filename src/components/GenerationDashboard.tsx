@@ -4,7 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Loader2, Play, Pause, RefreshCw, CheckCircle, XCircle, Clock, Zap, Video, AlertTriangle, Eye } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client"; // Database only
+import { getUser } from "@/utils/auth";
 import { toast } from "sonner";
 import VideoPreviewPlayer from "./VideoPreviewPlayer";
 
@@ -60,7 +61,7 @@ export default function GenerationDashboard() {
 
   useEffect(() => {
     fetchQueueItems();
-    
+
     // Set up real-time subscription
     const channel = supabase
       .channel('queue-updates')
@@ -94,7 +95,7 @@ export default function GenerationDashboard() {
       if (eventType === 'INSERT') {
         return [newRecord as QueueItem, ...prev];
       } else if (eventType === 'UPDATE') {
-        return prev.map(item => 
+        return prev.map(item =>
           item.id === newRecord.id ? { ...item, ...newRecord } : item
         );
       } else if (eventType === 'DELETE') {
@@ -127,7 +128,8 @@ export default function GenerationDashboard() {
 
   const fetchQueueItems = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) return;
 
       const { data, error } = await supabase
@@ -144,7 +146,7 @@ export default function GenerationDashboard() {
       if (error) throw error;
 
       setQueueItems(data || []);
-      
+
       // Calculate stats
       const newStats: DashboardStats = {
         total: data?.length || 0,
@@ -174,7 +176,7 @@ export default function GenerationDashboard() {
       toast.success(`Processed ${response.data.processed} items`, {
         description: `${response.data.remaining} items remaining in queue`
       });
-      
+
       fetchQueueItems();
     } catch (error) {
       console.error('Error processing queue:', error);
@@ -199,8 +201,8 @@ export default function GenerationDashboard() {
     }
   };
 
-  const progressPercent = stats.total > 0 
-    ? Math.round((stats.completed / stats.total) * 100) 
+  const progressPercent = stats.total > 0
+    ? Math.round((stats.completed / stats.total) * 100)
     : 0;
 
   if (loading) {

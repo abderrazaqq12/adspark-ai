@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RefreshCw, Image as ImageIcon, FileText, Mic, Video, Download, ExternalLink, Play, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Database only
+import { getUser } from '@/utils/auth';
 
 interface Script {
   id: string;
@@ -45,7 +46,8 @@ export const StudioAssetBuilder = () => {
 
   const loadLatestProject = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) return;
 
       // Get latest autopilot project
@@ -111,7 +113,7 @@ export const StudioAssetBuilder = () => {
 
   const handleRegenerate = async (assetType: string) => {
     setRegenerating(assetType);
-    
+
     try {
       // Trigger regeneration based on type
       if (selectedProject) {
@@ -237,9 +239,9 @@ export const StudioAssetBuilder = () => {
           <Card className="p-6 bg-card border-border">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Video Scripts</h3>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => handleRegenerate('scripts')}
                 disabled={regenerating === 'scripts'}
               >
@@ -247,7 +249,7 @@ export const StudioAssetBuilder = () => {
                 Regenerate
               </Button>
             </div>
-            
+
             {scripts.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 No scripts generated yet. Run the AI Processing first.
@@ -280,9 +282,9 @@ export const StudioAssetBuilder = () => {
           <Card className="p-6 bg-card border-border">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Scene Videos</h3>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => handleRegenerate('scenes')}
                 disabled={regenerating === 'scenes'}
               >
@@ -290,7 +292,7 @@ export const StudioAssetBuilder = () => {
                 Regenerate
               </Button>
             </div>
-            
+
             {scenes.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 No scenes generated yet. Run the AI Processing first.
@@ -301,8 +303,8 @@ export const StudioAssetBuilder = () => {
                   <div key={scene.id} className="rounded-lg bg-muted/50 border border-border hover:border-primary/50 transition-colors overflow-hidden">
                     <div className="aspect-video bg-muted flex items-center justify-center">
                       {scene.video_url ? (
-                        <video 
-                          src={scene.video_url} 
+                        <video
+                          src={scene.video_url}
                           className="w-full h-full object-cover"
                           controls
                         />
@@ -334,9 +336,9 @@ export const StudioAssetBuilder = () => {
           <Card className="p-6 bg-card border-border">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Final Video Outputs</h3>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => handleRegenerate('videos')}
                 disabled={regenerating === 'videos'}
               >
@@ -344,7 +346,7 @@ export const StudioAssetBuilder = () => {
                 Regenerate
               </Button>
             </div>
-            
+
             {videoOutputs.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 No final videos yet. Complete the video generation process first.
@@ -355,8 +357,8 @@ export const StudioAssetBuilder = () => {
                   <div key={video.id} className="rounded-lg bg-muted/50 border border-border hover:border-primary/50 transition-colors overflow-hidden">
                     <div className="aspect-[9/16] bg-muted flex items-center justify-center">
                       {video.final_video_url ? (
-                        <video 
-                          src={video.final_video_url} 
+                        <video
+                          src={video.final_video_url}
                           className="w-full h-full object-cover"
                           controls
                         />
@@ -375,9 +377,9 @@ export const StudioAssetBuilder = () => {
                         {video.format?.toUpperCase() || 'MP4'} • {video.duration_sec ? `${video.duration_sec}s` : 'Processing'}
                       </p>
                       {video.final_video_url && (
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="w-full mt-2"
                           onClick={() => window.open(video.final_video_url!, '_blank')}
                         >

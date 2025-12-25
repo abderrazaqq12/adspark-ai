@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Database only
+import { getUser } from '@/utils/auth';
 import { StorageCategoryStats, GoogleDriveStatus } from '@/types/storage';
 
 interface StorageStats {
@@ -39,7 +40,8 @@ export function useStorageStats() {
     try {
       setStats(prev => ({ ...prev, isLoading: true, error: null }));
 
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) {
         setStats(prev => ({ ...prev, isLoading: false, error: 'Not authenticated' }));
         return;
@@ -63,14 +65,14 @@ export function useStorageStats() {
       if (logError) throw logError;
 
       // Calculate generated outputs (videos, images, audio, etc.)
-      const outputFiles = fileAssets?.filter(f => 
+      const outputFiles = fileAssets?.filter(f =>
         ['output', 'final', 'video', 'image', 'audio'].includes(f.file_type)
       ) || [];
       const outputSize = outputFiles.reduce((sum, f) => sum + (f.file_size || 0), 0);
       const outputLastMod = outputFiles[0]?.created_at || null;
 
       // Calculate temporary files
-      const tempFiles = fileAssets?.filter(f => 
+      const tempFiles = fileAssets?.filter(f =>
         ['temp', 'tmp', 'cache', 'partial'].includes(f.file_type) || f.status === 'expired'
       ) || [];
       const tempSize = tempFiles.reduce((sum, f) => sum + (f.file_size || 0), 0);

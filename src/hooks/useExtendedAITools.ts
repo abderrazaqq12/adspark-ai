@@ -1,10 +1,11 @@
 // Extended AI Tools Hook - Enhanced with execution tracking and gallery persistence
 import { useState, useCallback, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { 
-  ExtendedAIModel, 
-  getModelById, 
-  extendedAIModelsRegistry 
+import { supabase } from '@/integrations/supabase/client'; // Database only
+import { getAuthToken, getUser } from '@/utils/auth';
+import {
+  ExtendedAIModel,
+  getModelById,
+  extendedAIModelsRegistry
 } from '@/data/extendedAIModels';
 import { useToast } from '@/hooks/use-toast';
 import { ExecutionState, ExecutionTiming } from '@/components/ai-tools/ExecutionStatusTracker';
@@ -115,7 +116,7 @@ export const useExtendedAITools = () => {
     if (!tool) return 0;
 
     let baseCost = 0.02;
-    
+
     if (tool.pricingTier === 'premium') baseCost = 0.10;
     else if (tool.pricingTier === 'standard') baseCost = 0.05;
     else if (tool.pricingTier === 'budget') baseCost = 0.02;
@@ -171,7 +172,7 @@ export const useExtendedAITools = () => {
     }
 
     const startTime = new Date();
-    
+
     // Update timing state
     setExecutionTiming({
       startTime,
@@ -183,7 +184,7 @@ export const useExtendedAITools = () => {
     setIsExecuting(true);
     setExecutionProgress(prev => ({ ...prev, [config.toolId]: 0 }));
     setLastSuccess(false);
-    
+
     // Set initial debug state
     setCurrentDebug({
       provider: 'resolving...',
@@ -200,8 +201,9 @@ export const useExtendedAITools = () => {
     }, 500);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      // VPS-ONLY: Use centralized auth
+      const token = getAuthToken();
+      if (!token) {
         throw new Error('Not authenticated');
       }
 
@@ -209,7 +211,7 @@ export const useExtendedAITools = () => {
       setCurrentDebug(prev => prev ? { ...prev, status: 'executing' } : null);
 
       const functionName = model.apiEndpoint || 'ai-tools';
-      
+
       const payload = {
         action: config.toolId,
         model: model.id,
@@ -250,11 +252,11 @@ export const useExtendedAITools = () => {
       const durationMs = endTime.getTime() - startTime.getTime();
 
       setExecutionProgress(prev => ({ ...prev, [config.toolId]: 100 }));
-      setExecutionTiming(prev => ({ 
-        ...prev, 
-        endTime, 
+      setExecutionTiming(prev => ({
+        ...prev,
+        endTime,
         progress: 100,
-        state: response.error ? 'failed' : 'completed' 
+        state: response.error ? 'failed' : 'completed'
       }));
 
       if (response.error) {
@@ -263,25 +265,25 @@ export const useExtendedAITools = () => {
 
       const responseData = response.data;
       const outputType = getOutputTypeFromTool(model);
-      
+
       // Extract output URL with comprehensive fallbacks - NEVER leave empty on success
-      let outputUrl = responseData?.outputUrl 
-        || responseData?.url 
-        || responseData?.imageUrl 
+      let outputUrl = responseData?.outputUrl
+        || responseData?.url
+        || responseData?.imageUrl
         || responseData?.videoUrl
         || responseData?.data?.url
         || responseData?.data?.image?.url
         || responseData?.data?.video?.url;
-      
+
       // If still no URL but we have input data, use that as reference
       if (!outputUrl && config.inputData) {
         outputUrl = config.inputData.imageUrl || config.inputData.videoUrl || config.inputData.audioUrl;
       }
-      
+
       // Extract debug info with clean fallbacks - NEVER show 'unknown'
       const rawProvider = responseData?.debug?.provider || model.apiEndpoint || 'lovable_ai';
       const rawModel = responseData?.debug?.model || model.id || 'gemini-2.5-flash';
-      
+
       const debug: ToolExecutionDebug = {
         provider: PROVIDER_NAMES[rawProvider] || rawProvider,
         model: cleanModelName(rawModel),
@@ -301,7 +303,8 @@ export const useExtendedAITools = () => {
       let assetId: string | undefined;
       if (outputUrl) {
         try {
-          const { data: { user } } = await supabase.auth.getUser();
+          // VPS-ONLY: Use centralized auth
+          const user = getUser();
           if (user) {
             const { data: savedAsset } = await supabase
               .from('generated_images')
@@ -325,7 +328,7 @@ export const useExtendedAITools = () => {
               } as any)
               .select('id')
               .single();
-            
+
             assetId = savedAsset?.id;
             console.log('[AITools] Asset saved to gallery:', assetId);
           }
@@ -358,7 +361,7 @@ export const useExtendedAITools = () => {
       };
 
       setLastResults(prev => ({ ...prev, [config.toolId]: result }));
-      
+
       toast({
         title: "Execution Complete",
         description: `${model.name} finished in ${(durationMs / 1000).toFixed(1)}s via ${debug.provider}`,
@@ -367,7 +370,7 @@ export const useExtendedAITools = () => {
       return result;
     } catch (error: any) {
       console.error('[AITools] Execution error:', error);
-      
+
       // Clear progress interval
       if (progressIntervalRef.current) {
         clearInterval(progressIntervalRef.current);
@@ -377,10 +380,10 @@ export const useExtendedAITools = () => {
       const endTime = new Date();
       const durationMs = endTime.getTime() - startTime.getTime();
 
-      setExecutionTiming(prev => ({ 
-        ...prev, 
-        endTime, 
-        state: 'failed' 
+      setExecutionTiming(prev => ({
+        ...prev,
+        endTime,
+        state: 'failed'
       }));
 
       const errorDebug: ToolExecutionDebug = {
@@ -415,7 +418,7 @@ export const useExtendedAITools = () => {
       };
 
       setLastResults(prev => ({ ...prev, [config.toolId]: result }));
-      
+
       toast({
         title: "Execution Failed",
         description: error.message || "Failed to execute tool",
@@ -483,7 +486,7 @@ export const useExtendedAITools = () => {
     lastOutputUrl,
     lastOutputType,
     lastSuccess,
-    
+
     // Model getters
     getVideoModels,
     getTalkingActorModels,
@@ -491,11 +494,11 @@ export const useExtendedAITools = () => {
     getPresets,
     getTools,
     getTool,
-    
+
     // Execution
     executeTool,
     estimateCost,
-    
+
     // Utilities
     toolSupportsInput,
     getToolsForInputType,

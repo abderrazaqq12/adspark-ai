@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Database/Storage only
+import { getUser } from '@/utils/auth';
 import { toast as sonnerToast } from 'sonner';
 import { useAudience } from '@/contexts/AudienceContext';
 import { CountrySelector } from '@/components/audience/CountrySelector';
@@ -499,7 +500,8 @@ export const StudioProductInput = ({
 
                   setIsUploading(true);
                   try {
-                    const { data: { user } } = await supabase.auth.getUser();
+                    // VPS-ONLY: Use centralized auth
+                    const user = getUser();
                     if (!user) {
                       sonnerToast.error('Please sign in to upload files');
                       return;

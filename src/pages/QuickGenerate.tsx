@@ -8,7 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client"; // Database only
+import { getAuthToken } from "@/utils/auth";
 import { Rocket, Sparkles, Zap, Clock, DollarSign, Film, FileText, Mic } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import AutopilotProgress from "@/components/AutopilotProgress";
@@ -32,7 +33,7 @@ export default function QuickGenerate() {
   const navigate = useNavigate();
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  
+
   const [formData, setFormData] = useState({
     productName: '',
     productDescription: '',
@@ -55,8 +56,9 @@ export default function QuickGenerate() {
     setIsGenerating(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      // VPS-ONLY: Use centralized auth
+      const token = getAuthToken();
+      if (!token) {
         toast.error("Please sign in to continue");
         navigate('/auth');
         return;
@@ -71,7 +73,7 @@ export default function QuickGenerate() {
       }
 
       const { jobId, projectId, estimatedVideos: totalVideos } = response.data;
-      
+
       setActiveJobId(jobId);
       toast.success(`Autopilot started! Generating ${totalVideos} videos...`);
 
@@ -106,7 +108,7 @@ export default function QuickGenerate() {
           Quick Generate
         </h1>
         <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-          Generate up to 100+ unique video ads with just your product info. 
+          Generate up to 100+ unique video ads with just your product info.
           Our AI handles scripts, voiceovers, and video creation automatically.
         </p>
       </div>
@@ -276,18 +278,18 @@ export default function QuickGenerate() {
                   <DollarSign className="h-4 w-4 text-muted-foreground" />
                   <span className="text-muted-foreground">Est. cost:</span>
                   <span className="font-medium">
-                    {formData.pricingTier === 'free' ? '$0' : 
-                     formData.pricingTier === 'cheap' ? `~$${(estimatedVideos * 0.02).toFixed(2)}` :
-                     formData.pricingTier === 'normal' ? `~$${(estimatedVideos * 0.05).toFixed(2)}` :
-                     `~$${(estimatedVideos * 0.10).toFixed(2)}`}
+                    {formData.pricingTier === 'free' ? '$0' :
+                      formData.pricingTier === 'cheap' ? `~$${(estimatedVideos * 0.02).toFixed(2)}` :
+                        formData.pricingTier === 'normal' ? `~$${(estimatedVideos * 0.05).toFixed(2)}` :
+                          `~$${(estimatedVideos * 0.10).toFixed(2)}`}
                   </span>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Button 
-            size="lg" 
+          <Button
+            size="lg"
             className="w-full gap-2"
             onClick={handleGenerate}
             disabled={isGenerating || !formData.productName.trim()}

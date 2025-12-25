@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Database only
+import { getAuthToken } from '@/utils/auth';
 
 interface PipelineJob {
   id: string;
@@ -10,7 +11,7 @@ interface PipelineJob {
   input_data: any;
   output_data: any;
   error_message?: string | null;
-  
+
   estimated_cost: number;
   actual_cost: number;
   started_at?: string | null;
@@ -64,8 +65,9 @@ export function usePipelineJobs(projectId?: string): UsePipelineJobsReturn {
     if (!projectId) return null;
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      // VPS-ONLY: Use centralized auth
+      const token = getAuthToken();
+      if (!token) throw new Error('Not authenticated');
 
       const response = await supabase.functions.invoke('pipeline-stage', {
         body: {
@@ -136,7 +138,7 @@ export function usePipelineJobs(projectId?: string): UsePipelineJobsReturn {
           if (payload.eventType === 'INSERT') {
             setJobs(prev => [payload.new as PipelineJob, ...prev]);
           } else if (payload.eventType === 'UPDATE') {
-            setJobs(prev => prev.map(j => 
+            setJobs(prev => prev.map(j =>
               j.id === payload.new.id ? payload.new as PipelineJob : j
             ));
           } else if (payload.eventType === 'DELETE') {

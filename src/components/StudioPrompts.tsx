@@ -7,16 +7,16 @@ import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { 
-  FileText, 
-  ChevronDown, 
-  Save, 
-  Loader2, 
-  Image, 
-  Video, 
-  Mic, 
-  Globe, 
-  User, 
+import {
+  FileText,
+  ChevronDown,
+  Save,
+  Loader2,
+  Image,
+  Video,
+  Mic,
+  Globe,
+  User,
   Sparkles,
   Package,
   Layout,
@@ -32,7 +32,8 @@ import {
   Palette,
   Settings2
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client"; // Database only
+import { getUser } from "@/utils/auth";
 import { toast } from "sonner";
 
 // All available functions in the SaaS
@@ -264,7 +265,8 @@ export default function StudioPrompts() {
 
   const loadPrompts = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) return;
 
       const { data: settings } = await supabase
@@ -304,7 +306,7 @@ export default function StudioPrompts() {
       });
 
       setPrompts(mergedPrompts);
-      
+
       // Initialize edited prompts
       const initialEdits: Record<string, { prompt: string; function: string; name: string; description: string }> = {};
       mergedPrompts.forEach(p => {
@@ -327,7 +329,8 @@ export default function StudioPrompts() {
   const savePrompts = async () => {
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) throw new Error("Not authenticated");
 
       // Get current preferences
@@ -338,7 +341,7 @@ export default function StudioPrompts() {
         .maybeSingle();
 
       const currentPrefs = (settings?.preferences as Record<string, any>) || {};
-      
+
       // Separate default and custom prompts
       const defaultPromptsData: Record<string, any> = {};
       const customPromptsData: any[] = [];
@@ -604,7 +607,7 @@ export default function StudioPrompts() {
       <CardContent className="space-y-4">
         {prompts.map((prompt) => (
           <Collapsible key={prompt.id} open={expandedPrompts[prompt.id]}>
-            <CollapsibleTrigger 
+            <CollapsibleTrigger
               className="w-full"
               onClick={() => togglePrompt(prompt.id)}
             >
@@ -686,8 +689,8 @@ export default function StudioPrompts() {
                     </Label>
                     <div className="flex items-center gap-2">
                       {prompt.isCustom && (
-                        <Button 
-                          variant="destructive" 
+                        <Button
+                          variant="destructive"
                           size="sm"
                           onClick={() => deletePrompt(prompt.id)}
                         >
@@ -696,8 +699,8 @@ export default function StudioPrompts() {
                         </Button>
                       )}
                       {!prompt.isCustom && (
-                        <Button 
-                          variant="ghost" 
+                        <Button
+                          variant="ghost"
                           size="sm"
                           onClick={() => resetPrompt(prompt.id)}
                         >

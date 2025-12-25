@@ -7,16 +7,17 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { 
-  AlertTriangle, 
-  Users, 
-  FileX, 
+import {
+  AlertTriangle,
+  Users,
+  FileX,
   Lock,
   ImageOff,
   CheckCircle2,
   ArrowRight
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Database only
+import { getUser } from '@/utils/auth';
 import { useNavigate } from 'react-router-dom';
 
 interface AttentionItem {
@@ -42,8 +43,8 @@ export function AttentionQueuePanel() {
     try {
       const attentionItems: AttentionItem[] = [];
 
-      // 1. Check for projects with missing audience configuration
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) return;
 
       const { data: settings } = await supabase
@@ -232,28 +233,25 @@ export function AttentionQueuePanel() {
         {items.map(item => {
           const Icon = getIcon(item.type);
           const severity = getSeverity(item.type);
-          
+
           return (
-            <div 
+            <div
               key={item.id}
-              className={`p-3 rounded-lg border ${
-                severity === 'high' 
-                  ? 'bg-destructive/5 border-destructive/30' 
+              className={`p-3 rounded-lg border ${severity === 'high'
+                  ? 'bg-destructive/5 border-destructive/30'
                   : 'bg-yellow-500/5 border-yellow-500/30'
-              }`}
+                }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
-                  <Icon className={`w-4 h-4 mt-0.5 ${
-                    severity === 'high' ? 'text-destructive' : 'text-yellow-600'
-                  }`} />
+                  <Icon className={`w-4 h-4 mt-0.5 ${severity === 'high' ? 'text-destructive' : 'text-yellow-600'
+                    }`} />
                   <div>
                     <p className="font-medium text-sm text-foreground">
                       {item.projectName}
                     </p>
-                    <p className={`text-xs font-medium ${
-                      severity === 'high' ? 'text-destructive' : 'text-yellow-600'
-                    }`}>
+                    <p className={`text-xs font-medium ${severity === 'high' ? 'text-destructive' : 'text-yellow-600'
+                      }`}>
                       {item.reason}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
@@ -261,8 +259,8 @@ export function AttentionQueuePanel() {
                     </p>
                   </div>
                 </div>
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   variant="outline"
                   onClick={() => navigate(item.actionUrl)}
                   className="shrink-0 h-8"

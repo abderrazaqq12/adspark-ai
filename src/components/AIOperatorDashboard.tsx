@@ -4,11 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { 
-  Bot, 
-  RefreshCw, 
-  Loader2, 
-  CheckCircle2, 
+import {
+  Bot,
+  RefreshCw,
+  Loader2,
+  CheckCircle2,
   AlertCircle,
   Zap,
   TrendingDown,
@@ -26,7 +26,8 @@ import {
   DollarSign,
   Layers
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client"; // Database only
+import { getUser } from "@/utils/auth";
 import { toast } from "sonner";
 import AutopilotProgress from "./AutopilotProgress";
 import { useFreeTierCreativeEngine } from "@/hooks/useFreeTierCreativeEngine";
@@ -87,7 +88,7 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
       const { data, error } = await supabase.functions.invoke('ai-operator', {
         body: { action: 'check_api_keys' }
       });
-      
+
       if (!error && data) {
         setOperatorStatus({
           operator_enabled: data.settings?.ai_operator_enabled || false,
@@ -109,7 +110,7 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
         .select('*')
         .order('created_at', { ascending: false })
         .limit(20);
-      
+
       if (projectId) {
         query = query.eq('project_id', projectId);
       }
@@ -118,7 +119,7 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
       if (error) throw error;
 
       setJobs(data || []);
-      
+
       // Calculate stats
       const allJobs = data || [];
       setStats({
@@ -157,9 +158,10 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
 
   const runOperator = async (action: string) => {
     setIsRunning(true);
-    
+
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) throw new Error('Not authenticated');
 
       const { data, error } = await supabase.functions.invoke('ai-operator', {
@@ -184,7 +186,8 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
   const runFreeTierOptimization = async () => {
     setIsRunning(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) throw new Error('Not authenticated');
 
       // Get AI Operator recommendation for free-tier
@@ -213,7 +216,7 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
         status: 'completed',
         user_id: user.id,
         project_id: projectId || undefined,
-        output_data: { 
+        output_data: {
           useFreeTier: recommendation.useFreeTier,
           reason: recommendation.reason,
           estimatedQuality: recommendation.estimatedQuality,
@@ -236,7 +239,7 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
       case 'quality_check': return <Eye className="w-4 h-4" />;
       case 'optimize_cost': return <TrendingDown className="w-4 h-4" />;
       case 'generate_variations': return <Sparkles className="w-4 h-4" />;
-      case 'generate_images': 
+      case 'generate_images':
       case 'generate_images_n8n': return <Image className="w-4 h-4" />;
       case 'auto_regenerate': return <RefreshCw className="w-4 h-4" />;
       case 'free_tier_optimization': return <DollarSign className="w-4 h-4" />;
@@ -300,7 +303,7 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
 
       {/* Autopilot Tab */}
       {showAutopilot && activeTab === "autopilot" && autopilotJobId && (
-        <AutopilotProgress 
+        <AutopilotProgress
           jobId={autopilotJobId}
           onComplete={() => {
             toast.success('Autopilot completed!');
@@ -348,8 +351,8 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
                 )}
                 {operatorStatus && (
                   <>
-                    <Badge 
-                      variant="outline" 
+                    <Badge
+                      variant="outline"
                       className={`${operatorStatus.api_keys.count > 0 ? 'border-emerald-500/30 text-emerald-500' : 'border-amber-500/30 text-amber-500'}`}
                     >
                       <Key className="w-3 h-3 mr-1" />
@@ -463,20 +466,18 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
                 <ScrollArea className="h-[300px]">
                   <div className="space-y-2 pr-4">
                     {jobs.map((job) => (
-                      <div 
+                      <div
                         key={job.id}
-                        className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
-                          job.status === 'running' 
-                            ? 'bg-primary/5 border border-primary/20' 
+                        className={`flex items-center justify-between p-3 rounded-lg transition-colors ${job.status === 'running'
+                            ? 'bg-primary/5 border border-primary/20'
                             : 'bg-muted/30'
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                            job.status === 'running' 
-                              ? 'bg-primary/20 text-primary animate-pulse' 
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${job.status === 'running'
+                              ? 'bg-primary/20 text-primary animate-pulse'
                               : 'bg-primary/10 text-primary'
-                          }`}>
+                            }`}>
                             {getJobTypeIcon(job.job_type)}
                           </div>
                           <div>
@@ -494,8 +495,8 @@ export default function AIOperatorDashboard({ projectId, enabled = true, showAut
                         </div>
                         <div className="flex items-center gap-2">
                           {job.error_message && (
-                            <span 
-                              className="text-xs text-destructive max-w-[150px] truncate flex items-center gap-1" 
+                            <span
+                              className="text-xs text-destructive max-w-[150px] truncate flex items-center gap-1"
                               title={job.error_message}
                             >
                               <AlertTriangle className="w-3 h-3" />

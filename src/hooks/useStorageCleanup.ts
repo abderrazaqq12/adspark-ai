@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Database only
+import { getUser, getUserId } from '@/utils/auth';
 import { StorageCategory, CleanupResult } from '@/types/storage';
 import { toast } from 'sonner';
 
@@ -32,7 +33,8 @@ export function useStorageCleanup() {
     };
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) {
         throw new Error('Not authenticated');
       }

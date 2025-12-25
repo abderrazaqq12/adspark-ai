@@ -6,10 +6,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { 
-  ArrowRight, 
-  Loader2, 
-  Mic, 
+import {
+  ArrowRight,
+  Loader2,
+  Mic,
   Play,
   Pause,
   Download,
@@ -19,7 +19,8 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Database only
+import { getUser, getAuthToken } from '@/utils/auth';
 import { useStudioPrompts } from '@/hooks/useStudioPrompts';
 import { AudienceTargeting } from './AudienceTargeting';
 import { useAssetUpload } from '@/hooks/useAssetUpload';
@@ -66,7 +67,7 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
   const [language, setLanguage] = useState('en');
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [audioElements, setAudioElements] = useState<Record<string, HTMLAudioElement>>({});
-  
+
   const [scriptText, setScriptText] = useState('');
   const [tracks, setTracks] = useState<VoiceoverTrack[]>();
 
@@ -85,7 +86,8 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
 
   const loadSettings = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // VPS-ONLY: Use centralized auth
+      const user = getUser();
       if (!user) return;
 
       const { data: settings } = await supabase
@@ -96,7 +98,7 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
 
       if (settings) {
         setAiOperatorEnabled(settings.ai_operator_enabled || false);
-        
+
         const prefs = settings.preferences as Record<string, any>;
         if (prefs) {
           setLanguage(prefs.studio_language?.split('-')[0] || 'en');
@@ -127,12 +129,13 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
     setIsGenerating(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      // VPS-ONLY: Use centralized auth
+      const token = getAuthToken();
+      if (!token) throw new Error('Not authenticated');
 
       // Split script into segments if too long
       const segments = scriptText.split('\n\n').filter(s => s.trim());
-      
+
       const newTracks: VoiceoverTrack[] = segments.map((text, i) => ({
         id: `track-${Date.now()}-${i}`,
         scriptIndex: i + 1,
@@ -146,41 +149,41 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
 
       // Generate via Supabase edge function
       for (let i = 0; i < newTracks.length; i++) {
-          try {
-            const response = await supabase.functions.invoke('generate-voiceover', {
-              body: {
-                text: newTracks[i].text,
-                voiceId: selectedVoice,
-                model: voiceModel,
-                language: audienceTargeting.language.split('-')[0] || language,
-              }
-            });
-
-            const audioUrl = response.data?.audioUrl || null;
-            const duration = response.data?.duration || 0;
-            const hasError = !!response.error;
-
-            setTracks(prev => prev.map((t, idx) => 
-              idx === i 
-                ? { 
-                    ...t, 
-                    audioUrl,
-                    duration,
-                    status: hasError ? 'failed' : 'completed' 
-                  } 
-                : t
-            ));
-
-            // Auto-upload to Google Drive if available
-            if (audioUrl && !hasError && isUploadAvailable) {
-              uploadVoiceover(audioUrl, `voiceover_segment_${i + 1}`, {
-                text: newTracks[i].text.substring(0, 100),
-                voiceId: selectedVoice,
-                duration,
-              });
+        try {
+          const response = await supabase.functions.invoke('generate-voiceover', {
+            body: {
+              text: newTracks[i].text,
+              voiceId: selectedVoice,
+              model: voiceModel,
+              language: audienceTargeting.language.split('-')[0] || language,
             }
-          } catch (error) {
-          setTracks(prev => prev.map((t, idx) => 
+          });
+
+          const audioUrl = response.data?.audioUrl || null;
+          const duration = response.data?.duration || 0;
+          const hasError = !!response.error;
+
+          setTracks(prev => prev.map((t, idx) =>
+            idx === i
+              ? {
+                ...t,
+                audioUrl,
+                duration,
+                status: hasError ? 'failed' : 'completed'
+              }
+              : t
+          ));
+
+          // Auto-upload to Google Drive if available
+          if (audioUrl && !hasError && isUploadAvailable) {
+            uploadVoiceover(audioUrl, `voiceover_segment_${i + 1}`, {
+              text: newTracks[i].text.substring(0, 100),
+              voiceId: selectedVoice,
+              duration,
+            });
+          }
+        } catch (error) {
+          setTracks(prev => prev.map((t, idx) =>
             idx === i ? { ...t, status: 'failed' } : t
           ));
         }
@@ -248,7 +251,7 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
     const track = tracks.find(t => t.id === id);
     if (!track) return;
 
-    setTracks(prev => prev.map(t => 
+    setTracks(prev => prev.map(t =>
       t.id === id ? { ...t, status: 'generating' } : t
     ));
 
@@ -266,14 +269,14 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
       const duration = response.data?.duration || track.duration;
       const hasError = !!response.error;
 
-      setTracks(prev => prev.map(t => 
-        t.id === id 
-          ? { 
-              ...t, 
-              audioUrl: audioUrl || t.audioUrl,
-              duration,
-              status: hasError ? 'failed' : 'completed' 
-            } 
+      setTracks(prev => prev.map(t =>
+        t.id === id
+          ? {
+            ...t,
+            audioUrl: audioUrl || t.audioUrl,
+            duration,
+            status: hasError ? 'failed' : 'completed'
+          }
           : t
       ));
 
@@ -286,7 +289,7 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
         });
       }
     } catch (error) {
-      setTracks(prev => prev.map(t => 
+      setTracks(prev => prev.map(t =>
         t.id === id ? { ...t, status: 'failed' } : t
       ));
     }
@@ -411,11 +414,10 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
             </div>
             <div className="space-y-2">
               {tracks.map((track, index) => (
-                <div 
-                  key={track.id} 
-                  className={`flex items-center gap-3 p-2 rounded-lg transition-all ${
-                    playingId === track.id ? 'bg-primary/10 border border-primary/30' : 'bg-background/50'
-                  }`}
+                <div
+                  key={track.id}
+                  className={`flex items-center gap-3 p-2 rounded-lg transition-all ${playingId === track.id ? 'bg-primary/10 border border-primary/30' : 'bg-background/50'
+                    }`}
                 >
                   <span className="text-xs text-muted-foreground w-6">{index + 1}.</span>
                   <p className="flex-1 text-sm truncate">{track.text.slice(0, 50)}...</p>
@@ -497,9 +499,9 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
                   <div className="flex items-center gap-2">
                     {track.status === 'completed' && track.audioUrl && (
                       <>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="h-8 w-8"
                           onClick={() => playTrack(track.id)}
                         >
@@ -509,9 +511,9 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
                             <Play className="w-4 h-4" />
                           )}
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="h-8 w-8"
                           onClick={() => window.open(track.audioUrl!, '_blank')}
                         >
@@ -519,9 +521,9 @@ export const StudioVoiceover = ({ onNext }: StudioVoiceoverProps) => {
                         </Button>
                       </>
                     )}
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="h-8 w-8"
                       onClick={() => regenerateTrack(track.id)}
                       disabled={track.status === 'generating'}

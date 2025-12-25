@@ -9,7 +9,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { getAuthToken } from '@/utils/auth-adapter';
+import { getAuthToken } from '@/utils/auth';
 import { useCreativeScale } from '@/hooks/useCreativeScale';
 import { useStreamingStrategy } from '@/hooks/useStreamingStrategy';
 import { executeUnifiedStrategy, ExecutionResult, EngineId, executionDebugLogger } from '@/lib/creative-scale/execution-engine';

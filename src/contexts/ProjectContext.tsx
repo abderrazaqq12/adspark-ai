@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { getAuthenticatedUser, getAuthToken, getAuthHeaders } from '@/utils/auth-adapter';
+import { getUser, getAuthToken, getAuthHeaders } from '@/utils/auth';
 import { toast } from 'sonner';
 
 export interface ProductInfo {
@@ -77,7 +77,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const loadLatestProject = useCallback(async () => {
     setIsLoading(true);
     try {
-      const user = await getAuthenticatedUser();
+      const user = getUser();
       if (!user) {
         setIsLoading(false);
         return;
@@ -276,7 +276,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     setIsSaving(true);
     try {
-      const user = await getAuthenticatedUser();
+      const user = getUser();
       if (!user) {
         toast.error('Please sign in to create a project');
         return null;
@@ -359,7 +359,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const saveProject = useCallback(async (): Promise<boolean> => {
     setIsSaving(true);
     try {
-      const user = await getAuthenticatedUser();
+      const user = getUser();
       if (!user) {
         toast.error('Please sign in to save');
         return false;
