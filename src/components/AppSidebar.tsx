@@ -1,4 +1,4 @@
-import { Home, Settings, Sparkles, FolderOpen, Cpu, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Clapperboard, Images, Wand2, SlidersHorizontal, Scale } from "lucide-react";
+import { Home, Settings, Sparkles, FolderOpen, Cpu, BarChart3, LayoutTemplate, ChevronLeft, ChevronRight, Clapperboard, Images, Wand2, SlidersHorizontal, Scale, Video } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { CreditsDisplay } from "@/components/CreditsDisplay";
@@ -16,9 +16,10 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-// Main workflows - Studio + Creative Replicator + Creative Scale + AI Tools
+// Main workflows - Studio + UGC Generator + Creative Replicator + Creative Scale + AI Tools
 const workflowItems = [
   { title: "Studio", url: "/create", icon: Clapperboard },
+  { title: "UGC Generator", url: "/ugc-generator", icon: Video },
   { title: "Creative Replicator", url: "/creative-replicator", icon: SlidersHorizontal },
   { title: "Creative AI Editor", url: "/creative-scale", icon: Scale },
   { title: "AI Tools", url: "/ai-tools", icon: Wand2 },

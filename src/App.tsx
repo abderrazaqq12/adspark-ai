@@ -24,6 +24,7 @@ import NotFound from "./pages/NotFound";
 import AITools from "./pages/AITools";
 import CreativeReplicator from "./pages/CreativeReplicator";
 import CreativeScale from "./pages/CreativeScale";
+import UGCGenerator from "./pages/UGCGenerator";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,7 @@ const App = () => (
                           <Route path="/" element={<Dashboard />} />
                           <Route path="/create" element={<ErrorBoundary><CreateVideo /></ErrorBoundary>} />
                           <Route path="/quick-generate" element={<ErrorBoundary><CreateVideo /></ErrorBoundary>} />
+                          <Route path="/ugc-generator" element={<ErrorBoundary><UGCGenerator /></ErrorBoundary>} />
                           <Route path="/creative-replicator" element={<CreativeReplicator />} />
                           <Route path="/creative-scale" element={<CreativeScale />} />
                           <Route path="/projects" element={<Projects />} />
