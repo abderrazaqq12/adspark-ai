@@ -94,7 +94,11 @@ class VPSFFmpegEngine implements IVideoEngine {
           }
 
           if (jobData.status === 'failed') {
-            throw new Error(jobData.error || 'Job failed on VPS');
+            // Handle error object or string
+            const errorMsg = typeof jobData.error === 'object' && jobData.error !== null
+              ? (jobData.error.message || JSON.stringify(jobData.error))
+              : (jobData.error || 'Job failed on VPS');
+            throw new Error(errorMsg);
           }
         } catch (pollErr) {
           console.warn(`[VPSFFmpeg] Poll error:`, pollErr);

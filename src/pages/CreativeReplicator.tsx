@@ -493,7 +493,10 @@ const CreativeReplicator = () => {
         } else if (result.success && result.outputType === 'plan') {
           toast.info(`Variation ${variationId}: Plan compiled (${variation.framework})`);
         } else {
-          toast.error(`Variation ${variationId} failed: ${result.error}`);
+          const errorMsg = typeof result.error === 'object' && result.error !== null
+            ? (result.error.message || JSON.stringify(result.error))
+            : (result.error || 'Unknown error');
+          toast.error(`Variation ${variationId} failed: ${errorMsg}`);
         }
       }
 
@@ -504,7 +507,16 @@ const CreativeReplicator = () => {
 
     } catch (err: any) {
       console.error('Generation error:', err);
-      toast.error(err.message || "Generation failed");
+      const errorMsg = err.message || 'Generation failed';
+      toast.error(errorMsg);
+
+      // Update debug info with error
+      setDebugInfo((prev: any) => ({
+        ...prev,
+        status: 'failed',
+        logs: [...(prev?.logs || []), `Error: ${errorMsg}`],
+      }));
+
       setIsGenerating(false);
     }
   };

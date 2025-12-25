@@ -45,16 +45,16 @@ export const StudioDataSettings = () => {
 
       const data = await response.json();
 
-      if (data?.preferences) {
-        const prefs = typeof data.preferences === 'string'
-          ? JSON.parse(data.preferences)
-          : data.preferences;
+      // Backend returns { ok: true, settings: { preferences: {...} } }
+      const prefs = data?.settings?.preferences || data?.preferences;
+      if (prefs) {
+        const parsedPrefs = typeof prefs === 'string' ? JSON.parse(prefs) : prefs;
 
         const loadedSettings = {
-          google_drive_folder_url: prefs.google_drive_folder_url || '',
-          google_drive_access_token: prefs.google_drive_access_token || '',
-          google_sheet_url: prefs.google_sheet_url || '',
-          google_sheet_id: prefs.google_sheet_id || '',
+          google_drive_folder_url: parsedPrefs.google_drive_folder_url || '',
+          google_drive_access_token: parsedPrefs.google_drive_access_token || '',
+          google_sheet_url: parsedPrefs.google_sheet_url || '',
+          google_sheet_id: parsedPrefs.google_sheet_id || '',
         };
         setSettings(loadedSettings);
         setDriveConnected(!!loadedSettings.google_drive_folder_url);
@@ -108,14 +108,14 @@ export const StudioDataSettings = () => {
       let currentPrefs: Record<string, any> = {};
       if (response.ok) {
         const data = await response.json();
-        if (data.preferences) {
-          currentPrefs = typeof data.preferences === 'string'
-            ? JSON.parse(data.preferences)
-            : data.preferences;
+        // Backend returns { ok: true, settings: { preferences: {...} } }
+        const prefs = data?.settings?.preferences || data?.preferences;
+        if (prefs) {
+          currentPrefs = typeof prefs === 'string' ? JSON.parse(prefs) : prefs;
         }
       }
 
-      // 2. Merge and Save
+      // 2. Merge and Save - send preferences directly (backend expects { preferences: {...} })
       const saveResponse = await fetch('/api/settings', {
         method: 'POST',
         headers: {
@@ -123,15 +123,17 @@ export const StudioDataSettings = () => {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          key: 'preferences',
-          value: {
+          preferences: {
             ...currentPrefs,
             ...settings
           }
         })
       });
 
-      if (!saveResponse.ok) throw new Error('Failed to save settings');
+      if (!saveResponse.ok) {
+        const errData = await saveResponse.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to save settings');
+      }
 
       toast.success('Data settings saved successfully');
     } catch (error: any) {

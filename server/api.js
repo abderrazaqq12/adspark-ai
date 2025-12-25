@@ -1010,6 +1010,7 @@ async function executeFFmpegJob(job) {
         const err = new Error(`FFmpeg exited with code ${code}`);
         err.code = 'FFMPEG_EXIT_ERROR';
         err.stage = 'execution';
+        err.stderr = stderr; // Attach captured stderr for error parsing
         reject(err);
       }
     });

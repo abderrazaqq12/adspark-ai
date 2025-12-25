@@ -22,15 +22,15 @@ interface StudioProductInputProps {
   onProductInfoChange?: (info: { name: string; description: string; imageUrl: string; link: string }) => void;
 }
 
-export const StudioProductInput = ({ 
-  onNext, 
+export const StudioProductInput = ({
+  onNext,
   onProjectCreated,
   productInfo: externalProductInfo,
-  onProductInfoChange 
+  onProductInfoChange
 }: StudioProductInputProps) => {
   // Global audience context
   const { resolved: audience, isLoading: audienceLoading } = useAudience();
-  
+
   const [dataSource, setDataSource] = useState<'manual' | 'sheet'>('manual');
   const [productUrl, setProductUrl] = useState('');
   const [productName, setProductName] = useState('');
@@ -41,7 +41,7 @@ export const StudioProductInput = ({
   const [language, setLanguage] = useState('');
   const [audienceAge, setAudienceAge] = useState('25-34');
   const [audienceGender, setAudienceGender] = useState('both');
-  
+
   // Sync local state with global audience when loaded
   useEffect(() => {
     if (!audienceLoading && audience) {
@@ -49,21 +49,21 @@ export const StudioProductInput = ({
       if (!language) setLanguage(audience.language);
     }
   }, [audience, audienceLoading]);
-  
+
   // Google Sheet state
   const [sheetUrl, setSheetUrl] = useState('');
   const [sheetRow, setSheetRow] = useState('2');
   const [sheetConnected, setSheetConnected] = useState(false);
   const [isLoadingSheet, setIsLoadingSheet] = useState(false);
-  
+
   // AI Operator mode
   const [aiOperatorEnabled, setAiOperatorEnabled] = useState(false);
-  
+
   // Media file uploads
   const [uploadedFiles, setUploadedFiles] = useState<{ name: string; url: string; type: 'image' | 'video' }[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -84,7 +84,7 @@ export const StudioProductInput = ({
 
   // Use ref to track previous values and prevent infinite loops
   const prevProductInfoRef = useRef<string>('');
-  
+
   // Notify parent of changes - using useCallback and ref comparison to prevent infinite loops
   useEffect(() => {
     if (onProductInfoChange) {
@@ -95,7 +95,7 @@ export const StudioProductInput = ({
         link: productUrl,
       };
       const newInfoString = JSON.stringify(newInfo);
-      
+
       // Only call if values actually changed
       if (prevProductInfoRef.current !== newInfoString) {
         prevProductInfoRef.current = newInfoString;
@@ -106,37 +106,32 @@ export const StudioProductInput = ({
 
   const loadSavedData = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      // VPS-First: Use backend API instead of Supabase directly
+      const response = await fetch('/api/settings');
+      if (!response.ok) {
+        console.warn('[Studio] Could not load settings');
         setIsLoading(false);
         return;
       }
 
-      const { data: settings } = await supabase
-        .from('user_settings')
-        .select('preferences, ai_operator_enabled')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      const data = await response.json();
+      if (data.ok && data.settings) {
+        setAiOperatorEnabled(data.settings.ai_operator_enabled || false);
 
-      if (settings) {
-        setAiOperatorEnabled(settings.ai_operator_enabled || false);
-        
-        const prefs = settings.preferences as Record<string, any>;
-        if (prefs) {
-          // Only set if not already provided externally
-          if (!externalProductInfo) {
-            setProductUrl(prefs.studio_product_url || '');
-            setProductName(prefs.studio_product_name || '');
-            setDescription(prefs.studio_description || '');
-            setMediaLinks(prefs.studio_media_links || '');
-          }
-          setTargetCountry(prefs.studio_target_country || prefs.studio_target_market || '');
-          setLanguage(prefs.studio_language || '');
-          setAudienceAge(prefs.studio_audience_age || '25-34');
-          setAudienceGender(prefs.studio_audience_gender || 'both');
-          setSheetUrl(prefs.google_sheet_url || '');
-          if (prefs.google_sheet_url) setSheetConnected(true);
+        const prefs = data.settings.preferences as Record<string, any> || {};
+        // Only set if not already provided externally
+        if (!externalProductInfo) {
+          setProductUrl(prefs.studio_product_url || '');
+          setProductName(prefs.studio_product_name || '');
+          setDescription(prefs.studio_description || '');
+          setMediaLinks(prefs.studio_media_links || '');
         }
+        setTargetCountry(prefs.studio_target_country || prefs.studio_target_market || '');
+        setLanguage(prefs.studio_language || '');
+        setAudienceAge(prefs.studio_audience_age || '25-34');
+        setAudienceGender(prefs.studio_audience_gender || 'both');
+        setSheetUrl(prefs.google_sheet_url || '');
+        if (prefs.google_sheet_url) setSheetConnected(true);
       }
     } catch (error) {
       console.error('Error loading saved data:', error);
@@ -159,7 +154,7 @@ export const StudioProductInput = ({
     try {
       // In production, this would call a backend API to fetch Google Sheet data
       await new Promise(resolve => setTimeout(resolve, 1500));
-      
+
       const simulatedSheetData = {
         productName: `Product from Row ${sheetRow}`,
         productUrl: `https://example.com/product-${sheetRow}`,
@@ -171,7 +166,7 @@ export const StudioProductInput = ({
       setProductUrl(simulatedSheetData.productUrl);
       setDescription(simulatedSheetData.productDescription);
       setMediaLinks(simulatedSheetData.mediaLinks);
-      
+
       toast({
         title: "Sheet Data Loaded",
         description: `Product data loaded from row ${sheetRow}. All fields have been populated.`,
@@ -201,24 +196,12 @@ export const StudioProductInput = ({
     setIsSaving(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      // Save to user_settings
-      const { data: currentSettings } = await supabase
-        .from('user_settings')
-        .select('preferences')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      const currentPrefs = (currentSettings?.preferences as Record<string, unknown>) || {};
-
-      await supabase
-        .from('user_settings')
-        .upsert({
-          user_id: user.id,
+      // VPS-First: Save settings via backend API
+      const settingsResponse = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           preferences: {
-            ...currentPrefs,
             studio_product_url: productUrl,
             studio_product_name: productName,
             studio_description: description,
@@ -228,62 +211,41 @@ export const StudioProductInput = ({
             studio_audience_age: audienceAge,
             studio_audience_gender: audienceGender,
           }
-        }, { onConflict: 'user_id' });
+        })
+      });
+
+      if (!settingsResponse.ok) {
+        const errData = await settingsResponse.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to save settings');
+      }
 
       let projectId: string | undefined;
 
       // Create project if product name is provided
       if (productName.trim()) {
-        const { data: existingProject } = await supabase
-          .from('projects')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('product_name', productName)
-          .maybeSingle();
+        // VPS-First: Create/update project via backend API
+        const projectResponse = await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: productName,
+            product_name: productName,
+            language: (language || audience.language).split('-')[0],
+            market: targetCountry || audience.country,
+            audience: audienceGender,
+            status: 'draft',
+            settings: {
+              product_description: description,
+              product_image_url: mediaLinks.split('\n')[0] || '',
+              product_link: productUrl,
+              audience_age: audienceAge,
+            }
+          })
+        });
 
-        projectId = existingProject?.id;
-
-        if (!projectId) {
-          const { data: newProject, error: projectError } = await supabase
-            .from('projects')
-            .insert({
-              user_id: user.id,
-              name: productName,
-              product_name: productName,
-              language: (language || audience.language).split('-')[0],
-              market: targetCountry || audience.country,
-              audience: audienceGender,
-              status: 'draft',
-              settings: {
-                product_description: description,
-                product_image_url: mediaLinks.split('\n')[0] || '',
-                product_link: productUrl,
-                audience_age: audienceAge,
-              }
-            })
-            .select()
-            .single();
-
-          if (projectError) throw projectError;
-          projectId = newProject.id;
-        } else {
-          // Update existing project
-          await supabase
-            .from('projects')
-            .update({
-              name: productName,
-              product_name: productName,
-              language: (language || audience.language).split('-')[0],
-              market: targetCountry || audience.country,
-              audience: audienceGender,
-              settings: {
-                product_description: description,
-                product_image_url: mediaLinks.split('\n')[0] || '',
-                product_link: productUrl,
-                audience_age: audienceAge,
-              }
-            })
-            .eq('id', projectId);
+        if (projectResponse.ok) {
+          const projectData = await projectResponse.json();
+          projectId = projectData.id;
         }
 
         // Notify parent of project creation
@@ -521,7 +483,7 @@ export const StudioProductInput = ({
               <Upload className="w-4 h-4 text-muted-foreground" />
               Media Files (Upload)
             </Label>
-            <div 
+            <div
               className="border-2 border-dashed border-border rounded-lg p-4 hover:border-primary/50 transition-colors cursor-pointer bg-background/50"
               onClick={() => fileInputRef.current?.click()}
             >
@@ -534,7 +496,7 @@ export const StudioProductInput = ({
                 onChange={async (e) => {
                   const files = e.target.files;
                   if (!files || files.length === 0) return;
-                  
+
                   setIsUploading(true);
                   try {
                     const { data: { user } } = await supabase.auth.getUser();
@@ -542,42 +504,42 @@ export const StudioProductInput = ({
                       sonnerToast.error('Please sign in to upload files');
                       return;
                     }
-                    
+
                     const newFiles: { name: string; url: string; type: 'image' | 'video' }[] = [];
-                    
+
                     for (const file of Array.from(files)) {
                       const fileExt = file.name.split('.').pop();
                       const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
                       const isVideo = file.type.startsWith('video/');
                       const bucket = isVideo ? 'videos' : 'custom-scenes';
-                      
+
                       const { data, error } = await supabase.storage
                         .from(bucket)
                         .upload(fileName, file);
-                      
+
                       if (error) {
                         console.error('Upload error:', error);
                         sonnerToast.error(`Failed to upload ${file.name}`);
                         continue;
                       }
-                      
+
                       const { data: { publicUrl } } = supabase.storage
                         .from(bucket)
                         .getPublicUrl(data.path);
-                      
+
                       newFiles.push({
                         name: file.name,
                         url: publicUrl,
                         type: isVideo ? 'video' : 'image'
                       });
                     }
-                    
+
                     setUploadedFiles(prev => [...prev, ...newFiles]);
-                    
+
                     // Add uploaded URLs to mediaLinks
                     const newUrls = newFiles.map(f => f.url).join('\n');
                     setMediaLinks(prev => prev ? `${prev}\n${newUrls}` : newUrls);
-                    
+
                     sonnerToast.success(`${newFiles.length} file(s) uploaded`);
                   } catch (error) {
                     console.error('Upload error:', error);
@@ -588,7 +550,7 @@ export const StudioProductInput = ({
                   }
                 }}
               />
-              
+
               {isUploading ? (
                 <div className="flex flex-col items-center justify-center py-4">
                   <Loader2 className="w-6 h-6 animate-spin text-primary mb-2" />
@@ -602,15 +564,15 @@ export const StudioProductInput = ({
                 </div>
               )}
             </div>
-            
+
             {/* Uploaded Files Preview */}
             {uploadedFiles.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mt-3">
                 {uploadedFiles.map((file, index) => (
                   <div key={index} className="relative group rounded-lg overflow-hidden border border-border bg-muted/30">
                     {file.type === 'image' ? (
-                      <img 
-                        src={file.url} 
+                      <img
+                        src={file.url}
                         alt={file.name}
                         className="w-full h-20 object-cover"
                       />
