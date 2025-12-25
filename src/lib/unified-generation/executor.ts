@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { invokeEdgeFunction } from '@/utils/ai-factory';
 import { UnifiedInput, UnifiedOutput, ExecutionResult, ExecutionMode } from './types';
 import { getPromptForExecution } from './prompts';
 
@@ -52,7 +53,7 @@ async function runLovableAgent(
 
   const { systemPrompt, userPrompt } = getPromptForExecution(input, customPrompt);
 
-  const { data, error } = await supabase.functions.invoke('unified-generation', {
+  const { data, error } = await invokeEdgeFunction('unified-generation', {
     body: {
       input,
       prompt: userPrompt,
@@ -80,7 +81,7 @@ async function callEdgeFunction(
 
   const { systemPrompt, userPrompt } = getPromptForExecution(input, customPrompt);
 
-  const { data, error } = await supabase.functions.invoke('unified-generation', {
+  const { data, error } = await invokeEdgeFunction('unified-generation', {
     body: {
       input,
       prompt: userPrompt,

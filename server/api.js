@@ -2940,10 +2940,225 @@ app.post('/api/settings', async (req, res) => {
   }
 });
 
-/**
- * GET /api/templates
- * Proxy to fetch prompt_templates for the VPS Admin
- */
+// ============================================
+// AI CONTENT FACTORY (VPS Mode)
+// ============================================
+
+const MARKET_PROFILES = {
+  sa: { tone: 'emotional, trust-building, family-oriented', ctaStyle: 'COD emphasis, fast delivery', psychology: 'Trust and family values', trustSignals: ['الدفع عند الاستلام', 'توصيل سريع', 'ضمان الجودة'] },
+  ae: { tone: 'luxurious, aspirational, modern', ctaStyle: 'exclusivity and premium', psychology: 'Luxury and status', trustSignals: ['Premium Quality', 'UAE Express', 'Exclusive'] },
+  kw: { tone: 'refined, quality-focused', ctaStyle: 'elegant and direct', psychology: 'Quality and refinement', trustSignals: ['Kuwait Delivery', 'Quality Assured'] },
+  ma: { tone: 'warm, community-oriented', ctaStyle: 'friendly and accessible', psychology: 'Community and authenticity', trustSignals: ['Livraison Maroc', 'Qualité garantie'] },
+  eu: { tone: 'clean, elegant, sustainable', ctaStyle: 'soft, value-focused', psychology: 'Quality and sustainability', trustSignals: ['EU Quality', 'Sustainable', 'Free Returns'] },
+  us: { tone: 'confident, lifestyle-focused', ctaStyle: 'action-oriented', psychology: 'Transformation and lifestyle', trustSignals: ['Free Shipping', 'Money-Back Guarantee'] },
+  latam: { tone: 'high-energy, dramatic', ctaStyle: 'urgent with discounts', psychology: 'Emotional connection', trustSignals: ['Envío Rápido', 'Mejor Precio'] }
+};
+
+const LANGUAGE_CONFIG = {
+  ar: { direction: 'rtl', name: 'Arabic', systemNote: 'Write in Arabic Gulf/Saudi dialect.' },
+  en: { direction: 'ltr', name: 'English', systemNote: 'Write in clear English.' },
+  es: { direction: 'ltr', name: 'Spanish', systemNote: 'Write in Latin American Spanish.' },
+  fr: { direction: 'ltr', name: 'French', systemNote: 'Write in elegant French.' },
+  de: { direction: 'ltr', name: 'German', systemNote: 'Write in precise German.' },
+  pt: { direction: 'ltr', name: 'Portuguese', systemNote: 'Write in Brazilian Portuguese.' }
+};
+
+async function callAIVPS(messages, maxTokens = 4000) {
+  // Load API keys
+  const keysFile = path.join(DATA_DIR, 'api_keys.json');
+  let openRouterKey = '';
+
+  if (fs.existsSync(keysFile)) {
+    try {
+      const keys = JSON.parse(fs.readFileSync(keysFile, 'utf8'));
+      // Find OpenRouter key
+      const keyObj = Object.values(keys).find(k => k.provider === 'openrouter' || k.key_name === 'OPENROUTER_API_KEY');
+      if (keyObj && keyObj.api_key) openRouterKey = keyObj.api_key;
+    } catch (e) {
+      console.error('[AI Factory] Error reading API keys:', e);
+    }
+  }
+
+  // Fallback to env
+  if (!openRouterKey) openRouterKey = process.env.OPENROUTER_API_KEY;
+
+  if (!openRouterKey) {
+    throw new Error('No AI provider configured. Please add OpenRouter API key in Settings.');
+  }
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${openRouterKey}`,
+      'HTTP-Referer': 'https://flowscale.ai', // Required by OpenRouter
+      'X-Title': 'FlowScale Host',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'anthropic/claude-3-haiku', // Cost effective default
+      messages: messages,
+      max_tokens: maxTokens
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    console.error('[AI Factory] OpenRouter error:', err);
+    throw new Error(`AI Provider Error: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return {
+    content: data.choices[0]?.message?.content || ''
+  };
+}
+
+app.post('/api/ai-content-factory', async (req, res) => {
+  try {
+    const {
+      projectId,
+      productName,
+      productDescription = '',
+      productFeatures = [],
+      productPrice = '',
+      contentTypes = [],
+      language = 'ar',
+      market = 'sa',
+      audience = 'both',
+      customPrompt = '',
+      hooksCount = 30,
+      scriptsCount = 5,
+      offersCount = 10
+    } = req.body;
+
+    if (!productName || !contentTypes || contentTypes.length === 0) {
+      return jsonError(res, 400, 'MISSING_PARAMS', 'productName and contentTypes are required');
+    }
+
+    // Normalization
+    const normalizeMarket = (m) => {
+      const marketMap = { 'sa': 'sa', 'saudi': 'sa', 'ae': 'ae', 'uae': 'ae', 'kw': 'kw', 'ma': 'ma', 'eu': 'eu', 'us': 'us', 'latam': 'latam' };
+      return marketMap[(m || 'sa').toLowerCase().trim()] || 'sa';
+    };
+
+    const normalizeLanguage = (l) => {
+      const langMap = { 'ar': 'ar', 'en': 'en', 'es': 'es', 'fr': 'fr', 'de': 'de', 'pt': 'pt' };
+      return langMap[(l || 'ar').toLowerCase().trim()] || 'ar';
+    };
+
+    const effectiveMarket = normalizeMarket(market);
+    const effectiveLanguage = normalizeLanguage(language);
+    const marketProfile = MARKET_PROFILES[effectiveMarket] || MARKET_PROFILES['sa'];
+    const langConfig = LANGUAGE_CONFIG[effectiveLanguage] || LANGUAGE_CONFIG['ar'];
+
+    const results = {};
+    const contextBlock = `PRODUCT: ${productName}\nDescription: ${productDescription}\nFeatures: ${productFeatures.join(', ')}\nPrice: ${productPrice}\n\nMARKET: ${effectiveMarket.toUpperCase()} - Tone: ${marketProfile.tone}\nAUDIENCE: ${audience}\nLANGUAGE: ${langConfig.name}\n${langConfig.systemNote}\n${customPrompt ? `ADDITIONAL: ${customPrompt}` : ''}`;
+
+    for (const contentType of contentTypes) {
+      try {
+        let prompt = contextBlock + '\n\n';
+
+        if (contentType === 'hooks') {
+          prompt += `Generate ${hooksCount} marketing hooks for video ads. Output JSON: { "hooks": [{ "text": "...", "type": "problem|curiosity|urgency|benefit", "duration": "6s|15s" }] }`;
+        } else if (contentType === 'scripts') {
+          prompt += `Generate ${scriptsCount} video ad scripts. Output JSON: { "scripts": [{ "title": "...", "duration": "15s|30s", "script": "...", "scenes": [...] }] }`;
+        } else if (contentType === 'offers') {
+          prompt += `Generate ${offersCount} compelling offers. Output JSON: { "offers": [{ "headline": "...", "description": "...", "urgencyText": "...", "type": "bundle|scarcity|bonus" }] }`;
+        } else if (contentType === 'description') {
+          prompt += `Generate product description. Output JSON: { "headline": "...", "subheadline": "...", "body": "...", "bulletPoints": [...] }`;
+        } else if (contentType === 'landing_page') {
+          prompt += `Generate landing page content. Output JSON with hero, problem, solution, features, testimonials, faq, guarantee sections.`;
+        } else {
+          prompt += `Generate 10 marketing angles. Output JSON: { "angles": [{ "name": "...", "headline": "...", "targetEmotion": "..." }] }`;
+        }
+
+        console.log(`[AI Factory] Generating ${contentType}...`);
+
+        const aiResponse = await callAIVPS([
+          { role: 'system', content: `Expert e-commerce copywriter for ${effectiveMarket.toUpperCase()} market. Output valid JSON.` },
+          { role: 'user', content: prompt }
+        ]);
+
+        try {
+          const jsonMatch = aiResponse.content.match(/\{[\s\S]*\}/);
+          results[contentType] = jsonMatch ? JSON.parse(jsonMatch[0]) : { raw: aiResponse.content };
+        } catch {
+          results[contentType] = { raw: aiResponse.content };
+        }
+      } catch (contentError) {
+        console.error(`[AI Factory] Error generating ${contentType}:`, contentError);
+        results[contentType] = { error: contentError.message || 'Unknown error' };
+      }
+    }
+
+    res.json({
+      success: true,
+      content: results,
+      metadata: { language, market, audience, generated_at: new Date().toISOString() }
+    });
+
+  } catch (err) {
+    console.error('[AI Factory] Error:', err);
+    jsonError(res, 500, 'AI_FACTORY_ERROR', err.message);
+  }
+});
+
+// ============================================
+// UNIFIED GENERATION (VPS Mode)
+// ============================================
+
+app.post('/api/unified-generation', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const { input, prompt, systemPrompt, mode } = req.body;
+
+    console.log(`[UnifiedGeneration] Mode: ${mode}, Product: ${input?.product?.title}`);
+
+    const aiResponse = await callAIVPS([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: prompt }
+    ]);
+
+    let parsed = {};
+    try {
+      const content = aiResponse.content;
+      // Try to extract JSON from markdown code blocks
+      const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) ||
+        content.match(/```\s*([\s\S]*?)\s*```/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[1]);
+      } else {
+        // Try direct JSON parse
+        const jsonStart = content.indexOf('{');
+        const jsonEnd = content.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+          parsed = JSON.parse(content.substring(jsonStart, jsonEnd + 1));
+        }
+      }
+    } catch (parseError) {
+      console.error('[UnifiedGeneration] Parse error:', parseError);
+      parsed = { raw: aiResponse.content };
+    }
+
+    const latencyMs = Date.now() - startTime;
+
+    res.json({
+      ...parsed,
+      meta: {
+        engine: mode,
+        provider: 'vps-openrouter',
+        latencyMs,
+        promptVersion: 1,
+        generatedAt: new Date().toISOString()
+      }
+    });
+
+  } catch (err) {
+    console.error('[UnifiedGeneration] Error:', err);
+    jsonError(res, 500, 'UNIFIED_ERROR', err.message);
+  }
+});
+
 app.get('/api/templates', async (req, res) => {
   if (!supabase) return res.json([]);
 

@@ -25,7 +25,8 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from "@/integrations/supabase/client";
+import { invokeEdgeFunction } from "@/utils/ai-factory";
 import { getUser, getAuthToken, getAuthHeaders } from '@/utils/auth';
 import { useStudioPrompts } from '@/hooks/useStudioPrompts';
 import { useAIAgent, getModelName } from '@/hooks/useAIAgent';
@@ -328,7 +329,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       // Use AI Operator for content generation
       console.log('Calling AI Content Factory (AI Operator mode)');
 
-      const { data, error } = await supabase.functions.invoke('ai-content-factory', {
+      const { data, error } = await invokeEdgeFunction('ai-content-factory', {
         body: {
           productName: productInfo.name,
           productDescription: productInfo.description,
@@ -436,7 +437,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       // Use AI Operator for script generation
       console.log('Calling Script Generation (AI Operator mode)');
 
-      const { data, error } = await supabase.functions.invoke('ai-content-factory', {
+      const { data, error } = await invokeEdgeFunction('ai-content-factory', {
         body: {
           productName: productInfo.name,
           productDescription: productInfo.description,
@@ -514,7 +515,7 @@ export const StudioMarketingEngine = ({ onNext }: StudioMarketingEngineProps) =>
       {
         console.log('Calling Landing Content (Lovable AI mode)');
 
-        const { data, error } = await supabase.functions.invoke('ai-content-factory', {
+        const { data, error } = await invokeEdgeFunction('ai-content-factory', {
           body: {
             productName: productInfo.name,
             productDescription: productInfo.description,
