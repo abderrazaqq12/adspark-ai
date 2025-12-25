@@ -3130,6 +3130,79 @@ app.patch('/api/api-keys/:provider/toggle', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/api-keys/:provider/test
+ * Test an API key by making a request to the provider's API
+ */
+app.post('/api/api-keys/:provider/test', async (req, res) => {
+  const { provider } = req.params;
+
+  try {
+    const apiKeys = loadApiKeys();
+
+    if (!apiKeys[provider]) {
+      return jsonError(res, 404, 'NOT_FOUND', 'API key not found. Please save the key first.');
+    }
+
+    const key = apiKeys[provider].key;
+    let testResult = { success: false, message: 'Unknown provider - test not implemented' };
+
+    // Provider-specific test logic
+    if (provider === 'OPENROUTER_API_KEY') {
+      try {
+        const response = await fetch('https://openrouter.ai/api/v1/models', {
+          headers: { 'Authorization': `Bearer ${key}` }
+        });
+        testResult = response.ok
+          ? { success: true, message: 'OpenRouter connection successful' }
+          : { success: false, message: `OpenRouter authentication failed (${response.status})` };
+      } catch (fetchErr) {
+        testResult = { success: false, message: `Network error: ${fetchErr.message}` };
+      }
+    } else if (provider === 'ELEVENLABS_API_KEY') {
+      try {
+        const response = await fetch('https://api.elevenlabs.io/v1/user', {
+          headers: { 'xi-api-key': key }
+        });
+        testResult = response.ok
+          ? { success: true, message: 'ElevenLabs connection successful' }
+          : { success: false, message: `ElevenLabs authentication failed (${response.status})` };
+      } catch (fetchErr) {
+        testResult = { success: false, message: `Network error: ${fetchErr.message}` };
+      }
+    } else if (provider === 'FAL_API_KEY') {
+      // Fal.ai doesn't have a simple auth check endpoint, so we mark as saved
+      testResult = { success: true, message: 'Fal AI key saved (no test endpoint available)' };
+    } else if (provider === 'AIMLAPI_API_KEY') {
+      // AIML API - test with models endpoint
+      try {
+        const response = await fetch('https://api.aimlapi.com/models', {
+          headers: { 'Authorization': `Bearer ${key}` }
+        });
+        testResult = response.ok
+          ? { success: true, message: 'AIML API connection successful' }
+          : { success: false, message: `AIML API authentication failed (${response.status})` };
+      } catch (fetchErr) {
+        testResult = { success: false, message: `Network error: ${fetchErr.message}` };
+      }
+    } else {
+      // Generic: Mark as saved but untested
+      testResult = { success: true, message: `${provider} key saved (automatic testing not available for this provider)` };
+    }
+
+    // Update validation status in stored keys
+    apiKeys[provider].last_validated_at = new Date().toISOString();
+    apiKeys[provider].last_validation_success = testResult.success;
+    apiKeys[provider].last_validation_message = testResult.message;
+    saveApiKeys(apiKeys);
+
+    res.json({ ok: true, ...testResult });
+  } catch (err) {
+    console.error('[API Keys] Test failed:', err);
+    res.json({ ok: false, success: false, message: err.message });
+  }
+});
+
 // ============================================
 // 404 HANDLER (JSON only)
 // ============================================

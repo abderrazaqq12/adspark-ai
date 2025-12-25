@@ -1784,18 +1784,26 @@ export default function Settings() {
                         onClick={async () => {
                           setTestingKey('OPENROUTER_API_KEY');
                           try {
-                            const response = await fetch('https://openrouter.ai/api/v1/models', {
-                              headers: { 'Authorization': `Bearer ${apiKeys['OPENROUTER_API_KEY'] || 'stored'}` }
+                            // Use backend to test stored key
+                            const token = localStorage.getItem('flowscale_token');
+                            const response = await fetch('/api/api-keys/OPENROUTER_API_KEY/test', {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                              }
                             });
-                            if (response.ok) {
-                              toast.success('OpenRouter connection successful!');
-                              setKeyTestResults(prev => ({ ...prev, OPENROUTER_API_KEY: { success: true, message: 'Connected' } }));
+                            const data = await response.json();
+                            if (data.success) {
+                              toast.success(data.message || 'OpenRouter connection successful!');
+                              setKeyTestResults(prev => ({ ...prev, OPENROUTER_API_KEY: { success: true, message: data.message } }));
+                              await refreshProviders(); // Refresh to show updated validation status
                             } else {
-                              toast.error('OpenRouter connection failed');
-                              setKeyTestResults(prev => ({ ...prev, OPENROUTER_API_KEY: { success: false, message: 'Failed' } }));
+                              toast.error(data.message || 'OpenRouter connection failed');
+                              setKeyTestResults(prev => ({ ...prev, OPENROUTER_API_KEY: { success: false, message: data.message } }));
                             }
-                          } catch {
-                            toast.error('OpenRouter connection failed');
+                          } catch (err) {
+                            toast.error('OpenRouter connection test failed');
                             setKeyTestResults(prev => ({ ...prev, OPENROUTER_API_KEY: { success: false, message: 'Error' } }));
                           }
                           setTestingKey(null);
