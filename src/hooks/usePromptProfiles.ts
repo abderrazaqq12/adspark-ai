@@ -46,7 +46,7 @@ function generatePromptHash(text: string): string {
 }
 
 // Check if running in VPS/self-hosted mode
-const isSelfHosted = () => import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted';
+const isSelfHosted = () => true; // Forced for VPS deployment
 
 export function usePromptProfiles() {
   const [loading, setLoading] = useState(false);

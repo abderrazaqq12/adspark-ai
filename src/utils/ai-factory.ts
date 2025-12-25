@@ -6,8 +6,9 @@ import { supabase } from '@/integrations/supabase/client';
  * Designed to be a drop-in replacement for supabase.functions.invoke
  */
 export const invokeEdgeFunction = async (functionName: string, options: { body?: any; headers?: any } = {}) => {
-    // Check deployment mode
-    const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted';
+    // Check if running in VPS/self-hosted mode
+    const isSelfHosted = true; // Forced for VPS deployment
+
 
     if (isSelfHosted) {
         try {

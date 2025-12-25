@@ -2941,6 +2941,46 @@ app.post('/api/settings', async (req, res) => {
 });
 
 // ============================================
+// PROMPT PROFILES (VPS Mode)
+// ============================================
+
+app.get('/api/prompt-profiles', (req, res) => {
+  try {
+    const profilesFile = path.join(DATA_DIR, 'prompt_profiles.json');
+    if (!fs.existsSync(profilesFile)) return res.json([]);
+    const profiles = JSON.parse(fs.readFileSync(profilesFile, 'utf8'));
+    res.json(profiles); // Return array
+  } catch (e) {
+    jsonError(res, 500, 'LOAD_FAILED', e.message);
+  }
+});
+
+app.post('/api/prompt-profiles', (req, res) => {
+  try {
+    const profile = req.body;
+    if (!profile || !profile.id) return jsonError(res, 400, 'INVALID', 'Profile ID required');
+
+    const profilesFile = path.join(DATA_DIR, 'prompt_profiles.json');
+    let profiles = [];
+    if (fs.existsSync(profilesFile)) profiles = JSON.parse(fs.readFileSync(profilesFile, 'utf8'));
+
+    const idx = profiles.findIndex(p => p.id === profile.id);
+    const now = new Date().toISOString();
+
+    if (idx >= 0) {
+      profiles[idx] = { ...profiles[idx], ...profile, updated_at: now };
+    } else {
+      profiles.push({ ...profile, created_at: now, updated_at: now });
+    }
+
+    fs.writeFileSync(profilesFile, JSON.stringify(profiles, null, 2));
+    res.json(profiles[idx >= 0 ? idx : profiles.length - 1]);
+  } catch (e) {
+    jsonError(res, 500, 'SAVE_FAILED', e.message);
+  }
+});
+
+// ============================================
 // AI CONTENT FACTORY (VPS Mode)
 // ============================================
 
@@ -2971,9 +3011,14 @@ async function callAIVPS(messages, maxTokens = 4000) {
   if (fs.existsSync(keysFile)) {
     try {
       const keys = JSON.parse(fs.readFileSync(keysFile, 'utf8'));
-      // Find OpenRouter key
-      const keyObj = Object.values(keys).find(k => k.provider === 'openrouter' || k.key_name === 'OPENROUTER_API_KEY');
-      if (keyObj && keyObj.api_key) openRouterKey = keyObj.api_key;
+      // Check for OPENROUTER_API_KEY directly or scan values logic
+      if (keys['OPENROUTER_API_KEY'] && keys['OPENROUTER_API_KEY'].key) {
+        openRouterKey = keys['OPENROUTER_API_KEY'].key;
+      } else {
+        // Fallback scan
+        const keyObj = Object.values(keys).find(k => k.provider === 'openrouter' || k.key_name === 'OPENROUTER_API_KEY');
+        if (keyObj && keyObj.key) openRouterKey = keyObj.key;
+      }
     } catch (e) {
       console.error('[AI Factory] Error reading API keys:', e);
     }
