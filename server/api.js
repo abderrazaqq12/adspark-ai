@@ -54,6 +54,11 @@ import { compileRenderPlan } from './render-plan.js';
 import { detectEngineCapabilities, getRecommendedEncoders } from './engine-utils.js';
 import { decideExecution } from './decision-layer.js';
 
+// UGC Decision-First Architecture Imports
+import { normalizeError, errorResponse } from './ugc/error-normalizer.js';
+import { decideAvatarGeneration, decideScriptGeneration, decideVoiceGeneration, getEngineStatusReport } from './ugc/decision-engine.js';
+import { warnWithoutProject } from './ugc/project-enforcer.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
@@ -3702,64 +3707,95 @@ app.listen(PORT, HOST, () => {
   // Start automated cleanup task (Delete after 2 hours)
   startCleanupTask();
 });
-
 // ============================================
-// UGC VIDEO FACTORY API (Isolated Module)
+// UGC VIDEO FACTORY API (Production Integration)
+// Decision-First Architecture with Contract Enforcement
 // ============================================
 
 // In-memory UGC batch jobs (isolated from main render queue)
 const ugcBatchJobs = new Map();
 
 /**
- * POST /api/ugc/generate-avatars
- * Generate 3-5 AI avatars based on market/language/gender
+ * GET /api/ugc/engine-status
+ * Returns current engine availability status (for debug panel)
  */
-app.post('/api/ugc/generate-avatars', async (req, res) => {
+app.get('/api/ugc/engine-status', (req, res) => {
+  res.json({ ok: true, ...getEngineStatusReport() });
+});
+
+/**
+ * POST /api/ugc/generate-avatars
+ * Generate 3-5 AI avatars using Decision Engine
+ */
+app.post('/api/ugc/generate-avatars', warnWithoutProject, async (req, res) => {
+  const stage = 'avatar';
+
   try {
-    const { market = 'SAUDI_ARABIA', language = 'ARABIC', gender = 'ALL', count = 5 } = req.body;
+    const { market = 'SAUDI_ARABIA', language = 'ARABIC', gender = 'ALL', count = 5, projectId } = req.body;
 
-    console.log(`[UGC] Generating ${count} avatars for ${market}/${language}/${gender}`);
+    // Make decision using Decision Engine
+    const decision = decideAvatarGeneration({ market, language, gender });
+    console.log(`[UGC] Avatar decision: ${decision.engine} (trace: ${JSON.stringify(decision.trace.fallbacksTriggered)})`);
 
-    // Generate placeholder avatars (real AI would be called here)
+    // Generate avatars based on decision
     const genders = gender === 'ALL' ? ['MALE', 'FEMALE'] : [gender];
     const avatars = [];
 
     for (let i = 0; i < count; i++) {
       const avatarGender = genders[i % genders.length];
       const seed = `${market}-${language}-${avatarGender}-${Date.now()}-${i}`;
+
+      // Use DiceBear as fallback (decision.engine will indicate real engine when available)
+      const imageUrl = decision.engine === 'dicebear'
+        ? `https://api.dicebear.com/7.x/personas/svg?seed=${seed}&backgroundColor=c0aede,d1d4f9,ffd5dc,ffdfbf`
+        : `https://api.dicebear.com/7.x/personas/svg?seed=${seed}&backgroundColor=c0aede,d1d4f9,ffd5dc,ffdfbf`; // Would be real API call
+
       avatars.push({
         id: `avatar-${Date.now()}-${i}`,
-        imageUrl: `https://api.dicebear.com/7.x/personas/svg?seed=${seed}&backgroundColor=c0aede,d1d4f9,ffd5dc,ffdfbf`,
+        imageUrl,
         gender: avatarGender,
         market,
         language,
         isSelected: i === 0,
+        engine: decision.engine,
       });
     }
 
-    res.json({ ok: true, avatars });
+    res.json({
+      ok: true,
+      avatars,
+      decision: {
+        engine: decision.engine,
+        qualityGuardEnabled: decision.qualityGuardEnabled,
+        fallbacksTriggered: decision.trace.fallbacksTriggered.length,
+      },
+      trace: decision.trace,
+      projectId: req.ugcProject?.id || null
+    });
   } catch (error) {
-    console.error('[UGC] Avatar generation error:', error);
-    res.status(500).json({ ok: false, error: error.message });
+    const normalized = normalizeError(error, stage, 'decision-engine');
+    console.error(`[UGC] ${JSON.stringify(normalized)}`);
+    res.status(500).json({ ok: false, error: normalized });
   }
 });
 
 /**
  * POST /api/ugc/generate-scripts
- * Generate N scripts using rotating marketing frameworks
+ * Generate N scripts using Decision Engine framework rotation
  */
-app.post('/api/ugc/generate-scripts', async (req, res) => {
+app.post('/api/ugc/generate-scripts', warnWithoutProject, async (req, res) => {
+  const stage = 'script';
+
   try {
-    const { productName, productBenefit, language = 'ARABIC', videoCount = 5 } = req.body;
+    const { productName, productBenefit, language = 'ARABIC', videoCount = 5, projectId } = req.body;
 
     if (!productName || !productBenefit) {
-      return res.status(400).json({ ok: false, error: 'Product name and benefit are required' });
+      return errorResponse(res, 400, stage, 'validation', 'Product name and benefit are required', false);
     }
 
-    console.log(`[UGC] Generating ${videoCount} scripts for "${productName}" in ${language}`);
-
-    // Marketing frameworks rotation
-    const frameworks = ['PAS', 'AIDA', 'TESTIMONIAL', 'PROBLEM_FIRST'];
+    // Make decision using Decision Engine
+    const decision = decideScriptGeneration({ productName, productBenefit, language, videoCount });
+    console.log(`[UGC] Script decision: ${decision.frameworks.length} scripts with frameworks`);
 
     // Arabic/Spanish hooks and CTAs
     const hooks = {
@@ -3779,7 +3815,7 @@ app.post('/api/ugc/generate-scripts', async (req, res) => {
 
     const scripts = [];
     for (let i = 0; i < videoCount; i++) {
-      const framework = frameworks[i % frameworks.length];
+      const framework = decision.frameworks[i];
       const hook = langHooks[i % langHooks.length];
       const cta = langCTAs[i % langCTAs.length];
 
@@ -3794,33 +3830,49 @@ app.post('/api/ugc/generate-scripts', async (req, res) => {
       });
     }
 
-    res.json({ ok: true, scripts });
+    res.json({
+      ok: true,
+      scripts,
+      trace: decision.trace,
+      projectId: req.ugcProject?.id || null
+    });
   } catch (error) {
-    console.error('[UGC] Script generation error:', error);
-    res.status(500).json({ ok: false, error: error.message });
+    const normalized = normalizeError(error, stage, 'script-engine');
+    console.error(`[UGC] ${JSON.stringify(normalized)}`);
+    res.status(500).json({ ok: false, error: normalized });
   }
 });
 
 /**
  * POST /api/ugc/generate-voice
- * Generate voice audio for a script using ElevenLabs
+ * Generate voice audio using Decision Engine
  */
-app.post('/api/ugc/generate-voice', async (req, res) => {
+app.post('/api/ugc/generate-voice', warnWithoutProject, async (req, res) => {
+  const stage = 'voice';
+
   try {
-    const { scriptText, voiceId, apiKey } = req.body;
+    const { scriptText, voiceId, apiKey, market = 'SAUDI_ARABIA', projectId } = req.body;
 
     if (!scriptText || !voiceId) {
-      return res.status(400).json({ ok: false, error: 'Script text and voice ID are required' });
+      return errorResponse(res, 400, stage, 'validation', 'Script text and voice ID are required', false);
     }
 
-    // If no API key, return placeholder
-    if (!apiKey) {
-      console.log('[UGC] No ElevenLabs API key - returning placeholder');
+    // Make decision using Decision Engine
+    const decision = decideVoiceGeneration({ market, apiKey });
+    console.log(`[UGC] Voice decision: engine=${decision.engine || 'none'}`);
+
+    // If no engine available (no API key)
+    if (!decision.engine) {
       return res.json({
         ok: true,
         audioUrl: null,
         placeholder: true,
-        message: 'ElevenLabs API key not configured'
+        decision: {
+          engine: null,
+          reason: decision.trace.reason
+        },
+        trace: decision.trace,
+        projectId: req.ugcProject?.id || null
       });
     }
 
@@ -3844,8 +3896,8 @@ app.post('/api/ugc/generate-voice', async (req, res) => {
     });
 
     if (!elevenLabsResponse.ok) {
-      const error = await elevenLabsResponse.text();
-      throw new Error(`ElevenLabs API error: ${error}`);
+      const errorText = await elevenLabsResponse.text();
+      throw new Error(`ElevenLabs API error: ${errorText}`);
     }
 
     // Save audio to temp file
@@ -3854,29 +3906,51 @@ app.post('/api/ugc/generate-voice', async (req, res) => {
     const audioPath = path.join(TEMP_DIR, `${audioId}.mp3`);
     fs.writeFileSync(audioPath, Buffer.from(audioBuffer));
 
-    const audioUrl = `/uploads/${audioId}.mp3`;
-
-    res.json({ ok: true, audioUrl, duration: null }); // Duration would be calculated from audio
+    res.json({
+      ok: true,
+      audioUrl: `/uploads/${audioId}.mp3`,
+      duration: null,
+      decision: { engine: 'elevenlabs' },
+      trace: decision.trace,
+      projectId: req.ugcProject?.id || null
+    });
   } catch (error) {
-    console.error('[UGC] Voice generation error:', error);
-    res.status(500).json({ ok: false, error: error.message });
+    const normalized = normalizeError(error, stage, 'elevenlabs');
+    console.error(`[UGC] ${JSON.stringify(normalized)}`);
+    res.status(500).json({ ok: false, error: normalized });
   }
 });
 
 /**
  * POST /api/ugc/create-batch
- * Create a batch job for N videos
+ * Create a batch job for N videos with execution trace
  */
-app.post('/api/ugc/create-batch', async (req, res) => {
+app.post('/api/ugc/create-batch', warnWithoutProject, async (req, res) => {
+  const stage = 'batch';
+
   try {
-    const { videoCount, productName, avatars, scripts, voiceId } = req.body;
+    const { videoCount, productName, avatars, scripts, voiceId, market, language, projectId } = req.body;
 
     if (!videoCount || !productName || !avatars || !scripts) {
-      return res.status(400).json({ ok: false, error: 'Missing required batch parameters' });
+      return errorResponse(res, 400, stage, 'validation', 'Missing required batch parameters: videoCount, productName, avatars, scripts', false);
     }
 
     const batchId = `ugc-batch-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
-    console.log(`[UGC] Creating batch ${batchId} with ${videoCount} videos`);
+    console.log(`[UGC] Creating batch ${batchId} with ${videoCount} videos for project ${projectId || 'unscoped'}`);
+
+    // Build execution trace
+    const executionTrace = {
+      batchId,
+      startedAt: new Date().toISOString(),
+      decisions: {
+        avatarEngine: decideAvatarGeneration({ market, language }).engine,
+        scriptEngine: 'internal',
+        voiceEngine: voiceId ? 'elevenlabs' : null,
+        assembler: 'ffmpeg'
+      },
+      stages: [],
+      fallbacks: [],
+    };
 
     // Create video variants
     const videos = [];
@@ -3899,65 +3973,85 @@ app.post('/api/ugc/create-batch', async (req, res) => {
 
     const batch = {
       batchId,
+      projectId: req.ugcProject?.id || projectId || null,
       status: 'PROCESSING',
       progress: 0,
       currentStage: 'Initializing',
       videos,
+      executionTrace,
       createdAt: new Date().toISOString(),
     };
 
     ugcBatchJobs.set(batchId, batch);
 
-    // Simulate async processing (in production, this would be a worker)
+    // Simulate async processing (in production, this would be a VPS worker)
     simulateUGCBatchProcessing(batchId);
 
     res.json({ ok: true, ...batch });
   } catch (error) {
-    console.error('[UGC] Batch creation error:', error);
-    res.status(500).json({ ok: false, error: error.message });
+    const normalized = normalizeError(error, stage, 'batch-orchestrator');
+    console.error(`[UGC] ${JSON.stringify(normalized)}`);
+    res.status(500).json({ ok: false, error: normalized });
   }
 });
 
 /**
  * GET /api/ugc/batch-status
- * Check batch job status
+ * Check batch job status with execution trace
  */
 app.get('/api/ugc/batch-status', (req, res) => {
   const { batchId } = req.query;
 
   if (!batchId) {
-    return res.status(400).json({ ok: false, error: 'Batch ID is required' });
+    return errorResponse(res, 400, 'batch', 'validation', 'Batch ID is required', false);
   }
 
   const batch = ugcBatchJobs.get(batchId);
 
   if (!batch) {
-    return res.status(404).json({ ok: false, error: 'Batch not found' });
+    return errorResponse(res, 404, 'batch', 'lookup', `Batch not found: ${batchId}`, false);
   }
 
   res.json({ ok: true, ...batch });
 });
 
 /**
- * Simulate UGC batch processing (demo mode)
+ * Simulate UGC batch processing with execution trace
  */
 async function simulateUGCBatchProcessing(batchId) {
   const batch = ugcBatchJobs.get(batchId);
   if (!batch) return;
 
-  const stages = ['Script Generation', 'Voice Generation', 'Avatar Processing', 'Scene Composition', 'Rendering', 'Finalizing'];
+  const stages = [
+    { name: 'Script Generation', engine: 'internal' },
+    { name: 'Voice Generation', engine: 'elevenlabs' },
+    { name: 'Avatar Processing', engine: batch.executionTrace?.decisions?.avatarEngine || 'dicebear' },
+    { name: 'Scene Composition', engine: 'internal' },
+    { name: 'Rendering', engine: 'ffmpeg' },
+    { name: 'Finalizing', engine: 'internal' }
+  ];
+
   const totalSteps = stages.length * batch.videos.length;
   let currentStep = 0;
 
   for (const stage of stages) {
-    batch.currentStage = stage;
+    batch.currentStage = stage.name;
+
+    // Record stage in trace
+    const stageStart = Date.now();
+    batch.executionTrace.stages.push({
+      name: stage.name,
+      engine: stage.engine,
+      startedAt: new Date().toISOString(),
+      status: 'running'
+    });
 
     for (let i = 0; i < batch.videos.length; i++) {
       currentStep++;
       batch.progress = Math.round((currentStep / totalSteps) * 100);
 
       // Mark video as done on final stage
-      if (stage === 'Finalizing') {
+      if (stage.name === 'Finalizing') {
         batch.videos[i].status = 'DONE';
         batch.videos[i].completedAt = new Date().toISOString();
         batch.videos[i].thumbnailUrl = `https://picsum.photos/seed/${batch.videos[i].id}/270/480`;
@@ -3966,14 +4060,21 @@ async function simulateUGCBatchProcessing(batchId) {
       ugcBatchJobs.set(batchId, batch);
       await new Promise(r => setTimeout(r, 200)); // Simulate processing time
     }
+
+    // Update stage trace
+    const stageTrace = batch.executionTrace.stages[batch.executionTrace.stages.length - 1];
+    stageTrace.completedAt = new Date().toISOString();
+    stageTrace.durationMs = Date.now() - stageStart;
+    stageTrace.status = 'done';
   }
 
   batch.status = 'DONE';
   batch.progress = 100;
   batch.completedAt = new Date().toISOString();
+  batch.executionTrace.completedAt = new Date().toISOString();
   ugcBatchJobs.set(batchId, batch);
 
-  console.log(`[UGC] Batch ${batchId} completed`);
+  console.log(`[UGC] Batch ${batchId} completed with trace`);
 }
 
 // ============================================

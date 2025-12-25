@@ -9,3 +9,5 @@ export { ResultsGrid } from './ResultsGrid';
 export { AvatarCarousel } from './AvatarCarousel';
 export { VoiceGrid } from './VoiceGrid';
 export { GenerateBar } from './GenerateBar';
+export { ExecutionTrace } from './ExecutionTrace';
+
