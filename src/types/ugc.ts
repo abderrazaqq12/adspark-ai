@@ -103,6 +103,9 @@ export interface UGCVideoVariant {
     ctaText?: string;
     subtitleStyle?: string;
     avatarProfileId?: string;
+    avatarId?: string;
+    scriptId?: string;
+    framework?: string;
     marketingAngle?: string;
     scriptText?: string;
     voiceUrl?: string;

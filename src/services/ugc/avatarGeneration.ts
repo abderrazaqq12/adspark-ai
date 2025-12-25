@@ -120,18 +120,28 @@ export function validateAvatarQuality(imageUrl: string): boolean {
 /**
  * Generate placeholder avatars for demo/testing
  */
-export function generatePlaceholderAvatars(count: number = 5): UGCGeneratedAvatar[] {
+export function generatePlaceholderAvatars(
+    count: number = 5,
+    market: UGCMarket = 'USA',
+    language: UGCLanguage = 'ENGLISH',
+    genderFilter: UGCGender = 'ALL'
+): UGCGeneratedAvatar[] {
     const avatars: UGCGeneratedAvatar[] = [];
-    const genders: Array<'MALE' | 'FEMALE'> = ['MALE', 'FEMALE'];
+    const genders: Array<'MALE' | 'FEMALE'> =
+        genderFilter === 'ALL'
+            ? ['MALE', 'FEMALE']
+            : [genderFilter as 'MALE' | 'FEMALE'];
 
     for (let i = 0; i < count; i++) {
-        const gender = genders[i % 2];
+        const gender = genders[i % genders.length];
+        // Use realistic photo placeholder for demo
+        const seed = `${market}-${language}-${gender}-${Date.now()}-${i}`;
         avatars.push({
-            id: `placeholder-${i}`,
-            imageUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${Date.now()}-${i}&backgroundColor=b6e3f4`,
+            id: `avatar-${Date.now()}-${i}`,
+            imageUrl: `https://api.dicebear.com/7.x/personas/svg?seed=${seed}&backgroundColor=c0aede,d1d4f9,ffd5dc,ffdfbf`,
             gender,
-            market: 'USA',
-            language: 'ENGLISH',
+            market,
+            language,
             isSelected: i === 0,
         });
     }

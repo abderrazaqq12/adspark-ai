@@ -6,3 +6,6 @@ export { VoicePreview } from './VoicePreview';
 export { BatchSettingsSection } from './BatchSettingsSection';
 export { ProgressDisplay } from './ProgressDisplay';
 export { ResultsGrid } from './ResultsGrid';
+export { AvatarCarousel } from './AvatarCarousel';
+export { VoiceGrid } from './VoiceGrid';
+export { GenerateBar } from './GenerateBar';

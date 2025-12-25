@@ -3704,6 +3704,279 @@ app.listen(PORT, HOST, () => {
 });
 
 // ============================================
+// UGC VIDEO FACTORY API (Isolated Module)
+// ============================================
+
+// In-memory UGC batch jobs (isolated from main render queue)
+const ugcBatchJobs = new Map();
+
+/**
+ * POST /api/ugc/generate-avatars
+ * Generate 3-5 AI avatars based on market/language/gender
+ */
+app.post('/api/ugc/generate-avatars', async (req, res) => {
+  try {
+    const { market = 'SAUDI_ARABIA', language = 'ARABIC', gender = 'ALL', count = 5 } = req.body;
+
+    console.log(`[UGC] Generating ${count} avatars for ${market}/${language}/${gender}`);
+
+    // Generate placeholder avatars (real AI would be called here)
+    const genders = gender === 'ALL' ? ['MALE', 'FEMALE'] : [gender];
+    const avatars = [];
+
+    for (let i = 0; i < count; i++) {
+      const avatarGender = genders[i % genders.length];
+      const seed = `${market}-${language}-${avatarGender}-${Date.now()}-${i}`;
+      avatars.push({
+        id: `avatar-${Date.now()}-${i}`,
+        imageUrl: `https://api.dicebear.com/7.x/personas/svg?seed=${seed}&backgroundColor=c0aede,d1d4f9,ffd5dc,ffdfbf`,
+        gender: avatarGender,
+        market,
+        language,
+        isSelected: i === 0,
+      });
+    }
+
+    res.json({ ok: true, avatars });
+  } catch (error) {
+    console.error('[UGC] Avatar generation error:', error);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/ugc/generate-scripts
+ * Generate N scripts using rotating marketing frameworks
+ */
+app.post('/api/ugc/generate-scripts', async (req, res) => {
+  try {
+    const { productName, productBenefit, language = 'ARABIC', videoCount = 5 } = req.body;
+
+    if (!productName || !productBenefit) {
+      return res.status(400).json({ ok: false, error: 'Product name and benefit are required' });
+    }
+
+    console.log(`[UGC] Generating ${videoCount} scripts for "${productName}" in ${language}`);
+
+    // Marketing frameworks rotation
+    const frameworks = ['PAS', 'AIDA', 'TESTIMONIAL', 'PROBLEM_FIRST'];
+
+    // Arabic/Spanish hooks and CTAs
+    const hooks = {
+      ARABIC: ['هل تعاني من هذه المشكلة؟', 'لازم تشوفون هذا المنتج', 'كنت أعاني من نفس المشكلة', 'اكتشفت شي مهم جداً'],
+      SPANISH: ['¿Tienes este problema?', 'Tienen que ver esto', 'Yo tenía el mismo problema', 'Descubrí algo importante'],
+      ENGLISH: ['Do you have this problem?', 'You need to see this', 'I had the same issue', 'I discovered something important'],
+    };
+
+    const ctas = {
+      ARABIC: ['جربوه الحين!', 'الرابط في البايو', 'اطلبوه قبل ما يخلص', 'ما راح تندمون'],
+      SPANISH: ['¡Pruébalo ahora!', 'Link en la bio', 'Pídelo antes de que se agote', 'No te vas a arrepentir'],
+      ENGLISH: ['Try it now!', 'Link in bio', 'Order before it sells out', 'You won\'t regret it'],
+    };
+
+    const langHooks = hooks[language] || hooks.ENGLISH;
+    const langCTAs = ctas[language] || ctas.ENGLISH;
+
+    const scripts = [];
+    for (let i = 0; i < videoCount; i++) {
+      const framework = frameworks[i % frameworks.length];
+      const hook = langHooks[i % langHooks.length];
+      const cta = langCTAs[i % langCTAs.length];
+
+      scripts.push({
+        id: `script-${Date.now()}-${i}`,
+        text: `${hook}\n\n${productName} - ${productBenefit}\n\n${cta}`,
+        framework,
+        hook,
+        cta,
+        language,
+        videoNumber: i + 1,
+      });
+    }
+
+    res.json({ ok: true, scripts });
+  } catch (error) {
+    console.error('[UGC] Script generation error:', error);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/ugc/generate-voice
+ * Generate voice audio for a script using ElevenLabs
+ */
+app.post('/api/ugc/generate-voice', async (req, res) => {
+  try {
+    const { scriptText, voiceId, apiKey } = req.body;
+
+    if (!scriptText || !voiceId) {
+      return res.status(400).json({ ok: false, error: 'Script text and voice ID are required' });
+    }
+
+    // If no API key, return placeholder
+    if (!apiKey) {
+      console.log('[UGC] No ElevenLabs API key - returning placeholder');
+      return res.json({
+        ok: true,
+        audioUrl: null,
+        placeholder: true,
+        message: 'ElevenLabs API key not configured'
+      });
+    }
+
+    console.log(`[UGC] Generating voice for ${scriptText.length} chars with voice ${voiceId}`);
+
+    // Call ElevenLabs API
+    const elevenLabsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        text: scriptText,
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75,
+        },
+      }),
+    });
+
+    if (!elevenLabsResponse.ok) {
+      const error = await elevenLabsResponse.text();
+      throw new Error(`ElevenLabs API error: ${error}`);
+    }
+
+    // Save audio to temp file
+    const audioBuffer = await elevenLabsResponse.arrayBuffer();
+    const audioId = `voice-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+    const audioPath = path.join(TEMP_DIR, `${audioId}.mp3`);
+    fs.writeFileSync(audioPath, Buffer.from(audioBuffer));
+
+    const audioUrl = `/uploads/${audioId}.mp3`;
+
+    res.json({ ok: true, audioUrl, duration: null }); // Duration would be calculated from audio
+  } catch (error) {
+    console.error('[UGC] Voice generation error:', error);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/ugc/create-batch
+ * Create a batch job for N videos
+ */
+app.post('/api/ugc/create-batch', async (req, res) => {
+  try {
+    const { videoCount, productName, avatars, scripts, voiceId } = req.body;
+
+    if (!videoCount || !productName || !avatars || !scripts) {
+      return res.status(400).json({ ok: false, error: 'Missing required batch parameters' });
+    }
+
+    const batchId = `ugc-batch-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+    console.log(`[UGC] Creating batch ${batchId} with ${videoCount} videos`);
+
+    // Create video variants
+    const videos = [];
+    for (let i = 0; i < videoCount; i++) {
+      const avatar = avatars[i % avatars.length];
+      const script = scripts[i];
+
+      videos.push({
+        id: `variant-${batchId}-${i}`,
+        variantNumber: i + 1,
+        status: 'PROCESSING',
+        avatarId: avatar?.id,
+        scriptId: script?.id,
+        hookText: script?.hook,
+        ctaText: script?.cta,
+        framework: script?.framework,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    const batch = {
+      batchId,
+      status: 'PROCESSING',
+      progress: 0,
+      currentStage: 'Initializing',
+      videos,
+      createdAt: new Date().toISOString(),
+    };
+
+    ugcBatchJobs.set(batchId, batch);
+
+    // Simulate async processing (in production, this would be a worker)
+    simulateUGCBatchProcessing(batchId);
+
+    res.json({ ok: true, ...batch });
+  } catch (error) {
+    console.error('[UGC] Batch creation error:', error);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+/**
+ * GET /api/ugc/batch-status
+ * Check batch job status
+ */
+app.get('/api/ugc/batch-status', (req, res) => {
+  const { batchId } = req.query;
+
+  if (!batchId) {
+    return res.status(400).json({ ok: false, error: 'Batch ID is required' });
+  }
+
+  const batch = ugcBatchJobs.get(batchId);
+
+  if (!batch) {
+    return res.status(404).json({ ok: false, error: 'Batch not found' });
+  }
+
+  res.json({ ok: true, ...batch });
+});
+
+/**
+ * Simulate UGC batch processing (demo mode)
+ */
+async function simulateUGCBatchProcessing(batchId) {
+  const batch = ugcBatchJobs.get(batchId);
+  if (!batch) return;
+
+  const stages = ['Script Generation', 'Voice Generation', 'Avatar Processing', 'Scene Composition', 'Rendering', 'Finalizing'];
+  const totalSteps = stages.length * batch.videos.length;
+  let currentStep = 0;
+
+  for (const stage of stages) {
+    batch.currentStage = stage;
+
+    for (let i = 0; i < batch.videos.length; i++) {
+      currentStep++;
+      batch.progress = Math.round((currentStep / totalSteps) * 100);
+
+      // Mark video as done on final stage
+      if (stage === 'Finalizing') {
+        batch.videos[i].status = 'DONE';
+        batch.videos[i].completedAt = new Date().toISOString();
+        batch.videos[i].thumbnailUrl = `https://picsum.photos/seed/${batch.videos[i].id}/270/480`;
+      }
+
+      ugcBatchJobs.set(batchId, batch);
+      await new Promise(r => setTimeout(r, 200)); // Simulate processing time
+    }
+  }
+
+  batch.status = 'DONE';
+  batch.progress = 100;
+  batch.completedAt = new Date().toISOString();
+  ugcBatchJobs.set(batchId, batch);
+
+  console.log(`[UGC] Batch ${batchId} completed`);
+}
+
+// ============================================
 // AUTOMATED CLEANUP (2 Hour TTL)
 // ============================================
 
