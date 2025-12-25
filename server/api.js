@@ -3155,7 +3155,8 @@ app.post('/api/ai-content-factory', async (req, res) => {
         } else if (contentType === 'landing_page') {
           prompt += `Generate landing page content. Output JSON with hero, problem, solution, features, testimonials, faq, guarantee sections.`;
         } else {
-          prompt += `Generate 10 marketing angles. Output JSON: { "angles": [{ "name": "...", "headline": "...", "targetEmotion": "..." }] }`;
+          prompt += `Generate 10 marketing angles. FOR EACH ANGLE, include a 'keyMessage' (a deep psychological insight or specific benefit).
+          Output JSON: { "angles": [{ "name": "...", "headline": "...", "targetEmotion": "...", "keyMessage": "..." }] }`;
         }
 
         console.log(`[AI Factory] Generating ${contentType}...`);

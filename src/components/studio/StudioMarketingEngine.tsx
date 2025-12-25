@@ -841,6 +841,17 @@ ${landingData.finalCta?.urgencyText || ''}`;
                     {isSyncing ? 'Syncing...' : isSynced ? 'Synced' : 'Sync Now'}
                   </Button>
                 </div>
+
+                {/* Next Step Button */}
+                <div className="flex justify-end pt-4 border-t border-border/50">
+                  <Button
+                    onClick={() => setActiveTab('landing')}
+                    className="gap-2 bg-primary hover:bg-primary/90 shadow-md transition-all active:scale-95"
+                  >
+                    Continue to Landing Content
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
             )}
           </Card>
@@ -899,6 +910,18 @@ ${landingData.finalCta?.urgencyText || ''}`;
                 className="min-h-[400px] font-mono text-sm bg-background"
                 dir="rtl"
               />
+            )}
+
+            {landingContent && (
+              <div className="mt-6 flex justify-end pt-4 border-t border-border/50">
+                <Button
+                  onClick={() => onContinue({ angles: generatedAngles, landingContent })}
+                  className="gap-2 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary shadow-lg transition-all active:scale-95 px-6"
+                >
+                  Final Step: Generate Landing Page
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </div>
             )}
           </Card>
         </TabsContent>
