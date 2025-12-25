@@ -1,5 +1,6 @@
 /**
  * Hook for managing first-class prompt profiles with database persistence
+ * VPS Mode: Uses /api/prompt-profiles proxy to bypass RLS
  */
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client'; // For database only, NOT auth
@@ -44,6 +45,9 @@ function generatePromptHash(text: string): string {
   return Math.abs(hash).toString(16).padStart(8, '0');
 }
 
+// Check if running in VPS/self-hosted mode
+const isSelfHosted = () => import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted';
+
 export function usePromptProfiles() {
   const [loading, setLoading] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
@@ -56,7 +60,37 @@ export function usePromptProfiles() {
     market: string = 'gcc'
   ): Promise<PromptProfile | null> => {
     try {
-      // VPS-ONLY: Use centralized auth
+      if (isSelfHosted()) {
+        // VPS Mode: Use API proxy
+        const token = localStorage.getItem('flowscale_token');
+        const res = await fetch(`/api/prompt-profiles?type=${type}&language=${language}&market=${market}`, {
+          headers: {
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          }
+        });
+
+        if (!res.ok) {
+          console.error('[PromptProfiles] VPS fetch error');
+          return null;
+        }
+
+        const data = await res.json();
+
+        if (debugMode && data.prompt) {
+          console.log(`[PromptProfiles] Active prompt loaded:`, {
+            id: data.prompt.id,
+            type,
+            language,
+            market,
+            hash: data.prompt.prompt_hash,
+            version: data.prompt.version
+          });
+        }
+
+        return data.prompt as PromptProfile | null;
+      }
+
+      // Cloud Mode: Direct Supabase
       const user = getUser();
       if (!user) return null;
 
@@ -103,7 +137,43 @@ export function usePromptProfiles() {
   ): Promise<PromptProfile | null> => {
     setLoading(true);
     try {
-      // VPS-ONLY: Use centralized auth
+      if (isSelfHosted()) {
+        // VPS Mode: Use API proxy
+        const token = localStorage.getItem('flowscale_token');
+        const res = await fetch('/api/prompt-profiles', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            type,
+            title,
+            prompt_text: promptText,
+            language,
+            market
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.description || 'Failed to save prompt');
+        }
+
+        const data = await res.json();
+
+        if (debugMode) {
+          console.log(`[PromptProfiles] Prompt saved:`, {
+            id: data.prompt.id,
+            version: data.prompt.version
+          });
+        }
+
+        toast({ title: 'Prompt Saved', description: `Version ${data.prompt.version} saved` });
+        return data.prompt as PromptProfile;
+      }
+
+      // Cloud Mode: Direct Supabase
       const user = getUser();
       if (!user) {
         toast({ title: 'Error', description: 'Must be logged in', variant: 'destructive' });
@@ -278,3 +348,4 @@ export function usePromptProfiles() {
     generatePromptHash
   };
 }
+

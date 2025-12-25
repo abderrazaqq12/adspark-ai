@@ -2964,6 +2964,167 @@ app.get('/api/templates', async (req, res) => {
   }
 });
 
+// ============================================
+// PROMPT PROFILES API (VPS Mode - Bypass RLS)
+// ============================================
+
+/**
+ * GET /api/prompt-profiles
+ * Get active prompt profile for a type/language/market
+ */
+app.get('/api/prompt-profiles', async (req, res) => {
+  const { type, language = 'ar', market = 'gcc' } = req.query;
+
+  if (!type) {
+    return jsonError(res, 400, 'MISSING_TYPE', 'type query parameter is required');
+  }
+
+  try {
+    if (!supabase) {
+      // Fallback: Return null if no Supabase
+      return res.json({ prompt: null });
+    }
+
+    const { data, error } = await supabase
+      .from('prompt_profiles')
+      .select('*')
+      .eq('user_id', DEFAULT_USER_ID)
+      .eq('type', type)
+      .eq('language', language)
+      .eq('market', market)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('[API] Prompt profile fetch error:', error);
+      return res.json({ prompt: null });
+    }
+
+    res.json({ prompt: data || null });
+  } catch (err) {
+    console.error('[API] Prompt profiles error:', err);
+    res.json({ prompt: null });
+  }
+});
+
+/**
+ * POST /api/prompt-profiles
+ * Save or update a prompt profile
+ */
+app.post('/api/prompt-profiles', async (req, res) => {
+  const { type, title, prompt_text, language = 'ar', market = 'gcc' } = req.body;
+
+  if (!type || !title || !prompt_text) {
+    return jsonError(res, 400, 'MISSING_PARAMS', 'type, title, and prompt_text are required');
+  }
+
+  try {
+    if (!supabase) {
+      // Fallback: Store locally
+      const promptsFile = path.join(DATA_DIR, 'prompt_profiles.json');
+      let prompts = {};
+
+      try {
+        if (fs.existsSync(promptsFile)) {
+          prompts = JSON.parse(fs.readFileSync(promptsFile, 'utf8'));
+        }
+      } catch (e) { /* ignore */ }
+
+      const key = `${type}_${language}_${market}`;
+      const existing = prompts[key];
+
+      // Generate hash
+      let hash = 0;
+      for (let i = 0; i < prompt_text.length; i++) {
+        hash = ((hash << 5) - hash) + prompt_text.charCodeAt(i);
+        hash = hash & hash;
+      }
+      const promptHash = Math.abs(hash).toString(16).padStart(8, '0');
+
+      const newPrompt = {
+        id: existing?.id || `prompt_${Date.now()}`,
+        user_id: DEFAULT_USER_ID,
+        type,
+        title,
+        prompt_text,
+        prompt_hash: promptHash,
+        language,
+        market,
+        version: (existing?.version || 0) + 1,
+        is_active: true,
+        created_at: existing?.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      prompts[key] = newPrompt;
+      fs.writeFileSync(promptsFile, JSON.stringify(prompts, null, 2), 'utf8');
+
+      return res.json({ ok: true, prompt: newPrompt });
+    }
+
+    // Generate hash
+    let hash = 0;
+    for (let i = 0; i < prompt_text.length; i++) {
+      hash = ((hash << 5) - hash) + prompt_text.charCodeAt(i);
+      hash = hash & hash;
+    }
+    const promptHash = Math.abs(hash).toString(16).padStart(8, '0');
+
+    // Check for existing
+    const { data: existing } = await supabase
+      .from('prompt_profiles')
+      .select('*')
+      .eq('user_id', DEFAULT_USER_ID)
+      .eq('type', type)
+      .eq('language', language)
+      .eq('market', market)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (existing) {
+      // Update existing
+      const { data, error } = await supabase
+        .from('prompt_profiles')
+        .update({
+          title,
+          prompt_text,
+          prompt_hash: promptHash,
+          version: existing.version + 1,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existing.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json({ ok: true, prompt: data });
+    } else {
+      // Create new
+      const { data, error } = await supabase
+        .from('prompt_profiles')
+        .insert({
+          user_id: DEFAULT_USER_ID,
+          type,
+          title,
+          prompt_text,
+          prompt_hash: promptHash,
+          language,
+          market,
+          version: 1,
+          is_active: true
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json({ ok: true, prompt: data });
+    }
+  } catch (err) {
+    console.error('[API] Prompt profile save error:', err);
+    jsonError(res, 500, 'SAVE_FAILED', err.message);
+  }
+});
+
 /**
  * GET /api/user/profile
  * Mock profile for VPS Admin to prevent 406 errors on frontend
