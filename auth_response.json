@@ -1,0 +1,51 @@
+{
+    "access_token":  "eyJhbGciOiJIUzI1NiIsImtpZCI6IlVxSGhjeFdSUzVBYUhtMzAiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2JlZGV1a2lqbml4ZWloamVwYmpnLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiJmODE0NjVhNS1iZDMwLTRjZWMtODgyZC0wNTk5M2JiOWU2MDUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2Nzg1Mjk0LCJpYXQiOjE3NjY3ODE2OTQsImVtYWlsIjoidG80Nzk5cG9AZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdfSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbCI6InRvNDc5OXBvQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJwaG9uZV92ZXJpZmllZCI6ZmFsc2UsInN1YiI6ImY4MTQ2NWE1LWJkMzAtNGNlYy04ODJkLTA1OTkzYmI5ZTYwNSJ9LCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6InBhc3N3b3JkIiwidGltZXN0YW1wIjoxNzY2NzgxNjk0fV0sInNlc3Npb25faWQiOiI3YmU2ODllNy01YWZlLTQ5NTAtYWQ1MC00MzdjZWM0NDUyYmIiLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ.IcTT562UOhzYraitkyAwFzuoMcvCgYDxcT7SKWMK-vg",
+    "token_type":  "bearer",
+    "expires_in":  3600,
+    "expires_at":  1766785294,
+    "refresh_token":  "ileea3xgtr77",
+    "user":  {
+                 "id":  "f81465a5-bd30-4cec-882d-05993bb9e605",
+                 "aud":  "authenticated",
+                 "role":  "authenticated",
+                 "email":  "to4799po@gmail.com",
+                 "email_confirmed_at":  "2025-12-03T22:00:57.890904Z",
+                 "phone":  "",
+                 "confirmed_at":  "2025-12-03T22:00:57.890904Z",
+                 "last_sign_in_at":  "2025-12-26T20:41:34.199468915Z",
+                 "app_metadata":  {
+                                      "provider":  "email",
+                                      "providers":  [
+                                                        "email"
+                                                    ]
+                                  },
+                 "user_metadata":  {
+                                       "email":  "to4799po@gmail.com",
+                                       "email_verified":  true,
+                                       "phone_verified":  false,
+                                       "sub":  "f81465a5-bd30-4cec-882d-05993bb9e605"
+                                   },
+                 "identities":  [
+                                    {
+                                        "identity_id":  "a70a1d2d-69f1-4d18-a62e-36564acc3d5e",
+                                        "id":  "f81465a5-bd30-4cec-882d-05993bb9e605",
+                                        "user_id":  "f81465a5-bd30-4cec-882d-05993bb9e605",
+                                        "identity_data":  {
+                                                              "email":  "to4799po@gmail.com",
+                                                              "email_verified":  false,
+                                                              "phone_verified":  false,
+                                                              "sub":  "f81465a5-bd30-4cec-882d-05993bb9e605"
+                                                          },
+                                        "provider":  "email",
+                                        "last_sign_in_at":  "2025-12-03T22:00:57.887866Z",
+                                        "created_at":  "2025-12-03T22:00:57.887929Z",
+                                        "updated_at":  "2025-12-03T22:00:57.887929Z",
+                                        "email":  "to4799po@gmail.com"
+                                    }
+                                ],
+                 "created_at":  "2025-12-03T22:00:57.870027Z",
+                 "updated_at":  "2025-12-26T20:41:34.256752Z",
+                 "is_anonymous":  false
+             },
+    "weak_password":  null
+}

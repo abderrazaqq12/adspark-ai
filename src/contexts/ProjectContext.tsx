@@ -77,7 +77,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const loadLatestProject = useCallback(async () => {
     setIsLoading(true);
     try {
-      const user = getUser();
+      const mode = import.meta.env.VITE_DEPLOYMENT_MODE;
+      const isVPSMode = mode === 'self-hosted' || mode === 'vps';
+
+      let user = null;
+      if (isVPSMode) {
+        user = getUser();
+      } else {
+        const { data } = await supabase.auth.getUser();
+        user = data.user;
+      }
+
       if (!user) {
         setIsLoading(false);
         return;
@@ -276,7 +286,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     setIsSaving(true);
     try {
-      const user = getUser();
+      const mode = import.meta.env.VITE_DEPLOYMENT_MODE;
+      const isVPSMode = mode === 'self-hosted' || mode === 'vps';
+
+      let user = null;
+      if (isVPSMode) {
+        user = getUser();
+      } else {
+        const { data } = await supabase.auth.getUser();
+        user = data.user;
+      }
+
       if (!user) {
         toast.error('Please sign in to create a project');
         return null;
@@ -359,7 +379,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const saveProject = useCallback(async (): Promise<boolean> => {
     setIsSaving(true);
     try {
-      const user = getUser();
+      const mode = import.meta.env.VITE_DEPLOYMENT_MODE;
+      const isVPSMode = mode === 'self-hosted' || mode === 'vps';
+
+      let user = null;
+      if (isVPSMode) {
+        user = getUser();
+      } else {
+        const { data } = await supabase.auth.getUser();
+        user = data.user;
+      }
+
       if (!user) {
         toast.error('Please sign in to save');
         return false;

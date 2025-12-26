@@ -22,22 +22,15 @@ export function useAuth() {
       return;
     }
 
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) {
-        setUser({
-          id: session.user.id,
-          email: session.user.email,
-          role: 'user'
-        });
-      }
-      setLoading(false);
-    });
+    let mounted = true;
 
-    // Listen for auth changes
+    // Set up auth state listener - this handles both initial load and updates
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (!mounted) return;
+
+        console.log('[useAuth] Auth state change:', event, !!session);
+
         setSession(session);
         if (session?.user) {
           setUser({
@@ -45,14 +38,17 @@ export function useAuth() {
             email: session.user.email,
             role: 'user'
           });
-        } else {
+        } else if (event === 'SIGNED_OUT') {
           setUser(null);
         }
         setLoading(false);
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signUp = useCallback(async (email: string, password: string, fullName?: string) => {
