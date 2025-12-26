@@ -14,16 +14,18 @@ interface LayoutProps {
 
 // Routes that don't require a project context
 const BYPASS_PROJECT_ROUTES = [
-  '/',           // Dashboard
-  '/projects',   // Projects page (manages projects)
-  '/settings',   // Settings page
-  '/engines',    // AI Engines page
-  '/analytics',  // Analytics page
+  '/app',           // Dashboard
+  '/app/',          // Dashboard with trailing slash
+  '/app/dashboard', // Explicit dashboard route
+  '/app/projects',  // Projects page (manages projects)
+  '/app/settings',  // Settings page
+  '/app/engines',   // AI Engines page
+  '/app/analytics', // Analytics page
 ];
 
 export function Layout({ children, title, actions }: LayoutProps) {
   const location = useLocation();
-  
+
   // Enable system-wide pipeline job notifications with progress updates
   usePipelineNotifications({
     enabled: true,

@@ -83,14 +83,25 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const init = async () => {
       try {
-        // VPS-ONLY: Use centralized auth
-        const user = getUser();
-        if (!user) {
-          setIsLoading(false);
-          return;
-        }
+        const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
 
-        await loadProjects(user.id);
+        if (isSelfHosted) {
+          // VPS mode: Use centralized auth
+          const user = getUser();
+          if (!user) {
+            setIsLoading(false);
+            return;
+          }
+          await loadProjects(user.id);
+        } else {
+          // Supabase mode: Get user from Supabase Auth
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) {
+            setIsLoading(false);
+            return;
+          }
+          await loadProjects(user.id);
+        }
       } catch (error) {
         console.error('[GlobalProjectContext] Init error:', error);
       } finally {
@@ -99,7 +110,18 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
     };
 
     init();
-    // VPS-ONLY: No auth state listener. Frontend reacts to 401 responses only.
+
+    // Listen for Supabase auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        await loadProjects(session.user.id);
+      } else if (event === 'SIGNED_OUT') {
+        setProjects([]);
+        setActiveProject(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const loadProjects = async (userId: string) => {
@@ -125,28 +147,30 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
         }
         setProjects((data || []) as Project[]);
       }
-
-      const projectList = (projects || []);
     } catch (error) {
       console.error('[GlobalProjectContext] Load projects error:', error);
-      if (import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted') setProjects([]);
+      setProjects([]);
     }
 
     // Restore active project from localStorage
     const savedProjectId = localStorage.getItem(STORAGE_KEY);
     if (savedProjectId) {
       // Note: projects state might not be updated yet in closure, so we rely on fetched data if we could.
-      // But simplifying here as this runs after load.
     }
   };
 
   const refreshProjects = useCallback(async () => {
-    // VPS-ONLY: Use centralized auth
-    const user = getUser();
-    if (user) {
-      await loadProjects(user.id);
+    const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
+
+    if (isSelfHosted) {
+      const user = getUser();
+      if (user) await loadProjects(user.id);
+    } else {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) await loadProjects(user.id);
     }
   }, []);
+
 
   const selectProject = useCallback(async (projectId: string) => {
     const project = projects.find(p => p.id === projectId);
@@ -229,7 +253,6 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
     setIsCreating(true);
     try {
       const isSelfHosted = import.meta.env.VITE_DEPLOYMENT_MODE === 'self-hosted' || import.meta.env.VITE_DEPLOYMENT_MODE === 'vps';
-      let userId = 'local-user';
       let newProject: Project;
 
       if (isSelfHosted) {
@@ -251,10 +274,26 @@ export function GlobalProjectProvider({ children }: { children: ReactNode }) {
         if (!res.ok) throw new Error('Failed to create local project');
         newProject = await res.json();
       } else {
-        // VPS-ONLY: This branch should not be reached
-        console.error('[GlobalProjectContext] Non-VPS mode not supported');
-        toast.error('Configuration error');
-        return null;
+        // Use Supabase Auth for user identification
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          toast.error('Please sign in to create a project');
+          return null;
+        }
+
+        const { data, error } = await supabase
+          .from('projects')
+          .insert({
+            name: name.trim(),
+            product_name: name.trim(),
+            user_id: user.id,
+            status: 'draft'
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        newProject = data as Project;
       }
 
       // Try to create Google Drive folder (non-blocking)

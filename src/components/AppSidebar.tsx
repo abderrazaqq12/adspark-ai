@@ -18,30 +18,30 @@ import {
 
 // Main workflows - Studio + UGC Generator + Creative Replicator + Creative Scale + AI Tools
 const workflowItems = [
-  { title: "Studio", url: "/create", icon: Clapperboard },
-  { title: "UGC Generator", url: "/ugc-generator", icon: Video },
-  { title: "Creative Replicator", url: "/creative-replicator", icon: SlidersHorizontal },
-  { title: "Creative AI Editor", url: "/creative-scale", icon: Scale },
-  { title: "AI Tools", url: "/ai-tools", icon: Wand2 },
+  { title: "Studio", url: "/app/create", icon: Clapperboard },
+  { title: "UGC Generator", url: "/app/ugc-generator", icon: Video },
+  { title: "Creative Replicator", url: "/app/creative-replicator", icon: SlidersHorizontal },
+  { title: "Creative AI Editor", url: "/app/creative-scale", icon: Scale },
+  { title: "AI Tools", url: "/app/ai-tools", icon: Wand2 },
 ];
 
 // Quick access items - Dashboard only
 const quickAccessItems = [
-  { title: "Dashboard", url: "/", icon: Home },
+  { title: "Dashboard", url: "/app", icon: Home },
 ];
 
 // Library items - Projects and Gallery
 const libraryItems = [
-  { title: "Projects", url: "/projects", icon: FolderOpen },
-  { title: "Assets", url: "/gallery", icon: Images },
-  { title: "Templates", url: "/templates", icon: LayoutTemplate },
+  { title: "Projects", url: "/app/projects", icon: FolderOpen },
+  { title: "Assets", url: "/app/gallery", icon: Images },
+  { title: "Templates", url: "/app/templates", icon: LayoutTemplate },
 ];
 
 // Tools items
 const toolsItems = [
-  { title: "Analytics", url: "/analytics", icon: BarChart3 },
-  { title: "AI Engines", url: "/engines", icon: Cpu },
-  { title: "Settings", url: "/settings", icon: Settings },
+  { title: "Analytics", url: "/app/analytics", icon: BarChart3 },
+  { title: "AI Engines", url: "/app/engines", icon: Cpu },
+  { title: "Settings", url: "/app/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
@@ -54,7 +54,7 @@ export function AppSidebar() {
         {/* Logo/Brand */}
         <div
           className={`flex items-center gap-3 px-3 py-4 cursor-pointer hover:bg-sidebar-accent/50 rounded-lg mx-2 transition-colors ${open ? '' : 'justify-center'}`}
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/app')}
         >
           <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center shadow-glow shrink-0">
             <Sparkles className="w-4 h-4 text-primary-foreground" />

@@ -10,18 +10,21 @@ interface TopBarProps {
 }
 
 const routeTitles: Record<string, string> = {
-  "/": "Dashboard",
-  "/create": "Studio",
-  "/creative-replicator": "Creative Replicator",
-  "/creative-scale": "Creative AI Editor",
-  "/ai-tools": "AI Tools",
-  "/projects": "Projects",
-  "/gallery": "Asset Gallery",
-  "/templates": "Templates",
-  "/analytics": "Analytics",
-  "/engines": "AI Engines",
-  "/settings": "Settings",
-  "/scene-builder": "Scene Builder",
+  "/app": "Dashboard",
+  "/app/": "Dashboard",
+  "/app/dashboard": "Dashboard",
+  "/app/create": "Studio",
+  "/app/creative-replicator": "Creative Replicator",
+  "/app/creative-scale": "Creative AI Editor",
+  "/app/ai-tools": "AI Tools",
+  "/app/ugc-generator": "UGC Generator",
+  "/app/projects": "Projects",
+  "/app/gallery": "Asset Gallery",
+  "/app/templates": "Templates",
+  "/app/analytics": "Analytics",
+  "/app/engines": "AI Engines",
+  "/app/settings": "Settings",
+  "/app/scene-builder": "Scene Builder",
 };
 
 export function TopBar({ title, actions }: TopBarProps) {
