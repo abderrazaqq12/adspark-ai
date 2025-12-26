@@ -1,250 +1,293 @@
 /**
- * Landing Page - Public Marketing Homepage
- * 
- * Sections:
- * 1. Hero - Headline + CTAs
- * 2. What FlowScale Does - 5 feature blocks
- * 3. How It Works - 3 steps
- * 4. Security & Privacy - Trust signals
+ * Landing Page - FlowScale AI
+ * Premium landing page for AI-powered video ad creation
  */
 
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import {
-    Sparkles,
-    FolderOpen,
-    Video,
-    Copy,
-    Images,
-    Settings,
     ArrowRight,
-    Shield,
-    Lock,
-    UserCheck,
-    Trash2
+    Play,
+    Sparkles,
+    Zap,
+    Video,
+    Wand2,
+    Layers,
+    Download,
+    CheckCircle2,
+    Star,
+    Users,
+    Clock,
+    Shield
 } from 'lucide-react';
 
+// Features data
 const features = [
     {
-        icon: FolderOpen,
-        title: 'Project-Based Pipeline',
-        description: 'Organize your creative work into projects. Input assets, configure settings, generate content, and export—all in one structured workflow.',
+        icon: Wand2,
+        title: 'AI Script Generation',
+        description: 'Transform your product into compelling ad scripts using proven marketing frameworks like PAS, AIDA, and more.',
     },
     {
         icon: Video,
-        title: 'UGC Video Generation',
-        description: 'Create UGC-style video ads with AI-generated scripts, voiceovers, and visual scenes. Control tone, style, and messaging.',
+        title: 'UGC Video Factory',
+        description: 'Generate authentic user-generated style content with AI avatars and natural voiceovers.',
     },
     {
-        icon: Copy,
+        icon: Layers,
         title: 'Creative Replicator',
-        description: 'Analyze existing ad creatives and generate variations. Maintain your brand while exploring new angles.',
+        description: 'Analyze winning ads and replicate their success patterns for your own products.',
     },
     {
-        icon: Images,
-        title: 'Asset Library',
-        description: 'Store, organize, and retrieve your generated outputs. Export files or delete them when no longer needed.',
+        icon: Zap,
+        title: 'Quick Generate',
+        description: 'Go from idea to finished video ad in minutes, not days. Batch create multiple variations.',
     },
     {
-        icon: Settings,
-        title: 'User-Controlled Settings',
-        description: 'Configure language, target audience, AI engines, and generation parameters. You control every aspect of the process.',
-    },
-];
-
-const steps = [
-    {
-        number: '01',
-        title: 'Create a Project',
-        description: 'Start a new project and provide your product information, assets, and creative brief.',
-    },
-    {
-        number: '02',
-        title: 'Generate Content',
-        description: 'Use AI engines to generate scripts, voiceover, images, and video clips based on your inputs.',
-    },
-    {
-        number: '03',
-        title: 'Render & Export',
-        description: 'Render your final outputs, preview results, and export files to your preferred destinations.',
-    },
-];
-
-const securityPoints = [
-    {
-        icon: Lock,
-        title: 'OAuth-Based Connections',
-        description: 'When connecting to external services, we use standard OAuth protocols. You control what access is granted.',
-    },
-    {
-        icon: UserCheck,
-        title: 'User Separation',
-        description: 'Your projects and assets are isolated. Other users cannot access your content.',
+        icon: Download,
+        title: 'Export Ready',
+        description: 'Download in formats optimized for TikTok, Instagram Reels, YouTube Shorts, and more.',
     },
     {
         icon: Shield,
-        title: 'Encrypted Storage',
-        description: 'Sensitive data and tokens are encrypted. We follow industry-standard security practices.',
+        title: 'Brand Consistency',
+        description: 'Save your brand colors, fonts, and templates for consistent creative output across campaigns.',
+    },
+];
+
+// Steps data
+const steps = [
+    {
+        number: '1',
+        title: 'Describe your product',
+        description: 'Enter your product details and select a marketing framework. Our AI analyzes and creates conversion-focused scripts.',
+        image: '/placeholder.svg',
     },
     {
-        icon: Trash2,
-        title: 'Disconnect Anytime',
-        description: 'You can disconnect integrations, delete projects, and remove assets at any time.',
+        number: '2',
+        title: 'Customize your creative',
+        description: 'Choose AI avatars, voice styles, and visual templates. Adjust the tone, pacing, and call-to-action.',
+        image: '/placeholder.svg',
     },
+    {
+        number: '3',
+        title: 'Generate & export',
+        description: 'Render your video in HD quality. Download directly or create variations for A/B testing.',
+        image: '/placeholder.svg',
+    },
+];
+
+// Stats
+const stats = [
+    { value: '10K+', label: 'Videos Created' },
+    { value: '500+', label: 'Active Creators' },
+    { value: '< 3 min', label: 'Avg. Generation' },
+    { value: '4.9/5', label: 'User Rating' },
 ];
 
 export function Landing() {
     return (
-        <div className="min-h-screen">
-            {/* Hero Section - Compact */}
-            <section className="relative py-16 md:py-20 overflow-hidden">
-                {/* Background gradient */}
-                <div className="absolute inset-0 bg-gradient-to-b from-violet-500/5 via-transparent to-transparent" />
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-violet-500/10 rounded-full blur-3xl" />
+        <div className="min-h-screen bg-background">
+            {/* Hero Section */}
+            <section className="relative pt-20 pb-16 md:pt-28 md:pb-24 overflow-hidden">
+                {/* Background Effects */}
+                <div className="absolute inset-0">
+                    <div className="absolute top-[-20%] left-[20%] w-[60%] h-[60%] bg-gradient-to-br from-violet-600/20 via-purple-500/10 to-transparent rounded-full blur-[120px]" />
+                    <div className="absolute bottom-[-10%] right-[10%] w-[40%] h-[40%] bg-gradient-to-tr from-indigo-600/15 via-violet-500/10 to-transparent rounded-full blur-[100px]" />
+                </div>
 
-                <div className="relative max-w-5xl mx-auto px-8 lg:px-16 text-center">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-sm text-violet-300 mb-4">
-                        <Sparkles className="w-4 h-4" />
-                        AI-Powered Creative Pipeline
+                <div className="relative max-w-6xl mx-auto px-6 lg:px-8">
+                    {/* Badge */}
+                    <div className="flex justify-center mb-6">
+                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-500/10 border border-violet-500/20">
+                            <Users className="w-4 h-4 text-violet-400" />
+                            <span className="text-sm text-violet-300 font-medium">Trusted by 500+ video creators</span>
+                        </div>
                     </div>
 
-                    <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground tracking-tight mb-4">
-                        Generate and manage <br className="hidden sm:block" />
-                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-purple-400">
-                            short-form ad creatives
-                        </span>
-                    </h1>
+                    {/* Headline */}
+                    <div className="text-center max-w-4xl mx-auto mb-8">
+                        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white tracking-tight mb-6">
+                            AI-Powered Ad Creation —
+                            <br />
+                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 via-purple-400 to-indigo-400">
+                                Simple, Fast & Professional
+                            </span>
+                        </h1>
+                        <p className="text-lg md:text-xl text-white/60 max-w-2xl mx-auto leading-relaxed">
+                            Create studio-quality video ads in minutes. Just describe your product — our AI handles scripts, avatars, and editing.
+                        </p>
+                    </div>
 
-                    <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto mb-6 leading-relaxed">
-                        FlowScale AI provides a structured production pipeline for creating video ads.
-                        Input your assets, generate content with AI, and export your finished creatives.
-                    </p>
-
-                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                    {/* CTA Buttons */}
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
                         <Link to="/auth">
-                            <Button size="default" className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-lg shadow-violet-500/25 gap-2">
-                                Open App
+                            <Button size="lg" className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-lg shadow-violet-500/25 gap-2 h-12 px-8">
+                                Get started
                                 <ArrowRight className="w-4 h-4" />
                             </Button>
                         </Link>
-                        <Link to="/privacy">
-                            <Button size="default" variant="outline" className="gap-2">
-                                <Shield className="w-4 h-4" />
-                                Security & Privacy
-                            </Button>
-                        </Link>
+                        <Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/5 gap-2 h-12 px-8">
+                            <Play className="w-4 h-4" />
+                            Watch demo
+                        </Button>
+                    </div>
+
+                    {/* Video Preview */}
+                    <div className="relative max-w-4xl mx-auto">
+                        <div className="relative aspect-video rounded-2xl overflow-hidden border border-white/10 bg-black/40 backdrop-blur-sm shadow-2xl shadow-violet-500/10">
+                            {/* Gradient overlay */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+
+                            {/* Placeholder content */}
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center cursor-pointer hover:bg-white/20 transition-all group">
+                                    <Play className="w-8 h-8 text-white ml-1 group-hover:scale-110 transition-transform" />
+                                </div>
+                            </div>
+
+                            {/* Demo image placeholder */}
+                            <img
+                                src="/placeholder.svg"
+                                alt="FlowScale AI Demo"
+                                className="w-full h-full object-cover opacity-60"
+                            />
+                        </div>
+
+                        {/* Glow effect */}
+                        <div className="absolute -inset-4 bg-gradient-to-r from-violet-500/20 via-purple-500/20 to-indigo-500/20 rounded-3xl blur-2xl -z-10" />
                     </div>
                 </div>
             </section>
 
-            {/* What FlowScale Does - Compact */}
-            <section id="features" className="py-12 border-t border-border/50">
-                <div className="max-w-6xl mx-auto px-8 lg:px-16">
-                    <div className="text-center mb-8">
-                        <h2 className="text-xl md:text-2xl font-bold text-foreground mb-2">
-                            What FlowScale AI Does
+            {/* Stats Bar */}
+            <section className="py-8 border-y border-white/5 bg-white/[0.02]">
+                <div className="max-w-6xl mx-auto px-6 lg:px-8">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+                        {stats.map((stat) => (
+                            <div key={stat.label} className="text-center">
+                                <div className="text-2xl md:text-3xl font-bold text-white mb-1">{stat.value}</div>
+                                <div className="text-sm text-white/50">{stat.label}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* How It Works */}
+            <section className="py-20 md:py-28">
+                <div className="max-w-6xl mx-auto px-6 lg:px-8">
+                    {/* Section Header */}
+                    <div className="text-center mb-16">
+                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-500/10 border border-violet-500/20 mb-6">
+                            <Sparkles className="w-4 h-4 text-violet-400" />
+                            <span className="text-sm text-violet-300 font-medium">How It Works</span>
+                        </div>
+                        <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+                            Create amazing ads
+                            <br />
+                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-purple-400">
+                                in 3 simple steps
+                            </span>
                         </h2>
-                        <p className="text-sm text-muted-foreground max-w-2xl mx-auto">
-                            A complete workflow for creating AI-generated video ad content.
-                        </p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {/* Steps */}
+                    <div className="grid md:grid-cols-3 gap-8">
+                        {steps.map((step) => (
+                            <div key={step.number} className="relative group">
+                                <div className="bg-white/[0.03] backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:border-violet-500/30 transition-all h-full">
+                                    {/* Step Number */}
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-bold mb-4">
+                                        {step.number}
+                                    </div>
+
+                                    {/* Content */}
+                                    <h3 className="text-xl font-semibold text-white mb-2">{step.title}</h3>
+                                    <p className="text-white/50 text-sm leading-relaxed mb-4">{step.description}</p>
+
+                                    {/* Image placeholder */}
+                                    <div className="aspect-video rounded-lg bg-gradient-to-br from-violet-500/10 to-purple-500/10 border border-white/5 flex items-center justify-center">
+                                        <Video className="w-8 h-8 text-violet-400/50" />
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* Features Grid */}
+            <section className="py-20 md:py-28 border-t border-white/5">
+                <div className="max-w-6xl mx-auto px-6 lg:px-8">
+                    {/* Section Header */}
+                    <div className="text-center mb-16">
+                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-500/10 border border-violet-500/20 mb-6">
+                            <Zap className="w-4 h-4 text-violet-400" />
+                            <span className="text-sm text-violet-300 font-medium">Features</span>
+                        </div>
+                        <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+                            Everything you need to create
+                            <br />
+                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-purple-400">
+                                professional video ads
+                            </span>
+                        </h2>
+                    </div>
+
+                    {/* Features Grid */}
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {features.map((feature) => (
                             <div
                                 key={feature.title}
-                                className="p-4 rounded-lg border border-border/50 bg-card/30 hover:bg-card/50 transition-colors"
+                                className="group bg-white/[0.03] backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:border-violet-500/30 hover:bg-white/[0.05] transition-all"
                             >
-                                <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center mb-3">
-                                    <feature.icon className="w-4 h-4 text-violet-400" />
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/30 flex items-center justify-center mb-4 group-hover:border-violet-500/50 transition-colors">
+                                    <feature.icon className="w-6 h-6 text-violet-400" />
                                 </div>
-                                <h3 className="text-sm font-semibold text-foreground mb-1">{feature.title}</h3>
-                                <p className="text-xs text-muted-foreground leading-relaxed">{feature.description}</p>
+                                <h3 className="text-lg font-semibold text-white mb-2">{feature.title}</h3>
+                                <p className="text-white/50 text-sm leading-relaxed">{feature.description}</p>
                             </div>
                         ))}
                     </div>
                 </div>
             </section>
 
-            {/* How It Works - Compact */}
-            <section id="how-it-works" className="py-12 bg-card/30 border-t border-border/50">
-                <div className="max-w-5xl mx-auto px-8 lg:px-16">
-                    <div className="text-center mb-6">
-                        <h2 className="text-xl md:text-2xl font-bold text-foreground mb-2">
-                            How It Works
+            {/* CTA Section */}
+            <section className="py-20 md:py-28">
+                <div className="max-w-4xl mx-auto px-6 lg:px-8">
+                    <div className="relative bg-gradient-to-br from-violet-500/20 via-purple-500/10 to-transparent rounded-3xl border border-violet-500/20 p-8 md:p-12 text-center overflow-hidden">
+                        {/* Background glow */}
+                        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80%] h-[50%] bg-violet-500/20 blur-[100px] -z-10" />
+
+                        <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+                            Ready to create your first video ad?
                         </h2>
-                        <p className="text-sm text-muted-foreground">
-                            Three steps from input to finished creative.
+                        <p className="text-white/60 text-lg mb-8 max-w-2xl mx-auto">
+                            Join thousands of marketers using FlowScale AI to create high-converting video ads in minutes.
                         </p>
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {steps.map((step, index) => (
-                            <div key={step.number} className="flex flex-col items-center text-center p-4">
-                                <div className="shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm mb-3">
-                                    {step.number}
-                                </div>
-                                <h3 className="text-sm font-semibold text-foreground mb-1">{step.title}</h3>
-                                <p className="text-xs text-muted-foreground">{step.description}</p>
+                        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                            <Link to="/auth">
+                                <Button size="lg" className="bg-white hover:bg-white/90 text-black font-semibold shadow-lg gap-2 h-12 px-8">
+                                    Start creating for free
+                                    <ArrowRight className="w-4 h-4" />
+                                </Button>
+                            </Link>
+                        </div>
+
+                        {/* Trust indicators */}
+                        <div className="flex items-center justify-center gap-6 mt-8 text-sm text-white/40">
+                            <div className="flex items-center gap-2">
+                                <CheckCircle2 className="w-4 h-4 text-green-400" />
+                                <span>No credit card required</span>
                             </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* Security & Privacy - Compact */}
-            <section className="py-12 border-t border-border/50">
-                <div className="max-w-6xl mx-auto px-8 lg:px-16">
-                    <div className="text-center mb-6">
-                        <h2 className="text-xl md:text-2xl font-bold text-foreground mb-2">
-                            Security & Privacy
-                        </h2>
-                        <p className="text-sm text-muted-foreground max-w-2xl mx-auto">
-                            We prioritize user control and data protection.
-                        </p>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {securityPoints.map((point) => (
-                            <div
-                                key={point.title}
-                                className="p-4 rounded-lg border border-border/50 bg-card/30 text-center"
-                            >
-                                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center mx-auto mb-2">
-                                    <point.icon className="w-4 h-4 text-emerald-400" />
-                                </div>
-                                <h3 className="text-sm font-semibold text-foreground mb-1">{point.title}</h3>
-                                <p className="text-xs text-muted-foreground">{point.description}</p>
+                            <div className="flex items-center gap-2">
+                                <Clock className="w-4 h-4 text-violet-400" />
+                                <span>Setup in 2 minutes</span>
                             </div>
-                        ))}
+                        </div>
                     </div>
-
-                    <div className="mt-6 text-center">
-                        <Link to="/privacy">
-                            <Button variant="outline" size="sm" className="gap-2">
-                                Read Full Privacy Policy
-                                <ArrowRight className="w-3 h-3" />
-                            </Button>
-                        </Link>
-                    </div>
-                </div>
-            </section>
-
-            {/* CTA Section - Compact */}
-            <section className="py-10 bg-gradient-to-b from-violet-500/5 to-transparent border-t border-border/50">
-                <div className="max-w-3xl mx-auto px-8 lg:px-16 text-center">
-                    <h2 className="text-lg md:text-xl font-bold text-foreground mb-2">
-                        Ready to streamline your creative workflow?
-                    </h2>
-                    <p className="text-sm text-muted-foreground mb-4">
-                        Start creating AI-powered video ads with FlowScale.
-                    </p>
-                    <Link to="/auth">
-                        <Button size="default" className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-lg shadow-violet-500/25 gap-2">
-                            Get Started
-                            <ArrowRight className="w-4 h-4" />
-                        </Button>
-                    </Link>
                 </div>
             </section>
         </div>
