@@ -1,157 +1,261 @@
 import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Loader2, Lock, ShieldCheck, Zap, Globe, Cpu } from "lucide-react";
+import { Loader2, Sparkles, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+
+type AuthMode = 'signin' | 'signup';
 
 export default function Auth() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { signIn } = useAuth();
+  const { signUp, signInWithEmail, signInWithGoogle } = useAuth();
+
+  const [mode, setMode] = useState<AuthMode>('signin');
   const [isLoading, setIsLoading] = useState(false);
-  const [username, setUsername] = useState("admin");
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Form state
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const from = location.state?.from?.pathname || "/";
-
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username || !password) return;
+    if (!email || !password) return;
+    if (mode === 'signup' && !fullName) return;
 
     setIsLoading(true);
     try {
-      const response = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-
-      const data = await response.json();
-
-      if (data.ok) {
-        toast.success("Identity Verified", {
-          description: "VPS administrative session established.",
-        });
-        signIn(data.token, data.user);
-        navigate(from, { replace: true });
+      if (mode === 'signup') {
+        const { error } = await signUp(email, password, fullName);
+        if (error) {
+          toast.error("Sign up failed", { description: error.message });
+        } else {
+          toast.success("Account created!", {
+            description: "Check your email to verify your account."
+          });
+          setMode('signin');
+        }
       } else {
-        toast.error("Access Denied", {
-          description: data.message || "Invalid administrative password",
-        });
-        setPassword("");
+        const { error } = await signInWithEmail(email, password);
+        if (error) {
+          toast.error("Sign in failed", { description: error.message });
+        } else {
+          toast.success("Welcome back!", { description: "Redirecting to dashboard..." });
+          navigate('/app');
+        }
       }
     } catch (error) {
-      toast.error("System Error", {
-        description: "Could not connect to the VPS security gateway.",
-      });
+      toast.error("Something went wrong", { description: "Please try again." });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    try {
+      const { error } = await signInWithGoogle();
+      if (error) {
+        toast.error("Google sign in failed", { description: error.message });
+      }
+    } catch (error) {
+      toast.error("Something went wrong");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden p-6">
-      {/* Background Decorative Elements */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 blur-[120px] rounded-full animate-pulse" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-accent/10 blur-[120px] rounded-full animate-pulse" style={{ animationDelay: '2s' }} />
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
+      {/* Aurora Background */}
+      <div className="absolute inset-0 bg-background">
+        <div className="absolute top-[-20%] right-[-10%] w-[60%] h-[60%] bg-gradient-to-br from-violet-600/30 via-purple-500/20 to-transparent rounded-full blur-[120px] animate-pulse" />
+        <div className="absolute bottom-[-20%] left-[-10%] w-[50%] h-[50%] bg-gradient-to-tr from-indigo-600/20 via-violet-500/15 to-transparent rounded-full blur-[100px] animate-pulse" style={{ animationDelay: '2s' }} />
+        <div className="absolute top-[40%] left-[30%] w-[30%] h-[30%] bg-purple-500/10 rounded-full blur-[80px]" />
+      </div>
 
-      <div className="w-full max-w-[420px] space-y-8 relative z-10">
-        <div className="text-center space-y-4">
-          <div className="flex items-center justify-center gap-3">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary via-primary to-accent flex items-center justify-center shadow-lg shadow-primary/20 ring-1 ring-white/20">
-              <Zap className="w-8 h-8 text-primary-foreground fill-white/10" />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <h1 className="text-3xl font-bold tracking-tighter text-foreground">FlowScale <span className="text-primary">VPS</span></h1>
-            <p className="text-muted-foreground font-medium">Administrative Lockdown Active</p>
-          </div>
-        </div>
-
-        <Card className="bg-card/50 backdrop-blur-xl border-white/5 shadow-2xl ring-1 ring-white/10 overflow-hidden">
-          <div className="h-1.5 w-full bg-gradient-to-r from-primary via-accent to-primary animate-gradient-x" />
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-xl">Authentication</CardTitle>
-                <CardDescription>Enter your system primary key</CardDescription>
+      {/* Auth Card */}
+      <div className="relative z-10 w-full max-w-[420px] mx-4">
+        {/* Glassmorphic Card */}
+        <div className="bg-black/40 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+          {/* Header with Logo */}
+          <div className="pt-8 pb-4 text-center">
+            <div className="flex items-center justify-center gap-2 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/30">
+                <Sparkles className="w-5 h-5 text-white" />
               </div>
-              <Lock className="w-5 h-5 text-muted-foreground/50" />
+              <span className="text-xl font-semibold text-white">FlowScale</span>
             </div>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleLogin} className="space-y-6">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="username">Admin Username</Label>
-                  <Input
-                    id="username"
-                    type="text"
-                    placeholder="admin"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    required
-                    className="bg-muted/30 border-white/5 h-12 pl-4 focus:ring-primary/50 transition-all duration-300"
-                  />
-                </div>
 
+            {/* Toggle Tabs */}
+            <div className="flex items-center justify-center gap-1 bg-white/5 rounded-full p-1 mx-8">
+              <button
+                onClick={() => setMode('signup')}
+                className={`flex-1 py-2 px-4 rounded-full text-sm font-medium transition-all duration-300 ${mode === 'signup'
+                    ? 'bg-white text-black shadow-lg'
+                    : 'text-white/70 hover:text-white'
+                  }`}
+              >
+                Sign up
+              </button>
+              <button
+                onClick={() => setMode('signin')}
+                className={`flex-1 py-2 px-4 rounded-full text-sm font-medium transition-all duration-300 ${mode === 'signin'
+                    ? 'bg-white text-black shadow-lg'
+                    : 'text-white/70 hover:text-white'
+                  }`}
+              >
+                Sign in
+              </button>
+            </div>
+          </div>
+
+          {/* Form Content */}
+          <div className="px-8 pb-8">
+            <h2 className="text-2xl font-semibold text-white mb-6">
+              {mode === 'signup' ? 'Create an account' : 'Welcome back'}
+            </h2>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Full Name - Sign Up Only */}
+              {mode === 'signup' && (
                 <div className="space-y-2">
-                  <Label htmlFor="password">Admin Password</Label>
-                  <div className="relative group">
+                  <Label htmlFor="fullName" className="text-white/70 text-sm">Full name</Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
                     <Input
-                      id="password"
-                      type="password"
-                      placeholder="••••••••••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                      className="bg-muted/30 border-white/5 h-12 pl-4 pr-10 focus:ring-primary/50 transition-all duration-300"
+                      id="fullName"
+                      type="text"
+                      placeholder="John Doe"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      required={mode === 'signup'}
+                      className="bg-white/5 border-white/10 text-white placeholder:text-white/30 h-12 pl-10 focus:ring-violet-500/50 focus:border-violet-500/50"
                     />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/30 group-focus-within:text-primary/50 transition-colors">
-                      <ShieldCheck className="w-5 h-5" />
-                    </div>
                   </div>
                 </div>
+              )}
+
+              {/* Email */}
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-white/70 text-sm">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="bg-white/5 border-white/10 text-white placeholder:text-white/30 h-12 pl-10 focus:ring-violet-500/50 focus:border-violet-500/50"
+                  />
+                </div>
               </div>
 
+              {/* Password */}
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-white/70 text-sm">Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="bg-white/5 border-white/10 text-white placeholder:text-white/30 h-12 pl-10 pr-10 focus:ring-violet-500/50 focus:border-violet-500/50"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Submit Button */}
               <Button
                 type="submit"
-                className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-lg shadow-primary/20 transition-all duration-300 active:scale-[0.98]"
-                disabled={isLoading || !password}
+                disabled={isLoading}
+                className="w-full h-12 bg-white hover:bg-white/90 text-black font-semibold shadow-lg transition-all duration-300 mt-6"
               >
                 {isLoading ? (
                   <div className="flex items-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Verifying...</span>
+                    <span>{mode === 'signup' ? 'Creating account...' : 'Signing in...'}</span>
                   </div>
                 ) : (
-                  "Establishing Secure Session"
+                  mode === 'signup' ? 'Create an account' : 'Sign in'
                 )}
               </Button>
             </form>
-          </CardContent>
-        </Card>
 
-        {/* Security Meta Info */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card/40 border border-white/5 backdrop-blur-sm">
-            <Globe className="w-4 h-4 text-primary/60" />
-            <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground/70">Single Node</span>
-          </div>
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card/40 border border-white/5 backdrop-blur-sm">
-            <Cpu className="w-4 h-4 text-accent/60" />
-            <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground/70">Hardware Auth</span>
+            {/* Divider */}
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/10"></div>
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-black/40 px-3 text-white/40">or continue with</span>
+              </div>
+            </div>
+
+            {/* Google OAuth */}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleGoogleSignIn}
+              disabled={isLoading}
+              className="w-full h-12 bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white"
+            >
+              <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
+                <path
+                  fill="currentColor"
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                />
+                <path
+                  fill="currentColor"
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                />
+                <path
+                  fill="currentColor"
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                />
+                <path
+                  fill="currentColor"
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                />
+              </svg>
+              Continue with Google
+            </Button>
+
+            {/* Terms */}
+            <p className="text-center text-xs text-white/40 mt-6">
+              By continuing, you agree to our{' '}
+              <Link to="/terms" className="text-violet-400 hover:text-violet-300 underline">
+                Terms of Service
+              </Link>{' '}
+              and{' '}
+              <Link to="/privacy" className="text-violet-400 hover:text-violet-300 underline">
+                Privacy Policy
+              </Link>
+            </p>
           </div>
         </div>
 
-        <div className="text-center">
-          <p className="text-xs text-muted-foreground/50 font-medium">
-            System Perimeter Secured via FlowScale Kernel v2.0
-          </p>
+        {/* Back to Home Link */}
+        <div className="text-center mt-6">
+          <Link to="/" className="text-sm text-white/50 hover:text-white transition-colors">
+            ← Back to home
+          </Link>
         </div>
       </div>
     </div>

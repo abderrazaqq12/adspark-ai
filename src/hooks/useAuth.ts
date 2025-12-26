@@ -1,61 +1,109 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import type { User, Session } from "@supabase/supabase-js";
 import { isBuilderMode } from "../utils/dev-adapter";
 
-export interface User {
+export interface AuthUser {
   id: string;
+  email: string | undefined;
   role: string;
 }
 
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('flowscale_token'));
 
   useEffect(() => {
     // 🛠️ BUILDER MODE BYPASS
     if (isBuilderMode()) {
-      setUser({ id: 'builder', role: 'dev' });
-      setToken('mock-builder-token');
+      setUser({ id: 'builder', email: 'builder@dev.local', role: 'dev' });
       setLoading(false);
       return;
     }
 
-    const storedToken = localStorage.getItem('flowscale_token');
-    const storedUser = localStorage.getItem('flowscale_user');
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email,
+          role: 'user'
+        });
+      }
+      setLoading(false);
+    });
 
-    if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
-    }
-    setLoading(false);
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        if (session?.user) {
+          setUser({
+            id: session.user.id,
+            email: session.user.email,
+            role: 'user'
+          });
+        } else {
+          setUser(null);
+        }
+        setLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = (newToken: string, newUser: User) => {
-    localStorage.setItem('flowscale_token', newToken);
-    localStorage.setItem('flowscale_user', JSON.stringify(newUser));
-    setToken(newToken);
-    setUser(newUser);
-  };
+  const signUp = useCallback(async (email: string, password: string, fullName?: string) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName
+        }
+      }
+    });
+    return { data, error };
+  }, []);
 
-  const signOut = async () => {
-    try {
-      await fetch('/api/logout', { method: 'POST' });
-    } catch (e) {
-      console.warn("Logout notification failed:", e);
+  const signInWithEmail = useCallback(async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
+    return { data, error };
+  }, []);
+
+  const signInWithGoogle = useCallback(async () => {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/app`
+      }
+    });
+    return { data, error };
+  }, []);
+
+  const signOut = useCallback(async () => {
+    const { error } = await supabase.auth.signOut();
+    if (!error) {
+      setUser(null);
+      setSession(null);
+      window.location.href = '/';
     }
-    localStorage.removeItem('flowscale_token');
-    localStorage.removeItem('flowscale_user');
-    setToken(null);
-    setUser(null);
-    window.location.href = '/auth';
-  };
+    return { error };
+  }, []);
 
   return {
     user,
+    session,
     loading,
-    token,
-    authenticated: !!token,
-    signIn,
+    authenticated: !!session,
+    signUp,
+    signInWithEmail,
+    signInWithGoogle,
     signOut
   };
 }

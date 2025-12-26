@@ -7,9 +7,9 @@ interface ProtectedRouteProps {
 }
 
 /**
- * VPS Lockdown Perimeter
- * Enforces authenticated access to all internal routes.
- * Redirects to /auth if session is missing or expired.
+ * Protected Route Wrapper
+ * Enforces authenticated access using Supabase session.
+ * Redirects to /auth if no session exists.
  */
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { authenticated, loading } = useAuth();
@@ -18,20 +18,21 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
       </div>
     );
   }
 
   if (!authenticated) {
     // 🛠️ BUILDER MODE BYPASS
-    // Never redirect in builder/preview environments
-    // The dev-adapter will handle API mocking
     if (window.location.hostname.includes('lovable') || window.location.search.includes('builder=true') || window !== window.parent) {
       return <>{children}</>;
     }
 
-    // Redirect to login but save the current location to redirect back after login
+    // Redirect to auth but save the current location to redirect back after login
     return <Navigate to="/auth" state={{ from: location }} replace />;
   }
 
