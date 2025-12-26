@@ -1,61 +1,81 @@
 /**
- * DASHBOARD - Production Operational Dashboard
+ * DASHBOARD - Premium Operator Dashboard
  * 
- * This is a READ-ONLY operational awareness dashboard.
- * It answers ONE question: "What is happening right now in my system?"
- * 
- * ARCHITECTURAL CONTRACT:
- * 1. NOT a duplicate of sidebar navigation
- * 2. READ-ONLY - No creation flows, no configuration
- * 3. GLOBAL and CONTEXT-AWARE - Reflects active project and system health
- * 
- * SECTIONS:
- * 1. System Status Bar - VPS, FFmpeg, GPU, Queue, Storage
- * 2. Active Project Snapshot - Current project context
- * 3. Live Pipeline Activity - Running and failed jobs
- * 4. Cost & Usage Snapshot - AI costs with breakdown
- * 5. Recent Outputs - Last 5 generated files
+ * High-density, operator-grade dashboard for at-a-glance understanding.
+ * Matches professional SaaS references with compact KPI row, activity table, charts.
  */
 
-import { 
+import {
   SystemStatusBar,
   ActiveProjectSnapshot,
   LivePipelineActivity,
   CostUsageSnapshot,
   RecentOutputs,
-  ActiveJobsProgress
+  ActiveJobsProgress,
+  KPIRow
 } from '@/components/dashboard';
+import { Video, DollarSign, Zap, HardDrive } from 'lucide-react';
 
 export default function Dashboard() {
+  // Sample KPI data - would come from hooks in production
+  const kpis = [
+    {
+      label: 'Videos Generated',
+      value: '1,247',
+      icon: <Video className="w-3.5 h-3.5" />,
+      trend: { value: 12, direction: 'up' as const },
+      sparkline: [3, 5, 4, 7, 8, 6, 9, 11]
+    },
+    {
+      label: 'Credits Left',
+      value: '$42.50',
+      icon: <DollarSign className="w-3.5 h-3.5" />,
+      trend: { value: 8, direction: 'down' as const }
+    },
+    {
+      label: 'Active Jobs',
+      value: '3',
+      icon: <Zap className="w-3.5 h-3.5" />,
+      trend: { value: 0, direction: 'neutral' as const }
+    },
+    {
+      label: 'Storage Used',
+      value: '847 MB',
+      icon: <HardDrive className="w-3.5 h-3.5" />,
+      trend: { value: 5, direction: 'up' as const }
+    },
+  ];
+
   return (
-    <div className="p-6 space-y-6 animate-fade-in max-w-7xl mx-auto">
-      {/* Page Header - Minimal */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          Real-time system overview
-        </p>
+    <div className="p-4 space-y-4 animate-fade-in h-[calc(100vh-3.5rem)] overflow-y-auto scrollbar-thin">
+      {/* Page Header - Compact */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-page-title">Dashboard</h1>
+          <p className="text-caption">Real-time system overview</p>
+        </div>
+        {/* System Status Bar inline */}
+        <SystemStatusBar />
       </div>
 
-      {/* SECTION 1 - System Status Bar (Always Visible) */}
-      <SystemStatusBar />
+      {/* KPI Row - Compact 4-column */}
+      <KPIRow kpis={kpis} />
 
-      {/* SECTION 2 - Active Project Snapshot */}
-      <ActiveProjectSnapshot />
+      {/* Active Project + Jobs Progress */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <div className="lg:col-span-2">
+          <ActiveProjectSnapshot />
+        </div>
+        <ActiveJobsProgress />
+      </div>
 
-      {/* SECTION 2.5 - Active Jobs Progress (Real-time) */}
-      <ActiveJobsProgress />
-
-      {/* Main Grid Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* SECTION 3 - Live Pipeline Activity */}
+      {/* Main Grid - Pipeline + Cost */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <LivePipelineActivity />
-
-        {/* SECTION 4 - Cost & Usage Snapshot */}
         <CostUsageSnapshot />
       </div>
 
-      {/* SECTION 5 - Recent Outputs */}
+      {/* Recent Outputs */}
       <RecentOutputs />
     </div>
   );

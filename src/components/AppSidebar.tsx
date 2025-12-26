@@ -70,12 +70,12 @@ export function AppSidebar() {
             <SidebarMenu className="space-y-0.5">
               {quickAccessItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild className="h-9">
+                  <SidebarMenuButton asChild className="h-8">
                     <NavLink
                       to={item.url}
                       end={item.url === "/"}
-                      className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors ${!open ? 'justify-center px-0' : ''}`}
-                      activeClassName="bg-primary/10 text-primary font-medium"
+                      className={`flex items-center gap-3 rounded-md px-3 py-1.5 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors ${!open ? 'justify-center px-0' : ''}`}
+                      activeClassName="bg-primary text-primary-foreground font-medium shadow-sm"
                     >
                       <item.icon className="w-4 h-4 shrink-0" />
                       {open && <span>{item.title}</span>}
@@ -101,11 +101,11 @@ export function AppSidebar() {
             <SidebarMenu className="space-y-0.5">
               {workflowItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild className="h-9">
+                  <SidebarMenuButton asChild className="h-8">
                     <NavLink
                       to={item.url}
-                      className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors ${!open ? 'justify-center px-0' : ''}`}
-                      activeClassName="bg-primary/10 text-primary font-medium"
+                      className={`flex items-center gap-3 rounded-md px-3 py-1.5 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors ${!open ? 'justify-center px-0' : ''}`}
+                      activeClassName="bg-primary text-primary-foreground font-medium shadow-sm"
                     >
                       <item.icon className="w-4 h-4 shrink-0" />
                       {open && <span>{item.title}</span>}
@@ -131,11 +131,11 @@ export function AppSidebar() {
             <SidebarMenu className="space-y-0.5">
               {libraryItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild className="h-9">
+                  <SidebarMenuButton asChild className="h-8">
                     <NavLink
                       to={item.url}
-                      className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors ${!open ? 'justify-center px-0' : ''}`}
-                      activeClassName="bg-primary/10 text-primary font-medium"
+                      className={`flex items-center gap-3 rounded-md px-3 py-1.5 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors ${!open ? 'justify-center px-0' : ''}`}
+                      activeClassName="bg-primary text-primary-foreground font-medium shadow-sm"
                     >
                       <item.icon className="w-4 h-4 shrink-0" />
                       {open && <span>{item.title}</span>}
@@ -161,11 +161,11 @@ export function AppSidebar() {
             <SidebarMenu className="space-y-0.5">
               {toolsItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild className="h-9">
+                  <SidebarMenuButton asChild className="h-8">
                     <NavLink
                       to={item.url}
-                      className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors ${!open ? 'justify-center px-0' : ''}`}
-                      activeClassName="bg-primary/10 text-primary font-medium"
+                      className={`flex items-center gap-3 rounded-md px-3 py-1.5 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors ${!open ? 'justify-center px-0' : ''}`}
+                      activeClassName="bg-primary text-primary-foreground font-medium shadow-sm"
                     >
                       <item.icon className="w-4 h-4 shrink-0" />
                       {open && <span>{item.title}</span>}
