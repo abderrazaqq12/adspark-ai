@@ -27,6 +27,10 @@ import CreativeScale from "./pages/CreativeScale";
 import UGCGenerator from "./pages/UGCGenerator";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
+// Public pages (no auth required)
+import { PublicLayout } from "./components/public";
+import { Landing, About, Privacy, Terms, Contact } from "./pages/public";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -37,7 +41,17 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
+            {/* Public routes (no auth required) */}
+            <Route path="/landing" element={<PublicLayout><Landing /></PublicLayout>} />
+            <Route path="/about" element={<PublicLayout><About /></PublicLayout>} />
+            <Route path="/privacy" element={<PublicLayout><Privacy /></PublicLayout>} />
+            <Route path="/terms" element={<PublicLayout><Terms /></PublicLayout>} />
+            <Route path="/contact" element={<PublicLayout><Contact /></PublicLayout>} />
+
+            {/* Auth route */}
             <Route path="/auth" element={<Auth />} />
+
+            {/* Protected app routes */}
             <Route path="/*" element={
               <ProtectedRoute>
                 <AudienceProvider>
