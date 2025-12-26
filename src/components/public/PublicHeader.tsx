@@ -24,7 +24,7 @@ export function PublicHeader() {
             <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex items-center justify-between h-16">
                     {/* Logo */}
-                    <Link to="/landing" className="flex items-center gap-3 group">
+                    <Link to="/" className="flex items-center gap-3 group">
                         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/20 group-hover:shadow-violet-500/40 transition-shadow">
                             <Sparkles className="w-5 h-5 text-white" />
                         </div>
@@ -51,7 +51,7 @@ export function PublicHeader() {
                                 Sign In
                             </Button>
                         </Link>
-                        <Link to="/auth">
+                        <Link to="/app">
                             <Button size="sm" className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-lg shadow-violet-500/20">
                                 Open App
                             </Button>

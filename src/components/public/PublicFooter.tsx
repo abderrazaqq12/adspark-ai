@@ -14,9 +14,9 @@ const footerSections = [
     {
         title: 'Product',
         links: [
-            { label: 'Features', href: '/landing#features' },
-            { label: 'How It Works', href: '/landing#how-it-works' },
-            { label: 'Open App', href: '/auth' },
+            { label: 'Features', href: '/#features' },
+            { label: 'How It Works', href: '/#how-it-works' },
+            { label: 'Open App', href: '/app' },
         ],
     },
     {
@@ -44,7 +44,7 @@ export function PublicFooter() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
                     {/* Brand Column */}
                     <div className="col-span-2 md:col-span-1">
-                        <Link to="/landing" className="flex items-center gap-2 mb-4">
+                        <Link to="/" className="flex items-center gap-2 mb-4">
                             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
                                 <Sparkles className="w-4 h-4 text-white" />
                             </div>

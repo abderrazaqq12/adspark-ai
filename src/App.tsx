@@ -42,7 +42,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             {/* Public routes (no auth required) */}
-            <Route path="/landing" element={<PublicLayout><Landing /></PublicLayout>} />
+            <Route path="/" element={<PublicLayout><Landing /></PublicLayout>} />
             <Route path="/about" element={<PublicLayout><About /></PublicLayout>} />
             <Route path="/privacy" element={<PublicLayout><Privacy /></PublicLayout>} />
             <Route path="/terms" element={<PublicLayout><Terms /></PublicLayout>} />
@@ -52,7 +52,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
 
             {/* Protected app routes */}
-            <Route path="/*" element={
+            <Route path="/app/*" element={
               <ProtectedRoute>
                 <AudienceProvider>
                   <GlobalProjectProvider>
@@ -60,6 +60,7 @@ const App = () => (
                       <Layout>
                         <Routes>
                           <Route path="/" element={<Dashboard />} />
+                          <Route path="/dashboard" element={<Dashboard />} />
                           <Route path="/create" element={<ErrorBoundary><CreateVideo /></ErrorBoundary>} />
                           <Route path="/quick-generate" element={<ErrorBoundary><CreateVideo /></ErrorBoundary>} />
                           <Route path="/ugc-generator" element={<ErrorBoundary><UGCGenerator /></ErrorBoundary>} />
